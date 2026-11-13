@@ -1,12 +1,4 @@
 <script setup lang="ts">
-/**
- * Password recovery page.
- *
- * The server always answers `202` and only sends a reset email when a
- * password account exists. Every outcome — success or rejection — renders the
- * same fixed, account-neutral copy, so this page never reveals whether an
- * email is registered.
- */
 import { usePasswordAuth } from '../composables/usePasswordAuth';
 import FormField from '@/components/app/FormField.vue';
 import StatusBanner from '@/components/app/StatusBanner.vue';

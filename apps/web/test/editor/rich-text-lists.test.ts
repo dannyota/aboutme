@@ -69,7 +69,6 @@ function editorOf(wrapper: Wrapper): HTMLElement {
   return wrapper.get('[contenteditable="true"]').element as HTMLElement;
 }
 
-/** Puts the caret at the end of the last text node that reads `text`. */
 async function caretAfter(editor: HTMLElement, text: string): Promise<void> {
   const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
   let target: Text | undefined;

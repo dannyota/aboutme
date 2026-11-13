@@ -12,18 +12,10 @@ import { setSiteLocale } from './support/locale';
 
 registerCapabilities();
 
-// revoke-all (on success) and the current-session "Log out" button both
-// navigate away via `navigateTo` — stub it so tests can assert on the
-// target without a real page transition tearing the mounted wrapper down
-// mid-test. `mockNuxtImport`'s factory is hoisted above any top-level
-// `const`, so the mock function has to be created inside it; `navigateTo`
-// itself becomes accessible as an auto-import in this file afterward.
+// mockNuxtImport's factory is hoisted like vi.mock, so it creates the mock.
 mockNuxtImport('navigateTo', () => vi.fn());
 
-// The registerEndpoint mock's event doesn't normalize header casing the way
-// a real Node request does, and h3's own `getRequestHeader` disagrees with
-// the mocked event shape across the versions pinned here — so read the
-// mocked request headers directly, case-insensitively.
+// registerEndpoint's mocked event does not normalize header casing.
 interface MockEvent {
   node?: { req?: { headers?: Record<string, string> } };
 }
@@ -86,8 +78,6 @@ describe('sessions.vue', () => {
     expect(wrapper.find('[as]').exists()).toBe(false);
 
     const currentRow = wrapper.get('[data-testid="session-row-sess-1"]');
-    // Revoking your own current session is logout, not a generic device
-    // removal — no identical "Revoke" action on the current row.
     expect(
       currentRow
         .findAll('[data-slot="button"]')
@@ -162,7 +152,6 @@ describe('sessions.vue', () => {
     await flushPromises();
 
     expect(deleteAttempted).toBe(true);
-    // An already-gone session is a stale row, not a user-visible error.
     expect(wrapper.find('[data-testid="revoke-error"]').exists()).toBe(false);
   });
 
@@ -183,9 +172,6 @@ describe('sessions.vue', () => {
     await flushPromises();
     await flushPromises();
 
-    // Contrast with the 404 case above: a genuine failure (not "already
-    // gone") does surface an error, proving the 404 assertion above isn't
-    // vacuously true.
     expect(wrapper.get('[data-testid="revoke-error"]').text()).toContain(
       'Could not revoke',
     );
@@ -214,14 +200,8 @@ describe('sessions.vue', () => {
       await flushPromises();
       await flushPromises();
 
-      // A boolean flag can't tell "attempted once" from "attempted
-      // twice" — mutate()'s CSRF self-heal must not treat this 403 as
-      // csrf_rejected and retry it (that would double-fire a mutation
-      // the server already refused for an unrelated reason).
       expect(deleteAttempts).toBe(1);
 
-      // A 403 here is a CSRF failure, not a reauth signal (ADR 0015):
-      // it shows the plain revoke error, never the reauth prompt.
       expect(wrapper.find('[data-testid="reauth-prompt"]').exists()).toBe(
         false,
       );
@@ -270,12 +250,8 @@ describe('sessions.vue', () => {
       await addButton.trigger('click');
       await flushPromises();
 
-      // Refreshes identities/csrfToken before offering link targets, so it
-      // doesn't act on stale state.
       expect(meCalls).toBeGreaterThan(callsBeforeClick);
 
-      // meData only has a `google` identity linked, so github/linkedin are
-      // offered — and google (already linked) is not.
       const linkButtons = wrapper
         .findAll('[data-slot="button"]')
         .filter((button) => button.text().startsWith('Link '));
@@ -355,12 +331,8 @@ describe('sessions.vue', () => {
       await flushPromises();
 
       const prompt = wrapper.get('[data-testid="reauth-prompt"]');
-      // "link" reason copy, distinct from the "action" copy the
-      // revoke/revoke-all tests above use.
       expect(prompt.text()).toContain('link a new provider');
 
-      // meData's only linked identity is `google` — reauth targets that
-      // existing provider, never the not-yet-linked one being added.
       const reauthButton = prompt.get('[data-slot="button"]');
       expect(reauthButton.text()).toBe('Sign in again with Google');
     },
@@ -389,9 +361,6 @@ describe('sessions.vue', () => {
         'Something went wrong',
       );
 
-      // A plain `linkErrorMessages[code]` lookup resolves inherited
-      // properties too — `?error=constructor` would otherwise render
-      // `Object`'s constructor function instead of falling back.
       const prototypeAttempt = await mountSuspended(SessionsPage, {
         route: '/app/settings/sessions?error=constructor',
       });
@@ -463,8 +432,6 @@ describe('sessions.vue', () => {
       await flushPromises();
       await flushPromises();
 
-      // Revoke-all destroys the current session too (Clear-Site-Data) —
-      // there is nothing left to refetch, only somewhere else to go.
       expect(vi.mocked(navigateTo)).toHaveBeenCalledWith('/login');
       expect(meGetCalls).toBe(meGetCallsAtMount);
       expect(sessionsGetCalls).toBe(sessionsGetCallsAtMount);
@@ -495,14 +462,7 @@ describe('sessions.vue', () => {
       await flushPromises();
       await flushPromises();
 
-      // A boolean flag can't tell "attempted once" from "attempted
-      // twice" — mutate()'s CSRF self-heal must not treat this 403 as
-      // csrf_rejected and retry it (that would double-fire a mutation
-      // the server already refused for an unrelated reason).
       expect(revokeAllAttempts).toBe(1);
-      // A 403 here is a CSRF failure, not a reauth signal (ADR 0015):
-      // it shows the plain logout-everywhere error, never the reauth
-      // prompt — and definitely not a silent success.
       expect(wrapper.find('[data-testid="reauth-prompt"]').exists()).toBe(
         false,
       );
@@ -580,8 +540,6 @@ describe('sessions.vue', () => {
         await flushPromises();
         await flushPromises();
 
-        // The parent's `updated` handler refetches /me and the device list
-        // (a successful add/change replaces the current session).
         expect(meCalls).toBeGreaterThan(meCallsAtMount);
         expect(sessionsGetCalls).toBeGreaterThan(sessionsCallsAtMount);
       },
@@ -657,7 +615,6 @@ describe('sessions.vue', () => {
         await wrapper.get('[data-testid="password-form"]').trigger('submit');
         await flushPromises();
 
-        // The linked provider is offered; no email is shown.
         expect(
           wrapper
             .find('[data-testid="password-provider-reauth-google"]')
@@ -712,7 +669,6 @@ describe('sessions.vue capability gating', () => {
       await flushPromises();
       expect(wrapper.text()).not.toContain('Connected agents');
       expect(agentRequests).toBe(0);
-      // Sessions and password remain.
       expect(wrapper.text()).toContain('Signed-in devices');
       expect(wrapper.text()).toContain('Password');
     },
@@ -739,9 +695,6 @@ describe('sessions.vue capability gating', () => {
       await flushPromises();
       await flushPromises();
 
-      // The revoke error banner does not depend on a linkable provider
-      // existing — there is no reauth path left for a session revoke to
-      // fall back to (ADR 0015).
       expect(wrapper.find('[data-testid="reauth-prompt"]').exists()).toBe(
         false,
       );

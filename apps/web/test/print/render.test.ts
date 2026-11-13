@@ -109,8 +109,6 @@ describe('private print Vue document', () => {
         homeHref: 'https://aboutme.example/',
       }),
     }));
-    // The public page wraps the same article in its measure and download
-    // control; the resume itself must match print byte for byte.
     const article = /<article class="resume-document"[\s\S]*<\/article>/u
       .exec(shared)?.[0];
     expect(article).toBeDefined();
@@ -155,8 +153,6 @@ describe('private print Vue document', () => {
   );
 
   it('keeps the PDF light when the stored customization is dark', async () => {
-    // docs/design/public-page-theme.md, "What stays light": the print
-    // snapshot drops the field and PrintResumeApp never passes a scheme.
     const envelope = printEnvelope();
     (envelope.document.customization as unknown as Record<string, unknown>)
       .colorScheme = 'dark';

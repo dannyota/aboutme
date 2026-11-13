@@ -2,9 +2,6 @@ import { describe, expect, it } from 'vitest';
 
 import { type LegalSection, legalCopy } from '../../app/i18n/legal';
 
-// The Privacy Policy and Terms carry exactly the approved showcase text
-// (docs/design/showcase.md, Privacy Policy and Terms of Service; AC-SHOW-011).
-
 function section(
   document: 'privacy' | 'terms',
   locale: 'vi' | 'en',

@@ -32,8 +32,6 @@ import {
   prepareScreen,
 } from './support';
 
-// Gallery templates with a sample show a stored page image; the others
-// mount a live thumbnail.
 const LIVE_THUMBNAILS = TEMPLATES.length
   - new Set(SAMPLES.map(({ templateId }) => templateId)).size;
 
@@ -288,7 +286,6 @@ test.describe('Vietnamese chrome', () => {
 
           if (page.thumbnails > 0) {
             await expectThumbnailRenders(browserPage, page.thumbnails);
-            // Embedded names stay out of the page's heading outline.
             await expect(browserPage.locator('h1')).toHaveCount(1);
           }
 
@@ -447,10 +444,6 @@ for (const path of ['/', '/templates'] as const) {
   }
 }
 
-// The hero sheet and its ghost stay the same size and centered at phone
-// widths in both engines. iPhone Safari once laid the zoomed sheet out
-// narrower than its stage, leaving the ghost wider and the pair off center
-// (DESIGN.md, landing).
 const PHONE_WIDTHS = [360, 375, 390, 414, 430] as const;
 
 async function expectCenteredSheet(page: Page, width: number) {

@@ -1,9 +1,4 @@
 <script setup lang="ts">
-/**
- * The review form: notices, the resume and personal detail cards, one card
- * per found section, the check line, and the not-imported card
- * (docs/design/linkedin-import-ui.md, "Review state").
- */
 import { CircleAlert } from '@lucide/vue';
 import { computed } from 'vue';
 import CheckboxField from '@/components/app/CheckboxField.vue';
@@ -48,9 +43,6 @@ const emit = defineEmits<{
 }>();
 
 const notices = computed(() => buildNoticeLines(props.locale, props.review));
-// checkDocument maps a failing path to the entry or detail id it belongs to,
-// so this set covers both (apps/web/app/import/linkedin/build.ts,
-// `checkDocument`).
 const invalidEntryIds = computed((): ReadonlySet<string> =>
   props.schemaCheck.ok ? new Set() : new Set(props.schemaCheck.entryIds));
 const personal = computed(() => editorFieldsCopy[props.locale].personal);
@@ -70,9 +62,6 @@ type DetailType = 'email' | 'phone' | 'location' | 'linkedin' | 'website';
 function detailFieldName(type: DetailType): string {
   return personal.value[type];
 }
-/** Email and phone start unchecked, because a published resume shows them;
- * `contactOffHint` explains that on its own line under the value (docs/
- * design/linkedin-import-ui.md, "Personal details card"). */
 function isContactField(type: DetailType): boolean {
   return type === 'email' || type === 'phone';
 }

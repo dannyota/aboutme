@@ -44,7 +44,6 @@ const reason = ref<RecoveryReason | null>(null);
 const { locale } = useLocale();
 const copy = computed(() => editorControlsCopy[locale.value].controls);
 
-// Recovery reads the latest accepted resume, as recoverTemplate does.
 const latest = computed(
   () => props.actions.record.value?.accepted ?? props.state.accepted,
 );
@@ -168,8 +167,6 @@ function assertNever(value: never): never {
       >
         {{ reasonText }}
       </StatusBanner>
-      <!-- The footer stacks in reverse on phones, so the primary action
-           comes last here to show first there (DESIGN.md). -->
       <AlertDialogFooter>
         <Button
           ref="keepButton"

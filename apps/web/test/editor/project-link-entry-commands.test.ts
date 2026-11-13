@@ -19,10 +19,6 @@ import type { AcceptedResume, EditorRuntime } from '../../app/editor/types';
 import { acceptedFixture } from './fixture';
 import { openEditor } from './held-write-editor';
 
-// Linking an existing, unlinked project entry (docs/design/projects.md
-// "Selection"): an atomic command through the editor's write queue that adds
-// only the reference and keeps every field of the entry.
-
 const PROJECT = '0190f000-0000-7000-8000-0000000000c1';
 const OTHER_PROJECT = '0190f000-0000-7000-8000-0000000000c2';
 const ENTRY = '0190f000-0000-7000-8000-0000000000e1';

@@ -4,7 +4,6 @@ import type { PhotoReadState } from '../../stores/resumes';
 
 export type PhotoState = 'ready' | 'loading' | 'unavailable' | 'none';
 
-/** The document the preview renders: photo metadata only with its URL. */
 export function previewProjection(
   document: Resume,
   photoUrl: string | undefined,

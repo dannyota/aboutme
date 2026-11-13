@@ -1,5 +1,3 @@
-// noticeCut formats its character count per locale, not as a raw digit
-// string (docs/design/linkedin-import-ui.md, "Messages").
 import { describe, expect, it } from 'vitest';
 
 import { importCopy } from '../../../app/i18n/import';

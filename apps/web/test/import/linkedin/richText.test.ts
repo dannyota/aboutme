@@ -1,8 +1,4 @@
 // @vitest-environment jsdom
-//
-// This file needs the client sanitizer (DOMPurify over jsdom) to verify the
-// generated HTML round-trips unchanged, so it runs under jsdom rather than
-// node, unlike dates.test.ts in this directory.
 
 import { HOSTILE_CORPUS } from '@aboutme/schema/sanitizer';
 import { describe, expect, it } from 'vitest';
@@ -241,7 +237,6 @@ describe('linesToRichText size limit', () => {
     expect(html.startsWith('<p>')).toBe(true);
     expect(html.endsWith('</p>')).toBe(true);
 
-    // No lone surrogate: every high surrogate is followed by a low surrogate.
     for (let i = 0; i < html.length; i += 1) {
       const code = html.charCodeAt(i);
       if (code >= 0xd800 && code <= 0xdbff) {

@@ -1,14 +1,5 @@
 import { TEMPLATES } from '@aboutme/schema/templates';
 
-/**
- * Login and registration return paths (`?next=`). The rule matches the
- * server's OAuth return path check (apps/server/internal/auth/returnpath.go):
- * a same-origin path with one leading slash, no backslash, and no control
- * character, both as written and after percent-decoding the path, and no
- * "." or ".." segment in the decoded path. /app/new keeps only a known sample
- * or template id and an en or vi language.
- */
-
 export const DEFAULT_RETURN_PATH = '/app/resumes';
 
 const MAX_RETURN_PATH_BYTES = 2048;
@@ -32,7 +23,6 @@ function plainPath(value: string): boolean {
     && !value.includes('\\') && !hasControlCharacter(value);
 }
 
-// Resolving a "." or ".." segment can turn "/.//host" into "//host".
 function hasDotSegment(path: string): boolean {
   return path.split('/').some((segment) => segment === '.' || segment === '..');
 }
@@ -63,7 +53,6 @@ function appNewReturnPath(query: URLSearchParams): string {
   return search === '' ? APP_NEW_PATH : `${APP_NEW_PATH}?${search}`;
 }
 
-/** The validated return path, or null when `value` is not acceptable. */
 export function validateReturnPath(value: unknown): string | null {
   if (typeof value !== 'string' || value === '' || !plainPath(value)) {
     return null;
@@ -82,18 +71,13 @@ export function validateReturnPath(value: unknown): string | null {
     return null;
   }
   if (parsed.origin !== ORIGIN) return null;
-  // The router matches paths without regard to case or a trailing slash.
+  // vue-router matches paths case-insensitively, with an optional trailing /.
   if (decoded.replace(/\/$/u, '').toLowerCase() === APP_NEW_PATH) {
     return appNewReturnPath(parsed.searchParams);
   }
   return value;
 }
 
-// Every path this app's client (Vue) router renders itself. A validated
-// return path outside this set is still a legitimate same-origin
-// destination — for example `/oauth/authorize`, served by the Go backend —
-// so it needs a real browser navigation instead of a client-side route
-// change, which would otherwise land on nothing the router can match.
 const APP_ROUTE_PATTERNS: readonly RegExp[] = [
   /^\/$/u,
   /^\/login$/u,
@@ -111,11 +95,6 @@ const APP_ROUTE_PATTERNS: readonly RegExp[] = [
   /^\/app\/settings\/sessions$/u,
 ];
 
-/**
- * True when `path` is a page this app's own client router can render.
- * Deliberately exact: an unrecognized path defaults to `false` (a real
- * browser navigation) rather than risking a client-side dead end.
- */
 export function isAppRoute(path: string): boolean {
   const pathname = path.split(/[?#]/u, 1)[0] ?? '';
   return APP_ROUTE_PATTERNS.some((pattern) => pattern.test(pathname));
@@ -126,23 +105,11 @@ function pathOnly(path: string): string {
   return pathname.length > 1 ? pathname.replace(/\/+$/u, '') : pathname;
 }
 
-/**
- * True when `path` names a route that requires a signed-in session:
- * `/authorize` and every `/app/**` route (docs/design/web.md, Application
- * surfaces). The router matches paths without regard to case or a trailing
- * slash, so this normalizes both before comparing.
- */
 export function requiresSession(path: string): boolean {
   const lowered = pathOnly(path).toLowerCase();
   return lowered === '/authorize' || lowered.startsWith('/app/');
 }
 
-/**
- * Where a signed-out visit to a session-required route goes: `/app/new`
- * goes to `/register` (a visitor there came from a public gallery page, not
- * the app), every other route goes to `/login`, each carrying a validated
- * `?next=` back to `fullPath` (docs/design/web.md, the shared route guard).
- */
 export function signedOutRedirect(fullPath: string): string {
   const next = validateReturnPath(fullPath);
   const base = pathOnly(fullPath).toLowerCase() === APP_NEW_PATH

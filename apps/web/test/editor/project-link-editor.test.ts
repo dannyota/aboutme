@@ -85,7 +85,6 @@ function recordWith(
   };
 }
 
-/** Actions whose edits join the record's queue, as the store does. */
 function actionsFor(record: Ref<ResumeRecord>) {
   return {
     record: computed(() => record.value),
@@ -280,13 +279,9 @@ describe('adding a project another published resume shows', () => {
   });
 
   interface Choice {
-    /** This resume as the editor loaded it. */
     readonly live: boolean;
-    /** The project's links as the library list showed them. */
     readonly cached?: readonly string[];
-    /** The project's links when read again; null when that read fails. */
     readonly fresh?: readonly string[] | null;
-    /** This resume in the account list read again; null when it fails. */
     readonly listedLive?: boolean | null;
   }
 
@@ -410,7 +405,6 @@ describe('adding a project another published resume shows', () => {
       expect([resumeList.mock.calls.length, api.read.mock.calls.length])
         .toEqual([1, 1]);
 
-      // The queue holds the link through a retry, then it lands.
       const held = record.value.pending[0]!;
       record.value = {
         ...record.value,

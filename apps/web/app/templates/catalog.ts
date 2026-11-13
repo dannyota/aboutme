@@ -6,14 +6,6 @@ import fontCatalog from '../assets/fonts/catalog.json';
 import type { Locale } from '../i18n/locale';
 import { SAMPLE_PAGES } from './samplePages';
 
-/**
- * The template gallery's catalog: what each of the 20 templates is for, in
- * both site languages, and the facts the gallery filters on. Presets and
- * samples come from @aboutme/schema; this file holds only the gallery copy
- * and judgments.
- */
-
-/** The gallery's single-choice filters, in chip order (SPEC §2). */
 export const FILTERS = [
   'sample',
   'ats',
@@ -26,7 +18,6 @@ export const FILTERS = [
 
 export type GalleryFilter = (typeof FILTERS)[number];
 
-/** The gallery's tech role chips, in chip order (DESIGN.md, Library). */
 export const ROLES = [
   'backend',
   'frontend',
@@ -41,11 +32,6 @@ export const ROLES = [
 
 export type GalleryRole = (typeof ROLES)[number];
 
-/**
- * The one template whose sample is for each role. Membership is an
- * editorial judgment, kept here, not in the schema; it matches the
- * `sampleTags` given to each template below.
- */
 export const ROLE_MEMBERS: Readonly<Record<GalleryRole, readonly string[]>> = {
   'backend': ['one-page-tight'],
   'frontend': ['engineer-compact'],
@@ -58,12 +44,6 @@ export const ROLE_MEMBERS: Readonly<Record<GalleryRole, readonly string[]>> = {
   'security': ['consulting-formal'],
 };
 
-/**
- * Which templates each filter shows, besides "sample", which follows the
- * samples. Membership is an editorial judgment, kept here, not in the schema.
- * Exported so the editor search box can also match a template's filter chip
- * labels (`app/templates/search.ts`).
- */
 export const MEMBERS: Readonly<
   Record<Exclude<GalleryFilter, 'sample'>, readonly string[]>
 > = {
@@ -83,7 +63,6 @@ export const MEMBERS: Readonly<
     'graduate-friendly',
     'minimal-air',
   ],
-  // Every template can show a photo; these suit one.
   'photo': [
     'modern-sidebar',
     'executive-band',
@@ -120,10 +99,6 @@ export const MEMBERS: Readonly<
   ],
 };
 
-/**
- * The templates with a sample lead the gallery: the nine tech role samples
- * in role chip order, then the other four with a sample.
- */
 const SAMPLE_ORDER = [
   ...ROLES.flatMap((role) => ROLE_MEMBERS[role]),
   'ats-plain',
@@ -133,12 +108,7 @@ const SAMPLE_ORDER = [
 ];
 
 interface CatalogEntry {
-  /** One line on what the template is for, per site language. */
   readonly purpose: Readonly<Record<Locale, string>>;
-  /**
-   * The tag naming each sample, by the sample's language, in each site
-   * language ("CV mẫu: Kỹ sư backend" on the Vietnamese site).
-   */
   readonly sampleTags?: Readonly<
     Record<SampleLanguage, Readonly<Record<Locale, string>>>
   >;
@@ -404,11 +374,8 @@ export interface GalleryTemplate extends CatalogEntry {
   readonly columns: 1 | 2;
   readonly pageFormat: 'a4' | 'letter';
   readonly fontName: string;
-  /** Sample languages this template has, in SAMPLES order. */
   readonly sampleLanguages: readonly SampleLanguage[];
-  /** Suits a header photo; every template can show one. */
   readonly suitsPhoto: boolean;
-  /** The sample's page count, when the template has a sample. */
   readonly samplePages?: number;
 }
 
@@ -416,10 +383,6 @@ const fontNames = new Map(
   fontCatalog.entries.map((entry) => [entry.id, entry.displayName]),
 );
 
-/**
- * The 20 templates in gallery order: the nine tech role samples first, then
- * the other samples, then the rest (DESIGN.md, Library).
- */
 export const GALLERY: readonly GalleryTemplate[] = Object.freeze(
   TEMPLATES.map((preset): GalleryTemplate => {
     const entry = ENTRIES[preset.id];
@@ -461,10 +424,6 @@ export function galleryTemplate(id: string): GalleryTemplate | undefined {
   return GALLERY.find((template) => template.id === id);
 }
 
-/**
- * The role a sample shows, from its tag ("Sample: Backend engineer" gives
- * "Backend engineer"), in a given language.
- */
 export function sampleRole(
   template: GalleryTemplate,
   sampleLanguage: SampleLanguage,
@@ -474,7 +433,6 @@ export function sampleRole(
     .replace(/^(?:CV mẫu|Sample): /u, '');
 }
 
-/** Whether a template belongs under a gallery filter. */
 export function matchesFilter(
   template: GalleryTemplate,
   filter: GalleryFilter,
@@ -484,17 +442,14 @@ export function matchesFilter(
     : MEMBERS[filter].includes(template.id);
 }
 
-/** The filter named in a query value, or undefined for "all". */
 export function parseFilter(value: unknown): GalleryFilter | undefined {
   return FILTERS.find((filter) => filter === value);
 }
 
-/** Every template id each filter names, for the catalog checks. */
 export function filterMembers(): Readonly<Record<string, readonly string[]>> {
   return MEMBERS;
 }
 
-/** Whether a template is the sample shown for a tech role chip. */
 export function matchesRole(
   template: GalleryTemplate,
   role: GalleryRole,
@@ -502,16 +457,10 @@ export function matchesRole(
   return ROLE_MEMBERS[role].includes(template.id);
 }
 
-/** The role named in a query value, or undefined for "all roles". */
 export function parseRole(value: unknown): GalleryRole | undefined {
   return ROLES.find((role) => role === value);
 }
 
-/**
- * A copy of a route query with the role chip set, keeping every other key
- * (notably `filter`). Undefined removes the `role` key so "all roles" drops
- * it from the URL (DESIGN.md, Library).
- */
 export function withRole(
   query: LocationQuery,
   role: GalleryRole | undefined,
@@ -525,7 +474,6 @@ export function withRole(
   return next;
 }
 
-/** Normalized Library targets preserve unrelated query keys. */
 export function withGalleryFilters(
   query: LocationQuery,
   role: GalleryRole | undefined,

@@ -12,15 +12,10 @@ const props = defineProps<{
   readonly copy: ViewsDetailCopy;
 }>();
 
-// Plain elements and CSS only: each day is a bar whose height is
-// proportional to the busiest day in the 90-day window (counting.md,
-// "What the owner sees").
 const maxReal = computed(() => (
   props.days.reduce((max, day) => Math.max(max, day.real), 0)
 ));
 
-// True when there is nothing real to chart, so the bars row gives way to
-// the "no real views" message instead of a row of invisible bars.
 const allZero = computed(() => maxReal.value === 0);
 
 function barHeightPercent(real: number): number {
@@ -28,7 +23,6 @@ function barHeightPercent(real: number): number {
   return Math.max(2, Math.round((real / maxReal.value) * 100));
 }
 
-// First, middle, and last day label the x-axis.
 const axisDays = computed(() => {
   const days = props.days;
   if (days.length === 0) return [];

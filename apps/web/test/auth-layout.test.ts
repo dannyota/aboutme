@@ -8,10 +8,6 @@ import LoginPage from '../app/pages/login.vue';
 import { registerCapabilities } from './support/capabilities';
 import { setSiteLocale } from './support/locale';
 
-// `AuthLayout` frames every account page with a form-first shell and a
-// brand panel shown only from 1024 px (DESIGN.md "Authenticated chrome and
-// editor"; ADR 0020 keeps this chrome off the renderer).
-
 registerCapabilities();
 
 const appRoot = join(process.cwd(), 'app');

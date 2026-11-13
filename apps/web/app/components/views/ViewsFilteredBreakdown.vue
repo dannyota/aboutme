@@ -48,9 +48,6 @@ const totals = computed(() => {
         v-for="key in FILTERED_KEYS"
         :key="key"
       >
-        <!-- Balanced wrapping keeps a long Vietnamese label such as
-             "Không vượt qua kiểm tra" from leaving one word alone on the
-             second line in the narrow five-column grid. -->
         <dt class="text-balance text-muted-foreground">
           {{ props.copy.filteredLabels[key] }}
         </dt>

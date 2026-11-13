@@ -134,8 +134,6 @@ describe('useOAuthConsent', () => {
     [400, 'reauth_required', 'unavailable'],
     [500, 'other', 'unavailable'],
     [500, 'internal_error', 'unavailable'],
-    // Rule 7: only the exact 409/agent_limit_reached pair maps to the
-    // grant-limit failure; every other 409 or 400 stays unavailable.
     [409, 'agent_limit_reached', 'agent-limit'],
     [409, 'other', 'unavailable'],
     [400, 'agent_limit_reached', 'unavailable'],

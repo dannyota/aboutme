@@ -27,9 +27,6 @@ import {
   templateStructuredData,
 } from '../../app/templates/structuredData';
 
-// The template gallery's catalog, filters, documents, and search data
-// (DESIGN.md, template gallery).
-
 const ids = TEMPLATES.map((template) => template.id);
 
 describe('gallery catalog', () => {

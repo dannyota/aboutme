@@ -7,20 +7,12 @@ import {
   type CreateProjectRequest,
 } from './projectDocument';
 
-// A library project made from a resume's own project entry
-// (docs/design/projects.md "Selection"): `name` from `title`, `role` from
-// `subtitle`, `repositoryUrl` or `demoUrl` from `link`, `dates` from
-// `dates`, and `summary` from the description as plain text, cut to the
-// summary limit.
-
-/** Hosts whose links are repositories rather than demos. */
 const CODE_HOSTS: ReadonlySet<string> = new Set([
   'github.com', 'gitlab.com', 'bitbucket.org', 'codeberg.org',
 ]);
 
 const BLOCK_TAGS: ReadonlySet<string> = new Set(['P', 'UL', 'OL', 'LI', 'BR']);
 
-/** Whether the entry has the text a project needs: a name within limits. */
 export function canSaveEntry(entry: ProjectEntry): boolean {
   const name = entry.title?.trim() ?? '';
   return name !== ''
@@ -28,11 +20,6 @@ export function canSaveEntry(entry: ProjectEntry): boolean {
     && characterCount(entry.subtitle?.trim() ?? '') <= TEXT_LIMITS.role;
 }
 
-/**
- * The language the project is written in: the resume's, as its primary
- * subtag, so the project page under this resume needs no fallback; the
- * site language when the resume has none.
- */
 export function projectLanguage(
   lng: string | null | undefined,
   siteLocale: string,
@@ -66,7 +53,6 @@ export function projectFromEntry(
   };
 }
 
-/** An https link and its host; a project cannot hold mailto: or tel:. */
 function httpsLink(
   value: string | undefined,
 ): { readonly href: string; readonly host: string } | null {
@@ -90,21 +76,16 @@ function copyDates(
   };
 }
 
-/**
- * The text of sanitized rich text: paragraph, list and line breaks become
- * spaces, entities are decoded by the browser's inert parser, and white
- * space collapses.
- */
 function plainText(html: string): string {
   if (html === '' || typeof DOMParser === 'undefined') return '';
   const parsed = new DOMParser().parseFromString(html, 'text/html');
   let out = '';
   const walk = (node: ChildNode): void => {
-    if (node.nodeType === 3) { // Node.TEXT_NODE
+    if (node.nodeType === 3) {
       out += node.textContent ?? '';
       return;
     }
-    const block = node.nodeType === 1 // Node.ELEMENT_NODE
+    const block = node.nodeType === 1
       && BLOCK_TAGS.has((node as Element).tagName);
     if (block) out += ' ';
     node.childNodes.forEach(walk);
@@ -114,10 +95,6 @@ function plainText(html: string): string {
   return out.replace(/\s+/gu, ' ').trim();
 }
 
-/**
- * At most `limit` code points, as the server counts them, ending on a
- * whole character so no emoji or accent is split.
- */
 function cut(text: string, limit: number): string {
   if (characterCount(text) <= limit) return text;
   let out = '';

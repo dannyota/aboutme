@@ -1,17 +1,5 @@
 import type { Resume, Section } from '@aboutme/schema';
 
-// A TypeScript copy of the Go link-preview text rules
-// (apps/server/internal/previewmeta/text.go,
-// apps/server/internal/previewmeta/previewmeta.go), so the publish dialog can
-// show the preview text and the card text from editor data with no server
-// call. See docs/design/link-previews.md, "Text rules".
-//
-// The editor's Resume document is not yet projected to the public shape, so
-// every export here applies the same visibility rules Go's
-// internal/publicresume/projection.go applies: a hidden entry, a hidden or
-// empty-valued contact detail, and a section outside
-// customization.layout.sections (main then sidebar) never reach the output.
-
 export const SITE_NAME = 'aboutme.vn';
 
 const MAX_TITLE_GRAPHEMES = 70;
@@ -27,9 +15,7 @@ const ELLIPSIS = '…';
 const encoder = new TextEncoder();
 const byteLength = (text: string): number => encoder.encode(text).length;
 
-// unicode.IsSpace's White_Space set: U+0009-U+000D, U+0020, U+0085, U+00A0,
-// U+1680, U+2000-U+200A, U+2028, U+2029, U+202F, U+205F, U+3000. JavaScript's
-// \s differs (it also matches U+FEFF), so the set is listed explicitly.
+// JS \s matches U+FEFF; Go's unicode.IsSpace does not (ECMA-262, Go unicode).
 const WHITE_SPACE_CODE_POINTS = new Set([
   0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x20, 0x85, 0xa0, 0x1680, 0x2028, 0x2029,
   0x202f, 0x205f, 0x3000,
@@ -40,8 +26,6 @@ const isSpaceRune = (character: string): boolean => {
   return WHITE_SPACE_CODE_POINTS.has(codePoint);
 };
 const isControlRune = (character: string): boolean => /\p{Cc}/u.test(character);
-// Bidirectional formatting characters: U+061C, U+200E, U+200F, U+202A to
-// U+202E, U+2066 to U+2069.
 const isBidiFormatting = (character: string): boolean => {
   const codePoint = character.codePointAt(0)!;
   return codePoint === 0x061c || codePoint === 0x200e || codePoint === 0x200f
@@ -49,10 +33,6 @@ const isBidiFormatting = (character: string): boolean => {
     || (codePoint >= 0x2066 && codePoint <= 0x2069);
 };
 
-/**
- * Normalize (Go's Normalize): replace control and bidirectional formatting
- * characters with a space, collapse white space runs to one space, and trim.
- */
 export function normalizePreviewText(text: string): string {
   let out = '';
   let pendingSpace = false;
@@ -96,8 +76,6 @@ const charAfter = (text: string, index: number): string => {
 const isLetter = (character: string): boolean => /\p{L}/u.test(character);
 const isDigit = (character: string): boolean => /\p{Nd}/u.test(character);
 
-// phoneToken: a token touching a letter or digit, such as an order ID, is not
-// contact data, and neither is a run of years such as 2012-2016-2020.
 const isPhoneToken = (text: string, start: number, end: number): boolean => {
   const before = charBefore(text, start);
   const after = charAfter(text, end);
@@ -128,11 +106,6 @@ const scrubPhones = (text: string): string => {
   return out;
 };
 
-/**
- * Scrub (Go's Scrub): remove every exact contact value, every email-shaped
- * token, and every phone-shaped token with nine or more digits, then
- * normalize again.
- */
 export function scrubPreviewText(
   text: string,
   contacts: readonly string[],
@@ -163,13 +136,6 @@ const fitsDescription = (text: string): boolean =>
   byteLength(text) <= MAX_DESCRIPTION_BYTES
   && graphemeCount(text) <= MAX_DESCRIPTION_GRAPHEMES;
 
-/**
- * Cut (Go's Cut): shorten a normalized description to
- * MaxDescriptionGraphemes. Keeps the longest run of whole sentences that
- * fits when that run has at least 60 clusters; otherwise cuts at the last
- * space at or before cluster 159, drops trailing `,;:–-` and spaces, and
- * appends an ellipsis.
- */
 export function cutPreviewDescription(text: string): string {
   if (fitsDescription(text)) return text;
   let run = '';
@@ -208,9 +174,6 @@ export function cutPreviewDescription(text: string): string {
   return trimRightCutset(clusters.slice(0, end).join(''), ',;:–- ') + ELLIPSIS;
 }
 
-// firstGraphemes (Go's firstGraphemes): keeps at most `limit` whole grapheme
-// clusters and, when maxBytes is positive, at most maxBytes bytes, then
-// trims trailing spaces.
 function firstGraphemes(text: string, limit: number, maxBytes: number): string {
   const clusters = graphemeClusters(text);
   let out = '';
@@ -224,11 +187,6 @@ function firstGraphemes(text: string, limit: number, maxBytes: number): string {
   return trimRightSpace(out);
 }
 
-/**
- * Locale (Go's Locale): maps a BCP 47 resume language to an Open Graph
- * locale: vi to vi_VN, en to en_US, and language-REGION to language_REGION.
- * Every other language, including und, maps to "".
- */
 export function previewLocale(lng: string): string {
   if (lng === 'vi') return 'vi_VN';
   if (lng === 'en') return 'en_US';
@@ -255,8 +213,6 @@ const siteSlug = (slug: string): string => `${SITE_NAME}/${slug}`;
 const isVietnamese = (lng: string): boolean =>
   (lng.split('-', 1)[0] ?? '').toLowerCase() === 'vi';
 
-// cardField (Go's cardField): a normalized name or headline, or "" when
-// scrubbing would change it.
 function cardField(value: string, contacts: readonly string[]): string {
   const normalized = normalizePreviewText(value);
   const scrubbed = scrubPreviewText(normalized, contacts);
@@ -265,19 +221,16 @@ function cardField(value: string, contacts: readonly string[]): string {
 
 const BLOCK_TAGS = new Set(['P', 'UL', 'OL', 'LI', 'BR']);
 
-// richTextPlain (Go's richTextPlain): the plain text of sanitized rich text,
-// with paragraph, list, list-item, and line-break boundaries becoming
-// spaces, and entities decoded by the browser's HTML parser.
 function richTextPlain(source: string): string {
   if (typeof DOMParser === 'undefined') return '';
   const parsed = new DOMParser().parseFromString(source, 'text/html');
   let out = '';
   const walk = (node: ChildNode): void => {
-    if (node.nodeType === 3) { // Node.TEXT_NODE
+    if (node.nodeType === 3) {
       out += node.textContent ?? '';
       return;
     }
-    const block = node.nodeType === 1 // Node.ELEMENT_NODE
+    const block = node.nodeType === 1
       && BLOCK_TAGS.has((node as Element).tagName);
     if (block) out += ' ';
     node.childNodes.forEach(walk);
@@ -292,10 +245,6 @@ const isVisible = (entry: EntryLike): boolean => entry.isHidden !== true;
 const hasVisibleEntry = (section: Section): boolean =>
   section.entries.some(isVisible);
 
-// firstVisibleSection (Go's firstSection): the first section in layout order
-// (main then sidebar) with the requested sectionType and at least one
-// visible entry. A section with no visible entry is skipped, never blocking
-// a later section of the same type.
 function firstVisibleSection<T extends Section['sectionType']>(
   document: Resume,
   sectionType: T,
@@ -311,8 +260,6 @@ function firstVisibleSection<T extends Section['sectionType']>(
   return undefined;
 }
 
-// summary (Go's summary): the plain text of the first profile section's
-// visible entries in layout order.
 function summary(document: Resume): string {
   const section = firstVisibleSection(document, 'profile');
   if (section === undefined) return '';
@@ -324,9 +271,6 @@ function summary(document: Resume): string {
   return normalizePreviewText(parts.join(' '));
 }
 
-// latestRole (Go's latestRole): the first visible entry of the first work
-// section in layout order, as "<job title>, <employer>" or whichever field
-// exists.
 function latestRole(document: Resume): string {
   const section = firstVisibleSection(document, 'work');
   if (section === undefined) return '';
@@ -341,10 +285,6 @@ function latestRole(document: Resume): string {
   return joinPresent(', ', title, employer);
 }
 
-/**
- * previewContactValues (Go's contactValues): the normalized visible,
- * non-empty contact detail values, longest first (stable).
- */
 export function previewContactValues(document: Resume): string[] {
   const values: string[] = [];
   for (const detail of document.personalDetails.details ?? []) {
@@ -355,10 +295,6 @@ export function previewContactValues(document: Resume): string[] {
   return [...values].sort((a, b) => byteLength(b) - byteLength(a));
 }
 
-/**
- * previewTitle (Go's Title): the public title as written when set, else the
- * scrubbed full name cut to 70 clusters, else the site and slug.
- */
 export function previewTitle(
   publicTitle: string | null,
   document: Resume,
@@ -374,10 +310,6 @@ export function previewTitle(
   return name !== '' ? name : siteSlug(slug);
 }
 
-/**
- * previewDescription (Go's Description): the summary, or its fallback, as
- * plain text cut to 160 clusters.
- */
 export function previewDescription(document: Resume, lng: string): string {
   const contacts = previewContactValues(document);
   const summaryText = scrubPreviewText(summary(document), contacts);
@@ -395,11 +327,6 @@ export function previewDescription(document: Resume, lng: string): string {
   return isVietnamese(lng) ? `CV trên ${SITE_NAME}` : `Resume on ${SITE_NAME}`;
 }
 
-/**
- * previewImageText (Go's ImageText): the name, plus a spaced middle dot and
- * the headline, cut to 200 clusters; the site and slug when there is no
- * name.
- */
 export function previewImageText(document: Resume, slug: string): string {
   const contacts = previewContactValues(document);
   const name = cardField(document.personalDetails.fullName ?? '', contacts);
@@ -414,11 +341,6 @@ export function previewImageText(document: Resume, slug: string): string {
   );
 }
 
-/**
- * previewCardText (Go's CardText): the name and headline the preview card
- * shows, each normalized and null when scrubbing would change it. The
- * headline is null too when there is no name.
- */
 export function previewCardText(
   document: Resume,
 ): { name: string | null; headline: string | null } {

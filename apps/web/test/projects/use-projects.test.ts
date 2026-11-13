@@ -45,7 +45,6 @@ async function editorSetup(loaded = project()) {
   return { api, auth, user, navigate, editor };
 }
 
-/** Another tab signs in as a different account while a write is out. */
 function switchAccountOnRefresh(
   auth: ReturnType<typeof fakeAuth>['auth'],
   user: ReturnType<typeof fakeAuth>['user'],
@@ -224,6 +223,28 @@ describe('project editor', () => {
       expect(editor.draft.value?.text.en?.name).toBe('Elsewhere');
       expect(editor.notice.value).toBeNull();
     });
+
+  it('keeps text typed while a save runs', async () => {
+    const { editor, api } = await editorSetup();
+    editor.draft.value!.text.en!.name = 'Shop';
+    let answer: (value: unknown) => void = () => {};
+    api.replace.mockImplementation(() => new Promise((resolve) => {
+      answer = resolve;
+    }));
+
+    const saving = editor.save();
+    await flushPromises();
+    editor.draft.value!.text.en!.name = 'Shop typed during the save';
+    answer(ok(project({
+      revision: '4', text: { en: { name: 'Shop', role: 'Lead engineer' } },
+    })));
+    await saving;
+
+    expect(editor.loaded.value?.revision).toBe('4');
+    expect(editor.draft.value?.text.en?.name).toBe(
+      'Shop typed during the save',
+    );
+  });
 
   it('loads, edits and saves a project that already has dates', async () => {
     const { editor, api } = await editorSetup(dated());
@@ -431,7 +452,6 @@ describe('address change and deletion with a second factor', () => {
     data: { secondFactorRequired: true },
   });
 
-  /** An enrolled account answers the password with a pending factor. */
   async function factorPending(kind: 'address' | 'delete' = 'address') {
     const context = releaseSetup();
     const send = kind === 'delete' ? context.api.remove : context.api.replace;

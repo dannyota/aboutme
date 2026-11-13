@@ -18,9 +18,6 @@ import {
 } from '../../app/templates/startDocument';
 import { setSiteLocale } from '../support/locale';
 
-// Starting a resume from a gallery sample or a template: the /app/new query,
-// the starting document, and the create dialog's sample choice.
-
 const mounted = new Set<{ unmount: () => void }>();
 
 afterEach(() => {

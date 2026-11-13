@@ -6,10 +6,6 @@ import TemplateCard from '../../app/components/templates/TemplateCard.vue';
 import { galleryCopy } from '../../app/i18n/templates';
 import { galleryTemplate } from '../../app/templates/catalog';
 
-// A gallery card with a stored sample page image shows that image instead of
-// the live scaled render; one without a sample, or without `pageImageAlt`
-// (the homepage's cards), still shows the live render (DESIGN.md, Library).
-
 const atsPlain = galleryTemplate('ats-plain')!;
 const classicSerif = galleryTemplate('classic-serif')!;
 

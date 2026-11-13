@@ -11,10 +11,6 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 
-// From your projects for a project the resume already has as an unlinked
-// entry (docs/design/ui/projects.md "In the resume editor"). Link that
-// entry is the default and takes the focus; Cancel or dismissing sends
-// nothing.
 defineProps<{
   readonly open: boolean;
   readonly title: string;

@@ -1,9 +1,4 @@
 <script setup lang="ts">
-/**
- * `PageSettings` controls the page size and margins used for the PDF and for
- * printing. Margins are presets over the stored millimetre pair; Custom
- * reveals the two axes. Letter pages show inches and store millimetres.
- */
 import type { Customization } from '@aboutme/schema';
 import { computed, ref, watch } from 'vue';
 

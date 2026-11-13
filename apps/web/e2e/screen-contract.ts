@@ -31,7 +31,6 @@ export const SCREEN_CLASSES = [
 ] as const;
 export type ScreenClass = typeof SCREEN_CLASSES[number];
 
-/** Use the same named checks for captured cells and their seeded defects. */
 export async function expectScreenClass(
   page: Page,
   contract: ScreenContract,

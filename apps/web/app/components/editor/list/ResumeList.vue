@@ -26,7 +26,6 @@ const props = withDefaults(
     busyIds: readonly string[];
     removalFocusId: string | null;
     removalFocusVersion: number;
-    /** The list's own rename or delete of a card that has not settled. */
     saveStates?: Readonly<Record<string, ResumeCardSaveState>>;
     now?: Date;
   }>(),
@@ -219,7 +218,6 @@ watch(
           gap-1 rounded-[var(--radius-sheet)] border-2 border-dashed
           border-border bg-card/50 p-6 text-sm text-muted-foreground"
       >
-        <!-- The header creates blank resumes; menus create language copies. -->
         <template v-if="items.length === 0 && n === 1">
           <span
             class="text-foreground"

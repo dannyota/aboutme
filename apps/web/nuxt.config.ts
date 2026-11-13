@@ -80,7 +80,6 @@ const buildPublicRenderWorker = async (
     build: {
       ssr: resolve('server/workers/public-render/worker-entry.ts'),
       outDir: publicRenderBuildDir,
-      // The validator and hydration asset share this private build directory.
       emptyOutDir: false,
       rollupOptions: {
         treeshake: { moduleSideEffects: false },
@@ -92,9 +91,7 @@ const buildPublicRenderWorker = async (
       },
     },
     ssr: {
-      // @lucide/vue must be bundled with this build's single vue instance;
-      // externalizing it leaves its inject() calling a second node_modules
-      // vue, which has no current instance during SSR and fails the render.
+      // @lucide/vue's inject() needs the one bundled vue instance during SSR.
       noExternal: ['vue', 'vue/server-renderer', '@lucide/vue'],
       external: ['@aboutme/schema', '@aboutme/schema/sanitizer'],
     },
@@ -104,9 +101,7 @@ const buildPublicRenderWorker = async (
 const buildPublicResumeHydration = async (): Promise<void> => {
   await viteBuild({
     configFile: false,
-    // This client bundle runs in a browser, where `process` does not exist.
-    // Vue's runtime emits `process.env.NODE_ENV` dev-warning guards, so
-    // replace them with a literal to keep the bundle browser-safe.
+    // Vue's runtime emits process.env.NODE_ENV guards; browsers lack process.
     define: { 'process.env.NODE_ENV': JSON.stringify('production') },
     plugins: [
       publicRenderSanitizerPlugin(),
@@ -200,8 +195,7 @@ const publicRenderWorkerPlugin = (emitAssets = true) => ({
       if (!existsSync(publicRenderWorker)) {
         throw new Error('Public render worker was not built.');
       }
-      // Resolve against the server entry (import.meta.url), not the importing
-      // chunk: ROLLUP_FILE_URL breaks under nuxt dev and code-split builds.
+      // Rollup's ROLLUP_FILE_URL breaks under nuxt dev and code-split builds.
       this.emitFile({
         type: 'asset',
         fileName: 'workers/public-render.mjs',
@@ -214,12 +208,9 @@ const publicRenderWorkerPlugin = (emitAssets = true) => ({
   },
 });
 
-// https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
   modules: ['@nuxt/eslint', '@pinia/nuxt', 'shadcn-nuxt'],
 
-  // Server-side rendering is required: public resume pages and SEO/GEO
-  // surfaces must be crawlable without JS (spec §5).
   ssr: true,
 
   devtools: { enabled: false },
@@ -228,16 +219,7 @@ export default defineNuxtConfig({
     head: {
       htmlAttrs: { lang: 'en' },
       script: [{ src: '/theme-bootstrap.js' }],
-      // The seal mark (DESIGN.md; ADR 0020). Order
-      // matters: a PNG `sizes="32x32"` link goes first so browsers that
-      // pick the first suitable icon (notably iOS/iPadOS Safari, which
-      // does not resolve the SVG for the tab switcher and pinned-tab
-      // grid) get a raster they can use; the SVG follows for scalable
-      // rendering everywhere else; `apple-touch-icon` with an explicit
-      // `sizes="180x180"` is the opaque, full-bleed icon iOS uses for the
-      // home screen and app switcher. The manifest link and theme-color
-      // meta back the same icon set for Android/desktop "add to home
-      // screen" (docs/adr/0020-application-visual-identity.md).
+      // iOS Safari takes the first suitable icon and skips SVG: PNG goes first.
       link: [
         {
           rel: 'icon',
@@ -254,16 +236,11 @@ export default defineNuxtConfig({
         { rel: 'manifest', href: '/site-v3.webmanifest' },
       ],
       meta: [
-        // Safari auto-links digit runs such as date ranges into tel: links;
-        // this opts every page (including sample resumes) out of that,
-        // without touching the explicit tel:/mailto: anchors contact
-        // details render.
+        // Safari auto-links digit runs such as date ranges as tel: links.
         {
           name: 'format-detection',
           content: 'telephone=no, date=no, address=no, email=no',
         },
-        // Matches the manifest's theme_color (ADR 0020's brand blue): the
-        // browser chrome color on Android and the pull-to-refresh tint.
         { name: 'theme-color', content: '#26409c' },
       ],
     },
@@ -274,8 +251,6 @@ export default defineNuxtConfig({
   runtimeConfig: {
     printOrigin: 'http://127.0.0.1:20082',
     public: {
-      // Go API base path. Same-origin in dev/prod (Caddy routes /api/v1/*
-      // to the server); override only for local experimentation.
       apiBase: '/api/v1',
     },
   },
@@ -292,28 +267,10 @@ export default defineNuxtConfig({
   },
 
   routeRules: {
-    // Every Nuxt-rendered page gets the app-page CSP by default; a page with
-    // its own inline script (the homepage and template pages' JSON-LD) needs
-    // no wider policy for it, since that script is a data block the browser
-    // never executes (app/utils/csp.ts cites the HTML spec). This default
-    // header never reaches a browser unchanged from the two internal routes
-    // under this wildcard: the print route's own handler overwrites it with
-    // the exact policy Chromium's real navigation there enforces
-    // (server/utils/print/handler.ts,
-    // apps/server/internal/printrender/policy.go), and the public-render
-    // route is read only by Go's render client, which reads its body and
-    // ignores every header but Content-Type
-    // (apps/server/internal/directrender/client.go).
     '/**': { headers: { 'Content-Security-Policy': APP_CSP } },
-    // The account pages are client-rendered, so their first HTML is a shell
-    // without head tags; this header keeps them out of search engines.
     '/app/**': { headers: { 'X-Robots-Tag': 'noindex' } },
-    // The community showcase is never indexed or followed
-    // (docs/design/showcase.md, Search engines and discovery).
     '/showcase': { headers: { 'X-Robots-Tag': 'noindex, nofollow' } },
     '/app/resumes/**': { ssr: false },
-    // The LinkedIn import page loads pdf.js only in the browser
-    // (docs/design/linkedin-import.md).
     '/app/import/**': { ssr: false },
     ...(harnessEnabled
       ? {
@@ -330,10 +287,6 @@ export default defineNuxtConfig({
 
   experimental: {
     entryImportMap: false,
-    // Links prefetch their route chunk on hover, focus, or touch, not on
-    // sight: the homepage and header show many links above the fold, and
-    // visibility prefetch fetched every target on first paint
-    // (docs/design/web.md).
     defaults: {
       nuxtLink: { prefetchOn: { visibility: false, interaction: true } },
     },
@@ -364,34 +317,19 @@ export default defineNuxtConfig({
 
   vite: {
     plugins: [tailwindcss(), publicRenderWorkerPlugin(false)],
-    // The dev server discovers these on the first visit to a page that
-    // imports them and then reloads the document at whatever URL it shows.
-    // A client navigation that has not committed yet is lost to that reload,
-    // so the first sign-in would land back on /login. Production builds
-    // bundle them and never reload.
+    // Vite's dev server reloads the page when it discovers a new dependency.
     optimizeDeps: {
       include: [
         '@lucide/vue',
         '@vueuse/core',
-        // The editor's precompiled document validator
-        // (app/editor/documentValidator.generated.mjs) imports these Ajv
-        // runtime helpers directly; the resume list is the first page after
-        // sign-in to reach it.
         'ajv-formats/dist/formats.js',
         'ajv/dist/runtime/equal.js',
         'ajv/dist/runtime/ucs2length.js',
         'class-variance-authority',
         'clsx',
         'dompurify',
-        // Lazy routes import these: the API client on the editor and agent
-        // settings, the QR encoder on two-factor settings, and pdf.js on the
-        // LinkedIn import. The dev server's startup crawl reaches them too.
         'openapi-fetch',
         'pdfjs-dist/legacy/build/pdf.mjs',
-        // The rich-text editor is the first thing on the editor route
-        // (/app/resumes/**, client-only) to import these; the same
-        // first-visit reload the comment above describes for sign-in also
-        // interrupts the editor's first hydration.
         'prosemirror-commands',
         'prosemirror-history',
         'prosemirror-keymap',
@@ -414,9 +352,6 @@ export default defineNuxtConfig({
     'nitro:build:before': async () => {
       buildPublicResumeValidator(publicRenderBuildDir);
       buildPrintDocumentValidator(printBuildDir);
-      // The public worker bakes in content versions of the public
-      // stylesheets and the hydration bundle, so all are written before it
-      // builds.
       await buildPrintWorker(printBuildDir, printDocumentValidator);
       await buildPublicResumeHydration();
       await buildPublicRenderWorker(

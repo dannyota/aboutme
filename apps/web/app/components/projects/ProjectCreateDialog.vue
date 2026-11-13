@@ -19,9 +19,7 @@ const props = defineProps<{
   readonly open: boolean;
   readonly state: CreateState;
   readonly copy: ProjectsCopy;
-  /** The account's resumes the new project may be shown on. */
   readonly resumes: readonly ResumeSummary[];
-  /** The note the last submit decided to show. */
   readonly privacyNote?: boolean;
 }>();
 const emit = defineEmits<{
@@ -31,8 +29,6 @@ const emit = defineEmits<{
 
 const name = ref('');
 const chosen = ref<readonly string[]>([]);
-// docs/design/projects.md "Privacy": two published resumes would let a
-// reader of both connect them.
 const sharesPublic = computed(() =>
   choosesTwoPublished(props.resumes, chosen.value)
   || (props.privacyNote === true && chosen.value.length >= 2));
@@ -56,7 +52,6 @@ watch(() => props.open, (open) => {
 
 function choose(resumeId: string, checked: boolean): void {
   const others = chosen.value.filter((id) => id !== resumeId);
-  // Resume list order, so links go out in the order the owner sees.
   chosen.value = props.resumes.map((resume) => resume.id).filter((id) =>
     others.includes(id) || (checked && id === resumeId));
 }

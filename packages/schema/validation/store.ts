@@ -1,23 +1,11 @@
-// Aggregate validation that JSON Schema cannot express or the Go write boundary
-// does not execute: UTF-8 byte limits, cross-field placement and date rules,
-// resume-wide ID uniqueness, contact URL schemes, and photo-key traversal.
-// TypeScript and Go share fixtures so verdicts and issue order stay aligned.
-// See docs/design/data.md#bounds-and-invariants and
-// docs/design/security.md#untrusted-document-content.
-
-/** Rich-text limit in UTF-8 bytes; schema maxLength counts code points. */
 export const MAX_RICH_TEXT_BYTES = 16384;
 
 export interface ValidationIssue {
-  /** Stable machine-readable rule id, e.g. "rich-text-byte-length". */
   rule: string;
-  /** Dotted/bracketed path into the document, e.g. "content.work.entries[0].description". */
   path: string;
-  /** Human-readable explanation, safe to surface in a 422 response. */
   message: string;
 }
 
-/** UTF-8 byte length across Node and browsers, matching Go string bytes. */
 export function utf8ByteLength(value: string): number {
   return new TextEncoder().encode(value).length;
 }
@@ -42,9 +30,6 @@ export function validateRichTextByteLength(
   return [];
 }
 
-// Rich-text fields by section discriminator. Own-property lookup is required:
-// hostile values such as "constructor" and "__proto__" must not resolve
-// through Object.prototype.
 const RICH_TEXT_FIELDS_BY_SECTION_TYPE: Record<string, string[]> = {
   profile: ["text"],
   work: ["description"],
@@ -66,10 +51,6 @@ function richTextFieldsFor(sectionType: string | undefined): string[] {
   return RICH_TEXT_FIELDS_BY_SECTION_TYPE[sectionType]!;
 }
 
-/**
- * Treats malformed non-arrays as empty so aggregate validation never throws.
- * Go's typed decoder rejects these shapes before this boundary.
- */
 function toArray<T>(value: unknown): T[] {
   return Array.isArray(value) ? (value as T[]) : [];
 }
@@ -114,11 +95,6 @@ interface LayoutSections {
   sidebar?: string[];
 }
 
-/**
- * Enforces that every content key appears exactly once across both layout
- * arrays. Duplicate placements, missing references, and orphan content use
- * distinct rule IDs. See docs/adr/0004-resume-document-contract.md.
- */
 export function validateLayoutSections(
   content: Record<string, DocumentSection> | undefined,
   layoutSections: LayoutSections | undefined,
@@ -165,16 +141,8 @@ export function validateLayoutSections(
   return issues;
 }
 
-/**
- * Enforces entry-ID uniqueness across the whole resume and reports every
- * occurrence. Missing or non-string IDs normalize to the empty Go string value
- * so malformed input has the same result in both implementations.
- */
-// A valid document may contain 1,536 entries. Bound peer paths in each issue so
-// one repeated ID cannot produce quadratic response text.
 const MAX_OTHER_PATHS_IN_MESSAGE = 3;
 
-// Formats a bounded, sorted list of the duplicate occurrence's peer paths.
 function formatOtherPaths(sortedPaths: string[], path: string): string {
   const shown: string[] = [];
   for (const p of sortedPaths) {
@@ -182,7 +150,7 @@ function formatOtherPaths(sortedPaths: string[], path: string): string {
     if (shown.length === MAX_OTHER_PATHS_IN_MESSAGE) break;
     shown.push(p);
   }
-  const total = sortedPaths.length - 1; // every path is unique, so exactly one entry equals `path`
+  const total = sortedPaths.length - 1;
   const remaining = total - shown.length;
   const suffix = remaining > 0 ? `, and ${remaining} more` : "";
   return shown.join(", ") + suffix;
@@ -204,11 +172,9 @@ export function validateEntryIdUniqueness(
     });
   }
 
-  // Sort IDs and paths so emitted messages match Go regardless of map order.
   for (const id of [...pathsById.keys()].sort()) {
     const paths = pathsById.get(id)!;
     if (paths.length <= 1) continue;
-    // Sort once per duplicated ID before emitting one issue per occurrence.
     const sortedPaths = [...paths].sort();
     for (const path of sortedPaths) {
       issues.push({
@@ -222,11 +188,6 @@ export function validateEntryIdUniqueness(
   return issues;
 }
 
-/**
- * Enforces unique contact detail IDs. Old-client writes restore each detail's
- * display by ID (docs/adr/0013-resume-header-and-contacts.md).
- * Missing or non-string IDs normalize to the empty Go string value.
- */
 export function validateDetailIdUniqueness(
   personalDetails: PersonalDetails | undefined,
 ): ValidationIssue[] {
@@ -264,15 +225,10 @@ interface DateRange {
   present: boolean;
 }
 
-// Missing months compare as January, so two year-only dates compare equal.
 function yearMonthOrdinal(value: YearMonth): number {
   return value.y * 12 + (value.m ?? 1);
 }
 
-/**
- * Enforces start<=end when end exists. A malformed missing start yields no
- * issue instead of throwing, matching Go's zero-value tolerance.
- */
 export function validateDateRange(
   dates: DateRange | null | undefined,
   path: string,
@@ -293,7 +249,6 @@ export function validateDateRange(
   return [];
 }
 
-// Section types with date ranges. Certificates use one date, not a range.
 const DATE_RANGE_SECTION_TYPES = new Set([
   "work",
   "education",
@@ -322,9 +277,6 @@ export function validateDateRanges(
   return issues;
 }
 
-// Only known plain-text contact types are exempt. URL types and malformed
-// discriminators default to the https requirement. See
-// docs/adr/0013-resume-header-and-contacts.md.
 const DETAIL_TYPES_WITHOUT_URL_CONSTRAINT = new Set([
   "email",
   "phone",
@@ -347,12 +299,6 @@ interface PersonalDetails {
   photo?: Photo;
 }
 
-/**
- * Requires exact lowercase https:// for linkable or malformed contact types;
- * an empty value remains valid. This store check protects the Go boundary,
- * which does not execute JSON Schema. AJV separately checks full URI syntax.
- * See docs/adr/0013-resume-header-and-contacts.md.
- */
 export function validatePersonalDetailUrlSchemes(
   personalDetails: PersonalDetails | undefined,
 ): ValidationIssue[] {
@@ -378,11 +324,7 @@ export function validatePersonalDetailUrlSchemes(
   return issues;
 }
 
-/**
- * Rejects ".." in photo object keys. This stays outside the schema pattern
- * because negative lookahead is not portable to Go RE2; a substring check has
- * identical TypeScript and Go behavior. See docs/design/security.md#untrusted-media.
- */
+// Go's RE2 has no lookahead, so the schema pattern cannot reject "..".
 export function validatePhotoKeyTraversal(
   personalDetails: PersonalDetails | undefined,
 ): ValidationIssue[] {
@@ -403,11 +345,6 @@ interface ResumeDocument {
   personalDetails?: PersonalDetails;
 }
 
-/**
- * Locale-independent final order by path, rule, then message. Sorting once at
- * this boundary keeps caller-visible output aligned with Go regardless of each
- * rule's internal iteration order.
- */
 function compareIssues(a: ValidationIssue, b: ValidationIssue): number {
   if (a.path !== b.path) return a.path < b.path ? -1 : 1;
   if (a.rule !== b.rule) return a.rule < b.rule ? -1 : 1;
@@ -415,11 +352,6 @@ function compareIssues(a: ValidationIssue, b: ValidationIssue): number {
   return 0;
 }
 
-/**
- * Runs every aggregate rule and returns all issues in canonical order. Null,
- * undefined, and other malformed top-level values yield no issues rather than
- * throwing at this untyped boundary.
- */
 export function validateDocument(
   doc: ResumeDocument | null | undefined,
 ): ValidationIssue[] {

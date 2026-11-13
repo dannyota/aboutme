@@ -17,11 +17,6 @@ import { registerCapabilities } from '../support/capabilities';
 import { setSiteLocale } from '../support/locale';
 import { holdSignedOutRedirects } from '../support/signedOutRedirects';
 
-// The community showcase page: states, URL filters, count line, filter bar
-// and sheet, active-filter chips, tiles, invite card, pager, and the privacy
-// rules (docs/design/showcase.md; docs/design/ui/showcase.md; AC-SHOW-002,
-// 005, 008, 013, 014).
-
 mockNuxtImport('navigateTo', () => vi.fn());
 registerCapabilities({ providerLogin: false, agentAccess: false });
 let meStatus = 401;
@@ -46,7 +41,6 @@ registerEndpoint('/api/v1/me', (event) => {
 });
 
 const LISTING_PATH = '/api/v1/public/showcase';
-// Raw HTML, browser storage, cookies, and server-side or cached fetching.
 const FORBIDDEN = new RegExp([
   'v-html',
   'innerHTML',
@@ -84,11 +78,9 @@ function respond(reply: Reply | undefined): Promise<Response> {
   }));
 }
 
-/** Queues replies for the listing; the last one repeats. */
 function stubListing(...next: Reply[]): void {
   replies = next;
   calls = [];
-  // Everything but the listing, such as the session read, keeps its mock.
   const realFetch = globalThis.fetch;
   const stub = (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : String(input);
@@ -123,10 +115,8 @@ function page(items: ShowcaseItem[], extra: object = {}) {
   };
 }
 
-// A page left mounted would keep reacting to later route changes.
 const mounted: { unmount(): void }[] = [];
 
-/** `attach` puts the page in the document, which focus checks need. */
 async function mountPage(route = '/showcase', attach = false) {
   const wrapper = await mountSuspended(
     ShowcasePage,
@@ -137,10 +127,6 @@ async function mountPage(route = '/showcase', attach = false) {
   return wrapper;
 }
 
-/**
- * Stubs `matchMedia`: the 1024 px query follows `set`, every other query
- * does not match. The page's `useMediaQuery` watcher listens for changes.
- */
 function stubViewport(initialWide: boolean) {
   let wide = initialWide;
   const listeners = new Set<(event: { matches: boolean }) => void>();
@@ -189,7 +175,6 @@ function bodyElement(selector: string): HTMLElement {
   return found;
 }
 
-/** Focuses the Filters button, as a click does, then opens the sheet. */
 async function openSheet(wrapper: Awaited<ReturnType<typeof mountPage>>) {
   const button = wrapper.get('[data-action="showcase-filters-open"]');
   (button.element as HTMLElement).focus();
@@ -285,7 +270,6 @@ describe('showcase page states', () => {
       const action = empty.get('a');
       expect(action.text()).toBe(showcaseCopy.en.emptyAction);
       expect(action.attributes('href')).toBe('/register');
-      // The filter rows stay.
       expect(wrapper.find('[data-testid="showcase-roles"]').exists())
         .toBe(true);
       expect(wrapper.find('[data-testid="showcase-pager"]').exists())
@@ -328,7 +312,6 @@ describe('showcase page states', () => {
     const wrapper = await mountPage('/showcase?role=qa');
     const line = wrapper.get('[data-state="no-match"]');
     expect(line.text()).toBe(showcaseCopy.en.noMatch);
-    // The count line is the live region; the line adds no second one.
     expect(line.attributes('role')).toBeUndefined();
     expect(wrapper.find('[data-testid="showcase-pager"]').exists()).toBe(false);
   });
@@ -341,7 +324,6 @@ describe('showcase page states', () => {
         .toBe(showcaseCopy.en.noMatch);
       const pager = wrapper.get('[data-testid="showcase-pager"]');
       expect(pager.text()).toContain('Page 5 of 3');
-      // Previous lands on the last real page; Next is not a link.
       expect(pager.get('a[data-action="showcase-previous"]')
         .attributes('href')).toBe('/showcase?page=3');
       const next = pager.get('[data-action="showcase-next"]');
@@ -378,7 +360,6 @@ describe('showcase page states', () => {
     expect(wrapper.find('[data-state="failed"]').exists()).toBe(true);
     expect(wrapper.get('[data-action="showcase-retry"]')
       .attributes('aria-disabled')).toBe('true');
-    // A second click while busy sends nothing.
     await wrapper.get('[data-action="showcase-retry"]').trigger('click');
     expect(calls).toHaveLength(2);
   });
@@ -425,7 +406,6 @@ describe('showcase filters in the URL', () => {
       .toBe('true');
   });
 
-  // Navigation settles asynchronously, so each step waits for the route.
   it('writes a role change to the URL, drops page, and reloads', async () => {
     stubListing(page([item('ada-lovelace')]));
     const wrapper = await mountPage('/showcase?lang=en&page=3');
@@ -433,7 +413,6 @@ describe('showcase filters in the URL', () => {
     await expectQuery({ role: 'frontend', lang: 'en' });
     await vi.waitFor(() => expect(listingUrls().at(-1))
       .toBe(`${LISTING_PATH}?role=frontend&lang=en`));
-    // A pressed chip stays pressed when pressed again.
     const before = calls.length;
     await wrapper.get('[data-role="frontend"]').trigger('click');
     await flushPromises();
@@ -461,7 +440,6 @@ describe('showcase filters in the URL', () => {
         mockImplementation(impl: (to: never) => Promise<unknown>): void;
       };
       const settle = spied.getMockImplementation()!;
-      // Navigation lands late, as it can on a slow device.
       spied.mockImplementation(async (to) => {
         await new Promise((resolve) => setTimeout(resolve, 50));
         return settle(to);
@@ -589,8 +567,6 @@ describe('showcase tiles', () => {
     expect(image.attributes('width')).toBe('1200');
     expect(image.attributes('height')).toBe('630');
     expect(tile.find('b').exists()).toBe(false);
-    // Role chip and language on one row, then the template, then the footer
-    // with the slug as plain text outside the tile link (S14).
     expect(link.get('.showcase-tile__line').text()).toBe('Data/AIVietnamese');
     expect(link.get('[data-showcase-role]').text()).toBe('Data/AI');
     expect(link.get('.showcase-tile__template').text())
@@ -620,7 +596,6 @@ describe('showcase tiles', () => {
       stubListing(page([item('ada-lovelace')]));
       const en = await mountPage();
       const report = en.get('[data-action="showcase-report"]');
-      // An icon link: the name is its aria-label, with no visible text.
       expect(report.text()).toBe('');
       expect(report.find('svg').attributes('aria-hidden')).toBe('true');
       expect(report.attributes('aria-label'))
@@ -629,7 +604,6 @@ describe('showcase tiles', () => {
         'mailto:danny@aboutme.vn?subject='
         + encodeURIComponent('Report showcase: ada-lovelace'),
       );
-      // Report is never inside the tile link.
       expect(en.get('[data-showcase-tile]')
         .find('[data-action="showcase-report"]').exists()).toBe(false);
       en.unmount();
@@ -693,7 +667,7 @@ describe('showcase privacy', () => {
       const app = await mountSuspended(AppRoot, { route: '/showcase' });
       mounted.push(app);
       await flushPromises();
-      // unhead writes the DOM on a zero-delay timer.
+      // @unhead/vue writes the DOM on a zero-delay timer.
       await vi.waitFor(() => {
         const robots = document.head.querySelectorAll('meta[name="robots"]');
         expect(robots).toHaveLength(1);
@@ -801,9 +775,6 @@ describe('showcase count line', () => {
       .find('[data-slot="skeleton"]').exists()).toBe(false);
   });
 
-  // A change that keeps the total leaves the text as it was; the keyed node
-  // is replaced so the live region announces the same text again
-  // (docs/design/ui/showcase.md, Count line).
   describe('announcing a change with the same total', () => {
     function textNode(wrapper: Awaited<ReturnType<typeof mountPage>>) {
       return wrapper.get('[data-testid="showcase-count"] > span').element;
@@ -863,8 +834,6 @@ describe('showcase count line', () => {
       stubListing(reply, reply);
       const wrapper = await mountPage();
       const before = textNode(wrapper);
-      // The pager link changes only `page` in the route; this harness mocks
-      // NuxtLink's navigation, so the test moves the route as the link does.
       await useRouter().replace({ path: '/showcase', query: { page: '2' } });
       await settleLoad(wrapper);
       expect(listingUrls().at(-1)).toBe(`${LISTING_PATH}?page=2`);
@@ -904,7 +873,6 @@ describe('showcase count line', () => {
         await flushPromises();
         expect(countText(wrapper)).toBe(showcaseCopy[locale].countLine(5));
         expect(textNode(wrapper)).toBe(before);
-        // A stale reply cannot announce the abandoned filters.
         finishChange(await respond(reply));
         await flushPromises();
         expect(textNode(wrapper)).toBe(before);
@@ -994,7 +962,6 @@ describe('showcase filter bar and rail', () => {
       expect(rail.attributes('aria-label')).toBe('Filters');
       expect(rail.find('[data-testid="showcase-filters"]').exists())
         .toBe(true);
-      // No role row outside the rail, and none in the bar.
       expect(bar.find('[data-testid="showcase-roles"]').exists()).toBe(false);
     });
 
@@ -1038,7 +1005,6 @@ describe('showcase filter bar and rail', () => {
     }
     expect(badgeElement.text()).toBe(badge);
     expect(badgeElement.attributes('aria-hidden')).toBe('true');
-    // The name starts with the visible label (WCAG 2.5.3).
     expect(name!.startsWith(button.text().replace(badge, '').trim()))
       .toBe(true);
   });
@@ -1258,7 +1224,6 @@ describe('showcase active filters', () => {
       .toEqual(['Backend', 'Vietnamese', 'Custom design']);
     expect(group.get('[data-action="showcase-filters-clear-all"]').text())
       .toBe('Clear all');
-    // It is the first row of the results area.
     expect(wrapper.get('[data-testid="showcase-results"]').element
       .firstElementChild).toBe(group.element);
   });

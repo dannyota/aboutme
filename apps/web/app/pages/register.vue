@@ -1,13 +1,4 @@
 <script setup lang="ts">
-/**
- * Registration page: name/email/password with component-local confirmation.
- *
- * The server is authoritative for password policy; the client checks only
- * required fields and local confirmation, then maps the closed policy issues
- * to fixed copy. The 202 success copy is fixed and reveals nothing about
- * email ownership. The server answers 202 before any mail is sent, so the
- * missing-email hint is shown to everyone and never claims a send failed.
- */
 import FormField from '@/components/app/FormField.vue';
 import AuthLayout from '@/components/auth/AuthLayout.vue';
 import PasswordField from '@/components/auth/PasswordField.vue';
@@ -30,9 +21,6 @@ import { validateReturnPath } from '@/utils/returnPath';
 
 const route = useRoute();
 const { locale } = useLocale();
-// A validated return path survives registration: provider sign-up and the
-// later password sign-in both return there. It is also remembered for
-// verify-email.vue, which opens in a new tab with no query of its own.
 const explicitNext = computed(() => validateReturnPath(route.query.next));
 const signInLink = computed(() => (explicitNext.value
   ? `/login?next=${encodeURIComponent(explicitNext.value)}`
@@ -40,10 +28,6 @@ const signInLink = computed(() => (explicitNext.value
 const copy = computed(() => authCopy[locale.value]);
 useHead(computed(() => ({ title: pageTitle(copy.value.createAccount) })));
 const { loginProviders, passwordRegistration, resolved } = useCapabilities();
-// While the client-only read is pending the form keeps its space but stays
-// hidden and inert, so it never flashes and then disappears.
-// The server may close sign-up after this page loaded; its 404 then shows
-// the same closed note.
 const closedByServer = ref(false);
 const formState = computed<'pending' | 'open' | 'closed'>(() => {
   if (closedByServer.value) return 'closed';
@@ -100,8 +84,6 @@ async function onSubmit() {
     });
     success.value = true;
     password.value = '';
-    // Carried forward so the verification email link can return there too;
-    // a null next clears an older one so it never reaches a later signup.
     remember(explicitNext.value);
   } catch (failure) {
     if ((failure as PasswordAuthFailure).kind === 'not-found') {
@@ -261,8 +243,6 @@ async function onSubmit() {
         />
       </template>
     </template>
-    <!-- Hold one provider button's space until the client-only read resolves;
-         no link renders before then. -->
     <div
       v-if="!success && !resolved"
       aria-hidden="true"

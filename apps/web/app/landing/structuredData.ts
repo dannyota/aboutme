@@ -1,11 +1,6 @@
 import { repositoryUrl } from '../i18n/legal';
 import { siteName, siteOrigin } from '../i18n/meta';
 
-/**
- * The homepage's schema.org graph. Every value is a fact the site already
- * states: the name, the address, the open repository, and that it is free.
- * No ratings, reviews, or user counts.
- */
 export function homeStructuredData(description: string): string {
   const url = `${siteOrigin}/`;
   const graph = {
@@ -39,6 +34,5 @@ export function homeStructuredData(description: string): string {
       },
     ],
   };
-  // JSON-LD is data, not script; escaping "<" keeps "</script>" out of it.
   return JSON.stringify(graph).replace(/</g, '\\u003c');
 }

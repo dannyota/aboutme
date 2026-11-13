@@ -5,9 +5,6 @@ import type {
 import type { ProjectPageCopy } from '../../i18n/project-pages';
 import ProjectDescription from './ProjectDescription';
 
-// The project page's text column (docs/design/ui/project-pages.md, "Project
-// page"): the outcome in a bordered panel, the description, and a link to
-// the other projects. Each section is a region named by its heading.
 defineProps<{
   readonly project: ProjectDetail;
   readonly copy: ProjectPageCopy;

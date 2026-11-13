@@ -5,15 +5,9 @@ import type { Locale } from '@/i18n/locale';
 
 import { SEAL_WORD, sealLayout, STAMP_HEIGHT } from './sealLayout';
 
-// The public seal (DESIGN.md, ADR 0020). The stamp is a rounded ticket: the
-// logo's seal mark (outer ring and "a") and the word PUBLIC (CÔNG KHAI in
-// Vietnamese) on top, a hairline, then the public link. It grows with the
-// link so a slug never overlaps itself (sealLayout.ts). The mark is a 20 px
-// seal tile with a check that always sits beside the public link.
 const props = withDefaults(
   defineProps<{
     link: string;
-    /** The stamp's word follows the page language (PUBLIC or CÔNG KHAI). */
     locale: Locale;
     label?: string;
     size?: 'mark' | 'stamp';
@@ -50,8 +44,6 @@ const logoTransform = computed(() =>
       data-seal-stamp
       :transform="`rotate(${rotate} ${layout.width / 2} ${STAMP_HEIGHT / 2})`"
     >
-      <!-- An opaque ground under the tint, so an edge or a line the stamp
-           sits on never shows through it. -->
       <rect
         data-seal-ground
         fill="var(--card)"

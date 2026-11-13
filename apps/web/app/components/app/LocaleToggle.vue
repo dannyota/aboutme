@@ -7,8 +7,6 @@ import {
 } from '@/i18n/locale';
 import { cn } from '@/lib/utils';
 
-// `compact` keeps the short labels (VI and EN) until 64rem instead of 640px,
-// for the signed-out header (docs/design/ui/landing-and-library.md).
 withDefaults(defineProps<{
   readonly label: string;
   readonly testId?: 'landing-locale' | 'workspace-locale';

@@ -16,8 +16,6 @@ import {
   useResizablePanel,
 } from '../../app/composables/useResizablePanel';
 
-// A viewport wide enough that the preview's 29.5rem floor never limits the
-// panel (needs more than 98rem), so tests can assert the flat 48rem ceiling.
 const WIDE_VIEWPORT_REM = 200;
 const originalClientWidth = document.documentElement.clientWidth;
 
@@ -32,9 +30,6 @@ function useWideViewport(): void {
   setClientWidthPx(WIDE_VIEWPORT_REM * 16);
 }
 
-// useResizablePanel reads document.documentElement.clientWidth at setup, so
-// every test gets a viewport wide enough that the 48rem ceiling, not the
-// preview floor, is what a stored or dragged width is checked against.
 beforeEach(useWideViewport);
 
 afterEach(() => {
@@ -51,19 +46,15 @@ describe('maxPanelWidthRem', () => {
 
   it('keeps the preview at its 29.5rem floor on a mid-size viewport', () => {
     expect(EDITOR_PREVIEW_MIN_REM).toBe(29.5);
-    // 90rem viewport - 20.5rem rail/outline - 29.5rem preview floor = 40rem.
     expect(maxPanelWidthRem(90)).toBe(40);
   });
 
   it('fits the 22rem minimum exactly at the 72rem breakpoint', () => {
-    // 72rem - 20.5rem - 29.5rem = 22rem: the narrowest four-region layout
-    // holds the default panel and the preview floor with no overflow.
     expect(maxPanelWidthRem(72)).toBe(EDITOR_PANEL_MIN_REM);
     expect(maxPanelWidthRem(73)).toBe(23);
   });
 
   it('never drops the max below the 22rem minimum', () => {
-    // 70rem - 20.5rem - 29.5rem = 20rem of room, less than the minimum.
     expect(maxPanelWidthRem(70)).toBe(EDITOR_PANEL_MIN_REM);
   });
 });
@@ -168,8 +159,6 @@ describe('createResizablePanelController', () => {
   it.each([
     ['ArrowLeft', false, 22, 23],
     ['ArrowLeft', true, 22, 26],
-    // Right/decrease starts away from the min, or it would clamp straight
-    // back to the floor and not show a change.
     ['ArrowRight', false, 30, 29],
     ['ArrowRight', true, 30, 26],
   ] as const)(
@@ -384,15 +373,11 @@ describe('useResizablePanel', () => {
       await wrapper.vm.$nextTick();
       expect(wrapper.vm.panel.widthRem.value).toBe(30);
 
-      // 1100px (68.75rem) leaves no room for the panel beyond the preview's
-      // 29.5rem floor, so the display clamps to the 22rem minimum.
       setClientWidthPx(1100);
       window.dispatchEvent(new Event('resize'));
       await wrapper.vm.$nextTick();
       expect(wrapper.vm.panel.widthRem.value).toBe(EDITOR_PANEL_MIN_REM);
 
-      // 1440px (90rem) has room for 30rem again; the stored preference,
-      // not the shrunk display value, drives the regrow.
       setClientWidthPx(1440);
       window.dispatchEvent(new Event('resize'));
       await wrapper.vm.$nextTick();

@@ -17,11 +17,6 @@ export interface SiteSeo {
   readonly locale: Locale;
 }
 
-/**
- * Title, description, canonical link, Open Graph, and Twitter card for an
- * indexable site page. The language lives in a cookie, not the URL, so there
- * is one canonical URL per page and no hreflang.
- */
 export function useSiteSeo(input: MaybeRefOrGetter<SiteSeo>): void {
   const seo = computed(() => toValue(input));
   useHead(computed(() => {

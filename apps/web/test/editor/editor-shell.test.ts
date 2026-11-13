@@ -32,7 +32,6 @@ import type { ResumeRecord } from '../../app/stores/resumes';
 import { acceptedFixture } from './fixture';
 import { setSiteLocale } from '../support/locale';
 
-// EditorPreview.vue's own storage key for the PDF/Web mode toggle.
 const PREVIEW_MODE_STORAGE_KEY = 'aboutme.editorPreviewMode';
 
 afterEach(() => {
@@ -161,8 +160,6 @@ describe('EditorShell', () => {
         global: { stubs: heavyStubs({ preview: 'real' }) },
       });
 
-      // The topbar names the resume in its own h1; the real preview below
-      // renders the resume name as a p, so the workspace keeps one h1.
       expect(wrapper.get('[data-resume-title]').element.tagName).toBe('H1');
       expect(wrapper.findAll('h1')).toHaveLength(1);
       expect(wrapper.get('.resume-name').element.tagName).toBe('P');
@@ -397,7 +394,6 @@ describe('EditorShell', () => {
     expect(wrapper.get('[data-testid="public-mark"]').classes()).not.toContain(
       'shrink-0',
     );
-    // The full wordmark gives way to the mark alone below 56rem.
     const brand = wrapper.get('.editor-brand').html();
     expect(brand).toContain('max-[56rem]:hidden');
     expect(brand).toContain('min-[56rem]:hidden');
@@ -547,8 +543,6 @@ describe('EditorShell', () => {
       ));
       expect(wide).toBeDefined();
       expect(narrow).toBeDefined();
-      // The narrow layout takes over below this width; at it, the rail,
-      // outline, preview floor, and default 22rem panel must not overflow.
       const breakpointRem = Number(/^max-\[([\d.]+)rem\]/.exec(narrow!)![1]);
       const tracks = [...wide!.matchAll(/([\d.]+)rem/g)]
         .map((match) => Number(match[1]));
@@ -568,9 +562,6 @@ describe('EditorShell', () => {
     () => {
       const wrapper = mountShell();
 
-      // A sr-only heading inside the inspector is `position: absolute`; the
-      // inspector must be a positioned ancestor or the heading is placed
-      // against the page instead, growing the page's scroll area.
       expect(wrapper.get('[data-region="inspector"]').classes())
         .toContain('relative');
     },
@@ -629,21 +620,16 @@ describe('EditorShell', () => {
       const switcher = wrapper.get('[role="tablist"]');
       const preview = wrapper.get('[data-responsive-region="preview"]');
 
-      // Up to 72 rem the preview spans the editor area and hides unless it is
-      // the active region (DESIGN.md), so the switch must show there too.
       expect(preview.classes()).toContain(
         'max-[72rem]:data-[narrow-active=false]:invisible',
       );
       expect(switcher.classes()).toContain('min-[72rem]:hidden');
       expect(switcher.classes()).not.toContain('min-[42rem]:hidden');
 
-      // The fixed switch must not cover the end of any stacked region.
       expect(wrapper.get('[data-region="inspector"]').classes())
         .toContain('max-[72rem]:pb-24');
       expect(wrapper.get('[data-region="outline"]').classes())
         .toContain('max-[72rem]:pb-16');
-      // The outline's padding only extends the scroll area if its content
-      // box grows with the section list instead of clipping at min-h-0.
       expect(
         wrapper.get('[data-region="outline"] > *').classes(),
       ).toContain('max-[72rem]:min-h-fit');

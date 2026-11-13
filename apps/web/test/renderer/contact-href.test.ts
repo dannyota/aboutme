@@ -20,9 +20,6 @@ function detail(
   return { id: 'detail-1', type, value, isHidden: false, ...extra };
 }
 
-// The corpus is shared with the server's internal/contactlink tests, so the
-// renderer and the public page validator link exactly the same values
-// (docs/adr/0013-resume-header-and-contacts.md).
 interface CorpusCase {
   type: PersonalDetail['type'];
   value: string;
@@ -74,7 +71,6 @@ describe('contact detail links', () => {
     href,
     icon,
   ) => {
-    // A stored display value does not change an email or phone link.
     const wrapper = mount(ContactChip, {
       props: {
         detail: detail(type, value, { display: 'label' }),

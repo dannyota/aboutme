@@ -15,15 +15,12 @@ const copy = computed(() => viewsIndexCopy[locale.value]);
 
 useHead({ title: computed(() => workspaceTitles[locale.value].views) });
 
-// The session cookie is only available client-side (no proxy at SSR).
 const { data, error, status } = await useFetch<ViewSummaryEnvelope>(
   '/api/v1/views',
   { credentials: 'include', server: false },
 );
 
-// server:false leaves `status` 'idle' during SSR, but hydration starts the
-// fetch (setting status 'pending') before the client's first render;
-// treating both as loading keeps the SSR and hydration renders identical.
+// Nuxt useFetch with server:false is 'idle' in SSR, 'pending' at hydration.
 const loading = computed(() => (
   status.value === 'idle' || status.value === 'pending'
 ));

@@ -9,8 +9,6 @@ import {
   PUBLIC_RENDER_FAILURE,
 } from '../../server/utils/public-render/envelope';
 
-// The shared corpus Go encodes from its request types
-// (docs/design/projects-contract.md "Render envelope").
 const corpus = JSON.parse(readFileSync(
   resolve(
     process.cwd(),
@@ -337,8 +335,6 @@ describe('project resume and head fields', () => {
 });
 
 describe('project envelope values Go can and cannot send', () => {
-  // U+1D49C is four bytes in UTF-8, so 300 of them are the longest summary
-  // the library stores, and the project page's description.
   const longSummary = '𝒜'.repeat(300);
   const withPreview = (envelope: Envelope, fields: Envelope): Envelope => ({
     ...envelope,
@@ -386,8 +382,6 @@ describe('project envelope values Go can and cannot send', () => {
   });
 
   it('admits the longest uncut project title and no longer', () => {
-    // 681 four-byte characters and one three-byte euro sign make 2,727
-    // bytes; 683 ASCII letters make 683 code points.
     const titles = {
       accepted: [`${'𝒜'.repeat(681)}€`, 'a'.repeat(683)],
       rejected: ['𝒜'.repeat(682), 'a'.repeat(684)],
@@ -484,7 +478,6 @@ describe('project envelope values Go can and cannot send', () => {
     for (const dates of [
       { start: { y: 2021 }, end: { y: 2020 }, present: false },
       { start: { y: 2020, m: 5 }, end: { y: 2020, m: 4 }, present: false },
-      // An omitted month counts as January, as in Go.
       { start: { y: 2020, m: 5 }, end: { y: 2020 }, present: false },
     ]) {
       rejects(withProject(detail(), { dates }));

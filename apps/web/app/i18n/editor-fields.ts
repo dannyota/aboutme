@@ -119,7 +119,6 @@ export type EditorFieldsCopy = {
     | 'cancel',
     string
   > & { readonly deleteDescription: (entry: string) => string };
-  /** A project section's library controls (docs/design/ui/projects.md). */
   readonly projectLinks: Record<
     | 'blankEntry'
     | 'fromProjects'

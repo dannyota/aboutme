@@ -38,10 +38,6 @@ function byteOrder(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
 }
 
-/**
- * The document as the server encodes it: the Go schema.Resume holds content
- * in a map, which encoding/json writes in byte order of its keys.
- */
 function serverEncoded(document: AcceptedResume['document']) {
   const content = Object.fromEntries(
     Object.keys(document.content)
@@ -53,12 +49,6 @@ function serverEncoded(document: AcceptedResume['document']) {
   );
 }
 
-/**
- * The server's 200 response to one template child, following
- * apps/server/internal/resumeapi/customization.go and persist.go: a set
- * creates a missing parent and replaces the leaf, an unset deletes the leaf,
- * and the response re-encodes the whole stored document.
- */
 function serverAccept(
   before: AcceptedResume,
   child: TemplateChildCommand,
@@ -116,8 +106,6 @@ function runGroup(group: TemplateGroupCommand, start: AcceptedResume) {
   return state;
 }
 
-/** An owner-like resume: two columns with a sidebar, a custom date format,
- * a non-default font size, body justify, and a photo position. */
 function ownerLike(): AcceptedResume {
   const document = structuredClone(fullDocument);
   document.customization.dateFormat = 'MM/YYYY';
@@ -133,11 +121,6 @@ function ownerLike(): AcceptedResume {
   return acceptedFixture({ document });
 }
 
-/**
- * Every starting resume: three bases, and each base after every preset.
- * With `server`, the editor holds content in the order the server writes it;
- * with `fixture`, it holds the fixture's own order, which differs.
- */
 function startingPoints(order: KeyOrder) {
   const bases = [
     {
@@ -172,15 +155,6 @@ function startingPoints(order: KeyOrder) {
   }));
 }
 
-/**
- * Applies driven through the store and coordinator. The pure matrix above
- * already proves the group state machine for every start and preset pair.
- * The store path adds dispatch and the reconcile of each re-encoded server
- * response (content is an unordered map, ADR 0004), which does not depend on
- * which pair it carries. So it runs every preset as the target from each
- * base, and each preset once as the one already applied, followed by the
- * next preset in the list. Both key orders run through describe.each.
- */
 function storePathCases(order: KeyOrder) {
   const starts = startingPoints(order);
   const bases = starts.slice(0, 3);
@@ -274,8 +248,6 @@ describe.each(['server', 'fixture'] as const)(
         }
       }
       expect(failures).toEqual([]);
-      // Every preset reached the server at least once, so no preset's
-      // children skip dispatch and reconcile.
       expect([...targets].sort()).toEqual(
         TEMPLATES.map((preset) => preset.id).sort(),
       );

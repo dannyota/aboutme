@@ -1,22 +1,12 @@
-// Reads /.well-known/deployment.json, version 1
-// (docs/design/deployment-transparency/document.md), and decides what the
-// verify page shows (docs/design/deployment-transparency/page.md#states).
-// Decoding is closed: every value the page shows or puts in a command must
-// match its field pattern, or the whole document is refused. The page never
-// trusts the observer's summary; it recomputes it from the components.
-
 export const deploymentDocumentPath = '/.well-known/deployment.json';
 const knownSchemaVersion = 1;
-/** The observer refuses to write more; the page refuses to read more. */
 export const maxDocumentBytes = 64 * 1024;
-/** Stale after this long whatever `stale_after` says (README, staleness). */
 const maxDocumentAgeMs = 600_000;
 
 export const componentNames = [
   'server', 'web', 'caddy', 'maintenance',
 ] as const;
 export type ComponentName = (typeof componentNames)[number];
-/** The components every release runs; `maintenance` runs only on demand. */
 export const servingComponents: readonly ComponentName[] = [
   'server', 'web', 'caddy',
 ];
@@ -28,7 +18,6 @@ const componentImages: Readonly<Record<ComponentName, string>> = {
   maintenance: 'ghcr.io/dannyota/aboutme-caddy',
 };
 
-/** `unknown` is any status this page does not know; it is never verified. */
 export type CheckStatus
   = | 'verified' | 'not_found' | 'invalid' | 'unchecked' | 'unknown';
 export type Summary = 'verified' | 'rolling_out' | 'unverified' | 'mismatch';
@@ -46,7 +35,6 @@ export interface RunningImage {
   readonly digest: string;
   readonly replicas: number;
   readonly runningSince: string;
-  /** Null unless the signature is verified, whatever the document says. */
   readonly version: string | null;
   readonly commit: string | null;
   readonly signature: CheckStatus;
@@ -57,7 +45,6 @@ export interface RunningImage {
 export interface DeploymentComponent {
   readonly name: ComponentName;
   readonly image: string;
-  /** Oldest first, by `running_since`. */
   readonly runningImages: readonly RunningImage[];
 }
 
@@ -73,7 +60,6 @@ export interface DeploymentDocument {
   readonly region: string;
   readonly observedAt: string;
   readonly staleAfter: string;
-  /** The observer's value, kept raw so an unknown one counts as disagreeing. */
   readonly summary: string;
   readonly release: Release | null;
   readonly components: readonly DeploymentComponent[];
@@ -178,7 +164,6 @@ function runningImage(value: unknown): RunningImage {
   const verified = signature === 'verified';
   const version = optionalText(raw.version, VERSION);
   const commit = optionalText(raw.commit, COMMIT);
-  // A verified signature always names its version and commit.
   if (verified && (version === null || commit === null)) refuse();
   return {
     digest: text(raw.digest, DIGEST),
@@ -205,7 +190,6 @@ function component(value: unknown): DeploymentComponent {
   if (new Set(images.map(({ digest }) => digest)).size !== images.length) {
     refuse();
   }
-  // Stable sort: equal start times keep the document's order.
   images.sort((left, right) =>
     Date.parse(left.runningSince) - Date.parse(right.runningSince));
   return { name: componentName, image: componentImages[componentName],
@@ -222,7 +206,6 @@ function release(value: unknown): Release | null {
   };
 }
 
-/** Decodes a parsed body, ignoring unknown fields (document.md, versions). */
 export function decodeDeploymentDocument(value: unknown): DecodeResult {
   try {
     const raw = record(value);
@@ -281,7 +264,6 @@ function servingComponent(
 const failed = (image: RunningImage) =>
   image.signature === 'not_found' || image.signature === 'invalid';
 
-/** The summary rules of document.md, "Summary and release". */
 export function recomputeSummary(document: DeploymentDocument): Summary {
   const images = imagesOf(document);
   const missing = servingComponents.some((name) =>
@@ -298,7 +280,6 @@ export function recomputeSummary(document: DeploymentDocument): Summary {
   return 'verified';
 }
 
-/** The release rule of document.md, "Summary and release". */
 export function recomputeRelease(
   document: DeploymentDocument,
 ): Release | null {
@@ -323,11 +304,6 @@ function sameRelease(left: Release | null, right: Release | null): boolean {
     && left.deployedAt === right.deployedAt;
 }
 
-/**
- * The server's clock at the moment of the response, from `Date` plus `Age`,
- * so a wrong visitor clock cannot make old data look current. Null when the
- * response carries no usable `Date`.
- */
 export function responseTime(
   date: string | null,
   age: string | null,
@@ -341,7 +317,6 @@ export function responseTime(
   return at + seconds * 1000;
 }
 
-/** The staleness rule; with no trusted clock the document counts as stale. */
 export function isStale(
   document: DeploymentDocument,
   now: number | null,
@@ -358,7 +333,6 @@ export interface Failure {
   readonly reason: Exclude<MismatchReason, 'summary'>;
 }
 
-/** Each failing component in document order, with its first cause. */
 export function failures(document: DeploymentDocument): Failure[] {
   const found: Failure[] = [];
   for (const name of componentNames) {
@@ -379,10 +353,6 @@ export function failures(document: DeploymentDocument): Failure[] {
   return found;
 }
 
-/**
- * The version the chain shows: the release when there is one, otherwise the
- * newest verified version among the serving components (visual.md, chain).
- */
 export interface ChainRelease {
   readonly version: string;
   readonly commit: string;
@@ -429,10 +399,8 @@ export type PageState
       readonly kind: 'mismatch';
       readonly document: DeploymentDocument;
       readonly reason: MismatchReason;
-      /** Null for a summary disagreement. */
       readonly component: ComponentName | null;
       readonly more: number;
-      /** The failure the chain shows; null for a summary disagreement. */
       readonly cause: Failure | null;
     }
     | {
@@ -451,19 +419,16 @@ export type PageState
     | {
       readonly kind: 'verified';
       readonly document: DeploymentDocument;
-      /** Null when the components run signed builds of different versions. */
       readonly release: Release | null;
     };
 
 export type PageStateKind = PageState['kind'];
 
-/** What the last fetch produced; `failed` covers network, status, and JSON. */
 export type FetchOutcome
   = | { readonly kind: 'pending' }
     | { readonly kind: 'failed' }
     | { readonly kind: 'decoded'; readonly result: DecodeResult };
 
-/** The state order of page.md: the first match wins. */
 export function pageState(
   outcome: FetchOutcome,
   now: number | null,
@@ -480,8 +445,6 @@ export function pageState(
   if (summary === 'mismatch') {
     const found = failures(document);
     const first = found[0]!;
-    // A bad signature fails the Image step even when a missing component
-    // comes first in document order; the chain shows the earliest break.
     const cause = found.find(({ reason }) => reason !== 'missing') ?? first;
     return {
       kind: 'mismatch',

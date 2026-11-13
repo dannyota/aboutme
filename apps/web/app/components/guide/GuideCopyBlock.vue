@@ -1,12 +1,4 @@
 <script setup lang="ts">
-/**
- * One URL or command block (docs/design/mcp-guide.md, "Layout"): the
- * verify page's command block look, `--muted` fill, border, 10 px radius,
- * 13 px monospace, sideways scroll, and a 32 px copy button at the top
- * right. The URL block carries no `$` prompt; a shell command does
- * (docs/design/mcp-guide.md says the URL never gets one, and Claude Code
- * steps show real shell commands).
- */
 import { Check, Copy } from '@lucide/vue';
 import { useClipboardCopy } from '@/components/verify/useClipboardCopy';
 import { shellPrompt } from '@/i18n/guide';

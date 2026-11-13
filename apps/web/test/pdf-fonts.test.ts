@@ -106,7 +106,6 @@ describe('PDF font metric fallback', () => {
       fontMatrix: [0.001, 0, 0, 0.001, 0, 0],
     } },
   ])('bounds fallback inflation by $name', async ({ font }) => {
-    // A 0.8 em ascent puts this line 1.854 pt above the top margin.
     const page = await pdfTextPage(textPage({ font,
       item: { transform: [10, 0, 0, 10, 10, 83.854] } }));
     expect(page.items[0]!.bounds!.top).toBeCloseTo(9.146);

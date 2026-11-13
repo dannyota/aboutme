@@ -1,6 +1,3 @@
-// Account-page copy: sign in, registration, password recovery and reset,
-// and email verification. Failures are closed client-side messages mapped
-// from server codes, so every message lives here in both languages.
 import type { Locale } from './locale';
 
 export type AuthMessage
@@ -31,11 +28,6 @@ type Provider = 'google' | 'github' | 'linkedin';
 
 export type AuthCopy = {
   readonly messages: Readonly<Record<AuthMessage, string>>;
-  /**
-   * The email-collision message, naming the provider just used, or a neutral
-   * phrase when it is null. Never names the account's existing sign-in method
-   * (a targeted-phishing hint).
-   */
   readonly providerEmailRegistered: (provider: string | null) => string;
   readonly brandPanel: {
     readonly statement: string;
@@ -229,10 +221,6 @@ export const authCopy: Record<Locale, AuthCopy> = {
         + 'can sign in.',
       providerCancelled: 'Sign-in was cancelled.',
     },
-    // Deliberately does not name the account's existing sign-in method:
-    // naming it hands an attacker a targeted-phishing hint (OAuth
-    // email-collision rule). It names only the provider just used, which
-    // the caller already knows.
     providerEmailRegistered: (provider) =>
       `An account with this email already exists. Sign in the way you `
       + `usually do, then link ${provider ?? 'this provider'} in Settings.`,

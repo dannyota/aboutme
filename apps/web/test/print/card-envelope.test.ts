@@ -11,7 +11,6 @@ import {
 } from '../../server/utils/print/envelope';
 import { cardEnvelope, printEnvelope, RESUME_ID } from './fixture';
 
-// The closed card envelope of docs/design/link-previews.md, "Preview card".
 const decode = (value: unknown) => decodePrintEnvelope(JSON.stringify(value));
 const rejected = (value: unknown): void => {
   expect(() => decode(value)).toThrow(PRINT_FAILURE);

@@ -41,10 +41,6 @@ export type CreateNotice
 
 type ResumeListNotice = 'resume-changed' | null;
 
-/**
- * What a card shows while the list's own rename or delete of it is not
- * settled: being saved, or a rename the queue holds after a failure.
- */
 export type ResumeCardSaveState = 'saving' | 'rename-held';
 
 interface CreateOpenOptions {
@@ -62,9 +58,7 @@ export interface ResumeListController {
     Readonly<Record<string, ResumeCardSaveState>>
   >;
   settled(): Promise<void>;
-  /** A rename or delete this list made has not settled yet. */
   unsettled(): boolean;
-  /** Sends a held rename or delete again through the queue. */
   retry(id: string): Promise<void>;
   create(
     title: string,
@@ -89,7 +83,6 @@ export interface ResumeListDeps {
   refreshAuth?: () => Promise<void>;
 }
 
-/** Resumes an account may hold; the fourth create is refused (409). */
 export const RESUME_CAP = 3;
 
 export function createNotice(result: CreateResumeResult): CreateNotice {
@@ -106,8 +99,6 @@ export function createNotice(result: CreateResumeResult): CreateNotice {
   return null;
 }
 
-/** Browser-owned list and lifecycle boundary. Network and command capture stay
- * in the existing API/coordinator/action layers. */
 export function useResumeList(deps: ResumeListDeps = {}): ResumeListController {
   const auth = useAuth();
   const api = deps.api ?? createResumeApi();
@@ -139,22 +130,14 @@ export function useResumeList(deps: ResumeListDeps = {}): ResumeListController {
   let settling: Promise<void> = Promise.resolve();
   let wasAuthenticated = false;
   const disposed = ref(false);
-  /** Resumes this list renamed or deleted, or is about to. */
   const touched = ref(new Set<string>());
-  /** Renames and deletes still reading the resume before they are queued. */
   const starting = ref(0);
-  /** The commands this list queued; leaving drops these and no others. */
   const ownCommands = new Set<string>();
   if (getCurrentScope() !== undefined) {
     onScopeDispose(() => {
       disposed.value = true;
-      // Leaving the list ends its queue's reads and writes and drops the
-      // renames and deletes it had not saved, as the leave warning said and
-      // as closing the editor does; the resume opens afresh. A record an
-      // editor has open keeps everything, the editor's work included.
       for (const id of touched.value) {
         coordinator.stop(id);
-        // An open editor takes the record over, with what this list held.
         if (store.openInEditor(id)) store.handOver(id);
         else store.dropCommands(id, ownCommands);
       }
@@ -241,9 +224,6 @@ export function useResumeList(deps: ResumeListDeps = {}): ResumeListController {
       return;
     }
     if (state === 'anonymous') {
-      // A first-visit anonymous state is the shared route guard's job
-      // (middleware/signed-in.global.ts); only a session lost after this
-      // page had already read a resume list is this page's own to send on.
       if (wasAuthenticated) void navigateTo('/login');
       return;
     }
@@ -345,9 +325,6 @@ export function useResumeList(deps: ResumeListDeps = {}): ResumeListController {
     confirmedTitle?: string,
   ): Promise<ResumeEditorActions | null> => {
     actionNotice.value = null;
-    // The resume is this list's from the first await, so leaving meanwhile
-    // stops its queue and warns; after each await a list that has gone
-    // neither reads, queues nor sends.
     touched.value = new Set([...touched.value, id]);
     starting.value += 1;
     try {
@@ -366,7 +343,6 @@ export function useResumeList(deps: ResumeListDeps = {}): ResumeListController {
         actionNotice.value = 'resume-changed';
         return null;
       }
-      // Nothing re-initializes a record that holds unsent or in-flight work.
       if (store.recordFor(id) === undefined) store.initialize(read.accepted);
       else store.adoptCompleteRead(id, read.accepted);
       return actionsFor(id);
@@ -384,11 +360,6 @@ export function useResumeList(deps: ResumeListDeps = {}): ResumeListController {
     };
   };
 
-  /**
-   * The card shows what the record holds: the title while it is queued, on
-   * its way, unknown or held to be sent again; otherwise, after it saved or
-   * was refused for good, the title the server kept.
-   */
   const showRecord = (id: string): void => {
     const record = store.recordFor(id);
     if (record === undefined) return;
@@ -401,7 +372,6 @@ export function useResumeList(deps: ResumeListDeps = {}): ResumeListController {
     });
   };
 
-  // A rename the queue settles later, on its own retries, shows its result.
   watch(
     () => [...touched.value].map((id) => {
       const record = store.recordFor(id);
@@ -430,7 +400,6 @@ export function useResumeList(deps: ResumeListDeps = {}): ResumeListController {
     });
     if (result?.kind !== 'enqueued') return;
     ownCommands.add(result.command.id);
-    // The card shows the new title at once, then whatever the server kept.
     updateItem(id, { title });
     await coordinator.flush(id);
     if (!disposed.value) showRecord(id);
@@ -439,7 +408,6 @@ export function useResumeList(deps: ResumeListDeps = {}): ResumeListController {
   const retry = (id: string): Promise<void> => {
     const held = store.recordFor(id)?.attempt;
     if (held === null || held === undefined) return Promise.resolve();
-    // Only the queue sends: this asks it to send the held write again.
     return coordinator.retry(id, held.command.id);
   };
 
@@ -475,12 +443,6 @@ export function useResumeList(deps: ResumeListDeps = {}): ResumeListController {
   };
 }
 
-/**
- * Whether the record's title is still on its way: queued, in flight, of
- * unknown outcome, or held to be sent again. A write refused for good is
- * not, until Try again sends it; it stays held while the card shows the
- * saved title.
- */
 function titleStillSending(record: ResumeRecord): boolean {
   if (record.pending.length > 0) return true;
   const held = record.attempt;

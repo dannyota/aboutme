@@ -1,6 +1,3 @@
-// The review's action panel: the sticky aside, the DOM/visual order of
-// Cancel and Create, the disabled Cancel while creating, and the block
-// reason (docs/design/linkedin-import-ui.md, "Action panel").
 import { mountSuspended } from '@nuxt/test-utils/runtime';
 import { describe, expect, it } from 'vitest';
 
@@ -38,13 +35,11 @@ describe('ImportActionPanel', () => {
     expect(heading.classes()).toContain('min-[900px]:not-sr-only');
 
     const classes = root.classes();
-    // Below 900 px: a full-bleed sticky footer.
     expect(classes).toContain('sticky');
     expect(classes).toContain('bottom-0');
     expect(classes).toContain('-mx-4');
     expect(classes).toContain('sm:-mx-6');
     expect(classes).toContain('border-t');
-    // From 900 px: the sticky aside card.
     expect(classes).toContain('min-[900px]:top-6');
     expect(classes).toContain('min-[900px]:bottom-auto');
     expect(classes).toContain('min-[900px]:mx-0');
@@ -64,8 +59,6 @@ describe('ImportActionPanel', () => {
       expect(actions.map((el) => el.attributes('data-action')))
         .toEqual(['import-cancel', 'import-create']);
       const cancel = wrapper.get('[data-action="import-cancel"]');
-      // From 900 px, Create then Cancel visually (spec "Action panel");
-      // Cancel takes the later CSS order so Create renders first.
       expect(cancel.classes()).toContain('min-[900px]:order-2');
     });
 

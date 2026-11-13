@@ -30,8 +30,6 @@ const LABELS = {
 };
 const compact = (value: string) => value.normalize('NFC').replace(/\s+/gu, '');
 
-// Expectations use sample fields and the template contract, never render
-// output.
 function sampleContent(
   sample: Resume, lng: 'en' | 'vi',
 ) {
@@ -332,8 +330,6 @@ export function assertDomInputContent(
     .toEqual(expected.map(content));
 }
 
-// Overflow inputs are the base JSON fields plus the harness's literal probes.
-// Template expectations stay independent of applyTemplate and runtime tokens.
 export async function overflowPdfChunks(
   printCase: PrintCase, lng: 'en' | 'vi',
 ): Promise<SamplePdfChunk[]> {

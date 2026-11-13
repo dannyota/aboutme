@@ -11,10 +11,6 @@ import {
   SheetTitle,
 } from '../../app/components/ui/sheet';
 
-// The shared filter fields of the sheet and the rail, and the sheet
-// primitive's optional built-in close (docs/design/ui/showcase.md, Bottom
-// sheet and Rail from 1024 px; AC-SHOW-005).
-
 const mounted: { unmount(): void }[] = [];
 
 afterEach(() => {
@@ -109,8 +105,7 @@ describe('shared filter fields', () => {
   });
 
   it('gives the rail and the sheet copies different element ids', async () => {
-    // One app holds both copies, as the page does: useId() numbers them per
-    // app, so two separate mounts would both start at the same id.
+    // Vue's useId() numbers ids per app; two mounts would share ids.
     const Both = defineComponent({
       setup() {
         return () => h('div', [
@@ -131,7 +126,6 @@ describe('shared filter fields', () => {
     const railIds = ids('rail');
     expect(railIds.length).toBeGreaterThan(0);
     for (const id of ids('sheet')) expect(railIds).not.toContain(id);
-    // The label points at its own select.
     const sheet = wrapper.get('[data-copy="sheet"]');
     expect(sheet.get('label').attributes('for'))
       .toBe(sheet.get('select').attributes('id'));

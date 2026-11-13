@@ -16,7 +16,6 @@ import { parseRevision } from '../../app/editor/revision';
 
 const FACTOR_PENDING = { data: { secondFactorRequired: true } };
 
-/** A fake reauthentication answer: the status `mutate` reports, then body. */
 function answered(status: number, body?: unknown) {
   return async (
     _url: string,
@@ -634,7 +633,6 @@ describe('publish controller', () => {
 });
 
 describe('publish controller second factor', () => {
-  /** An enrolled account answers the password with a pending factor. */
   async function factorPending() {
     const context = setup();
     vi.mocked(context.api.dispatch).mockResolvedValueOnce({
@@ -780,7 +778,6 @@ describe('publish controller reauthentication answers over HTTP', () => {
     });
   }
 
-  /** The session the app reads, with its real `mutate`. */
   async function liveAuth(): Promise<PublishControllerDeps['auth']> {
     let auth: ReturnType<typeof useAuth> | undefined;
     await mountSuspended(defineComponent({

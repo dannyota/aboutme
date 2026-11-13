@@ -1,11 +1,3 @@
-// Emits the Go preset table the community showcase uses to derive a resume's
-// template (docs/design/showcase.md "What a listing shows"). Each entry holds
-// the preset's customization in stored form, minus the leaves a template apply
-// keeps or resets for the owner and minus placement, as canonical JSON. The Go
-// side re-canonicalizes it and compares it to a resume's customization stripped
-// the same way. apps/server/internal/showcase/presets_test.go rebuilds the
-// table from templates/*.json and fails when this output is stale.
-
 import { dirname, join } from "node:path";
 
 import {
@@ -23,8 +15,6 @@ export const showcasePresetsGoPath = join(
   "presets.generated.go",
 );
 
-// canonicalJson serializes value with object keys in code-unit order, so equal
-// customizations always produce equal text.
 function canonicalJson(value) {
   if (Array.isArray(value)) {
     return `[${value.map(canonicalJson).join(",")}]`;
@@ -38,10 +28,6 @@ function canonicalJson(value) {
   return JSON.stringify(value);
 }
 
-// matchForm drops the five leaves the showcase ignores (pageFormat, dateFormat,
-// colorScheme, font.textAlign, header.photoPosition) and the preset's
-// placement (layout.placement, layout.sidebarSectionTypes). A resume's own
-// placement is layout.sections, which the Go side drops from its document.
 export function showcaseMatchForm(preset) {
   if (preset.customization?.header === undefined) {
     throw new Error(

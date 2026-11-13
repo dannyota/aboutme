@@ -1,6 +1,3 @@
-// Reads and validates released-versions.json, then emits the Go and
-// TypeScript halves of the released-version registry it describes.
-
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -12,9 +9,6 @@ import {
   writeGenerated,
 } from "./generatePaths.mjs";
 
-// released-versions.json is the only release registry. Do not infer releases
-// from filenames, because a stray file must not become a contract. Validate its
-// structure here so failures name the manifest field, not generated output.
 export function readReleasedManifest() {
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
   const versions = manifest.versions;
@@ -39,10 +33,6 @@ export function readReleasedManifest() {
     }
     previous = version;
 
-    // The conventional paths are asserted, not derived: a released entry
-    // states its own file explicitly, and this catches a typo pointing an
-    // entry at another version's schema (which would silently regenerate v<N>
-    // from v<M>'s bytes — the exact drift the immutability policy forbids).
     const expected = {
       schema: `resume.v${version}.schema.json`,
       goPackage: `gen/go/v${version}`,
@@ -106,15 +96,6 @@ export function readReleasedManifest() {
   return manifest;
 }
 
-// The Go half of the released-version registry. It lives in the CURRENT
-// package (gen/go, package schema) and imports one retained package per
-// released version, so `go build ./...` in gen/go is itself the proof
-// that every retained snapshot still compiles.
-//
-// Lookup fails closed: an unreleased version returns ErrUnknownSchemaVersion
-// rather than the nearest or newest match, mirroring docmigrate's identity
-// projector, which errors on a stored schema_version it has no converter for
-// instead of passing the document through unconverted.
 export function generateReleasedGo(manifest, outFile) {
   const imports = manifest.versions
     .map(
@@ -226,12 +207,6 @@ func ReleasedSchemaFor(version int) (ReleasedSchema, error) {
   writeGenerated(outFile, body, "go");
 }
 
-// The TypeScript half of the released-version registry. It carries the
-// manifest rather than the schema bytes: apps/web imports this package for
-// types, and inlining every released schema's ~36 KB into the bundle to
-// satisfy a build-time registry would be a real cost for no runtime gain. The
-// Go side (gen/go/released.go) is where the bytes live, because that is the
-// side that actually compiles and validates documents.
 export function generateReleasedTs(manifest, outFile) {
   const entries = manifest.versions
     .map(

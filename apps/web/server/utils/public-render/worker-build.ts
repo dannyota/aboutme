@@ -78,16 +78,10 @@ const rewriteRefs = (value: unknown): unknown => {
   );
 };
 
-/**
- * Reads the OpenAPI source and writes an Ajv standalone validator containing
- * only PublicResume and every schema it reaches.  The generated module is an
- * artifact: no hand-written mirror of the public DTO is used at runtime.
- */
 export function buildPublicResumeValidator(buildDir: string): string {
   return buildValidator(buildDir, 'PublicResume', 'public-resume');
 }
 
-/** Builds the private print document validator from the same OpenAPI source. */
 export function buildPrintDocumentValidator(buildDir: string): string {
   return buildValidator(buildDir, 'PublicResumeDocument', 'print-document');
 }

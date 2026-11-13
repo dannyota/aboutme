@@ -9,7 +9,6 @@ function isTheme(value: unknown): value is Theme {
   return value === 'light' || value === 'dark';
 }
 
-/** Keeps the theme cookie boundary testable without a Nuxt app. */
 export function createThemeController(
   preference: ThemePreference,
   systemTheme: Readonly<Ref<Theme>>,

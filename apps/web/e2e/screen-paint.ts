@@ -26,7 +26,6 @@ export async function visiblePaint(target: Locator): Promise<boolean> {
   });
 }
 
-/** Include every clipping ancestor and the widget's own frame. */
 export async function containedPaint(
   target: Locator, frame: string, empty = false,
 ): Promise<boolean> {
@@ -75,7 +74,6 @@ export interface SvgExpectation {
   readonly primitives: readonly SvgPrimitive[];
 }
 
-/** Check explicit primitives rather than trusting an icon's class name. */
 export async function expectSvg(
   icons: Locator, expected: SvgExpectation, message: string,
 ): Promise<void> {

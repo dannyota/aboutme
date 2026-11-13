@@ -1,10 +1,4 @@
 <script setup lang="ts">
-/**
- * One entry row in the review's section cards: a checkbox, the entry's text
- * (label and description, plain text only), and an optional notice or
- * invalid mark (docs/design/linkedin-import-ui.md, "Review state", the entry
- * table).
- */
 import { CircleAlert, Info } from '@lucide/vue';
 import { computed, useId } from 'vue';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -72,10 +66,7 @@ const describedBy = computed(() => {
       :model-value="modelValue"
       @update:model-value="(value) => emit('update:modelValue', Boolean(value))"
     />
-    <!-- The label wraps the whole text column, not just the heading, so the
-      whole row is the hit area (docs/design/linkedin-import-ui.md, "Review
-      state"). Its lines are spans, phrasing content, since a label cannot
-      hold block-level children. -->
+    <!-- HTML: a label holds phrasing content only, so its lines are spans. -->
     <Label
       class="grid flex-1 cursor-pointer items-start gap-1 font-normal"
       :for="fieldId"

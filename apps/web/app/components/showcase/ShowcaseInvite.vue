@@ -6,9 +6,6 @@ import type { Locale } from '@/i18n/locale';
 import { showcaseCopy } from '@/i18n/showcase';
 import { cn } from '@/lib/utils';
 
-// The last cell of the grid in the list state: an invitation to publish, not
-// a tile (docs/design/ui/showcase.md, Invite card). The target is the empty
-// action's: the visitor's resumes when signed in, else sign-up or sign-in.
 const props = defineProps<{
   readonly locale: Locale;
   readonly to: string;

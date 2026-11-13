@@ -5,7 +5,6 @@ import { setResponseStatus } from 'h3';
 import ForgotPasswordPage from '../app/pages/forgot-password.vue';
 import { setSiteLocale } from './support/locale';
 
-// These tests pin the English copy; Vietnamese has its own cases.
 beforeEach(() => setSiteLocale('en'));
 
 const GENERIC_COPY

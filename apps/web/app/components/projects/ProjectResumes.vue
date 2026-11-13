@@ -11,9 +11,6 @@ import type { ProjectsCopy } from '@/i18n/projects';
 import type { Project } from './projectDocument';
 import type { ProjectResumesController } from './projectResumesState';
 
-// The project editor's Resumes section (docs/design/ui/projects.md "In the
-// project screens"): every resume of the account, Shown or Add to this
-// resume. Removing a project happens in the resume, where its entry lives.
 const props = defineProps<{
   readonly controller: ProjectResumesController;
   readonly project: Project | null;
@@ -38,7 +35,6 @@ const statusText = computed(() => {
   }
 });
 
-/** The default language's name when this resume's project page uses it. */
 function fallbackFor(resume: ResumeSummary): string | null {
   if (props.project === null) return null;
   const page = projectPageLanguage(resume.lng, props.project);
@@ -183,7 +179,6 @@ function resumePath(id: string): string {
         </NuxtLink>
       </template>
     </p>
-    <!-- docs/design/projects.md "Privacy": Cancel takes the first focus. -->
     <ConfirmDialog
       v-if="controller.asking.value !== null"
       :open="true"

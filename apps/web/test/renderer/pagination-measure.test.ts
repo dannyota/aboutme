@@ -173,8 +173,6 @@ describe('measurePagination', () => {
       block.getBoundingClientRect = () => rect(10);
       root.append(block);
     }
-    // The whole entry: a paragraph, then a two-item list. Rendered at half
-    // size, so every gap reads half as large as it lays out.
     const whole = document.createElement('div');
     whole.dataset.paginationWholeEntry = '1';
     whole.innerHTML = '<article class="entry"><div class="entry-body">'
@@ -238,8 +236,6 @@ describe('measurePagination', () => {
       block.getBoundingClientRect = () => rect(10);
       root.append(block);
     }
-    // The whole entry: a paragraph, then a two-item ordered list. The list
-    // stays one body block even though it has two items, unlike a <ul>.
     const whole = document.createElement('div');
     whole.dataset.paginationWholeEntry = '1';
     whole.innerHTML = '<article class="entry"><div class="entry-body">'
@@ -271,8 +267,6 @@ describe('measurePagination', () => {
       ],
     };
     const measured = await measurePagination(root, split);
-    // The part after the list takes the whole entry's rendered gap (12),
-    // not the 0 a caller falls back to when the whole entry can't be read.
     expect(measured.blocks.map((block) => block.gapBeforePx))
       .toEqual([20, 8, 12]);
   });

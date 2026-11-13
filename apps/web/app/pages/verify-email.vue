@@ -1,19 +1,4 @@
 <script setup lang="ts">
-/**
- * Email verification landing page.
- *
- * The single-use token arrives in the URL fragment (the email link points at
- * `#token=...`). Reading the fragment, stripping it, and firing the request
- * happen synchronously during browser setup — before any await or telemetry —
- * so a refresh or replay of the address never re-sends the token, and the
- * token never appears in route query, history, state, or the DOM. A malformed
- * or missing fragment fails locally with no request at all.
- *
- * This page opens in a new tab with no query of its own, so the sign-in link
- * below can only recover register.vue's validated `?next=` from storage. That
- * read happens on the client in onMounted, so the server render and first
- * client render agree on plain `/login` and the link updates after.
- */
 import {
   type PasswordAuthFailure,
   usePasswordAuth,
@@ -53,7 +38,6 @@ if (import.meta.client) {
   const values = params.getAll('token').filter((value) => value !== '');
   if (values.length === 1) {
     token = values[0] as string;
-    // Strip the fragment before the request so no trace carries the token.
     history.replaceState(
       null,
       '',
@@ -80,8 +64,6 @@ if (token !== '') {
     });
 }
 
-// A dead or broken link can be sidestepped by signing in with a listed
-// provider, which needs no verification email.
 const offerProviders = computed(() =>
   loginProviders.value.length > 0
   && (errorMessage.value === 'verifyLinkExpired'

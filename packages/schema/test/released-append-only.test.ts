@@ -60,8 +60,6 @@ function git(repo: string, args: string[]): string {
   return execFileSync("git", args, { cwd: repo, encoding: "utf8" });
 }
 
-// Build a repository with released v1 and working schema files, then return the
-// base commit used by the append-only comparison.
 type BaseOptions = {
   v1Bytes?: string;
   v2Bytes?: string;
@@ -232,9 +230,6 @@ function runHostedGateWithNonCommitBase(script: string): {
   };
 }
 
-// Local make ci runs before integration, so its guard must compare the upstream
-// base with the index and worktree rather than assuming candidate bytes are in
-// HEAD. The workflow guard remains commit-based and uses runGate above.
 function runLocalWorktreeGate(
   mutate: (repo: string) => void,
   baseOptions: BaseOptions = {},
@@ -350,9 +345,7 @@ describe.each(gateScripts)("$name", ({ script }) => {
       ]);
     });
     expect(status).toBe(1);
-    // Rename detection is on by default, so this surfaces as R<score>; if it
-    // ever were not, the same change surfaces as D plus A and is still
-    // rejected on the D. Either name-status is a failure, which is the point.
+    // git diff detects renames by default, so this shows as R<score>.
     expect(output).toMatch(
       /^[RD]\d*\s+packages\/schema\/resume\.v1\.schema\.json/m,
     );

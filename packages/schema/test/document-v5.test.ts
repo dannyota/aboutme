@@ -4,9 +4,6 @@ import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 import { describe, expect, it } from "vitest";
 
-// Document v5 adds the optional customization.colorScheme, an enum of light,
-// dark, and system. Absent means light (docs/design/public-page-theme.md).
-
 const root = new URL("..", import.meta.url).pathname;
 const read = (name: string) =>
   JSON.parse(readFileSync(join(root, name), "utf8"));

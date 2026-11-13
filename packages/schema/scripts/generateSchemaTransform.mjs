@@ -1,21 +1,9 @@
-// In-memory schema transforms shared by (or specific to) the Go and
-// TypeScript codegen paths. Only the copy fed to the generators is touched —
-// resume.schema.json on disk is never modified, and AJV
-// (packages/schema/test/schema.test.ts) still validates the real file at
-// runtime. Everything here is about type *shape*, not validation.
-
-// The $def backing the (otherwise-unreferenced) SectionType enum — see
-// deriveSectionVariants for the per-sectionType entry list, which is
-// derived from the schema rather than named here.
 export const SECTION_TYPE_DEF = ["sectionType", "SectionType"];
 
 export function toPascalCase(key) {
   return key.charAt(0).toUpperCase() + key.slice(1);
 }
 
-// Derive entry definitions from the schema, in declaration order. Fail when
-// section.oneOf and sectionType.enum disagree instead of generating a partial
-// contract.
 export function deriveSectionVariants(schema) {
   const oneOf = schema.$defs?.section?.oneOf;
   if (!Array.isArray(oneOf) || oneOf.length === 0) {
@@ -58,13 +46,10 @@ export function deriveSectionVariants(schema) {
   return variants;
 }
 
-// Shared preprocessing for both languages.
 export function buildSharedCodegenSchema(schema) {
   const clone = structuredClone(schema);
 
-  // Neither generator evaluates JSON Schema 2020-12 unevaluatedProperties.
-  // Removing it from the type-only copy lets both merge entry allOf branches;
-  // AJV still enforces it against the source schema.
+  // Neither quicktype nor jstt evaluates JSON Schema unevaluatedProperties.
   const stripUnevaluatedProperties = (node) => {
     if (Array.isArray(node)) {
       node.forEach(stripUnevaluatedProperties);
@@ -79,9 +64,7 @@ export function buildSharedCodegenSchema(schema) {
   };
   stripUnevaluatedProperties(clone);
 
-  // dateRange allOf contains if/then validation, not type composition. jstt
-  // otherwise collapses its properties to unknown. The store layer enforces
-  // the relationship against real values.
+  // jstt collapses dateRange's properties to unknown under its if/then allOf.
   for (const def of Object.values(clone.$defs ?? {})) {
     if (
       def &&
@@ -95,8 +78,7 @@ export function buildSharedCodegenSchema(schema) {
     }
   }
 
-  // link's anyOf refines string validation but not its generated type. Use a
-  // plain string in the type-only copy to avoid duplicate intersection aliases.
+  // jstt emits duplicate intersection aliases for link's anyOf.
   if (clone.$defs?.link) {
     clone.$defs.link = {
       description: clone.$defs.link.description,
@@ -105,8 +87,7 @@ export function buildSharedCodegenSchema(schema) {
     };
   }
 
-  // Give every reusable definition a stable name. quicktype otherwise derives
-  // some names from the temporary input filename.
+  // quicktype otherwise names some definitions after the temp input file.
   for (const [key, def] of Object.entries(clone.$defs ?? {})) {
     if (
       def &&
@@ -124,15 +105,6 @@ export function buildSharedCodegenSchema(schema) {
   return clone;
 }
 
-// Go-only: content's map values point at `section`, an eight-way oneOf.
-// Go has no representation for that beyond structural collapse (see this
-// file's header comment), so section.go hand-writes the real `Section` type
-// instead. This function retargets `content`'s value schema at a trivial
-// empty placeholder titled "Section", so quicktype still generates
-// `Content map[string]Section` on Resume (referencing the hand-written
-// type) without also generating a competing, empty `type Section struct{}`
-// — generateGo strips that placeholder struct out of the raw output, since
-// section.go already declares the real one.
 export function buildGoCodegenSchema(sharedSchema) {
   const clone = structuredClone(sharedSchema);
   clone.$defs.__sectionPlaceholder = {
@@ -146,9 +118,7 @@ export function buildGoCodegenSchema(sharedSchema) {
   return clone;
 }
 
-// jstt treats a $ref with a sibling description as a new shape and emits a
-// duplicate alias. Drop that use-site annotation only from the TypeScript
-// type-copy; the source schema and embedded raw schema retain it.
+// jstt emits a duplicate alias for a $ref with a sibling description.
 export function buildTsCodegenSchema(sharedSchema) {
   const clone = structuredClone(sharedSchema);
 

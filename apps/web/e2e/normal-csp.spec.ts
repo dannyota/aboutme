@@ -13,22 +13,12 @@ import {
   trackCsp,
 } from './support';
 
-// A real anonymous visit already logs the browser's own "Failed to load
-// resource" message for GET /api/v1/me's expected 401 (useAuth.ts); it is
-// unrelated to CSP, so the signed-out page tests below allow it. Matched by
-// status code, not URL: the browser's message text embeds the mocked
-// response's status line, not always the request path.
+// Chromium logs "Failed to load resource" with the status, not the URL.
 const ANONYMOUS_ME_401 = 'a status of 401';
 
-// The browser logs its own "Failed to load resource" message for a document
-// served with status 404; the not-found tests below expect that status.
+// Chromium logs "Failed to load resource" for a 404 document.
 const DOCUMENT_404 = 'a status of 404';
 
-// The schema-current golden fixture (part of the reviewed e2e source set;
-// packages/schema/fixtures/full.json), used as the editor tests' mocked
-// resume body. The client validates the rest itself on read
-// (app/editor/resumeApi.ts's parseAcceptedResponse), so this file need not
-// duplicate that validation.
 const fixtureDocument = JSON.parse(
   readFileSync(
     resolvePath(
@@ -39,17 +29,11 @@ const fixtureDocument = JSON.parse(
   ),
 ) as { personalDetails?: { photo?: { key: string } } };
 
-// A clone with the photo stripped: the editor watches
-// document.personalDetails.photo?.key and fetches the owner photo when it is
-// present, which the plain editor test below does not also mock.
 const sampleDocument = JSON.parse(JSON.stringify(fixtureDocument)) as {
   personalDetails?: { photo?: unknown };
 };
 delete sampleDocument.personalDetails?.photo;
 
-// Matches app/editor/types.ts's ResumeMetadata; the wire shape
-// app/editor/resumeApi.ts's read() expects nested under `document` and
-// `revision` (app/editor/resumeApiParsing.ts's parseSummary).
 const sampleMetadata = {
   id: 'resume-1',
   title: 'Fixture',
@@ -65,19 +49,6 @@ const sampleMetadata = {
   updatedAt: '2026-01-01T00:00:00Z',
 };
 
-// Every Nuxt-rendered page in the production build sends the app-page CSP
-// (nuxt.config.ts routeRules) and never x-powered-by
-// (server/plugins/security-headers.ts), and no real interaction on any of
-// them trips a CSP violation. docs/design/security.md and the CSP itself
-// (app/utils/csp.ts) own the policy this proves. The homepage and the
-// template pages each render their JSON-LD as a
-// `<script type="application/ld+json">` data block (app/landing/
-// structuredData.ts, app/templates/structuredData.ts); per the HTML spec, the
-// browser never executes a data block
-// (https://html.spec.whatwg.org/multipage/scripting.html#data-block), so
-// those pages send this same, unmodified policy too.
-
-/** The CSP header every app page sends: APP_CSP unchanged. */
 function expectPlainAppCsp(headers: Record<string, string>): void {
   expect(headers['content-security-policy']).toBe(APP_CSP);
   expect(headers['x-powered-by']).toBeUndefined();
@@ -149,12 +120,6 @@ test('the login page sends the plain app CSP', async ({ page }) => {
   expect(external).toEqual([]);
 });
 
-// The design leaves open whether the app-page CSP header reaches `/_nuxt/`
-// script responses; a same-origin module worker runs under its own script
-// response's policy, not the page's (docs/design/linkedin-import.md's
-// "Security"). This proves the header is there, not just at the document
-// level, so a worker script served from `/_nuxt/` runs under the same
-// `worker-src 'self'` policy the page sends.
 test('a same-origin /_nuxt/ script response carries the app CSP header too',
   async ({ page }) => {
     const probe = await trackCsp(page);
@@ -194,10 +159,6 @@ test('a 404 page sends the plain app CSP and never x-powered-by', async ({
   expect(response?.status()).toBe(404);
   expectPlainAppCsp(response!.headers());
 
-  // A failure here should name the exact inline script CSP blocked, not
-  // just that one was blocked: server/utils/cspExternalize.ts externalizes
-  // Nuxt's own hydration payload for every response, so any inline
-  // `<script>` a 404 response still carries is worth seeing verbatim.
   const html = await response!.text();
   const inlineScript
     = /<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g;
@@ -206,8 +167,6 @@ test('a 404 page sends the plain app CSP and never x-powered-by', async ({
   expect(inlineScripts).toEqual([]);
 
   await expectCspClean(probe, [ANONYMOUS_ME_401, DOCUMENT_404]);
-  // Only the document itself may be a 404; a missing chunk or asset would
-  // log a second one.
   expect(probe.consoleErrors.filter((message) =>
     message.includes(DOCUMENT_404))).toHaveLength(1);
   expect(external).toEqual([]);
@@ -230,8 +189,6 @@ test('an unknown top-level path sends the plain app CSP', async ({ page }) => {
   expect(inlineScripts).toEqual([]);
 
   await expectCspClean(probe, [ANONYMOUS_ME_401, DOCUMENT_404]);
-  // Only the document itself may be a 404; a missing chunk or asset would
-  // log a second one.
   expect(probe.consoleErrors.filter((message) =>
     message.includes(DOCUMENT_404))).toHaveLength(1);
   expect(external).toEqual([]);
@@ -247,13 +204,7 @@ test('a client-side navigation to an unknown template raises no CSP '
   expect(response?.status()).toBe(200);
   await expect(page.locator('.template-detail__info h1')).toBeVisible();
 
-  // A client-side route change (no full navigation, so no fresh
-  // Content-Security-Policy header): Nuxt exposes its running app instance
-  // as window.useNuxtApp on every build (not just dev), and the router it
-  // resolves is the one already handling this page, so pushing an unknown
-  // template path here reruns app/pages/templates/[id].vue's setup() and
-  // its createError({ statusCode: 404 }) client-side, which Nuxt then shows
-  // through app/error.vue without a page reload.
+  // Nuxt exposes window.useNuxtApp in production builds too.
   await page.evaluate(async () => {
     const nuxtApp = (window as unknown as {
       useNuxtApp: () => { $router: { push: (path: string) => Promise<void> } };
@@ -276,10 +227,6 @@ test('submitting the login form navigates cleanly under the app CSP', async ({
     value: 'en',
     url: 'http://127.0.0.1:20092',
   }]);
-  // A real successful login sets a session cookie and lands on /app/resumes
-  // through a full reload (crossing from the SSR /login to the client-only
-  // /app/resumes route rule), so /api/v1/me reads as signed in throughout,
-  // exactly as the real destination page would see it.
   await mockSignedInSession(page);
   await page.route('**/api/v1/auth/password/login', async (route) => {
     await route.fulfill({ status: 204 });
@@ -301,9 +248,6 @@ test('submitting the login form navigates cleanly under the app CSP', async ({
     .click();
   await page.waitForURL((url) => url.pathname !== '/login');
   expect(new URL(page.url()).pathname).toBe('/app/resumes');
-  // Check for a real CSP violation before the visibility assertion below,
-  // which throws first (and would otherwise hide it) when the navigation
-  // landed but the destination page failed to render.
   expect(await probe.violations()).toEqual([]);
   await expect(page.getByRole('heading', { name: 'Resumes' })).toBeVisible();
 
@@ -363,9 +307,7 @@ test('the editor sends the plain app CSP and hydrates cleanly', async ({
   const probe = await trackCsp(page);
   const external = await denyExternalRequests(page);
   await mockSignedInSession(page);
-  // A successful, immediately closed stream: EventSource retries silently
-  // when its connection ends, but an aborted request logs the browser's own
-  // "Failed to load resource: net::ERR_FAILED", which is unrelated to CSP.
+  // Chromium logs net::ERR_FAILED for an aborted EventSource request.
   await page.route('**/api/v1/events', async (route) => {
     await route.fulfill({
       status: 200,
@@ -439,11 +381,6 @@ test('the editor with a photo present sends the plain app CSP and shows '
       },
     });
   });
-  // The owner photo the editor fetches for the fixture's
-  // personalDetails.photo.key and converts to a `data:` URL
-  // (pages/app/resumes/[id].vue's bytesToDataURL) for the preview and photo
-  // panel: this exercises img-src's `data:` source, which the plain editor
-  // test above never does because it strips the photo.
   await page.route('**/api/v1/resumes/resume-1/photo', async (route) => {
     const canvas = createCanvas(64, 64);
     canvas.getContext('2d').fillRect(0, 0, 64, 64);
@@ -472,9 +409,6 @@ test('the editor with a photo present sends the plain app CSP and shows '
   expect(external).toEqual([]);
 });
 
-// An account with a second factor answers the publish password with 202
-// (docs/design/passkey-second-factor-contract.md, "Primary authentication");
-// the address change needs that factor before the server accepts it.
 test('the publish dialog changes a published address after the second '
   + 'factor, under the plain app CSP', async ({ page }) => {
   test.setTimeout(40_000);
@@ -602,7 +536,7 @@ test('the publish dialog changes a published address after the second '
   expect(publishes[2]?.body).toEqual(publishes[0]?.body);
   expect(publishes[0]?.body).toMatchObject({ slug: 'ada-v2', live: true });
 
-  // Each refused publish logs the browser's own 403 resource message.
+  // Chromium logs "Failed to load resource" for each refused 403.
   await expectCspClean(probe, ['a status of 403']);
   expect(external).toEqual([]);
 });
@@ -639,11 +573,6 @@ test('settings sends the plain app CSP and hydrates cleanly', async ({
   expect(external).toEqual([]);
 });
 
-// AppShell.vue hides the signed-out "Tạo tài khoản" / "Đăng nhập" links
-// outright on this authRequiredPath route, so while its own /api/v1/me read
-// is still in flight, those wider signed-out links must not appear in place
-// of the eventual account menu: at 390px they push the header past the
-// viewport.
 test('the header at 390px never overflows on /app/settings/sessions while '
   + '/me is still loading', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 900 });
@@ -708,13 +637,6 @@ test('the header at 390px never overflows on /app/settings/sessions while '
     - document.documentElement.clientWidth)).toBe(0);
 });
 
-// AppShell.vue's showSignedOutLinks must stay hidden on an authRequiredPath
-// route for every authState but 'authenticated', not just 'loading': once
-// /api/v1/me settles to a rejected session, the shared route guard
-// (middleware/signed-in.global.ts) redirects to /login, but only after that
-// settling is itself a render. A header that shows the signed-out links for
-// that one render pushes past the viewport at 390px, the same way it did
-// for the still-loading case above.
 test('the header at 390px never overflows on /app/resumes while /me settles '
   + 'to a 401 and the page redirects to /login', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 900 });
@@ -745,9 +667,6 @@ test('the header at 390px never overflows on /app/resumes while /me settles '
   expect(await overflow()).toBe(0);
 
   releaseMe();
-  // Sample continuously instead of only before and after the redirect: the
-  // production regression this guards was a transient render between the
-  // settled 401 and the navigation, not a settled state of its own.
   const deadline = Date.now() + 5000;
   while (
     new URL(page.url()).pathname !== '/login' && Date.now() < deadline
@@ -758,11 +677,6 @@ test('the header at 390px never overflows on /app/resumes while /me settles '
   expect(new URL(page.url()).pathname).toBe('/login');
 });
 
-// /app/settings/sessions had no redirect of its own before the shared route
-// guard (middleware/signed-in.global.ts): it left only because
-// ConnectedAgents.vue mounts when agent access is on. This covers it the
-// same way as /app/resumes above, with agent access off, so the redirect
-// comes from the guard alone.
 test('the header at 390px never overflows on /app/settings/sessions while '
   + '/me settles to a 401 and the page redirects to /login', async ({
   page,
@@ -804,9 +718,6 @@ test('the header at 390px never overflows on /app/settings/sessions while '
   expect(await overflow()).toBe(0);
 
   releaseMe();
-  // Sample continuously instead of only before and after the redirect: the
-  // regression this guards is a transient render between the settled 401
-  // and the navigation, not a settled state of its own.
   const deadline = Date.now() + 5000;
   while (
     new URL(page.url()).pathname !== '/login' && Date.now() < deadline
@@ -820,12 +731,6 @@ test('the header at 390px never overflows on /app/settings/sessions while '
   );
 });
 
-// A signed-out visitor who follows a gallery sample's link into /app/new
-// must reach /register even when the session read settles before the
-// navigation commits: Nuxt treats a navigation as processing middleware
-// until it commits, and a redirect the guard (middleware/signed-in.global.ts)
-// starts in that window must still navigate. Holding the page chunks until
-// the guard's own /api/v1/me read has answered puts the 401 there.
 test('a signed-out sample link reaches /register when /me settles before '
   + 'the page loads', async ({ page }) => {
   await page.context().addCookies([{
@@ -849,7 +754,6 @@ test('a signed-out sample link reaches /register when /me settles before '
   await page.route('**/_nuxt/**', async (route) => {
     if (clicked) {
       await meAfterClick;
-      // Lets the settled read reach the guard before the chunk arrives.
       await new Promise((resolve) => setTimeout(resolve, 250));
     }
     await route.continue();
@@ -872,10 +776,6 @@ test('a signed-out sample link reaches /register when /me settles before '
   expect(new URL(page.url()).searchParams.get('next')).toBe(href);
 });
 
-// The Create resume dialog opens on the samples for an account with no
-// resumes, and the samples make it taller than a 1280x720 viewport. It must
-// stay inside the viewport and scroll, so its header, the Blank / From a
-// sample toggle, and its actions all stay reachable.
 test('the create resume dialog fits a 1280x720 viewport and scrolls', async ({
   page,
 }) => {

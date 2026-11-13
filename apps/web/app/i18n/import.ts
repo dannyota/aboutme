@@ -1,10 +1,5 @@
-// Copy for /app/import/linkedin (docs/design/linkedin-import-ui.md Copy).
-// `importLinkedIn`, the create-dialog entry link text, lives in
-// i18n/resume-create.ts next to the dialog's other copy.
 import type { WorkspaceCopy } from './workspace';
 
-// noticeCut's {max} is a character count, formatted per locale's own
-// grouping (docs/design/linkedin-import-ui.md, "Messages").
 const enNumberFormat = new Intl.NumberFormat('en-US');
 const viNumberFormat = new Intl.NumberFormat('vi-VN');
 
@@ -75,9 +70,6 @@ export type ImportCopy = {
   readonly sizeOver: (max: number) => string;
   readonly sizeOk: string;
   readonly invalid: string;
-  /** A schema failure outside any entry or detail: no row to deselect, so
-   * this names the whole document instead (docs/design/
-   * linkedin-import-ui.md, "Action panel"). */
   readonly invalidGeneral: string;
 };
 

@@ -2,14 +2,8 @@ import type { Section } from '@aboutme/schema';
 
 import type { BlockRef } from './paginate';
 
-// Paged preview breaks a long entry between its body blocks, the way print
-// fragments it (docs/design/templates/print.md §3): part 0 is the entry
-// header with its first body block, and every later part is one block.
-
 type BodyField = 'description' | 'text';
 
-// Sections whose entry body is rich text that may split. Skills and languages
-// pair their text with a level widget and stay whole.
 const bodyFields: Partial<Record<Section['sectionType'], BodyField>> = {
   work: 'description',
   education: 'description',
@@ -21,18 +15,9 @@ const bodyFields: Partial<Record<Section['sectionType'], BodyField>> = {
 
 const blockTag = /<(\/?)(p|ul|ol|li)\b[^>]*>/giu;
 
-/**
- * Splits rich text into its top-level blocks: each paragraph, each item of a
- * top-level unordered list (rewrapped in its own list), and each ordered list
- * whole, because the sanitizer drops `start` and a split list would renumber.
- * Anything it cannot read as balanced blocks stays one block. Every piece is
- * still sanitized when rendered, so splitting never widens what renders.
- */
 export function splitRichTextBlocks(html: string): string[] {
   const blocks: string[] = [];
   const stack: string[] = [];
-  // cursor is where the last top-level block (or list) ended; anything but
-  // whitespace between blocks means the body cannot split without loss.
   let cursor = 0;
   let blockStart = -1;
   let listOpen = '';
@@ -88,7 +73,6 @@ const bodyOf = (
   return typeof value === 'string' ? value : undefined;
 };
 
-/** The pagination blocks for one visible entry: one, or one per body block. */
 export function entryBlocks(
   sectionKey: string,
   section: Section,
@@ -102,10 +86,6 @@ export function entryBlocks(
   return Array.from({ length: parts }, (_, part) => ({ ...base, part }));
 }
 
-/**
- * The section reduced to one entry whose body is only the given part's block.
- * Part 0 keeps the entry header; the renderer omits it for later parts.
- */
 export function entryPartSection(
   section: Section,
   entryIndex: number,

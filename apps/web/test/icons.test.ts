@@ -1,6 +1,3 @@
-// icons.test.ts — the favicon, home-screen icon, and manifest set iOS and
-// Android need to show a real icon instead of a generic tile
-// (docs/adr/0020-application-visual-identity.md).
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -33,9 +30,7 @@ describe('application icon links', () => {
       const wrapper = await mountSuspended(AppRoot, { route: '/' });
       await flushPromises();
 
-      // @unhead/vue's client renderer debounces the actual DOM write with
-      // setTimeout(0), so a single flushPromises() (a microtask) races it;
-      // wait for the settled link set instead of asserting it immediately.
+      // @unhead/vue debounces its DOM write with setTimeout(0).
       await vi.waitFor(() => {
         const links = [...document.head.querySelectorAll(
           'link[rel="icon"], link[rel="apple-touch-icon"], '
@@ -134,7 +129,7 @@ describe('apple-touch-icon-v3.png', () => {
     expect(bytes.readUInt32BE(20)).toBe(180);
     const bitDepth = bytes.readUInt8(24);
     const colorType = bytes.readUInt8(25);
-    // PNG color type 2 is truecolor (RGB, no alpha, no 256-color palette).
+    // PNG spec: color type 2 is truecolor RGB, with no alpha or palette.
     expect(bitDepth).toBe(8);
     expect(colorType).toBe(2);
   });
@@ -146,15 +141,12 @@ describe('the chrome font preload', () => {
     const wrapper = await mountSuspended(AppRoot, { route: '/' });
     await flushPromises();
 
-    // Same debounced DOM write as above: wait for the settled tag instead
-    // of racing flushPromises() against unhead's setTimeout(0) flush.
     await vi.waitFor(() => {
       const preload = document.head.querySelector(
         'link[rel="preload"][as="font"]',
       );
       expect(preload?.getAttribute('type')).toBe('font/woff2');
       expect(preload?.getAttribute('crossorigin')).toBe('anonymous');
-      // Vite's hashed build path for the vendored file, not a second copy.
       expect(preload?.getAttribute('href'))
         .toMatch(/be-vietnam-pro-var[\w.-]*\.woff2$/u);
     });
@@ -163,10 +155,6 @@ describe('the chrome font preload', () => {
 
   it('is gated by the same isAppSurface check as the app html attribute',
     () => {
-      // The render harness (/_harness/**), the print worker, and public
-      // resume pages never mount AppRoot, so they never see this link;
-      // this pins the single condition that would otherwise need a
-      // second, drifting copy (docs/design/web.md).
       const source = readFileSync(
         join(here, '..', 'app', 'app.vue'), 'utf8',
       );

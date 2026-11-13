@@ -1,12 +1,4 @@
 <script setup lang="ts">
-/**
- * The chain card (docs/design/deployment-transparency/visual.md, "Chain"):
- * Source, Build, Image, and Running as an ordered list. Each step has a
- * disk, a label, a value, a muted line, and a state chip; a connector joins
- * each disk to the next, across below 42 rem and down the disk column on
- * phones. Connectors are decorative; steps 2 to 4 carry their meaning in
- * visually hidden text.
- */
 import {
   ArrowRightLeft,
   Check,
@@ -300,8 +292,6 @@ const buildLink = computed(() => release.value?.image.links.build ?? null);
   border-radius: 2px;
 }
 
-/* Below 42 rem the connector runs down the disk column, from this disk's
-   bottom edge through the 32 px gap to the next disk's top edge. */
 .verify-connector {
   position: absolute;
   top: 40px;
@@ -351,8 +341,6 @@ const buildLink = computed(() => release.value?.image.links.build ?? null);
   color: var(--line);
 }
 
-/* From 42 rem the steps are four equal columns 40 px apart, and a connector
-   runs from this disk's right edge to the next disk's left edge. */
 @media (min-width: 42rem) {
   .verify-chain {
     grid-template-columns: repeat(4, minmax(0, 1fr));

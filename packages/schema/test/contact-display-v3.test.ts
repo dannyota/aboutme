@@ -4,10 +4,6 @@ import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 import { describe, expect, it } from "vitest";
 
-// Document v3 adds a per-detail link display choice and a body text alignment
-// (docs/adr/0013-resume-header-and-contacts.md). Both are optional,
-// and absent keeps the v2 rendering.
-
 const root = new URL("..", import.meta.url).pathname;
 const read = (name: string) =>
   JSON.parse(readFileSync(join(root, name), "utf8"));

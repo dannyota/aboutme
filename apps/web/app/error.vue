@@ -1,13 +1,4 @@
 <script setup lang="ts">
-/**
- * The app-wide error page (Nuxt 4's app-level error handling: see
- * nuxt.com/docs/4.x/getting-started/error-handling). Nuxt renders this
- * instead of its own built-in error page, whose
- * error-404.vue/error-500.vue always emit an inline `<script>` (the Vite
- * modulepreload polyfill) that `script-src 'self'` blocks
- * (docs/design/security.md). This page renders no script of its own, and
- * never shows the error's own message or stack, in production or otherwise.
- */
 import type { NuxtError } from '#app';
 
 import { buttonVariants } from '@/components/ui/button';

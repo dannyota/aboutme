@@ -1,19 +1,4 @@
 <script setup lang="ts">
-/**
- * `PasswordField` — a labelled password input with a show/hide toggle and an
- * optional, component-local confirmation field.
- *
- * The caller supplies `autocomplete` (`current-password` or `new-password`)
- * so password managers see the right intent. The show/hide toggle reports
- * `aria-pressed` and a labelled icon so its state is accessible. Pasting and
- * autofill are native — no `@paste.prevent`, no re-typing shims. The model is
- * bound with Vue's native `v-model`, which already defers updates across IME
- * composition, so there is no composition rewrite here.
- *
- * Confirmation is entirely local to this component: `confirmValue` is exposed
- * (for a page's submit-time check) but never submitted by any parent, and no
- * strength score or character-class hint is ever rendered.
- */
 import { Eye, EyeOff } from '@lucide/vue';
 import IconButton from '@/components/app/IconButton.vue';
 import FormField from '@/components/app/FormField.vue';

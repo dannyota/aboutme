@@ -22,9 +22,6 @@ const copy = computed(() => viewsDetailCopy[locale.value]);
 
 useHead({ title: computed(() => workspaceTitles[locale.value].views) });
 
-// The session cookie is only available client-side (no proxy at SSR); a
-// resume owned by another account answers exactly like a missing one
-// (docs/api/openapi.yaml, getResumeViewCounts).
 const { data, error, status, refresh } = await useFetch<
   ResumeViewCountsEnvelope
 >(
@@ -32,9 +29,7 @@ const { data, error, status, refresh } = await useFetch<
   { credentials: 'include', server: false },
 );
 
-// server:false leaves `status` 'idle' during SSR, but hydration starts the
-// fetch (setting status 'pending') before the client's first render;
-// treating both as loading keeps the SSR and hydration renders identical.
+// Nuxt useFetch with server:false is 'idle' in SSR, 'pending' at hydration.
 const loading = computed(() => (
   status.value === 'idle' || status.value === 'pending'
 ));
@@ -109,9 +104,7 @@ const last90 = computed(() => {
         <span class="text-4xl font-bold tabular-nums tracking-tight">{{
           copy.headlineCount(last90.real)
         }}</span>
-        <!-- The leading space keeps the two spans' textContent readable
-             as one sentence; whitespace-only text between elements is
-             stripped, so the space has to live inside this span. -->
+        <!-- Vue's condense mode strips whitespace-only text nodes. -->
         <span class="text-base text-muted-foreground">{{
           ' ' + copy.headlineRest(last90.real, last90.filtered)
         }}</span>

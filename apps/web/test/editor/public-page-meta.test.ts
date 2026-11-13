@@ -20,7 +20,6 @@ describe('page title', () => {
     expect(publicTitleIssue('Danny from aboutme.vn')).toBeNull();
     expect(publicTitleIssue('')).toBeNull();
     expect(publicTitleIssue('a'.repeat(70))).toBeNull();
-    // A ZWJ emoji is one character, however many code points it has.
     const coder = `👩${ZWJ}💻`;
     expect(graphemeCount(coder.repeat(70))).toBe(70);
     expect(publicTitleIssue(coder.repeat(70))).toBeNull();

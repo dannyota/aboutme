@@ -1,26 +1,4 @@
 <script setup lang="ts">
-/**
- * Pending second-factor page. Completes a password or provider login, or a
- * settings reauthentication, for an account enrolled in a second factor.
- *
- * State comes only from the `__Host-auth-pending` cookie, read through
- * `GET /api/v1/auth/second-factor`. This page never calls `/me` and never
- * treats the pending cookie as a session — a provider redirect lands here
- * with no query string, and none of its text ever becomes copy, markup, or
- * a request target.
- *
- * Methods render in the server's fixed order (passkey, totp, then recovery;
- * docs/design/totp-second-factor-contract.md "Release surface"). A method
- * value this build does not recognize renders a refresh prompt instead of a
- * route call — beside the known methods, or alone when none remain — and
- * never touches the pending cookie itself (AC-AUTH-028).
- *
- * The authenticator code lives only in `totpCode`, a component-local ref.
- * `submitTotp` clears it the instant the submit handler reads it, before any
- * network call, and `clearTotpCode` runs again on unmount, so no exit path
- * (submit outcome, navigation, expiry, exhaustion, or unmount) leaves it in
- * memory (docs/design/totp-second-factor-contract.md "Provisioning data").
- */
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 import FormField from '@/components/app/FormField.vue';
 import StatusBanner from '@/components/app/StatusBanner.vue';
@@ -58,17 +36,11 @@ const copy = computed(() => secondFactorCopy[locale.value]);
 useHead(computed(() => ({ title: pageTitle(copy.value.title) })));
 
 const pending = useSecondFactorPending();
-// Real WebAuthn support never changes mid-session; SSR (where `window` is
-// absent) never reaches the branch that reads this, since `status` only
-// leaves "loading" from `onMounted`.
 const passkeySupported = isWebAuthnSupported();
 
 type PageState = 'loading' | 'ready' | 'expired' | 'unavailable';
 const state = ref<PageState>('loading');
 const status = ref<SecondFactorPendingStatus | null>(null);
-// Remembered only to pick the right sign-in-again target if the pending row
-// later turns out to be gone; never used to call `/me` or treat the cookie
-// as a session.
 const purpose = ref<'login' | 'reauth'>('login');
 
 const passkeyBusy = ref(false);
@@ -76,10 +48,6 @@ const passkeyMessage = ref<SecondFactorMessage | null>(null);
 const totpCode = ref('');
 const totpBusy = ref(false);
 const totpMessage = ref<SecondFactorMessage | null>(null);
-// Set only for a 429 cool-down; holds the server's `Retry-After` seconds so
-// the banner can show localized remaining time instead of generic copy
-// (docs/design/totp-second-factor-contract.md "Per-account TOTP failure
-// budget"). `null` means the current totpMessage, if any, applies instead.
 const totpCooldownSeconds = ref<number | null>(null);
 const recoveryCode = ref('');
 const recoveryBusy = ref(false);
@@ -91,10 +59,6 @@ const KNOWN_ORDER: readonly SecondFactorPendingMethod[] = [
   'recovery',
 ];
 
-/** Exactly six ASCII digits, matching the server's own input bound
- * (docs/design/totp-second-factor-contract.md "TOTP profile and code
- * verification"). Checked client-side so a malformed value never reaches
- * the network or spends a rate-limit slot. */
 const TOTP_CODE_SHAPE = /^[0-9]{6}$/;
 
 const knownMethods = computed<SecondFactorPendingMethod[]>(() => {
@@ -109,9 +73,6 @@ const expiredTarget = computed(() => (purpose.value === 'reauth'
   ? '/app/settings/sessions?error=authentication_required'
   : '/login?error=authentication_required'));
 
-/** The totp section's current error text, or `null` for none. A cool-down
- * always wins over a stale message because `submitTotp` clears whichever one
- * does not apply for the new outcome. */
 const totpErrorText = computed<string | null>(() => {
   if (totpCooldownSeconds.value !== null) {
     return copy.value.totp.cooldown(totpCooldownSeconds.value);
@@ -119,8 +80,6 @@ const totpErrorText = computed<string | null>(() => {
   return totpMessage.value ? copy.value.messages[totpMessage.value] : null;
 });
 
-/** Maps a retryable pending failure to its generic display copy. Callers
- * handle `authentication-required` separately by moving to "expired". */
 function messageFor(kind: SecondFactorPendingError): SecondFactorMessage {
   switch (kind) {
     case 'verification-failed':
@@ -133,12 +92,6 @@ function messageFor(kind: SecondFactorPendingError): SecondFactorMessage {
   }
 }
 
-/** Maps a retryable TOTP pending failure to its display copy. Distinct from
- * `messageFor` because a stale credential and a cool-down each need their
- * own copy here (docs/design/totp-second-factor-contract.md "Pending
- * verification API", "Per-account TOTP failure budget"; AC-AUTH-028). The
- * `rate-limited` kind never reaches this function: `submitTotp` reads its
- * `retryAfterSeconds` into `totpCooldownSeconds` instead. */
 function totpMessageFor(kind: SecondFactorPendingError): SecondFactorMessage {
   switch (kind) {
     case 'verification-failed':
@@ -169,11 +122,6 @@ async function load(): Promise<void> {
 
 onMounted(load);
 
-/** Navigates to the pending row's own validated return path, re-validated
- * client-side the same way login.vue treats `?next=` — defense in depth,
- * never trusting a stored string as a safe navigation target outright. A
- * destination outside this app's own pages (for example `/oauth/authorize`)
- * needs a real browser navigation, matching login.vue's own rule. */
 async function afterSuccess(): Promise<void> {
   const target = validateReturnPath(status.value?.returnPath)
     ?? DEFAULT_RETURN_PATH;
@@ -188,7 +136,7 @@ function refreshPage(): void {
   try {
     window.location.reload();
   } catch {
-    // Best effort only; not every test/browser environment implements it.
+    // jsdom and happy-dom may not implement location.reload().
   }
 }
 
@@ -213,8 +161,6 @@ async function usePasskey(): Promise<void> {
     } else if (error instanceof SecondFactorPendingFailure) {
       passkeyMessage.value = messageFor(error.kind);
     } else {
-      // A malformed options response (`WebAuthnDataInvalid`) or any other
-      // unexpected WebAuthn failure degrades to the same generic retry copy.
       passkeyMessage.value = 'tryAgain';
     }
   } finally {
@@ -222,10 +168,6 @@ async function usePasskey(): Promise<void> {
   }
 }
 
-// Never keep an authenticator code around longer than the keystroke that
-// entered it: `submitTotp` calls this immediately after reading the field,
-// before the request or navigation, so no exit path (submit outcome,
-// navigation, expiry, exhaustion, or unmount) leaves it in memory.
 function clearTotpCode(): void {
   totpCode.value = '';
 }
@@ -251,8 +193,6 @@ async function submitTotp(): Promise<void> {
       state.value = 'expired';
     } else if (error instanceof SecondFactorPendingFailure
       && error.kind === 'rate-limited') {
-      // Retry-After is capped at 86,400 seconds (24 hours); a missing
-      // header still shows the cap so the banner never reads as instant.
       totpCooldownSeconds.value = error.retryAfterSeconds ?? 86400;
     } else if (error instanceof SecondFactorPendingFailure) {
       totpMessage.value = totpMessageFor(error.kind);
@@ -296,8 +236,6 @@ async function submitRecovery(): Promise<void> {
   }
 }
 
-// Never keep a recovery code or an authenticator code around longer than
-// the attempt that used it.
 onBeforeUnmount(() => {
   clearRecoveryCode();
   clearTotpCode();

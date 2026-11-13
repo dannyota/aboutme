@@ -54,7 +54,6 @@ interface SessionInfo {
   id: string;
   createdAt: string;
   lastSeenAt: string;
-  // Both fields are nullable in OpenAPI and the Go response.
   ua: string | null;
   ip: string | null;
   current: boolean;
@@ -82,21 +81,16 @@ const {
   mutate,
   refresh: refreshMe,
 } = useAuth();
-// Only providers the server enables (ADR 0016) get link or reauth controls;
-// a disabled provider's start route answers not found.
 const { loginProviders, agentAccess, passkeyEnrollment } = useCapabilities();
 const enabledIdentities = computed(() =>
   identities.value.filter((identity) =>
     loginProviders.value.includes(identity.provider)));
 
-// Server-side rendering has neither the browser cookies nor the local proxy.
 const { data: sessionsResponse } = await useFetch<SessionsEnvelope>(
   '/api/v1/sessions',
   { credentials: 'include', server: false },
 );
 
-// Mutations refresh through the browser rather than rerunning the initial
-// useFetch request.
 const sessionsOverride = ref<SessionInfo[] | null>(null);
 const sessions = computed(
   () => sessionsOverride.value ?? sessionsResponse.value?.data ?? [],
@@ -126,7 +120,6 @@ function hasErrorCode(error: unknown, code: string): boolean {
 }
 
 function isNotFound(error: unknown): boolean {
-  // The no-oracle contract makes every absent or unauthorized target the same.
   return (
     typeof error === 'object'
     && error !== null
@@ -134,9 +127,6 @@ function isNotFound(error: unknown): boolean {
     && (error as { statusCode?: number }).statusCode === 404
   );
 }
-
-// Reauthentication is only for linking a new provider (ADR 0015): a session
-// revoke or logout-everywhere 403 is a CSRF failure, not a reauth prompt.
 
 const reauthRequired = ref(route.query.error === 'reauth_required');
 const reauthProvider = computed(
@@ -156,14 +146,10 @@ async function revokeSession(id: string): Promise<void> {
       revokeError.value = 'single';
       return;
     }
-    // An already-absent session means the stale list can be refreshed.
   }
   await refreshSessions();
 }
 
-// Unlinking keeps every session signed in. If the unlink was a response to a
-// compromised provider account, the person can end the other sessions here,
-// one existing revoke at a time, while this device stays signed in.
 const unlinkedNotice = ref<string | null>(null);
 const otherSessions = computed(() =>
   sessions.value.filter((session) => !session.current));
@@ -191,7 +177,6 @@ async function revokeAll(): Promise<void> {
     revokeError.value = 'all';
     return;
   }
-  // This also destroys the current session, so there is nothing to refresh.
   await navigateTo('/login');
 }
 
@@ -207,8 +192,6 @@ const startPending = ref(false);
 const startError = ref(false);
 
 async function openAddProvider(): Promise<void> {
-  // Refresh identities/csrfToken before offering link targets, so we don't
-  // act on stale state.
   await refreshMe();
   showAddProvider.value = true;
 }
@@ -252,9 +235,6 @@ async function reauthenticatePassword(password: string): Promise<void> {
   } catch (error) {
     throw mapReauthError(error);
   }
-  // An enrolled account's primary reauthentication is accepted but not
-  // complete: the pending second factor lives on its own page, whose return
-  // path for this purpose is fixed back to these settings.
   if (response?.data?.secondFactorRequired === true) {
     await navigateTo('/login/second-factor');
   }
@@ -274,9 +254,6 @@ async function startProviderReauth(provider: AuthProvider): Promise<void> {
   }
 }
 
-// The password-settings actions stay closed: each performs one operation and
-// rejects with a PasswordSettingsFailure rather than a raw server body. The
-// provider round trip reuses the same authorizeURL validation as linking.
 const passwordProviders = computed(() =>
   enabledIdentities.value.map((identity) => identity.provider),
 );
@@ -368,27 +345,19 @@ const secondFactorActions: SecondFactorSettingsActions = {
 provide(SecondFactorSettingsActionsKey, secondFactorActions);
 
 function onAccountDeleted(): void {
-  // A top-level navigation discards every in-memory account projection before
-  // the now-anonymous login page starts.
   if (import.meta.client) window.location.assign('/login');
 }
 
 async function onPasswordUpdated(): Promise<void> {
-  // A successful add/change replaces the current session: refetch /me (to
-  // flip hasPassword) and the device list (every other session is gone).
   await refreshMe();
   await refreshSessions();
 }
 
 async function onSecondFactorChanged(): Promise<void> {
-  // A passkey add/remove or recovery-code regeneration rotates the epoch:
-  // refetch /me for the replacement CSRF token and the device list, since
-  // every other session and connected-agent grant is now revoked.
   await refreshMe();
   await refreshSessions();
 }
 
-// OAuthCallbackErrorCode in OpenAPI is the closed callback vocabulary.
 const linkErrorCode = computed(() => {
   const value = route.query.error;
   if (typeof value !== 'string' || value === 'reauth_required') return null;
@@ -544,7 +513,6 @@ const linkErrorMessage = computed(() => {
       >
         {{ linkErrorMessage }}
       </StatusBanner>
-      <!-- Every linked identity is listed, even one whose provider is off. -->
       <LinkedIdentities
         v-if="identities.length"
         :actions="identityActions"

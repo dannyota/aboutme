@@ -9,15 +9,11 @@ import {
   responseTime,
 } from '@/utils/deploymentDocument';
 
-/** Refetch cadence while the tab is visible (page.md, behavior). */
 const refreshIntervalMs = 60_000;
-/** How often ages and staleness are re-read between fetches. */
 const tickMs = 10_000;
 
 interface Clock {
-  /** The server's time at the response, or null without a usable `Date`. */
   readonly serverTime: number | null;
-  /** `performance.now()` when the response arrived. */
   readonly localTime: number;
 }
 
@@ -60,12 +56,6 @@ async function readDocument(): Promise<{
   };
 }
 
-/**
- * Fetches the same-origin deployment document in the browser only, refetches
- * it every minute while the tab is visible, and keeps a clock anchored to the
- * response's `Date` and `Age` so a wrong visitor clock cannot hide staleness.
- * A failed refetch keeps the last document, which then ages into stale.
- */
 export function useDeploymentDocument() {
   const outcome = shallowRef<FetchOutcome>({ kind: 'pending' });
   const clock = shallowRef<Clock | null>(null);
@@ -118,7 +108,6 @@ export function useDeploymentDocument() {
     start();
   }
 
-  /** The server's current time, or null when the response gave none. */
   const now = computed<number | null>(() => {
     void tick.value;
     const anchor = clock.value;

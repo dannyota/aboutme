@@ -7,10 +7,6 @@ import {
   projectLanguage,
 } from '../../app/components/projects/projectFromEntry';
 
-// Creating a library project from a resume entry (docs/design/projects.md
-// "Selection"): name from title, role from subtitle, the link by host, the
-// dates, and the description as plain text cut to the summary limit.
-
 const ENTRY = '0190f000-0000-7000-8000-0000000000e1';
 
 const entry = (overrides: Partial<ProjectEntry> = {}): ProjectEntry => ({
@@ -84,8 +80,6 @@ describe('a project made from an entry', () => {
   });
 
   it('cuts the summary to 300 characters, never inside a character', () => {
-    // A decomposed é is two code points: the 299th character fits, it
-    // does not.
     const long = `${'a'.repeat(299)}e\u0301${'b'.repeat(20)}`;
     expect(projectFromEntry(entry({ description: `<p>${long}</p>` }), 'en')
       .text.en!.summary).toBe('a'.repeat(299));

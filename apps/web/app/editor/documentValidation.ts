@@ -2,10 +2,6 @@ import type { Resume } from '@aboutme/schema';
 import { CURRENT_VERSION } from '@aboutme/schema/released';
 import { validateDocument } from '@aboutme/schema/validation';
 
-// A build-time Ajv standalone compile of resume.schema.json
-// (documentValidator.generated.mjs), not a runtime `ajv.compile()`: that
-// call emits a `new Function`, which the app-page CSP's script-src blocks
-// (docs/design/security.md; the editor route carries that CSP too).
 import validateSchema from './documentValidator.generated.mjs';
 
 export class UnknownDocumentVersionError extends Error {

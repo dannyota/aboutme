@@ -47,13 +47,9 @@ describe('print worker build', () => {
       expect(existsSync(worker)).toBe(true);
       expect(existsSync(css)).toBe(true);
       expect(readFileSync(css, 'utf8')).toContain('.resume-document');
-      // The public page loads this stylesheet too; it hides the shell's skip
-      // link until the link is focused.
       const skipLink
         = /a\[href=(?:"#public-resume"|\\#public-resume)\]:not\(:focus\)/u;
       expect(readFileSync(css, 'utf8')).toMatch(skipLink);
-      // The owner's dark scheme rules live in a sibling stylesheet of the
-      // resume component; the same build must carry them, screen-only.
       const scheme = readFileSync(css, 'utf8');
       expect(scheme).toContain('--dark-color-surface');
       expect(scheme).toContain('prefers-color-scheme');
@@ -66,8 +62,6 @@ describe('print worker build', () => {
         deadlineMs: PRINT_WORKER_DEADLINE_MS,
         workerUrl: new URL(`file://${worker}`),
       })).resolves.toContain('data-print-document="true"');
-      // The same worker draws the link-preview card, and its CSS ships in
-      // print.css, the only stylesheet the card page may load.
       expect(readFileSync(css, 'utf8')).toContain('.preview-card-body');
       const card = await runPrintWorker(cardEnvelope(), {
         signal: new AbortController().signal,

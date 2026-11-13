@@ -1,12 +1,4 @@
 <script setup lang="ts">
-/**
- * "What your assistant can do" (docs/design/mcp-guide.md, "Layout"): a Can
- * and a Cannot list, one column below 42 rem with Can first, two 32 px-gap
- * columns from 42 rem. Nothing here uses seal red: the Cannot list must not
- * read as an error or a public-state mark. Can takes a Lucide `check` in
- * `--link`; Cannot takes a Lucide `minus` in `--muted-foreground`; the two
- * shapes stay distinct so the meaning survives forced colors.
- */
 import { Check, Minus } from '@lucide/vue';
 import type { GuideCopy } from '@/i18n/guide';
 

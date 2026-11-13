@@ -36,8 +36,6 @@ const photo = computed(
 );
 const read = computed(() => props.record.photoRead);
 const opaque = computed(() => props.record.opaquePhotoOutcome);
-// A photo uploaded here starts on the default crop; one that was already on
-// the resume keeps what it has until the person saves a crop.
 const awaitingUpload = ref(false);
 const uploadedKey = ref<string | null>(null);
 watch(

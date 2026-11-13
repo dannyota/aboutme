@@ -17,7 +17,6 @@ const props = defineProps<{
   readonly project: Project | null;
   readonly action: ReleaseAction;
   readonly copy: ProjectsCopy;
-  /** Resumes that show the project; the project's own list by default. */
   readonly linkedCount?: number;
 }>();
 const emit = defineEmits<{ close: [] }>();

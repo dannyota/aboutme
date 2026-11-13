@@ -14,7 +14,6 @@ import {
   textWidth,
 } from '../../app/components/preview/cardFit';
 
-// docs/design/link-preview-card.md, "Fitting the text".
 describe('card width estimate', () => {
   it('classes each cluster by its first code point after NFD', () => {
     expect(clusterWidth(' ')).toBe(0.23);

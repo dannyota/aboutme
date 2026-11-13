@@ -93,7 +93,6 @@ describe('private photo controls', () => {
   );
 
   it('keeps the hidden file input one pixel wide', () => {
-    // A full-width absolutely placed input pushed the editor sideways.
     const wrapper = mount(PhotoPanel, {
       props: { record: photoRecord(), actions: actionsFor(vi.fn()) },
     });
@@ -275,12 +274,10 @@ describe('private photo controls', () => {
         value: () => ({ left: 0, top: 0, width: 100, height: 100 }),
       });
 
-      // Dragging from inside the square moves it by the pointer's travel.
       await stage.trigger('pointerdown', { clientX: 10, clientY: 20 });
       await stage.trigger('pointermove', { clientX: 20, clientY: 20 });
       await stage.trigger('pointerup');
       expect(square.attributes('style')).toContain('left: 10%;');
-      // The arrow keys move it by 2%.
       await stage.trigger('keydown', { key: 'ArrowRight' });
       expect(square.attributes('style')).toContain('left: 12%;');
       await wrapper.get('form').trigger('submit');
@@ -289,7 +286,6 @@ describe('private photo controls', () => {
         crop: { x: 0.12, y: 0, width: 0.5, height: 0.5 },
       });
 
-      // Pressing outside the square centres it there, inside the photo.
       await stage.trigger('pointerdown', { clientX: 90, clientY: 90 });
       await stage.trigger('pointerup');
       expect(square.attributes('style')).toContain('left: 50%;');
@@ -315,7 +311,7 @@ describe('private photo controls', () => {
 
     expect(edit).toHaveBeenCalledTimes(1);
     const crop = edit.mock.calls[0]![0].crop;
-    // The store clones the crop; a reactive proxy would throw there.
+    // structuredClone throws on a Vue reactive proxy.
     expect(isProxy(crop)).toBe(false);
     expect(() => structuredClone(crop)).not.toThrow();
     expect(crop).toMatchObject({ x: 0, width: 1, height: 0.5 });

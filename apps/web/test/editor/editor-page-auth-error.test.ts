@@ -18,12 +18,6 @@ import {
   type FakeResumeServer,
 } from './fake-resume-server';
 
-// The editor page over the real editor, coordinator, store and session, with
-// only the network faked: `/api/v1/me` answers as the test says, and the
-// owner API is the fake server. While the session cannot be checked the
-// editor keeps its work and checks again; every answer then acts in one
-// place, for the person who opened the editor and no one else.
-
 const mocks = vi.hoisted(() => ({
   server: undefined as unknown,
   editors: [] as unknown[],
@@ -76,7 +70,6 @@ type MeAnswer
     | { readonly kind: 'error' }
     | { readonly kind: 'anonymous' };
 
-/** What `/api/v1/me` answers next, and when each request arrived. */
 const me = {
   answer: { kind: 'user', id: 'owner-1' } as MeAnswer,
   calls: [] as number[],
@@ -112,13 +105,11 @@ registerEndpoint('/api/v1/me', {
   },
 });
 
-/** The session as any part of the app sees it; its refresh is a check. */
 const Session = defineComponent({
   setup: () => ({ auth: useAuth() }),
   render: () => h('div'),
 });
 
-// The shell's banner and sign-in dialog call these, as this stand-in does.
 const shellStub = {
   props: ['actions', 'record', 'sessionCheck'],
   template: '<div data-editor-shell>'
@@ -132,15 +123,12 @@ const shellStub = {
     + '</div>',
 };
 
-// The mocked network answers through the event loop, so only timers and the
-// clock are faked.
 const FAKE_TIMERS: Parameters<typeof vi.useFakeTimers>[0] = {
   toFake: [
     'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date',
   ],
 };
 
-/** Real event-loop turns, in which the mocked network answers. */
 async function letNetworkAnswer(): Promise<void> {
   for (let turn = 0; turn < 10; turn += 1) {
     await new Promise<void>((resolve) => setImmediate(resolve));
@@ -148,10 +136,6 @@ async function letNetworkAnswer(): Promise<void> {
   await nextTick();
 }
 
-/**
- * Moves the fake clock on by `ms` in 50 ms steps, letting the network answer
- * after each, so a check that a timer starts gets its answer in time.
- */
 async function run(ms: number): Promise<void> {
   await letNetworkAnswer();
   for (let passed = 0; passed < ms; passed += 50) {
@@ -160,7 +144,6 @@ async function run(ms: number): Promise<void> {
   }
 }
 
-/** Lets `/me` answer `answer` for the whole app before a page opens. */
 async function sessionAnswers(answer: MeAnswer) {
   me.answer = answer;
   const session = await mountSuspended(Session);
@@ -183,12 +166,10 @@ async function mountPage() {
       },
     },
   });
-  // A page a failed test leaves open would keep acting on the shared session.
   mocks.pages.push(page);
   return page;
 }
 
-/** Opens the editor page signed in as owner-1, then fakes the clock. */
 async function openEditor() {
   const server = fakeServer(startingResume());
   mocks.server = server;
@@ -210,7 +191,6 @@ async function openEditor() {
     settle,
     wrapper,
     record: () => useResumeStore().recordFor(ID)!,
-    /** The next check of the session fails with something other than 401. */
     outage: async (): Promise<void> => {
       me.answer = { kind: 'error' };
       await auth.refresh();
@@ -241,7 +221,6 @@ describe('a failed session check while the editor is open', () => {
     async () => {
       const context = await openEditor();
       await context.outage();
-      // The failed check cleared the signed-in user the page knew.
       expect(context.auth.user.value).toBeNull();
 
       expect(context.actions.edit(headline('Staff engineer')).kind)
@@ -320,7 +299,6 @@ describe('a failed session check while the editor is open', () => {
 
     await context.settle(120_000);
 
-    // No extra check from the held write's own retries in between.
     expect(me.calls.slice(outageAt)).toEqual([
       2_250, 4_250, 8_250, 16_250, 32_250, 62_250, 92_250,
     ]);
@@ -427,7 +405,6 @@ describe('an ordinary session check', () => {
     await context.settle();
     expect(context.auth.authState.value).toBe('loading');
 
-    // The held write's next retry comes due while the check is unanswered.
     await context.settle(1_000);
     expect(context.server.sent).toHaveLength(2);
     me.held = undefined;
@@ -476,7 +453,6 @@ describe('an older page whose first read arrives late', () => {
 });
 
 describe('a session answer while the first read is out', () => {
-  /** Opens the page with its first read held until `arrive` is called. */
   async function openWithReadOut() {
     const server = fakeServer(startingResume());
     mocks.server = server;

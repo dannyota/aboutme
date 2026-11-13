@@ -388,9 +388,6 @@ export function createPublishController(
       return state.value;
     }
     if (!sameOwner(frozen, deps.auth)) return loseSession();
-    // Only 204 completes reauthentication. An enrolled account's 202 opens a
-    // pending factor the server still requires, so the attempt waits for an
-    // explicit Continue; any other answer is not proof and sends nothing.
     if (status === 202 && response?.data?.secondFactorRequired === true) {
       return setState({ kind: 'reauth-second-factor', attempt: frozen });
     }
@@ -481,7 +478,6 @@ export function createPublishController(
     }
   }
 
-  /** Resends once after a step the owner finished in another tab. */
   async function resendAfterOtherTab(
     from: 'provider-started' | 'reauth-second-factor',
   ): Promise<PublishControllerState> {

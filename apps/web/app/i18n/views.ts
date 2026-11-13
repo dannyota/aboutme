@@ -1,7 +1,3 @@
-// Copy for the owner's Views pages (/app/views and /app/views/{id}).
-// Every count and label here describes docs/design/viewer-analytics/
-// counting.md: real views pass every layer; filtered views are bots,
-// hosting networks, anomalies, failed checks, and crawlers.
 import type { Locale } from './locale';
 import type { WorkspaceCopy } from './workspace';
 
@@ -9,7 +5,6 @@ export type ViewsPlatform
   = | 'facebook' | 'linkedin' | 'x' | 'telegram' | 'whatsapp' | 'slack'
     | 'discord' | 'skype' | 'viber' | 'zalo';
 
-// Brand names read the same in both site languages.
 export const platformNames: Readonly<Record<ViewsPlatform, string>> = {
   facebook: 'Facebook',
   linkedin: 'LinkedIn',
@@ -32,14 +27,10 @@ function formatNumber(locale: Locale, value: number): string {
   return numberFormatters[locale].format(value);
 }
 
-// "1 real view" vs "N real views"; Vietnamese has no plural form.
 function realViewsEn(real: number): string {
   return `${formatNumber('en', real)} real ${real === 1 ? 'view' : 'views'}`;
 }
 
-// Days and months arrive as 'YYYY-MM-DD' / 'YYYY-MM' Asia/Ho_Chi_Minh
-// calendar values. Parsing as Date.UTC and formatting with timeZone: 'UTC'
-// keeps the calendar day from shifting with the viewer's own time zone.
 function parseDay(date: string): Date {
   const [year = 0, month = 1, day = 1] = date.split('-').map(Number);
   return new Date(Date.UTC(year, month - 1, day));
@@ -67,8 +58,7 @@ const fullDayFormatters: Readonly<Record<Locale, Intl.DateTimeFormat>> = {
   }),
 };
 
-// vi-VN's short month reads as "thg 9 2026"; the long form reads as a
-// natural Vietnamese date ("tháng 9 năm 2026").
+// CLDR's vi-VN short month reads "thg 9 2026"; the long form reads naturally.
 const monthFormatters: Readonly<Record<Locale, Intl.DateTimeFormat>> = {
   vi: new Intl.DateTimeFormat('vi-VN', {
     month: 'long', year: 'numeric', timeZone: 'UTC',

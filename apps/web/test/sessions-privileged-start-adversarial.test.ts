@@ -79,9 +79,6 @@ registerEndpoint('/api/v1/me', {
 });
 
 registerEndpoint('/api/v1/sessions', () => ({ data: [] }));
-// Second-factor state is read regardless of the enrollment capability, so
-// every mount of this page needs a registered response; it plays no part
-// in this file's OAuth-start assertions and stays unenrolled throughout.
 registerEndpoint('/api/v1/me/second-factor', () => ({
   data: { enabled: false, passkeys: [], recoveryCodesRemaining: 0 },
 }));
@@ -202,8 +199,6 @@ describe('settings privileged OAuth starts (adversarial)', () => {
         );
       }
 
-      // A rotated session invalidates the cached synchronizer token. One
-      // rejection refreshes /me and retries the exact same bodiless request.
       csrfToken = 'csrf-stale';
       await refreshNuxtData();
       const meCallsBeforeRetry = meCalls;
@@ -235,7 +230,6 @@ describe('settings privileged OAuth starts (adversarial)', () => {
         'csrf-rotated',
       );
 
-      // A second rejection stops. It must not loop or fall back to GET.
       csrfToken = 'csrf-stale-again';
       await refreshNuxtData();
       attempts = 0;
@@ -313,9 +307,6 @@ describe('settings privileged OAuth starts (adversarial)', () => {
       await settleClick(linkPage, 'Link Google');
       expect(linkPage.get('[data-testid="link-error"]').text()).not.toBe('');
 
-      // Reauthentication uses the stable first identity. Refreshing /me lets
-      // the same black-box surface exercise every provider without depending
-      // on a separate component instance or cached initial fetch.
       const reauthPage = await mountSuspended(SessionsPage, {
         route: '/app/settings/sessions?error=reauth_required',
       });

@@ -1,8 +1,3 @@
-/**
- * LinkedIn "Save to PDF" date parsing, per docs/design/linkedin-import.md
- * "Dates" and "Experience".
- */
-
 export interface YearMonth {
   y: number;
   m?: number;
@@ -14,7 +9,6 @@ export interface DateRange {
   present: boolean;
 }
 
-/** The parse of a dates text with any duration already removed. */
 export type LinkedInDates
   = | { kind: 'range'; dates: DateRange }
     | { kind: 'startOnly'; start: YearMonth }
@@ -54,10 +48,6 @@ const SINGLE_DATE_RE = /^(?:([A-Za-z]+)\s+)?(\d{4})$/;
 const RANGE_SPLIT_RE = /^(.+?)\s[-–]\s(.+)$/;
 const PRESENT_RE = /^present$/i;
 
-/**
- * `2020`, `Jan 2020`, `January 2020` (English, any case; `Sept` too). Year
- * 1900 to 2100.
- */
 export function parseLinkedInDate(text: string): YearMonth | undefined {
   const trimmed = text.trim();
   const match = SINGLE_DATE_RE.exec(trimmed);
@@ -74,7 +64,6 @@ export function parseLinkedInDate(text: string): YearMonth | undefined {
   return { y: year, m: month };
 }
 
-/** Compares two year-months. A missing month counts as equal to any month. */
 function compareYearMonth(a: YearMonth, b: YearMonth): number {
   if (a.y !== b.y) return a.y < b.y ? -1 : 1;
   if (a.m === undefined || b.m === undefined) return 0;
@@ -82,7 +71,6 @@ function compareYearMonth(a: YearMonth, b: YearMonth): number {
   return a.m < b.m ? -1 : 1;
 }
 
-/** The parse of a dates text with any duration already removed. */
 export function parseDateRange(text: string): LinkedInDates {
   const trimmed = text.trim();
   const rangeMatch = RANGE_SPLIT_RE.exec(trimmed);
@@ -93,7 +81,6 @@ export function parseDateRange(text: string): LinkedInDates {
     return { kind: 'startOnly', start };
   }
 
-  // Both groups in RANGE_SPLIT_RE are mandatory, so they exist on any match.
   const [, startText, endText] = rangeMatch;
   const start = parseLinkedInDate(startText!);
   if (start === undefined) return { kind: 'unreadable' };
@@ -117,14 +104,8 @@ const RANGE_CORE_RE = new RegExp(
 const SINGLE_DATE_SHAPE_RE = new RegExp(`^${DATE_PART}$`);
 const TRAILING_PARENS_RE = /\s*\(([^)]*)\)\s*$/;
 
-/**
- * A work date line: a date-shaped range (or single date) optionally followed
- * by a duration in parentheses. Returns the dates text without the duration,
- * or undefined when the line is not date-shaped.
- */
 export function matchDateLine(text: string): { datesText: string } | undefined {
   const trimmed = text.trim();
-  // Only a duration counts: `Summer 2020 (internship)` is not a date line.
   const parens = TRAILING_PARENS_RE.exec(trimmed);
   const hadDuration = parens !== null && isDurationLine(parens[1]!);
   const withoutDuration = hadDuration
@@ -146,19 +127,11 @@ const LESS_THAN_A_YEAR_RE = /^less than a year$/i;
 const DURATION_UNITS_RE
   = /^\d+\s+years?(?:\s+\d+\s+months?)?$|^\d+\s+months?$/i;
 
-/**
- * A group duration line: only a duration without parentheses, e.g.
- * `2 years 1 month`, `9 months`, `1 year`, `less than a year`.
- */
 export function isDurationLine(text: string): boolean {
   const trimmed = text.trim();
   return LESS_THAN_A_YEAR_RE.test(trimmed) || DURATION_UNITS_RE.test(trimmed);
 }
 
-/**
- * Work: range as is; startOnly -> no dates + notice 'startOnly'; unreadable
- * -> no dates + notice 'unreadable'.
- */
 export function workDates(
   parsed: LinkedInDates,
 ): { dates?: DateRange; notice?: 'startOnly' | 'unreadable' } {
@@ -172,10 +145,6 @@ export function workDates(
   }
 }
 
-/**
- * Education: startOnly -> {start, end: start, present: false} (a graduation
- * year); unreadable -> no dates + notice.
- */
 export function educationDates(
   parsed: LinkedInDates,
 ): { dates?: DateRange; notice?: 'unreadable' } {

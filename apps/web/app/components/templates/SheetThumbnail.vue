@@ -1,11 +1,4 @@
 <script setup lang="ts">
-/**
- * `SheetThumbnail` — page one of a resume, rendered by the shared renderer
- * and scaled to its box. With a width it has that size; without one it fills
- * its container's width and measures itself. The render mounts only while
- * the sheet is near the viewport. The picture is decorative: the surrounding
- * card names what it shows.
- */
 import type { Resume } from '@aboutme/schema';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 
@@ -15,11 +8,9 @@ import ScaledSheet from '../resume/ScaledSheet.vue';
 const props = defineProps<{
   readonly document?: Resume;
   readonly lng: string;
-  /** Width in CSS pixels; absent means the container's width. */
   readonly width?: number;
 }>();
 
-/** A4 at 96 dpi: 210 × 297 mm is 794 × 1123 CSS pixels. */
 const SHEET_WIDTH = 794;
 const SHEET_HEIGHT = 1123;
 
@@ -42,8 +33,6 @@ const scale = computed(() => (width.value ?? SHEET_WIDTH) / SHEET_WIDTH);
 const context = computed(() => ({
   lng: props.lng,
   mode: 'continuous' as const,
-  // The thumbnail is decorative (aria-hidden and inert above); the name
-  // is visual only, so the page's h1 count stays one per template card.
   nameHeading: 'p' as const,
 }));
 
@@ -57,7 +46,6 @@ onMounted(() => {
     resizer.observe(element);
     measured.value = element.clientWidth;
   }
-  // Without an observer (old browsers, tests) the sheet stays blank.
   if (typeof IntersectionObserver === 'undefined') return;
   observer = new IntersectionObserver(
     (entries) => {

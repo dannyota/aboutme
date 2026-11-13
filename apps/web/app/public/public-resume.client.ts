@@ -51,8 +51,6 @@ export function bindPublicRealtimeLifetime(
 
 const mountedRoots = new WeakMap<HTMLElement, ShallowRef<PublicResume>>();
 
-// The server renders the page credit from the canonical origin, and the
-// canonical link carries that origin, so hydration renders the same href.
 function canonicalHomeHref(): string {
   const canonical = document.querySelector<HTMLLinkElement>(
     'link[rel="canonical"]',
@@ -144,16 +142,9 @@ function unsupportedDocumentVersion(value: unknown): boolean {
   );
 }
 
-// A sign_in resume's JSON read needs the __Host-view-pass cookie; without it
-// the read is the uniform 404, which the live controller treats as
-// authoritative and answers with a page reload
-// (docs/design/viewer-analytics/sign-in-to-view.md#gated-routes). Public
-// routes never read the account session, so sending same-origin cookies
-// exposes nothing else.
 const PUBLIC_READ_CREDENTIALS: RequestCredentials = 'same-origin';
 
 const diagnostic = (reason: string): void => {
-  // Public diagnostics exclude URLs, response bodies, and resume data.
   console.debug(`public resume hydration skipped: ${reason}`);
 };
 
@@ -182,7 +173,6 @@ export async function hydratePublicResume(
       try {
         await mounter.hydrate(publicResume, root);
       } catch {
-        // Restores markup read from this element before the change.
         // eslint-disable-next-line no-restricted-syntax -- ADR 0008
         root.innerHTML = original;
         throw new Error('public hydration failed');
@@ -194,7 +184,6 @@ export async function hydratePublicResume(
       root.replaceChildren();
       await mounter.replace(publicResume, root);
     } catch {
-      // Restores markup read from this element before the change.
       // eslint-disable-next-line no-restricted-syntax -- no new input; ADR 0008
       root.innerHTML = original;
       throw new Error('public mount failed');
@@ -304,10 +293,6 @@ export async function readPublicResume(
 
 const reloadWindowMs = 60_000;
 
-// A not-found reload happens at most once per slug per window. When the page
-// and its JSON read disagree, an unbounded reload loops. Storage that cannot
-// be read or written blocks the reload
-// (docs/design/realtime.md#refresh-ladder).
 function reloadAllowed(slug: string, now: number = Date.now()): boolean {
   try {
     const key = `aboutme:public-reload:${slug}`;
@@ -389,7 +374,6 @@ export function createPublicResumeRealtime(options: {
       }
       restoreScrollState(options.root, state);
     } catch {
-      // Restores markup read from this element before the change.
       // eslint-disable-next-line no-restricted-syntax -- no new input; ADR 0008
       options.root.innerHTML = original;
       return { kind: 'failed' };
@@ -428,8 +412,6 @@ export function createPublicResumeRealtime(options: {
   };
 }
 
-// The marker the server writes only for a sign_in resume
-// (docs/design/viewer-analytics/sign-in-to-view.md#join-invite).
 function joinInviteHref(root: HTMLElement): '/register' | '/login' | null {
   const value = root.dataset.joinInvite;
   return value === '/register' || value === '/login' ? value : null;
@@ -462,8 +444,6 @@ function boot(): void {
     return;
   }
   const joinInvite = joinInviteHref(root);
-  // Counts a human view of this resume (counting.md); never on any other
-  // path, including a missing or invalid slug.
   startViewBeacon({
     slug: slug[0]!,
     onStart: (result) => {

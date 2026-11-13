@@ -45,8 +45,7 @@ function trimC0ControlsAndSpace(value: string): string {
 }
 
 function hasAllowedExplicitScheme(href: string): boolean {
-  // Match the URL parser's removal of tabs/newlines and outer C0 controls
-  // before checking that the source supplied an explicit admitted scheme.
+  // WHATWG URL parsing strips tabs, newlines, and outer C0 controls.
   const normalized = trimC0ControlsAndSpace(href.replace(/[\t\n\r]/g, ''));
   const match = /^([a-z][a-z\d+.-]*):/i.exec(normalized);
 

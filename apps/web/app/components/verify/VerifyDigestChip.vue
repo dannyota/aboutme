@@ -1,10 +1,4 @@
 <script setup lang="ts">
-/**
- * The digest chip and its copy button (docs/design/deployment-transparency/
- * visual.md, "Digest chip and copy"): a short, never-wrapping monospace
- * digest with the full value in an accessible name, a tooltip, and a real
- * copy button that confirms through the page's shared announcer.
- */
 import { Check, Copy } from '@lucide/vue';
 import { computed } from 'vue';
 import {

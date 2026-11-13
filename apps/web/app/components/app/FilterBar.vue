@@ -12,13 +12,9 @@ const props = defineProps<{
   readonly layout?: 'showcase' | 'library';
   readonly disabled?: boolean;
   readonly open: boolean;
-  /** The count line text; empty before the first load (a skeleton). */
   readonly text: string;
-  /** The bold lead, such as "1,234 resumes"; empty before any total. */
   readonly head?: string;
-  /** The order note after the head and ` · `; unused when `head` is empty. */
   readonly tail?: string;
-  /** Changes when a filter change settles, so the region announces again. */
   readonly announceKey: number;
   readonly activeCount: number;
 }>();

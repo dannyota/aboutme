@@ -62,7 +62,6 @@ const copy = computed(() => editorControlsCopy[locale.value].controls);
 
 const newColumn = ref<Column>('main');
 const newSectionType = ref<Section['sectionType']>('work');
-// The name follows the type until the person types their own.
 const newDisplayName = ref(defaultSectionNames[newSectionType.value]);
 watch(newSectionType, (next, previous) => {
   if (newDisplayName.value === defaultSectionNames[previous]) {

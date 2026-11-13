@@ -1,30 +1,3 @@
-// api-client.test.ts is the consumer-side proof for AC-API-001: the web
-// app's HTTP surface is *derived from* docs/api/openapi.yaml, not
-// hand-transcribed from it.
-//
-// Three independent failure modes, three independent halves:
-//
-//   1. Artifact: the committed generated surface
-//      (app/api/generated/openapi.ts) exists and was produced by the
-//      exact generator version pinned in package.json. Drift between the
-//      artifact and the contract is a separate, non-mutating gate —
-//      scripts/api-drift-check.sh, wired into `make api-check`.
-//   2. Runtime: a real openapi-fetch client, given an injected mock
-//      fetch, is driven through `GET /me`, the versioned auth surface.
-//      Method, URL, success envelope decoding and error envelope
-//      decoding are all asserted against the response
-//      examples read out of openapi.yaml itself — so a contract example
-//      the client cannot actually decode fails here.
-//   3. Compile-time: a throwaway .ts fixture is type-checked with the
-//      pinned tsc (6.0.3), mirroring schema-contract.test.ts. vitest does
-//      not type-check, and Nuxt's generated tsconfig.app.json does not
-//      include apps/web/test/**, so `npm run typecheck` alone would never
-//      see a type assertion written in this file. Running tsc on a
-//      fixture is what makes the request/response types load-bearing:
-//      the fixture asserts the generated `GET /me` payload structurally
-//      satisfies useAuth's hand-written MeEnvelope, and includes negative
-//      cases (@ts-expect-error) that fail the build if the versioned
-//      client ever starts accepting an unversioned ops path.
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -38,7 +11,6 @@ import {
 
 const here = dirname(fileURLToPath(import.meta.url));
 const webRoot = join(here, '..');
-// apps/web/test -> apps/web -> apps -> repo root -> docs/api/openapi.yaml
 const openapiPath = join(here, '..', '..', '..', 'docs', 'api', 'openapi.yaml');
 const generatedPath = join(webRoot, 'app', 'api', 'generated', 'openapi.ts');
 const tscBin = join(webRoot, 'node_modules', '.bin', 'tsc');
@@ -49,7 +21,6 @@ interface OpenApiOperation {
   }>;
 }
 
-/** A path item: the `servers` override (if any) plus its operations. */
 type OpenApiPathItem = {
   servers?: { url: string }[];
 } & Record<string, OpenApiOperation | undefined | { url: string }[]>;
@@ -61,7 +32,6 @@ interface OpenApiDoc {
 
 const doc = parse(readFileSync(openapiPath, 'utf8')) as OpenApiDoc;
 
-/** The documented response example for one operation + status code. */
 function example(path: string, method: string, status: string): unknown {
   const operation = doc.paths[path]?.[method] as OpenApiOperation | undefined;
   const response = operation?.responses?.[status];
@@ -80,11 +50,6 @@ interface Captured {
   method: string;
 }
 
-/**
- * A fetch double that records the request openapi-fetch built and replies
- * with a canned status + body. No network, no MSW: the point is to assert
- * exactly what the typed client puts on the wire.
- */
 function mockFetch(status: number, body: unknown): {
   fetch: (input: Request) => Promise<Response>;
   calls: Captured[];
@@ -163,9 +128,6 @@ describe('typed client (runtime contract)', () => {
   });
 
   it('decodes a 401 as the error envelope, not as data', async () => {
-    // The 401 on /me carries the documented Error shape; the typed client
-    // must surface it on `error` (never on `data`) so a caller cannot
-    // read a failure as a success.
     const { fetch } = mockFetch(401, example('/me', 'get', '401'));
     const client = createApiClient({ baseUrl: doc.servers[0].url, fetch });
 
@@ -178,19 +140,11 @@ describe('typed client (runtime contract)', () => {
   });
 
   it('defaults its base path from the contract, not a literal', () => {
-    // Same-origin in dev/prod, so the default is the *path* of the
-    // contract's server.
     expect(API_BASE_PATH).toBe(new URL(doc.servers[0].url).pathname);
   });
 });
 
-// Written to disk and compiled rather than kept inline: vitest strips
-// types without checking them, so a type assertion living in this file
-// would prove nothing. Deliberately self-contained (generated types +
-// client.ts only) — it must compile under bare tsc, with no Nuxt program,
-// so it cannot depend on `nuxt prepare` output. The consumer-side
-// assertion that needs Nuxt's auto-imports lives in
-// test/nuxt/api-contract.test.ts, which vue-tsc checks instead.
+// vitest strips types without checking them, so tsc compiles the fixture.
 function compileFixtureSource(): string {
   return [
     'import type { components, paths } from \'../app/api/generated/openapi\';',
@@ -279,10 +233,6 @@ function compileFixtureSource(): string {
 
 describe('typed client (compile-time contract)', () => {
   it('type-checks the generated request/response contract (tsc)', () => {
-    // The two `@ts-expect-error` lines in the fixture are assertions: tsc
-    // fails here if either stops being an error, so this also proves the
-    // versioned client rejects the unversioned probes and not merely
-    // documents it.
     const fixturePath = join(here, 'api-client-contract.tmp.ts');
     writeFileSync(fixturePath, compileFixtureSource());
     let diagnostics = '';

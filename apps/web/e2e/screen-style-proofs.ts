@@ -7,7 +7,6 @@ import {
   applyStyleMutation, mutationTest, proveMutation,
 } from './style-mutation';
 
-/** Every literal style expectation has its own isolated mutation step. */
 export function styleProofs(
   surface: string, open: (page: Page) => Promise<void>,
   rules: readonly StyleRule[],

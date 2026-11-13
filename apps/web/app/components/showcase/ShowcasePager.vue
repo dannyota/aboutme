@@ -8,9 +8,6 @@ import { showcaseCopy } from '@/i18n/showcase';
 import { type ShowcaseFilters, showcaseRouteQuery } from '@/lib/showcaseQuery';
 import { cn } from '@/lib/utils';
 
-// Previous, the page status, and Next. A link keeps the active filters and
-// sets `?page=`; at either end the control is a span that is not a stop
-// (docs/design/ui/showcase.md, Pager).
 const props = defineProps<{
   readonly page: number;
   readonly pageCount: number;
@@ -24,7 +21,6 @@ const buttonClass = cn(
   buttonVariants({ variant: 'outline' }),
   'showcase-pager__button',
 );
-// Past the end, Previous lands on the last real page.
 const previousPage = computed(() =>
   Math.max(1, Math.min(props.page - 1, props.pageCount)));
 const canGoPrevious = computed(() => props.page > 1);

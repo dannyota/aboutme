@@ -18,7 +18,6 @@ export interface PrintWorkerOptions {
   signal: AbortSignal;
   deadlineMs: 5_000;
   workerUrl: URL | string;
-  /** Test seam. Production always creates a Node worker. */
   workerFactory?: (
     url: URL | string,
     workerData: PrintJobEnvelope,

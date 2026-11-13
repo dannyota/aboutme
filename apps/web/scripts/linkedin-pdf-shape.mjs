@@ -1,58 +1,8 @@
 #!/usr/bin/env node
-// linkedin-pdf-shape.mjs: read one LinkedIn "Save to PDF" file and print only
-// its layout shape, so the design in docs/design/linkedin-import.md ("Facts
-// to confirm before the build") can be confirmed before the import parser is
-// built. docs/adr/0023-linkedin-import.md records why the
-// parser reads this file with pdf.js in the browser; this script reads it the
-// same way, locally, so the owner can run it on his own file and send back
-// the printed shape instead of the file itself.
-//
 // Usage: node apps/web/scripts/linkedin-pdf-shape.mjs <file.pdf>
-//        node apps/web/scripts/linkedin-pdf-shape.mjs --self-check
-//
-// Privacy rule: this script never prints a value from the profile. It only
-// prints structure: counts, positions, sizes, and a masked shape of each
-// line's text. Masking replaces every letter with "a" (or "A" if the source
-// letter is uppercase), every decimal digit with "9", and keeps punctuation
-// and whitespace unchanged; any other character (a symbol, mark, or control
-// character) becomes "#". Digits always mask to "9", with no exception, so a
-// real date, phone number, or count is never printed, only its shape.
-//
-// The one exception covers words the design already names as safe, structural
-// vocabulary rather than profile content: the known section headings, the
-// date and duration words ("Present", month names, "year(s)", "month(s)",
-// "less than a year"), the footer words ("Page", "of"), and the contact
-// labels ("LinkedIn", "Mobile", "Home", "Work", printed inside parentheses in
-// the file). Matching runs token by token over the whole line, not only when
-// the line is nothing but one of these words, so a heading printed on its own
-// line and a date word inside a longer line are both kept as themselves while
-// the rest of that same line still masks; see ALLOWLIST_PHRASES below for the
-// exact list, drawn from the design's "Lines" section and its mapping table.
-//
-// Two facts are inferred, not read directly, because reading a PDF's text
-// content (no rendering, per the design) does not expose them:
-// - "font names" are pdf.js's internal per-resource identifiers (for example
-//   "g_d0_f1"), not the embedded font's real name. The real name lives on the
-//   font object pdf.js builds only for rendering, which this script, like the
-//   import page, never triggers.
-// - "bold/normal" compares each line's font resource identifier to the most
-//   common one in the file and calls the rest "bold". Text rendering mode,
-//   the actual signal for bold, is graphics state that only rendering
-//   exposes. When the file embeds one font resource throughout, every line
-//   reports "normal"; that itself is a fact worth sending back.
-//
-// Line building, the column split, and heading detection follow the design's
-// "Lines" section as closely as a read-only fact-finder can; they are a
-// best-effort approximation for this pre-build check, not the parser itself.
 
 import { readFileSync } from 'node:fs';
 
-// Known section headings (design, "Lines"), plus the footer, date, duration,
-// and contact-label vocabulary the design and its mapping table name. Every
-// entry may appear as a whole line or as a token inside a longer line; both
-// print unchanged, case as extracted. Matching is case-insensitive (English
-// month names are read "any case" per the design), which only widens which
-// safe words survive masking, never what data survives it.
 const ALLOWLIST_PHRASES = [
   'Contact',
   'Top Skills',
@@ -104,9 +54,6 @@ const ALLOWLIST_PHRASES = [
   'Dec',
 ];
 
-// The same list, split into single words, for the self-check's leak scan:
-// every word inside an allowlisted phrase is safe on its own too, since the
-// phrase-matching regex below keeps the whole phrase together.
 const ALLOWLIST_WORDS = new Set();
 for (const phrase of ALLOWLIST_PHRASES) {
   for (const word of phrase.match(/\p{L}+/gu) ?? []) {
@@ -118,7 +65,6 @@ function escapeRegExp(text) {
   return text.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
 }
 
-// Longest phrase first, so "years" is not cut short by a "year" match.
 const ALLOWLIST_RE = new RegExp(
   `\\b(?:${[...ALLOWLIST_PHRASES]
     .sort((a, b) => b.length - a.length)
@@ -160,10 +106,6 @@ const DURATION_RE = new RegExp(
   'iu',
 );
 
-// Producer/Creator tool names safe to print verbatim (design and ADR 0023
-// expect Apache FOP and possibly a LinkedIn value); anything else prints as
-// "other" so an unexpected tool string, which could carry more than a name,
-// never reaches the output.
 const TOOL_ALLOWLIST_RE = [/^Apache\s+FOP\b/iu, /^FOP\b/iu, /^LinkedIn\b/iu];
 
 function maskChar(ch) {
@@ -181,11 +123,6 @@ function maskSegment(segment) {
   return out;
 }
 
-// Masks a line's text, keeping any run that matches ALLOWLIST_RE as printed.
-// A line whose whole text is one allowlisted phrase (a heading on its own
-// line, a contact label, "Present") comes back unchanged, since there is
-// nothing left over to mask; a line that mixes allowlisted and other words
-// keeps only the allowlisted ones.
 function maskLine(text) {
   let result = '';
   let lastIndex = 0;
@@ -214,9 +151,6 @@ function roundToHalf(value) {
   return Math.round(value * 2) / 2;
 }
 
-// The column split (design, "Columns"): left of the boundary is the
-// sidebar, at or right of it is the main column. `boundary === null` means
-// no page-1 line was found to derive it from.
 function columnFor(x, boundary) {
   if (boundary === null) return 'n/a';
   return x < boundary ? 'left' : 'right';
@@ -250,10 +184,6 @@ function extractItems(rawItems, pageNumber) {
   return items;
 }
 
-// Groups items into lines (design, "Lines"): items whose baselines lie
-// within 40% of the line's font size join it, then each line's items are
-// read left to right, with one joining space where a gap exceeds a quarter
-// of the font size.
 function buildLines(items) {
   const clusters = [];
   let current = null;
@@ -332,7 +262,6 @@ async function readShape(filePath) {
     disableFontFace: true,
     stopAtErrors: true,
   });
-  // pdf.js 6.3.289 reads onPassword from the loading task, not the options.
   loadingTask.onPassword = (updatePassword) => {
     updatePassword(new Error('this PDF requires a password'));
   };
@@ -413,10 +342,6 @@ function matchesColumn(line, column) {
   return column === 'left' ? line.column === 'left' : line.column !== 'left';
 }
 
-// Orders lines per page, sidebar (left) before main (right), each top to
-// bottom (design: "Reading order puts the whole left column before the right
-// one"), and sets each line's gap to the previous line in the same page and
-// column.
 function orderAndGap(lines) {
   const pages = [...new Set(lines.map((line) => line.page))].sort(
     (a, b) => a - b,
@@ -543,9 +468,6 @@ function runSelfCheck() {
     for (const word of sample.match(/\p{L}+/gu) ?? []) {
       if (word.length < 2) continue;
       if (ALLOWLIST_WORDS.has(word.toLowerCase())) continue;
-      // Word-boundary match, not substring: a masked, allowlisted token such
-      // as "linkedin" may coincidentally contain a shorter real word ("in")
-      // as a substring without that word being separately present.
       const leaked = new RegExp(`\\b${escapeRegExp(word)}\\b`, 'u').test(
         masked,
       );

@@ -1,15 +1,4 @@
 <script setup lang="ts">
-/**
- * `LinkedIdentities` — the caller's linked provider identities, each with an
- * Unlink control behind a confirmation.
- *
- * Mirrors the server rule: an identity counts as a sign-in method only while
- * its provider is enabled, so Unlink is disabled when removing an identity
- * would leave no password and no other enabled identity. Everything is keyed
- * by identity id, because one account can hold two identities of the same
- * provider. A stale reauthentication is renewed in place (password) or by a
- * provider round trip, then the unlink is retried.
- */
 import ConfirmDialog from '../app/ConfirmDialog.vue';
 import LocaleToggle from '../app/LocaleToggle.vue';
 import StatusBanner from '../app/StatusBanner.vue';
@@ -74,7 +63,6 @@ const rows = computed(() =>
     };
   }));
 
-// Provider reauthentication needs an enabled, linked provider.
 const reauthProviders = computed(() => [
   ...new Set(props.identities.filter(isUsable).map((i) => i.provider)),
 ]);
@@ -129,7 +117,6 @@ async function unlink(): Promise<void> {
       return;
     }
     if (kind === 'not-found') {
-      // Already gone elsewhere; the refreshed list shows the truth.
       finish();
       return;
     }
@@ -169,7 +156,6 @@ async function submitPasswordReauth(): Promise<void> {
   }
   currentPassword.value = '';
   pending.value = false;
-  // The confirmation already happened; retry the same unlink.
   await unlink();
 }
 

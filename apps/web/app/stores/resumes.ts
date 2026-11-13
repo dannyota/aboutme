@@ -28,18 +28,11 @@ export { dependencyIdsForNewCommand, nextSequence } from './resumeRecord';
 
 interface ResumeStoreState {
   records: Map<string, ResumeRecord>;
-  /** Editor pages open on each resume; other pages leave its record alone. */
   editors: Map<string, number>;
-  /** Times another page left a resume's record to its open editor. */
   handovers: Map<string, number>;
 }
 
 interface ResumeStoreActions {
-  /**
-   * Starts a record from a complete read, unless the one held for the
-   * resume has unsent or in-flight work, which nothing replaces. Returns
-   * whether it started the record.
-   */
   initialize(accepted: AcceptedResume): boolean;
   enqueue(resumeId: string, item: EditorQueueItem): void;
   startAttempt(
@@ -88,14 +81,8 @@ interface ResumeStoreActions {
     state: OpaquePhotoOutcome | null,
   ): void;
   discardLocal(resumeId: string): void;
-  /**
-   * Removes the queued or held commands `commandIds`, and nothing else, from
-   * the resume's record: the work a page queued and is leaving behind.
-   */
   dropCommands(resumeId: string, commandIds: ReadonlySet<string>): void;
-  /** An editor page opened on the resume, or closed. */
   markEditorOpen(resumeId: string, open: boolean): void;
-  /** Leaves the record to the open editor, whose queue then looks at it. */
   handOver(resumeId: string): void;
   removeResume(resumeId: string): void;
 }
@@ -103,12 +90,10 @@ interface ResumeStoreActions {
 interface ResumeStore extends ResumeStoreState, ResumeStoreActions {
   recordFor(resumeId: string): ResumeRecord | undefined;
   saveStateFor(resumeId: string): SaveState;
-  /** An editor page has the resume's record open. */
   openInEditor(resumeId: string): boolean;
   handoversFor(resumeId: string): number;
 }
 
-/** The store's record for `resumeId`, as its reactive state holds it. */
 function recordIn(
   store: { readonly records: Map<string, unknown> },
   resumeId: string,

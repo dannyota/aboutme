@@ -22,7 +22,6 @@ const EN_LABELS: Labels = {
   twitter: 'X',
   custom: 'Detail',
 };
-// Default labels follow the resume language; a user label is kept as typed.
 const VI_LABELS: Labels = {
   ...EN_LABELS,
   phone: 'Điện thoại',
@@ -43,8 +42,6 @@ const iconKeys: Record<PersonalDetail['type'], string> = {
   custom: 'user',
 };
 const href = computed(() => contactHref(props.detail));
-// Display modes apply to web addresses only; an email or phone link always
-// shows its value (ADR 0013).
 const isLink = computed(() => href.value?.startsWith('https://') ?? false);
 const iconKey = computed(() =>
   props.detail.type === 'custom' && isLink.value
@@ -54,9 +51,6 @@ const label = computed(() =>
   props.detail.label || labels.value[props.detail.type]);
 const display = computed(() =>
   isLink.value ? props.detail.display ?? 'short' : 'short');
-// An icon already names a typed contact, so its default label would repeat
-// it. A user-set label, a custom detail's label, or an icon-free header keep
-// the label. In label display the label is the anchor text instead.
 const showLabel = computed(
   () =>
     display.value !== 'label'
@@ -64,8 +58,6 @@ const showLabel = computed(
       || props.detail.type === 'custom'
       || Boolean(props.detail.label)),
 );
-// Short display drops the scheme and one trailing slash; the href keeps the
-// full URL.
 const shownValue = computed(() => {
   if (!isLink.value) return props.detail.value;
   if (display.value === 'label') return label.value;

@@ -60,11 +60,6 @@ import type { Component } from 'vue';
 
 import { BrandGitHub, BrandLinkedIn, BrandX } from './brandIcons';
 
-/**
- * The icons the renderer draws. The schema accepts any kebab-case Lucide
- * name; a section heading whose name is not here falls back to its section
- * type's icon (docs/design/templates/contract.md §5.3).
- */
 const ICONS: Readonly<Record<string, Component>> = Object.freeze({
   'award': Award,
   'badge-check': BadgeCheck,
@@ -143,10 +138,6 @@ const SECTION_FALLBACK_ICONS: Readonly<
   custom: 'bookmark',
 };
 
-/**
- * The icon a section heading draws: its own key when the renderer has it,
- * else its section type's icon. An absent or empty key stays empty.
- */
 export function sectionIconKey(section: Section): string | undefined {
   const key = section.iconKey;
   if (key === undefined || key === '' || hasIcon(key)) return key;

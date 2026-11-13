@@ -5,13 +5,9 @@ import ConfirmDialog from '@/components/app/ConfirmDialog.vue';
 import { Button } from '@/components/ui/button';
 import type { EditorFieldsCopy } from '@/i18n/editor-fields';
 
-// The note above a linked entry's fields (docs/design/ui/projects.md "In
-// the resume editor"). Refresh asks first, because it replaces text the
-// owner may have shortened for this resume.
 const props = defineProps<{
   readonly projectId: string;
   readonly name: string;
-  /** The default language's name when the project page falls back to it. */
   readonly fallbackLanguage: string | null;
   readonly refreshing: boolean;
   readonly copy: EditorFieldsCopy['projectLinks'];
@@ -21,8 +17,6 @@ const emit = defineEmits<{ refresh: [] }>();
 const asking = ref(false);
 const refreshButton = ref<{ $el?: HTMLElement } | null>(null);
 const openLink = ref<{ $el?: HTMLElement } | null>(null);
-// The dialog returns focus to Refresh, which is disabled while the refresh
-// is queued; focus waits on Open project and comes back when it is enabled.
 let returning: 'confirmed' | 'queued' | null = null;
 
 function confirm(): void {
@@ -39,8 +33,6 @@ watch(() => props.refreshing, async (refreshing) => {
     openLink.value?.$el?.focus();
   } else if (returning === 'queued') {
     returning = null;
-    // Only focus this note put on Open project comes back; a field the
-    // person moved to meanwhile keeps it.
     const link = openLink.value?.$el;
     if (link !== undefined && document.activeElement === link) {
       refreshButton.value?.$el?.focus();

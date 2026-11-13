@@ -2,12 +2,6 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-/**
- * `ResumeDocument`'s narrow-layout rules (the side photo and the two-column
- * layout) must switch on the resume's own rendered width, not the window's,
- * so a narrow editor pane shows the same layout a phone reader sees. A width
- * media query cannot do that: it only sees the window.
- */
 const source = readFileSync(
   resolve(
     import.meta.dirname,

@@ -330,6 +330,29 @@ describe('resume store state and replay', () => {
     },
   );
 
+  it('starts an attempt only from the queue head object itself', () => {
+    const { accepted, store } = initialized();
+    const first = titleCommand(accepted, 'First', 3, 'first');
+    store.enqueue(accepted.metadata.id, first);
+    const older = store.recordFor(accepted.metadata.id)!.pending[0]!;
+    store.enqueue(
+      accepted.metadata.id,
+      titleCommand(accepted, 'Second', 4, 'second'),
+    );
+
+    store.startAttempt(
+      accepted.metadata.id,
+      older,
+      first,
+      attemptFor(first),
+    );
+
+    const record = store.recordFor(accepted.metadata.id)!;
+    expect(record.attempt).toBeNull();
+    expect(record.pending).toHaveLength(1);
+    expect(record.pending[0]).toMatchObject({ id: 'first', value: 'Second' });
+  });
+
   it('derives sequence and dependencies from retained queue work', () => {
     const { accepted, store } = initialized();
     const first = titleCommand(accepted, 'First', 3, 'first');

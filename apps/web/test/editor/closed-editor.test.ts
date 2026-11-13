@@ -20,10 +20,6 @@ import {
   type FakeResumeServer,
 } from './fake-resume-server';
 
-// Work still in flight when the editor closes: whatever comes back belongs to
-// the closed editor and must neither send more nor change the resume the
-// next editor opened.
-
 const ID = 'resume-1';
 
 function session() {
@@ -37,7 +33,6 @@ function session() {
 
 type Session = ReturnType<typeof session>;
 
-/** An editor page's actions over the shared store and server. */
 function openEditor({ server, store }: Session) {
   const csrfToken = ref<string | null>('csrf-1');
   let finishRefresh = (): void => {};
@@ -76,7 +71,6 @@ function openEditor({ server, store }: Session) {
   });
   return {
     actions,
-    /** The session's CSRF token is gone, so the next send refreshes it. */
     dropToken: () => {
       csrfToken.value = null;
     },
@@ -87,7 +81,6 @@ function openEditor({ server, store }: Session) {
   };
 }
 
-/** Another editor page opens on the resume from a fresh complete read. */
 function reopen(context: Session) {
   context.store.initialize(context.server.stored);
   return openEditor(context);
@@ -100,7 +93,6 @@ function headlineElsewhere(server: FakeResumeServer, value: string): void {
   }));
 }
 
-/** The resume the reopened editor shows is the server's, untouched. */
 function expectFreshRecord(context: Session): void {
   expect(context.store.recordFor(ID)).toMatchObject({
     accepted: context.server.stored,
@@ -199,7 +191,6 @@ describe('work in flight when the editor closes', () => {
   );
 });
 
-/** A template that changes the resume the reopened editor read. */
 function changingTemplate(context: Session) {
   const current = context.server.stored;
   for (const preset of TEMPLATES) {

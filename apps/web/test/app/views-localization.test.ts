@@ -7,11 +7,7 @@ import { viewsDetailCopy, viewsIndexCopy } from '../../app/i18n/views';
 import { literalGuard, parityViolations } from '../support/localizationSource';
 import { setSiteLocale } from '../support/locale';
 
-// server:false leaves `status` 'idle' during SSR, but Nuxt starts the fetch
-// during hydration (setting `status` 'pending') before the first client
-// render. Both pages must render their loading branch for 'idle' too, or a
-// direct load hydrates against a different branch and the content never
-// appears. Mocking `useFetch` with the idle status checks that branch.
+// Nuxt: useFetch with server: false is 'idle' in SSR, 'pending' at hydration.
 mockNuxtImport('useFetch', () => () => ({
   data: ref(undefined),
   error: ref(null),

@@ -19,42 +19,11 @@ import { resolve } from 'node:path';
 
 import { denyExternalRequests, waitForImages } from './support';
 
-// Measures how far the editor's paged preview drifts from the PDF for every
-// gallery sample, in both languages. The preview is approximate and the PDF
-// is authoritative (docs/design/templates/print.md §1); this check reports
-// the size of that gap rather than enforcing pixel or text equality. It
-// fails when a case's drift exceeds preview-gap-expected.json, when the
-// preview's page count differs from the PDF's, or when a display scale
-// changes the layout the preview measures at full scale.
-//
-// Comparison unit: words, extracted from the DOM (Range.getBoundingClientRect
-// per word, clustered into visual lines) for the preview, and from pdfjs text
-// content for the PDF. A word-level LCS alignment tells which words the two
-// sides share; the boundaries between aligned words classify each
-// disagreement as a line-break, a page-break, or a missing/extra run.
-//
-// Both sides are read the same way so that only layout differences count:
-// - PDF tracking spaces absent from the glyphs are removed only when a
-//   complete text object matches one extracted item's text and position.
-// - Words are compared case-folded, because the PDF text layer carries a
-//   heading's CSS text-transform while DOM text does not.
-// - A word splits after each hyphen, because the PDF text layer splits a
-//   word that wraps at its hyphen while a DOM text node does not.
-// - Words are ordered by flow (header, main column, sidebar), then page,
-//   then line. The PDF has no flow structure, so its words take the flow
-//   whose region they sit in, using the column split and header bottom the
-//   preview's first page reports. Without this, a PDF line that crosses both
-//   columns interleaves main and sidebar words and misaligns them.
+// Chromium PDF text keeps CSS text-transform and splits at wrapped hyphens.
 
 const FULL_ZOOM = 1;
-// The editor's display scale on a 390 px phone, as EditorPreview.vue's
-// sheetZoom computes it. At this scale, text laid out at the scaled size
-// would fall below WebKit's minimum font size and grow; the preview must
-// still lay out at full size and match the PDF. It is smaller than the
-// desktop scale (0.84), so a font that grows at desktop also grows here.
+// WebKit's minimum font size would grow text laid out at this scale.
 const PHONE_ZOOM = (390 - 32) / (210 / 25.4 * 96);
-// Full zoom runs first so a settle failure at the phone zoom, and not at
-// full zoom, points at display scale rather than the fixture itself.
 const ZOOM_VARIANTS = [
   ['full', FULL_ZOOM],
   ['phone', PHONE_ZOOM],
@@ -70,12 +39,8 @@ const FLOW_RANK: Readonly<Record<Flow, number>> = {
   sidebar: 2,
 };
 
-// A word, or the part of a word up to and including a run of hyphens.
 const WORD_PATTERN = '[^\\s-]*-+|[^\\s-]+';
 
-// Where the flows sit on a page, as fractions of the page width so that
-// preview zoom and PDF points compare directly. bodyTop is measured on the
-// first page only; later pages carry no header.
 interface FlowGeometry {
   readonly bodyTop: number;
   readonly splitX: number | null;
@@ -146,9 +111,6 @@ interface CaseResult {
   readonly pdfPages: number;
 }
 
-// A case that never rendered, never settled, or drifted past the committed
-// expectation. Recorded instead of thrown, so one broken case never hides
-// the other 39; the test still fails at the end if this list is non-empty.
 interface DiagnosticSnapshot {
   readonly harnessDataset: Readonly<Record<string, string>> | null;
   readonly pagedResumeDataset: Readonly<Record<string, string>> | null;
@@ -182,8 +144,6 @@ type PreviewResult
     readonly diagnostics: DiagnosticSnapshot | null;
   };
 
-// --- expectation file -------------------------------------------------
-
 interface ExpectationMetrics {
   readonly maxLineBreak: number | null;
   readonly maxPageBreak: number | null;
@@ -205,7 +165,6 @@ const expectations = JSON.parse(
   readFileSync(expectationsPath, 'utf8'),
 ) as ExpectationFile;
 
-// Keyed without the display scale: every scale must lay out alike.
 function caseKey(sample: string, lng: string, engine: string): string {
   return `${sample}|${lng}|${engine}`;
 }
@@ -236,8 +195,6 @@ function assertWithinExpectation(result: CaseResult): void {
   }
 }
 
-// --- word alignment (LCS) ----------------------------------------------
-
 function compareKey(text: string): string {
   return text.normalize('NFC').toUpperCase();
 }
@@ -245,7 +202,7 @@ function compareKey(text: string): string {
 function orderByFlow<T extends { readonly flow: Flow }>(
   words: readonly T[],
 ): T[] {
-  // Array.prototype.sort is stable, so page and line order hold per flow.
+  // Array.prototype.sort is stable (ES2019), so page and line order hold.
   return [...words].sort((a, b) => FLOW_RANK[a.flow] - FLOW_RANK[b.flow]);
 }
 
@@ -294,8 +251,6 @@ function alignIndices(
   }
   return pairs;
 }
-
-// --- classification ------------------------------------------------------
 
 function collectRuns(
   words: readonly FlatWord[],
@@ -408,8 +363,6 @@ function causesFor(engine: Engine): string[] {
   if (engine === 'webkit') causes.push('webkit-vs-chromium-font-rendering');
   return causes;
 }
-
-// --- PDF text extraction (pdfjs) -----------------------------------------
 
 test.describe('PDF word spacing', () => {
   const transform = [11.55, 0, 0, 11.55, 404.8, 388.17];
@@ -643,8 +596,6 @@ function pdfTextObjects(operators: PdfTextOperators): PdfTextObject[] {
       current.matrix = Array.from(args[0] as Float32Array);
     }
     if (fn === OPS.moveText) {
-      // Glyph tracking needs single glyphs on both sides of each move.
-      // Whole runs can supply word spacing and must keep the extracted gaps.
       if (args[1] !== 0 || !current.singleGlyph || (args[0] as number) <= 0) {
         current.valid = false;
       }
@@ -671,7 +622,7 @@ function pdfTextObjects(operators: PdfTextOperators): PdfTextObject[] {
       run.pendingMove = false;
       for (const glyph of glyphs) {
         if (typeof glyph === 'number') {
-          // Numeric positioning can encode a word space without a glyph.
+          // PDF TJ: a numeric offset can encode a word space without a glyph.
           if (glyph !== 0) run.valid = false;
         } else {
           run.text += glyph.unicode;
@@ -708,10 +659,6 @@ function pdfWordMatches(
   wordPattern: string,
 ): { text: string; index: number }[] {
   const compact = (text: string) => text.replace(/\s/gu, '');
-  // Remove inferred whitespace only for one complete horizontal text object
-  // at this item's origin, with every non-space glyph unchanged. The decoded
-  // space glyphs retain word boundaries; separate objects and lines stay apart.
-  // Unsafe objects still block a unique association with a safe object.
   const candidates = objects.filter((object) =>
     Math.abs(object.left - item.transform[4]!) < 0.0001
     && Math.abs(object.baseline - item.transform[5]!) < 0.0001
@@ -748,8 +695,6 @@ interface RawWord {
   readonly bottom: number;
 }
 
-// A PDF word with its position as a fraction of the page width, used to
-// assign it a flow once the preview reports the flow geometry.
 interface PdfWord extends RawWord {
   readonly x: number;
   readonly centerY: number;
@@ -866,8 +811,6 @@ function buildPdfExtraction(
   return { pages, words: orderByFlow(words) };
 }
 
-// --- preview extraction (DOM) --------------------------------------------
-
 interface BrowserExtraction {
   pages: { page: number; lines: LineSummary[] }[];
   words: {
@@ -880,9 +823,7 @@ interface BrowserExtraction {
   geometry: FlowGeometry;
 }
 
-// Runs inside the page via page.evaluate: no reference to anything outside
-// this function body survives serialization, so every helper it needs is
-// declared inline, and the word pattern arrives as an argument.
+// Playwright serializes this page.evaluate body: keep helpers inline.
 function browserExtract(wordPattern: string): BrowserExtraction {
   interface Word {
     text: string;
@@ -1050,8 +991,6 @@ function browserExtract(wordPattern: string): BrowserExtraction {
   return { pages, words, geometry: geometryOf(pageEls[0]) };
 }
 
-// --- fixture URLs and rendering ------------------------------------------
-
 function sampleUrl(
   mode: 'continuous' | 'paged',
   templateId: string,
@@ -1120,11 +1059,6 @@ async function safeCaptureDiagnostics(
   }
 }
 
-// The zoom is requested in the URL and resolved once from it, never
-// toggled after the fact: the harness scales the paper with the same
-// ScaledSheet transform component EditorPreview.vue uses for a stable
-// viewport class. A failure to settle is recorded with a DOM snapshot
-// rather than thrown, so one broken case does not hide the rest.
 async function producePreview(
   browser: Browser,
   baseURL: string,
@@ -1170,8 +1104,6 @@ async function producePreview(
   }
 }
 
-// --- report ---------------------------------------------------------------
-
 interface ReportSummary {
   readonly totalCases: number;
   readonly casesWithDrift: number;
@@ -1205,10 +1137,7 @@ async function readExistingReport(
   }
 }
 
-// Each test appends its own cases and failures to the shared report file,
-// merged with what earlier tests already wrote. Playwright restarts the
-// worker (re-importing this module) after any test failure, so a
-// module-level accumulator would lose every case written before that.
+// Playwright restarts the worker after a failure, losing module state.
 async function appendReport(
   newCases: readonly CaseResult[],
   newFailures: readonly FailedCase[],
@@ -1240,8 +1169,6 @@ async function appendReport(
   );
 }
 
-// --- test wiring -----------------------------------------------------------
-
 let normalChromium: Browser | undefined;
 let webkitBrowser: Browser | undefined;
 
@@ -1257,10 +1184,7 @@ test.beforeAll(async () => {
     'preview-gap-expected.json must match every sample, locale, and engine',
   ).toEqual({ missingKeys: [], staleKeys: [] });
 
-  // @playwright/test's chromium/webkit exports default to the active
-  // project's launchOptions (the harness surface's print flags), so a
-  // "normal browser" launch must override args explicitly to stay empty;
-  // WebKit's binary rejects Chromium-only flags outright if they leak in.
+  // Playwright launchers inherit project args; WebKit rejects Chromium flags.
   normalChromium = await chromium.launch({ args: [] });
   try {
     webkitBrowser = await webkit.launch({ args: [] });
@@ -1352,8 +1276,6 @@ for (const { templateId, lng } of SAMPLES) {
           pdfPages: pdfPageCount,
         };
         caseResults.push(result);
-        // One line per case, so a ceiling change can cite the observed
-        // counts from the CI log.
         console.log(
           `preview-gap counts ${caseKey(templateId, lng, engine)}`
           + ` ${zoomLabel}: ${JSON.stringify(result.counts)}`
@@ -1361,17 +1283,12 @@ for (const { templateId, lng } of SAMPLES) {
         );
         try {
           assertWithinExpectation(result);
-          // A one-page PDF that spills into two preview pages (or the
-          // reverse) is the capacity gap this spec exists to catch, not a
-          // word-level drift the ceiling file can express.
           if (previewPageCount !== pdfPageCount) {
             throw new Error(
               `preview has ${String(previewPageCount)} page(s), `
               + `PDF has ${String(pdfPageCount)}`,
             );
           }
-          // The sheet is scaled for display with a transform, so the layout
-          // is the same at every scale (docs/design/templates/print.md §1).
           const scaled = JSON.stringify(result.counts);
           const full = JSON.stringify(fullScale?.counts ?? result.counts);
           if (zoomLabel === 'full') {

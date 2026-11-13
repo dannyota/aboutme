@@ -1,8 +1,3 @@
-// Reads the committed sample resumes (packages/schema/samples) and emits the
-// TypeScript sample registry consumed by apps/web: a manifest of which
-// template has a sample in which language, and lazy loaders, so a page pulls
-// only the sample it shows. test/samples.test.ts validates the documents.
-
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
 
@@ -17,7 +12,6 @@ export const sampleDirectory = join(packageRoot, "samples");
 const SAMPLE_FILE = /^([a-z0-9]+(?:-[a-z0-9]+)*)\.(vi|en)\.json$/u;
 const FILLER_FILE = /^_filler\.(vi|en)\.json$/u;
 
-/** Sample and filler files by name; throws on any other file. */
 export function readSampleFiles(templateIds) {
   const known = new Set(templateIds);
   const samples = [];

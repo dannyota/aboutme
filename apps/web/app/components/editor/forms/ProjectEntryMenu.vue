@@ -16,9 +16,6 @@ import type { EditorFieldsCopy } from '@/i18n/editor-fields';
 import { projectName } from '../../projects/projectDocument';
 import type { ProjectLibraryView } from './projectLibrary';
 
-// A project section's Add entry menu (docs/design/ui/projects.md "In the
-// resume editor"): a blank entry, or one of the library projects this resume
-// does not show yet.
 const props = defineProps<{
   readonly library: ProjectLibraryView;
   readonly linked: ReadonlySet<string>;

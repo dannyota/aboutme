@@ -13,7 +13,6 @@ const TOP_LEVEL_IDS: Readonly<Record<string, string>> = {
   technologies: 'project-technologies',
 };
 
-/** The element an issue path names, and the language tab it lives in. */
 export function issueTarget(path: string): {
   readonly id: string;
   readonly language: string | null;
@@ -25,7 +24,6 @@ export function issueTarget(path: string): {
   return { id: TOP_LEVEL_IDS[path] ?? 'project-form', language: null };
 }
 
-/** The message shown under the field; dates show their own. */
 export function issueMessage(issue: ProjectIssue, copy: ProjectsCopy): string {
   const field = issue.path.split('.').at(-1) ?? '';
   if (issue.code === 'date-range-order') return '';

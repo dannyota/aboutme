@@ -19,7 +19,6 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{ 'focus-issue': [path: string] }>();
 
-// Field issues stay with their controls; other issues keep their list.
 const listedIssues = computed(() =>
   props.state.kind === 'invalid'
     ? props.state.issues.filter((issue) =>

@@ -6,10 +6,6 @@ import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-// A byte-stable generator can still omit a schema variant. This suite derives
-// section types independently from the schema and checks AJV, generated
-// TypeScript, and the hand-written Go dispatch in both acceptance and rejection
-// directions. See docs/design/repository.md.
 const root = new URL("..", import.meta.url).pathname;
 const schema = JSON.parse(
   readFileSync(join(root, "resume.schema.json"), "utf8"),
@@ -38,10 +34,6 @@ function sectionTypesFromSchema(): string[] {
   });
 }
 
-// sectionType -> { fieldName: fieldSchema }, read straight from each entry
-// $def's non-entryBase allOf branch (entryBase's branch is a bare $ref with
-// no "properties" of its own, so it's naturally excluded — this only
-// collects domain fields, not id/isHidden).
 function entryFieldSchemasFromSchema(): Record<
   string,
   Record<string, unknown>
@@ -73,12 +65,6 @@ function entryFieldSchemasFromSchema(): Record<
   return result;
 }
 
-// Picks a field genuinely foreign to `sectionType`: present on some other
-// entry type, absent from this one. Deterministic (first match in schema
-// order) — never the skill/language pair specifically, since it always
-// finds *some* field the target type doesn't declare at all, and the
-// skill/language relationship is a subset (every language field IS a valid
-// skill field), not a foreign one.
 function foreignFieldFor(
   sectionType: string,
   entryFields: Record<string, Record<string, unknown>>,
@@ -147,7 +133,6 @@ let conformanceBinary: string;
 beforeAll(() => {
   tmpDir = mkdtempSync(join(tmpdir(), "aboutme-schema-conformance-"));
   conformanceBinary = join(tmpDir, "conformance-check");
-  // Build once, then exercise the real Go dispatch for every section type.
   execFileSync("go", ["build", "-o", conformanceBinary, "./cmd/conformance"], {
     cwd: join(root, "gen/go"),
     stdio: "inherit",
@@ -159,12 +144,6 @@ afterAll(() => {
   rmSync(tmpDir, { recursive: true, force: true });
 });
 
-// Writes a throwaway .ts fixture asserting `foreignField` is a compile
-// error on `sectionType`'s entries, runs `tsc --noEmit --strict` on it, and
-// cleans up. Mirrors type-fidelity.fixture.ts's `@ts-expect-error` pattern:
-// that directive itself errors if the following line does NOT error, so a
-// clean tsc run here proves the rejection is real, not just an unused,
-// unverified comment.
 function assertTsRejectsForeignField(
   sectionType: string,
   foreignField: string,
@@ -303,8 +282,6 @@ describe("codegen conformance: every sectionType across ajv, TS, and Go", () => 
   }
 });
 
-// Language fields are an exact subset of skill fields. A language-shaped entry
-// is therefore a valid partial skill entry and cannot be rejected by shape.
 describe('documented exception: a language-shaped entry under sectionType "skill" is accepted, not rejected', () => {
   const languageShapedEntry = {
     id: "018f0000-0000-7000-8000-000000000099",

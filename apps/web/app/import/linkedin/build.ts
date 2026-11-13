@@ -1,10 +1,3 @@
-/**
- * Turns a parsed LinkedIn profile into the review the import page shows, and
- * the reviewed choices into the resume document and the create request. See
- * docs/design/linkedin-import.md, "Mapping" (including "Limits") and "What
- * is dropped", and docs/design/linkedin-import-ui.md, "Review state"; ADR
- * 0023.
- */
 import type {
   Content,
   Customization,
@@ -17,9 +10,6 @@ import { CURRENT_VERSION } from '@aboutme/schema/released';
 import { validateDocument } from '@aboutme/schema/validation';
 
 import { applyTemplate } from '../../components/resume/applyTemplate';
-// A build-time Ajv standalone compile, like the editor's own document check
-// (apps/web/app/editor/documentValidation.ts): a runtime `ajv.compile()`
-// would emit a `new Function`, which the app-page CSP's script-src blocks.
 import validateSchema from '../../editor/documentValidator.generated.mjs';
 import { editorSectionsCopy } from '../../i18n/editor-sections';
 import { GALLERY, galleryTemplate } from '../../templates/catalog';
@@ -86,7 +76,6 @@ interface ReviewDetail {
 export interface ReviewEntry {
   id: string;
   section: ImportSectionKey;
-  /** The schema entry object with its new UUID id, ready for content. */
   entry: Record<string, unknown>;
   marks: EntryMark[];
   selectedByDefault: boolean;
@@ -101,13 +90,10 @@ export interface ReviewSection {
 export interface ImportReview {
   fullName: string;
   headline: string;
-  /** Cut marks for fullName and headline. */
   nameMarks: EntryMark[];
   details: ReviewDetail[];
-  /** Only found, non-empty sections, in IMPORT_SECTION_ORDER. */
   sections: ReviewSection[];
   dropped: { heading: string; count: number }[];
-  /** The gallery's first template (docs/design/linkedin-import.md, I4). */
   template: { id: string; name: string };
 }
 
@@ -119,16 +105,13 @@ export interface ReviewChoices {
   entryIds: ReadonlySet<string>;
 }
 
-/** Bytes over this fail the size meter (docs/design/linkedin-import.md). */
 export const REQUEST_MAX_BYTES = 262144;
 
 export type SchemaCheck
   = | { ok: true }
     | {
       ok: false;
-      /** Selected entries whose own subtree fails. */
       entryIds: string[];
-      /** A failure outside any entry, such as a layout or version problem. */
       general: boolean;
     };
 
@@ -140,7 +123,6 @@ const SHORT_FIELD_MAX = 120;
 const LABEL_MAX = 40;
 const MAX_SECTION_ENTRIES = 64;
 
-/** Clips to `max` and records a cut mark on `marks` when it was too long. */
 function clipField(
   value: string,
   max: number,
@@ -237,7 +219,6 @@ function buildCertificateEntry(title: string, id: string): Built {
   return { entry: { id, title: clipped }, marks };
 }
 
-/** Builds one section from its drafts, or undefined when there are none. */
 function buildSection<T>(
   key: ImportSectionKey,
   drafts: readonly T[],
@@ -266,11 +247,6 @@ function contactsOf(
   return contacts.filter((contact) => contact.type === type);
 }
 
-/**
- * Personal details in review order: email, phone, location, linkedin,
- * websites. Email and phone start unselected because a published resume
- * shows them (docs/design/linkedin-import.md, "Review screen").
- */
 function buildDetails(
   parsed: ParsedProfile,
   uuid: () => string,
@@ -317,7 +293,6 @@ function buildDetails(
   return details;
 }
 
-/** The parsed profile as the review the person checks before Create. */
 export function buildReview(
   parsed: ParsedProfile,
   uuid: () => string,
@@ -359,7 +334,6 @@ export function buildReview(
   };
 }
 
-/** The chosen entries of one section, capped at 64, in their review order. */
 function selectedEntries(
   section: ReviewSection,
   choices: ReviewChoices,
@@ -376,8 +350,6 @@ function selectedDetails(
   return review.details.filter((detail) => choices.detailIds.has(detail.id));
 }
 
-/** Every section's chosen entries, keyed by section, in IMPORT_SECTION_ORDER.
- */
 function selectedContent(
   review: ImportReview,
   choices: ReviewChoices,
@@ -391,15 +363,8 @@ function selectedContent(
   return result;
 }
 
-/** The language an imported resume is created with. */
 const IMPORT_LANGUAGE = 'en';
 
-/**
- * The reviewed choices as a resume document: `blankTemplateDocument` of the
- * gallery's first template, filled with the chosen personal details and
- * content, then `applyTemplate` so placement covers the new section keys, as
- * a blank resume would (docs/design/linkedin-import.md, "Mapping").
- */
 export function buildDocument(
   review: ImportReview,
   choices: ReviewChoices,
@@ -454,7 +419,6 @@ export function buildDocument(
   };
 }
 
-/** UTF-8 bytes of the JSON body the create request sends. */
 export function requestBytes(title: string, document: Resume): number {
   return new TextEncoder().encode(
     JSON.stringify({ title, lng: IMPORT_LANGUAGE, document }),
@@ -470,11 +434,6 @@ interface AjvLikeError {
   instancePath: string;
 }
 
-/**
- * Maps one path (an Ajv `instancePath` or a `validateDocument` dotted path)
- * to the entry or detail id it names in `entryIds`, when it names one at
- * all. Returns whether it mapped to a chosen entry or detail.
- */
 function mapPath(
   entryPattern: RegExp,
   detailPattern: RegExp,
@@ -503,12 +462,6 @@ function mapPath(
   return false;
 }
 
-/**
- * Runs the generated schema validator and the aggregate store checks the
- * create route also applies (packages/schema/validation/store.ts, for
- * example date ordering), and maps each failure to the chosen entry or
- * detail it belongs to.
- */
 export function checkDocument(
   document: Resume,
   review: ImportReview,
@@ -547,12 +500,6 @@ export function checkDocument(
   return { ok: false, entryIds: [...entryIds], general };
 }
 
-/**
- * The whole pipeline: reads the PDF, builds each page's lines against the
- * page-1 column boundary, splits them into a layout, maps the layout to a
- * profile, and builds the review (docs/design/linkedin-import.md, "Reading
- * the file").
- */
 export async function importLinkedInPdf(
   file: Blob,
   options: ReadOptions,

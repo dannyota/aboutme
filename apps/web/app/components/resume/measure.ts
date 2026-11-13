@@ -79,23 +79,11 @@ const gapFor = (
 const entryKey = (block: BlockRef): string =>
   `${block.column}:${block.sectionKey}:${String(block.entryIndex)}`;
 
-/**
- * The body blocks of a whole rendered entry, in the order splitRichTextBlocks
- * yields them: each paragraph, each item of an unordered list, and each
- * ordered list whole.
- */
 export function bodyBlockElements(body: Element): Element[] {
   return Array.from(body.children).flatMap((child) =>
     child.tagName === 'UL' ? Array.from(child.children) : [child]);
 }
 
-/**
- * The space between an entry's body blocks as the whole entry lays it out:
- * paragraph and list-item margins that a split part, rendered alone, loses.
- * Index k holds the gap before block k; index 0 is always 0. Returns
- * undefined when the rendered body does not have the expected block count,
- * so the caller falls back to no gap rather than guessing.
- */
 const wholeEntryGaps = (
   whole: Element,
   parts: number,
@@ -186,8 +174,6 @@ export async function measurePagination(
         false,
         `Block ${index} height`,
       ),
-      // A later part continues the same entry: its gap is the space the
-      // whole entry leaves between the two body blocks, not an entry gap.
       gapBeforePx: (block.part ?? 0) > 0
         ? partGap(block)
         : gapFor(

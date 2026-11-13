@@ -41,7 +41,6 @@ type Envelope = Record<string, unknown>;
 const envelopeNamed = (name: string): Envelope =>
   structuredClone(corpus.cases.find((entry) => entry.name === name)!.envelope);
 
-// Every request goes through the closed decoder first, as in the worker.
 const listRequest = (change: (envelope: Envelope) => void = () => {}) => {
   const envelope = envelopeNamed('list-vi-two-projects');
   change(envelope);
@@ -56,8 +55,6 @@ const projectRequest = (
 ) => {
   const envelope = envelopeNamed(name);
   change(envelope);
-  // Go derives the page description from the project's text: the summary,
-  // else the first 160 characters of the outcome, else none.
   const { summary, outcome }
     = envelope.project as Record<string, string | undefined>;
   (envelope.preview as Envelope).description = summary
@@ -88,8 +85,6 @@ const projectHtml = (
   name?: string,
 ) => renderPublicProject(projectRequest(change, name), VERSIONS);
 
-// What the contract forbids anywhere in either page
-// (docs/design/projects-contract.md "Render envelope").
 const expectClosedDocument = (document: Document) => {
   expect(document.querySelectorAll(
     'script, form, iframe, img, video, audio, object, embed, source, base',
@@ -99,7 +94,6 @@ const expectClosedDocument = (document: Document) => {
   expect(document.querySelectorAll('h1')).toHaveLength(1);
   expect(texts(document, 'a[href="#public-project"]'))
     .toEqual(['Skip to content']);
-  // No inline CSS: the pages run under style-src 'self'.
   expect(document.querySelectorAll('style, [style]')).toHaveLength(0);
   expect([...document.querySelectorAll('link[rel="stylesheet"]')]
     .map((link) => link.getAttribute('href'))).toEqual([
@@ -124,8 +118,6 @@ const expectClosedDocument = (document: Document) => {
   expect(document.querySelector('.public-download')).toBeNull();
 };
 
-// Internal anchors carry only href and class; external ones are the
-// project's buttons with the fixed rel.
 const expectAnchorAttributes = (document: Document) => {
   for (const anchor of document.querySelectorAll('a')) {
     if (anchor.closest('.project-description') !== null) continue;
@@ -251,7 +243,6 @@ describe('project list page', () => {
       .textContent).toBe('Author');
     expect(row.querySelector('.project-row-summary')!.getAttribute('lang'))
       .toBe('en');
-    // Dates follow the resume language and the chips are not text.
     expect(row.querySelector('.project-row-meta')!.textContent)
       .toBe('Author · 1922 – Hiện tại');
     expect(row.querySelector('.project-chips')!.hasAttribute('lang'))
@@ -586,8 +577,7 @@ describe('project page', () => {
 describe('project page frame', () => {
   it('opts out of telephone and date detection as the resume page does',
     async () => {
-      // Safari links digit runs such as 03/2022 – 06/2024 as telephone
-      // numbers unless the head says otherwise.
+      // Safari links digit runs such as dates as phone numbers by default.
       const head = '<meta charset="utf-8"><meta name="viewport" '
         + 'content="width=device-width, initial-scale=1"><meta '
         + 'name="format-detection" '
@@ -622,7 +612,6 @@ describe('project page frame', () => {
     async () => {
       for (const html of [await listHtml(), await projectHtml()]) {
         expect(html).not.toMatch(/<style|\sstyle=/iu);
-        // The stylesheet's rules reach the page only through its link.
         expect(html).not.toContain(PROJECT_PAGE_STYLE.slice(0, 40));
       }
     });
@@ -641,9 +630,6 @@ describe('project page frame', () => {
 });
 
 describe('a Go-sanitized hostile description', () => {
-  // The server sanitizer's pinned output for each hostile payload
-  // (apps/server/internal/sanitize/sanitize_test.go, TestCorpusOutputGolden):
-  // exactly what the library stores and Go sends.
   const sanitized = JSON.parse(readFileSync(
     resolve(
       process.cwd(),
@@ -688,9 +674,6 @@ describe('a Go-sanitized hostile description', () => {
 });
 
 describe('project HTML parity with the shared corpus', () => {
-  // Go's project page validator reads the same corpus, so real renderer
-  // output and Go's closed rules are checked against one fixture
-  // (docs/design/projects-contract.md "Render envelope").
   it.each(corpus.cases.map((entry) => [entry.name, entry] as const))(
     'renders exactly the corpus HTML for %s',
     async (_name, entry) => {

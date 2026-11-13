@@ -1,11 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-// Justify reaches body paragraphs and list items only
-// (docs/adr/0013-resume-header-and-contacts.md). The rule lives in
-// the shared renderer stylesheet, so screen, paged preview, public page, and
-// print all read it.
-
 const css = readFileSync('app/components/resume/ResumeDocument.vue', 'utf8');
 
 const rulesUsing = (property: string): string[] =>

@@ -13,8 +13,7 @@ import { fakeAuth, resumeSummary as summary, sequence } from './fixtures';
 const BASE = 'http://localhost/api/v1';
 const PROJECT = '0190f000-0000-7000-8000-0000000000c1';
 
-// The test environment's Request drops headers passed as a Headers object,
-// which is how the generated client hands them over; browsers keep them.
+// The test environment's Request drops headers given as a Headers object.
 class PlainHeadersRequest extends Request {
   constructor(input: RequestInfo | URL, init?: RequestInit) {
     const headers = Object.fromEntries(new Headers(init?.headers).entries());

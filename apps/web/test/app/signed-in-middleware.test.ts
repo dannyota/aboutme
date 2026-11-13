@@ -26,8 +26,6 @@ const me = {
   },
 };
 let meStatus = 401;
-// Holds every /me response until released, so a test can observe the
-// guard while the session read is still loading.
 let meGate: Promise<void> = Promise.resolve();
 let releaseMe: () => void = () => {};
 function holdMe(): void {
@@ -55,9 +53,6 @@ const SESSIONS_LOGIN = '/login?next=%2Fapp%2Fsettings%2Fsessions';
 const SAMPLE_PATH = '/app/new?sample=engineer-compact&lng=en';
 const SAMPLE_REGISTER = `/register?next=${encodeURIComponent(SAMPLE_PATH)}`;
 
-// The shared signed-out route guard (docs/design/web.md, Application
-// surfaces). A router push to an app route runs the registered global guard
-// too; both share one pending watcher.
 describe('signed-in.global middleware', () => {
   let replace: MockInstance<Router['replace']>;
 
@@ -67,8 +62,6 @@ describe('signed-in.global middleware', () => {
     vi.restoreAllMocks();
     await useRouter().push('/');
     clearNuxtData();
-    // These tests call the guard directly or navigate with push, never
-    // replace, so every replace is a redirect the guard sent.
     replace = vi.spyOn(useRouter(), 'replace').mockResolvedValue(undefined);
   });
 
@@ -101,7 +94,6 @@ describe('signed-in.global middleware', () => {
 
   it('redirects to the navigation target when the read settles first',
     async () => {
-      // The router still shows '/': the navigation has not committed.
       holdMe();
       signedInMiddleware(route('/app/settings/sessions'), route('/'));
       expect(replace).not.toHaveBeenCalled();
@@ -199,9 +191,7 @@ describe('signed-in.global middleware', () => {
 
   it('redirects when the read settles before the navigation commits',
     async () => {
-      // A link from a gallery page: Nuxt marks the navigation as processing
-      // middleware from beforeEach until afterEach, while the /app/new page
-      // chunk loads, and the 401 lands inside that window.
+      // Nuxt marks a navigation as in middleware until afterEach.
       const nuxtApp = useNuxtApp();
       holdMe();
       nuxtApp._processingMiddleware = true;

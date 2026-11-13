@@ -8,9 +8,6 @@ const { locale } = useLocale();
 const copy = computed(() => editorShellCopy[locale.value]);
 const panel = useResizablePanel();
 
-// Dragging moves the panel's left edge with the pointer; matches the
-// CropEditor.vue drag pattern (a single in-scope `drag` sentinel, optional
-// pointer-capture calls so a DOM without them still works in tests).
 let drag: { startClientX: number; startWidthRem: number } | null = null;
 let previousBodyUserSelect = '';
 let previousBodyCursor = '';
@@ -18,7 +15,6 @@ let previousBodyCursor = '';
 function beginDragStyles(): void {
   previousBodyUserSelect = document.body.style.userSelect;
   previousBodyCursor = document.body.style.cursor;
-  // A fast drag must not select the rich text or labels it passes over.
   document.body.style.userSelect = 'none';
   document.body.style.cursor = 'col-resize';
 }
@@ -29,7 +25,6 @@ function endDragStyles(): void {
 }
 
 function onPointerDown(event: PointerEvent): void {
-  // Only the primary button of the first pointer starts a drag.
   if (event.button !== 0 || drag !== null) return;
   drag = { startClientX: event.clientX, startWidthRem: panel.widthRem.value };
   (event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId);
@@ -39,7 +34,6 @@ function onPointerDown(event: PointerEvent): void {
 
 function onPointerMove(event: PointerEvent): void {
   if (drag === null) return;
-  // Moving left grows the panel; see useResizablePanel's handleKeyDown.
   const deltaPx = drag.startClientX - event.clientX;
   panel.setWidthRem(drag.startWidthRem + panel.pxToRem(deltaPx));
 }
@@ -52,14 +46,9 @@ function onPointerUp(event: PointerEvent): void {
     target.releasePointerCapture(event.pointerId);
   }
   endDragStyles();
-  // The drag is over: snap the dragged width to the quarter-rem grid and
-  // persist it, the same commit a keyboard step or reset makes (DESIGN.md
-  // "Authenticated chrome and editor").
   panel.commit();
 }
 
-// A drag can end without pointerup: the handle hides below 72 rem or the
-// editor unmounts mid-drag. Either way the body styles must not stay behind.
 function abandonDrag(): void {
   if (drag === null) return;
   drag = null;
@@ -69,8 +58,6 @@ function abandonDrag(): void {
 
 onBeforeUnmount(abandonDrag);
 
-// Screen readers announce a whole rem; the committed (stored) width still
-// snaps to the finer quarter-rem grid in useResizablePanel's commit.
 const announcedWidthRem = computed(() => Math.round(panel.widthRem.value));
 </script>
 

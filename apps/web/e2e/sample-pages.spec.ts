@@ -25,11 +25,7 @@ import {
 } from './sample-pdf-content';
 import { denyExternalRequests, waitForImages } from './support';
 
-// Samples use production print flags and assert PDF content and layout.
 const PAGES_DIR = resolve(import.meta.dirname, '../public/templates/pages');
-// About 1240px wide for an A4 page (docs/design/templates/print.md §2):
-// large enough for a library card and the template page, small enough to
-// ship ten-plus documents.
 const RASTER_DPI = 150;
 const POINTS_PER_MM = 72 / 25.4;
 interface ManifestEntry {
@@ -41,8 +37,6 @@ interface ManifestEntry {
   readonly files: readonly string[];
 }
 
-// Accepted one-page A4 rasters at 150 DPI. Each cell checks its own output;
-// manifest validation never depends on another test's process or result.
 const manifestEntries: readonly ManifestEntry[] = SAMPLES.map((sample) => ({
   ...sample, pages: 1, width: 1240, height: 1754,
   files: [`${sample.templateId}-${sample.lng}-p1.png`],
@@ -548,8 +542,7 @@ for (const boundary of ['minimum', 'maximum'] as const) {
         'transform': ['scaleY(0.8)', /^matrix\(/u],
       });
     } else {
-      // Scaling the whole root can add a page containing only empty overflow.
-      // Move only the sample's final text, keeping it inside the paper margins.
+      // Chromium print: scaling the root can add an empty overflow page.
       const shift = (0.99 - baseline[0]!) * (297 - 2 * 13) * 96 / 25.4;
       await applyStyleMutation(
         page.locator('.resume-main .entry-meta').last(), {

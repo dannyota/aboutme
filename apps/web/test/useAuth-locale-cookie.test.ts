@@ -6,16 +6,7 @@ import { defineComponent, h } from 'vue';
 import { localeCookie } from '../app/i18n/locale';
 import { setSiteLocale } from './support/locale';
 
-/**
- * Covers `restoreLocaleCookie` in `useAuth.ts`'s `mutate`: logout,
- * logout-everywhere, revoking the caller's own session, and account
- * deletion all send `Clear-Site-Data` (docs/design/security.md, session
- * lifecycle), which wipes `aboutme-locale` along with every other cookie.
- * The test endpoint plays the browser's part: it clears the cookie itself
- * and never exposes the header, as Chromium hides `Clear-Site-Data` from
- * page scripts. `logout-state.test.ts` covers the full logout-then-reload
- * path; this file isolates the hook's outcomes directly.
- */
+// Chromium hides Clear-Site-Data from scripts; the endpoint clears the cookie.
 
 const meData = {
   user: {
@@ -51,11 +42,7 @@ const Probe = defineComponent({
   },
 });
 
-/**
- * The locale cookie's value, or `undefined` when none is set. Deleting a
- * cookie the jar never held can leave an empty entry in the test DOM, which
- * a browser would not send, so an empty value counts as none.
- */
+// Deleting an unset cookie can leave an empty entry in the test DOM.
 function localeCookieValue(): string | undefined {
   const prefix = `${localeCookie}=`;
   const value = document.cookie
@@ -65,11 +52,6 @@ function localeCookieValue(): string | undefined {
   return value === '' ? undefined : value;
 }
 
-/**
- * Registers the mutation endpoint. `clearedBy` is the cookie line the
- * endpoint applies on the browser's behalf while answering: the
- * Clear-Site-Data wipe, another tab's write, or nothing.
- */
 function registerMutation(clearedBy: string | undefined): void {
   registerEndpoint('/api/v1/test-clear-site-data', {
     method: 'POST',

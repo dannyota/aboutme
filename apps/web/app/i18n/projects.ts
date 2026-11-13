@@ -1,5 +1,3 @@
-// Copy for the owner's Projects pages (/app/projects and /app/projects/{id}),
-// specified in docs/design/ui/projects.md.
 import type { WorkspaceCopy } from './workspace';
 
 export type ProjectReauthCopy = {

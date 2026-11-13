@@ -1,7 +1,5 @@
 <script setup lang="ts">
-// The 16 px icons of the project page's link buttons, drawn from Lucide's
-// git-branch, external-link and link geometry (ISC). They are inlined, like
-// the public page bar's download icon, so the page loads no icon module.
+// Geometry from Lucide's git-branch, external-link and link icons (ISC).
 defineProps<{ readonly kind: 'repository' | 'demo' | 'link' }>();
 </script>
 

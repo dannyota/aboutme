@@ -1,13 +1,4 @@
 <script setup lang="ts">
-/**
- * `ProviderButtons` — one sign-in link per enabled provider.
- *
- * Each is a plain `<a href>` to `/api/v1/auth/{provider}/start`, never a
- * fetch: the start endpoint sets a cookie and redirects, which needs a real
- * top-level navigation. Google follows its sign-in branding guidelines: the
- * standard four-colour "G" drawn inline (no external request under the CSP),
- * Roboto Medium, and Google's light and dark button colours.
- */
 import { Button } from '@/components/ui/button';
 import type { LoginProvider } from '@/composables/useCapabilities';
 import { authCopy } from '@/i18n/auth';
@@ -30,7 +21,7 @@ function startHref(provider: LoginProvider): string {
   return props.next ? `${base}?next=${encodeURIComponent(props.next)}` : base;
 }
 
-// Google's standard "G" mark, drawn inline so the button makes no request.
+// Google sign-in branding guidelines: the standard four-colour "G" mark.
 const googleMark = [
   {
     fill: '#EA4335',

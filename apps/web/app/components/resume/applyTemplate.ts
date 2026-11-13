@@ -81,15 +81,6 @@ function validateSelectors(preset: TemplatePreset): readonly SectionType[] {
   return sidebarSectionTypes;
 }
 
-/**
- * Text alignment, the header photo position, the page format, and the public
- * page color scheme belong to the owner, not the preset (ADR 0013; paper
- * follows where the owner prints; docs/design/public-page-theme.md), so a
- * template switch keeps the current values, or their absence. A
- * kept photo position under a preset with no header uses the default header,
- * which renders the same as no header. The date format follows the resume
- * language, never the preset (docs/design/templates/contract.md §3).
- */
 function withOwnerChoices(
   current: Customization,
   next: Customization,

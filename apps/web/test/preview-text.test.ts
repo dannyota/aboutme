@@ -15,10 +15,6 @@ import {
   scrubPreviewText,
 } from '../app/utils/previewText';
 
-// The corpus is shared with the server's internal/previewmeta tests, so the
-// publish-panel preview matches the authoritative Go text rules
-// (docs/design/link-previews.md, "Text rules").
-
 interface NormalizeCase { name: string; input: string; want: string }
 interface ScrubCase {
   name: string;
@@ -74,10 +70,6 @@ describe('previewLocale matches the Go corpus', () => {
     },
   );
 });
-
-// Fixture builders. Every field an owning export reads is set explicitly;
-// every other Customization field takes a fixed, valid value so the document
-// matches the Resume schema without affecting the text rules under test.
 
 let nextId = 0;
 const id = (): string => `id-${String(nextId++)}`;

@@ -1,10 +1,3 @@
-/**
- * Reads a picked PDF with pdf.js and returns each page's text items, or the
- * check it failed (docs/design/linkedin-import.md, "Reading the file"; ADR
- * 0023 decisions 3 and 5). Every limit counts bytes read and items received,
- * never `File.size` or a value the file declares. The worker is terminated
- * when the read ends, however it ends, so each pick needs a fresh one.
- */
 import type { TextItemLike } from './lines';
 import type { PdfjsModule, PdfWorkerHandle } from './pdfWorker';
 
@@ -14,7 +7,6 @@ const MAX_PAGES = 20;
 const MAX_TEXT_CHARS = 100_000;
 const MAX_TEXT_ITEMS = 20_000;
 const TIME_LIMIT_MS = 15_000;
-/** Share of unreadable characters above which the text is unreadable. */
 const MAX_UNREADABLE_SHARE = 0.01;
 
 export type ReadFailure
@@ -32,19 +24,12 @@ export type ReadResult
 
 export interface ReadOptions {
   readonly pdfjs: PdfjsModule;
-  /**
-   * The worker for this pick. The browser always passes one; Node tests omit
-   * it and pdf.js runs in-process.
-   */
   readonly worker?: PdfWorkerHandle;
-  /** Aborting it stops the read (the page's Stop button). */
   readonly signal?: AbortSignal;
   readonly timeLimitMs?: number;
-  /** Called after each page with the pages read and the page count. */
   readonly onProgress?: (pagesRead: number, pageCount: number) => void;
 }
 
-/** The `getDocument` options the design fixes; `data` is added per read. */
 export const DOCUMENT_OPTIONS = Object.freeze({
   useWasm: false,
   enableXfa: false,
@@ -61,7 +46,7 @@ class ReadStop extends Error {
   }
 }
 
-const PDF_HEADER = [0x25, 0x50, 0x44, 0x46, 0x2d]; // %PDF-
+const PDF_HEADER = [0x25, 0x50, 0x44, 0x46, 0x2d];
 
 function hasPdfHeader(bytes: Uint8Array): boolean {
   const end = Math.min(bytes.length, HEADER_WINDOW_BYTES) - PDF_HEADER.length;
@@ -71,10 +56,6 @@ function hasPdfHeader(bytes: Uint8Array): boolean {
   return false;
 }
 
-/**
- * U+FFFD, private use (U+E000 to U+F8FF), and controls other than line
- * breaks mark text that has no usable Unicode map.
- */
 // eslint-disable-next-line no-control-regex
 const UNREADABLE = /[\uFFFD\uE000-\uF8FF\0-\t\v\f\x0E-\x1F\x7F-\x9F]/gu;
 
@@ -101,7 +82,6 @@ function isTextItem(item: unknown): item is PdfTextItem {
     && Array.isArray((item as { transform?: unknown }).transform);
 }
 
-/** Reads one file; resolves with the text items or the failed check. */
 export async function readLinkedInPdf(
   file: Blob,
   options: ReadOptions,
@@ -113,8 +93,6 @@ export async function readLinkedInPdf(
   let onAbort: (() => void) | undefined;
   let passwordAsked = false;
 
-  // Rejects the moment the time limit passes or Stop is pressed; every step
-  // races it, so a stuck parse cannot hold the page.
   const halt = new Promise<never>((_, reject) => {
     timer = setTimeout(() => reject(new ReadStop('timedOut')), timeLimitMs);
     onAbort = () => reject(new ReadStop('stopped'));
@@ -157,9 +135,7 @@ export async function readLinkedInPdf(
     for (let number = 1; number <= pageCount; number += 1) {
       const page = await guard(doc.getPage(number));
       const [left, bottom] = page.view;
-      // Over a limit, the read throws out of this loop and the finally
-      // below ends the worker and the task, which ends this stream too.
-      // Cancelling the reader here instead races pdf.js's own close message.
+      // Cancelling this reader races pdf.js's own close message.
       const reader = page.streamTextContent().getReader();
       const pageItems: TextItemLike[] = [];
       for (;;) {
@@ -201,8 +177,6 @@ export async function readLinkedInPdf(
   } finally {
     clearTimeout(timer);
     if (onAbort !== undefined) signal?.removeEventListener('abort', onAbort);
-    // Terminate first: a hostile file can keep the worker too busy to answer
-    // the destroy message.
     worker?.terminate();
     loadingTask?.destroy().catch(() => {});
   }

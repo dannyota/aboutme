@@ -12,24 +12,18 @@ export function hasUnsafeWork(record: ResumeRecord | undefined): boolean {
       || record.conflicts.length > 0
       || Object.keys(record.issues).length > 0
       || record.templateState?.kind === 'partial'
-      // After an explicit discard the unread revision holds no work.
       || (record.completeReadRequired && !record.discarded)
       || record.sessionLost
       || record.opaquePhotoOutcome !== null)
   );
 }
 
-/** Session loss may redirect only when no work must stay in RAM. */
 export function shouldRetainEditorOnSessionLoss(
   record: ResumeRecord | undefined,
 ): boolean {
   return hasUnsafeWork(record);
 }
 
-/**
- * Flushing hands held rich text to the store first; what cannot be flushed
- * (an unfinished date range) keeps the page, like any other unsaved work.
- */
 export function flushAndCheckUnsaved(
   record: ResumeRecord | undefined,
   drafts: FieldDrafts | undefined,
@@ -45,10 +39,6 @@ export function useUnsavedNavigationGuard(
   useLeaveGuard(() => flushAndCheckUnsaved(record.value, drafts));
 }
 
-/**
- * Holds route changes and asks before unload while `unsafe` is true. With
- * `confirmLeave`, a route change waits for its answer instead of stopping.
- */
 export function useLeaveGuard(
   unsafe: () => boolean,
   confirmLeave?: () => Promise<boolean>,

@@ -6,30 +6,11 @@ import {
   type Locale,
 } from '@/i18n/locale';
 
-/**
- * `useAuth` — session/identity state backed by `GET /api/v1/me`.
- *
- * Same-origin in dev/prod (Caddy routes `/api/v1/*` to the Go API on the
- * same origin), so `credentials: 'include'` is mostly the browser default
- * already — stated explicitly here since it is security-relevant (the
- * cookie is `__Host-session`, httpOnly, and must travel with this call for
- * `/me` to resolve a session at all).
- *
- * `csrfToken` comes from the response body only — never a cookie, URL, or
- * log (spec: CSRF §"Sessions"). Every mutating call in this app (logout,
- * per-session revoke, revoke-all) must send it back as `X-CSRF-Token`.
- * Mutations with JSON bodies also send `Content-Type: application/json`;
- * bodiless mutations omit it. Use `mutate()` below rather than calling
- * `$fetch` directly, so the CSRF×rotation self-heal (see `mutate`'s own doc
- * comment) applies uniformly.
- */
-
 export type AuthProvider = 'google' | 'github' | 'linkedin';
 
 export interface AuthIdentity {
   id: string;
   provider: AuthProvider;
-  /** RFC 3339 UTC time the identity was linked. */
   createdAt: string;
 }
 
@@ -53,7 +34,6 @@ interface MutateOptions {
   method: 'POST' | 'PUT' | 'DELETE';
   body?: Record<string, unknown>;
   query?: Record<string, string>;
-  /** Receives the HTTP status of the response `mutate` resolves with. */
   onStatus?: (status: number) => void;
 }
 
@@ -62,7 +42,6 @@ export interface UseAuthReturn {
   csrfToken: ComputedRef<string | null>;
   identities: ComputedRef<AuthIdentity[]>;
   authState: ComputedRef<AuthState>;
-  /** The wait the last failed `/me` asked for in `Retry-After`, if any. */
   retryAfterMs: ComputedRef<number | null>;
   refresh: () => Promise<void>;
   logout: () => Promise<void>;
@@ -71,7 +50,6 @@ export interface UseAuthReturn {
 
 export type AuthState = 'loading' | 'authenticated' | 'anonymous' | 'error';
 
-/** Headers for a CSRF-protected call, including JSON only with a body. */
 function csrfHeaders(
   csrfToken: string | null,
   hasJSONBody = false,
@@ -83,7 +61,6 @@ function csrfHeaders(
   return headers;
 }
 
-/** True for a caught fetch error whose body is `{error:{code:"..."}}`. */
 function hasErrorCode(error: unknown, code: string): boolean {
   const actual = (error as { data?: { error?: { code?: string } } })?.data
     ?.error?.code;
@@ -106,7 +83,6 @@ function isRecoveredMeEnvelope(
     && recovered.csrfToken !== '';
 }
 
-/** A failed response's `Retry-After`, in whole seconds as the API sends it. */
 function retryAfterMsOf(error: unknown): number | null {
   const value = (error as { response?: { headers?: Headers } } | null)
     ?.response?.headers?.get?.('Retry-After') ?? null;
@@ -115,7 +91,6 @@ function retryAfterMsOf(error: unknown): number | null {
   return Number.isSafeInteger(seconds) ? seconds * 1_000 : null;
 }
 
-/** The browser's current interface language choice, if it holds one. */
 function readLocaleCookie(): Locale | undefined {
   const prefix = `${localeCookie}=`;
   const value = document.cookie
@@ -125,25 +100,7 @@ function readLocaleCookie(): Locale | undefined {
   return isLocale(value) ? value : undefined;
 }
 
-/**
- * Logout, logout-everywhere, revoking the caller's own session, and account
- * deletion all send `Clear-Site-Data: "cookies", "storage"`
- * (docs/design/security.md, session lifecycle). The browser wipes every
- * cookie for this origin, including `aboutme-locale`, before the response
- * reaches `mutate`'s caller, so the next page load would fall back to
- * Vietnamese. Chromium does not expose `Clear-Site-Data` to page scripts, so
- * the response cannot say whether it cleared anything. Instead, when a
- * browser held a language choice as the request started and holds none once
- * a successful response arrives, the choice is rewritten from the in-memory
- * locale state that Clear-Site-Data cannot touch. That keeps the interface
- * language a device preference (docs/design/localization.md, "Two language
- * domains"). Writing it before the caller navigates also keeps the next
- * page's `useCookie` readers from finding no cookie and deleting it again.
- * `useCookie` can skip writing an unchanged value, so this writes
- * `document.cookie` directly, with the same attributes `useLocale` sets. A
- * browser that never chose a language still gets none, and a cookie that is
- * still present, such as one another tab just changed, is left alone.
- */
+// Chromium hides Clear-Site-Data from page scripts, so restore the cookie.
 function restoreLocaleCookie(chosen: Locale): void {
   if (readLocaleCookie() !== undefined) return;
   const state = useState<Locale | undefined>(localeCookie);
@@ -153,7 +110,6 @@ function restoreLocaleCookie(chosen: Locale): void {
 }
 
 export function useAuth(): UseAuthReturn {
-  // Authenticated reads wait for the browser, where the cookie and proxy exist.
   const {
     data,
     error,
@@ -162,14 +118,10 @@ export function useAuth(): UseAuthReturn {
   } = useFetch<MeEnvelope>('/api/v1/me', {
     credentials: 'include',
     server: false,
-    // A failed check is retried on the caller's own schedule, never sooner
-    // than the server's Retry-After, so the client does not resend it.
+    // ofetch retries a failed GET by default; the caller owns the schedule.
     retry: 0,
   });
 
-  // Optional-chain all the way through: an unexpected response shape (a
-  // contract drift, a proxy error page, ...) must degrade to "logged out"
-  // rather than throw during render.
   const user = computed(() => data.value?.data?.user ?? null);
   const csrfToken = computed(() => data.value?.data?.csrfToken ?? null);
   const identities = computed(() => data.value?.data?.identities ?? []);
@@ -211,10 +163,6 @@ export function useAuth(): UseAuthReturn {
     await refreshing;
   }
 
-  // Rotation can invalidate the cached CSRF token. Refresh and retry once;
-  // surface a second rejection so forged or expired requests cannot loop.
-  // Every mutation goes through here, so the `onResponse` hook below covers
-  // every Clear-Site-Data endpoint without each call site repeating it.
   async function mutate<T = void>(
     url: string,
     options: MutateOptions,
@@ -246,9 +194,6 @@ export function useAuth(): UseAuthReturn {
   async function logout(): Promise<void> {
     await mutate('/api/v1/auth/logout', { method: 'POST' });
     data.value = undefined;
-    // Logout destroys the current session server-side (and sends
-    // Clear-Site-Data) — there is no session left to refetch. Leave this
-    // now-signed-out page for the login screen instead.
     await navigateTo('/login');
   }
 

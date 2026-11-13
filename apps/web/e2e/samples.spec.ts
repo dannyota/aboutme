@@ -5,10 +5,6 @@ import { TEMPLATES } from '@aboutme/schema/templates';
 import { SAMPLE_PAGES } from '../app/templates/samplePages';
 import { denyExternalRequests } from './support';
 
-// Gallery samples keep their page count in the pinned browser, so a spacing
-// or header change that pushes a one-page sample onto a second page fails
-// here. The generic filler stays within two pages under every template.
-
 async function pageCount(page: Page, url: string): Promise<number> {
   const response = await page.goto(url);
   expect(response?.ok()).toBe(true);

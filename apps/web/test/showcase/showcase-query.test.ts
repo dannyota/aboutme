@@ -17,9 +17,6 @@ import {
 } from '../../app/lib/showcaseQuery';
 import { GALLERY, ROLES } from '../../app/templates/catalog';
 
-// The filters live in the page URL (AC-SHOW-005); an unknown value counts as
-// All and is never sent (docs/design/ui/showcase.md, Bottom sheet).
-
 const presetId = GALLERY[0]!.id;
 
 describe('showcase query', () => {

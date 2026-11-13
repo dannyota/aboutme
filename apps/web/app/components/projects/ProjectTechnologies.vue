@@ -60,7 +60,6 @@ function onInput(value: string | number): void {
     entry.value = text;
     return;
   }
-  // A pasted list adds every finished item and keeps the last one typing.
   const parts = text.split(',');
   const last = parts.pop() ?? '';
   add(parts);

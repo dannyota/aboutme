@@ -240,18 +240,13 @@ for (const [name, styles] of [
 }
 
 interface PublicCell {
-  // The viewer's emulated color preference, set before the page loads.
   readonly colorPreference?: 'dark' | 'light';
   readonly name: string;
-  // The owner's color scheme (docs/design/public-page-theme.md); a light
-  // page sets none.
   readonly scheme?: 'dark' | 'system';
   readonly template: string;
   readonly width: number;
 }
 
-// The public page at a wide desktop and a phone (docs/design/web.md). The
-// harness draws PublicResumeApp as the public render worker does.
 const PUBLIC_CELLS: readonly PublicCell[] = [
   {
     name: 'public--classic-serif--2560.png',
@@ -268,8 +263,6 @@ const PUBLIC_CELLS: readonly PublicCell[] = [
     template: 'modern-sidebar',
     width: 390,
   },
-  // Wide template margins on a phone: the text keeps its measure and the
-  // padding drops to 16 px (docs/design/web.md, "Pagination and print").
   {
     name: 'public--classic-serif--390.png',
     template: 'classic-serif',
@@ -280,9 +273,6 @@ const PUBLIC_CELLS: readonly PublicCell[] = [
     template: 'editorial-wide',
     width: 390,
   },
-  // The dark and Match device schemes (docs/design/public-page-theme.md,
-  // "Display checks and tests"): a plain, a tinted-sidebar, and a tinted-band
-  // template, plus a Match device page under a dark preference.
   {
     name: 'public--modern-sidebar--dark--390.png',
     scheme: 'dark',
@@ -334,8 +324,6 @@ test.describe('public page measure', () => {
           if (element === null) throw new Error(`Missing ${selector}`);
           return element.getBoundingClientRect();
         };
-        // Characters a full body line holds: the paragraph's width over the
-        // average width of its characters.
         const paragraph = document.querySelector('.entry-body p');
         if (paragraph === null) throw new Error('Missing body paragraph');
         const range = document.createRange();
@@ -361,31 +349,20 @@ test.describe('public page measure', () => {
         };
       });
       expect(geometry.page).toBe(cell.width);
-      // The bar is the first child of .public-resume-page, full width,
-      // above the resume article (docs/design/public-page-theme.md,
-      // "Structure" and "Size and placement").
       expect(geometry.bar).toBe(cell.width);
       expect(geometry.linkTop).toBeLessThan(geometry.articleTop);
-      // A fine pointer (the default here) keeps the download button at
-      // 32 px high; a coarse pointer grows it to 40 px.
       expect(geometry.linkHeight).toBeLessThanOrEqual(32);
       if (cell.width === 390) {
-        // Phones keep the full width.
         expect(geometry.measure.left).toBe(0);
         expect(geometry.measure.right).toBe(390);
         expect(geometry.linkRight).toBeLessThan(390);
       } else {
-        // Centred, with the page background on both sides.
         const left = geometry.measure.left;
         const right = cell.width - geometry.measure.right;
-        // The 400 px floor is tuned for 2560; a 1440 page has less room
-        // beside the measure but still shows the page background on both sides.
         if (cell.width === 2560) expect(left).toBeGreaterThan(400);
         else expect(left).toBeGreaterThan(0);
         expect(Math.abs(left - right)).toBeLessThanOrEqual(1);
         expect(geometry.lines).toBeGreaterThan(1);
-        // The band depends on the template's typeface and is tuned on the
-        // 2560 cells, not on width.
         if (cell.width === 2560) {
           expect(geometry.charsPerLine).toBeGreaterThanOrEqual(88);
           expect(geometry.charsPerLine).toBeLessThanOrEqual(112);
@@ -415,12 +392,8 @@ test.describe('public page measure', () => {
   }
 });
 
-// The article's padding grows from 16 px toward the template margin as the
-// width allows the measure (docs/design/web.md, "Pagination and print"; the
-// page bar's inner row follows it, docs/design/public-page-theme.md).
 test.describe('public page screen margins', () => {
   const MM_TO_PX = 96 / 25.4;
-  // Template page margins, mm.
   const TEMPLATES_MARGIN_X = { 'classic-serif': 25, 'editorial-wide': 35 };
 
   for (const template of ['classic-serif', 'editorial-wide'] as const) {
@@ -452,14 +425,12 @@ test.describe('public page screen margins', () => {
           };
         });
         const margin = TEMPLATES_MARGIN_X[template] * MM_TO_PX;
-        // Padding is clamp(16, (width - measure) / 2, template margin).
         const expected = Math.min(
           margin,
           Math.max(16, (geometry.client - 52 * geometry.fontSize) / 2),
         );
         expect(geometry.left).toBeCloseTo(expected, 0);
         expect(geometry.right).toBeCloseTo(expected, 0);
-        // The page bar's mark and the body text share one left edge.
         expect(geometry.markLeft).toBeCloseTo(geometry.textLeft, 0);
         if (width === 390) {
           expect(geometry.left).toBe(16);
@@ -471,8 +442,6 @@ test.describe('public page screen margins', () => {
   }
 });
 
-// What a public page paints with its colors: the resume article, the header
-// (a tinted band shows its own ground), and the page bar.
 interface PublicSurfaces {
   readonly article: string;
   readonly bar: string;
@@ -493,9 +462,6 @@ async function openPublic(
   );
   expect(response?.ok()).toBe(true);
   await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
-  // The public render worker's page loads no theme bootstrap, but every Nuxt
-  // page head here does, and it writes an inline `color-scheme: light` on the
-  // root. Drop it so the harness matches the public page.
   await page.evaluate(() => {
     document.documentElement.style.removeProperty('color-scheme');
   });
@@ -520,9 +486,6 @@ async function readSurfaces(page: Page): Promise<PublicSurfaces> {
   });
 }
 
-// The scheme CSS is screen only and keys off the owner's choice plus, for
-// Match device, the viewer's preference (docs/design/public-page-theme.md,
-// "What stays light"). These checks compare computed colors across renders.
 test.describe('public page color scheme', () => {
   for (const template of ['classic-serif', 'executive-band']) {
     test(`a dark ${template} page turns dark on screen and light in print`,
@@ -536,11 +499,8 @@ test.describe('public page color scheme', () => {
         expect(dark.schemeAttribute).toBe('dark');
         expect(dark.article).not.toBe(light.article);
         if (template === 'executive-band') {
-          // A tinted band shows its own dark ground.
           expect(dark.header).not.toBe(light.header);
         }
-        // The page bar takes its dark ground; the light page keeps the
-        // light one.
         expect(light.bar).toBe('rgb(249, 248, 245)');
         expect(dark.bar).toBe('rgb(12, 16, 32)');
         expect(dark.rootScheme).toBe('dark');
@@ -576,7 +536,6 @@ test.describe('public page color scheme', () => {
     expect(matchDark.bar).toBe(dark.bar);
     expect(matchDark.rootScheme).toBe('dark');
 
-    // Print stays light whatever the viewer prefers.
     await page.emulateMedia({ media: 'print' });
     expect((await readSurfaces(page)).article).toBe(light.article);
   });

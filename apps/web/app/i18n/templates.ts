@@ -1,6 +1,3 @@
-// The template gallery (/templates) and template pages (/templates/<id>) in
-// both site languages. Purpose lines and sample tags per template live in
-// app/templates/catalog.ts.
 import type { GalleryFilter, GalleryRole } from '../templates/catalog';
 import type { Locale } from './locale';
 import { filterControls, type FilterControlCopy } from './filters';

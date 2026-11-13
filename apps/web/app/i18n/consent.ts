@@ -1,7 +1,6 @@
 import type { OAuthConsentScope } from '../composables/useOAuthConsent';
 import type { WorkspaceCopy } from './workspace';
 
-// Design rules cited below are in docs/design/mcp-client-compatibility.md.
 type ConsentCopy = {
   readonly title: string;
   readonly allowClient: (clientName: string) => string;
@@ -16,11 +15,8 @@ type ConsentCopy = {
   readonly reauthRequired: string;
   readonly restartRequired: string;
   readonly signInAgain: string;
-  /** Where approval returns for an `https` redirect (design rule 6). */
   readonly returnToHost: (host: string) => string;
-  /** Where approval returns for a loopback redirect (design rule 6). */
   readonly returnToLoopback: (host: string) => string;
-  /** The ten-grant limit banner around the Settings link (design rule 7). */
   readonly agentLimit: {
     readonly before: string;
     readonly settingsLabel: string;

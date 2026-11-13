@@ -1,9 +1,4 @@
 <script setup lang="ts">
-/**
- * The review's action panel: the size meter, the block reason, create
- * errors, and the Create and Cancel actions (docs/design/
- * linkedin-import-ui.md, "Action panel").
- */
 import { computed, ref, watch } from 'vue';
 import StatusBanner from '@/components/app/StatusBanner.vue';
 import { Button, buttonVariants } from '@/components/ui/button';
@@ -21,16 +16,10 @@ const props = defineProps<{
   readonly sizeOver: boolean;
   readonly schemaCheck: SchemaCheck;
   readonly creating: boolean;
-  /** A resolved create-error message (cap, createFailed, retryLater, or
-   * sessionLost), or null. `uncertain` is separate: it keeps its own
-   * `returnToResumes` link (docs/design/linkedin-import-ui.md, "After the
-   * request"). */
   readonly createErrorMessage: string | null;
   readonly uncertain: boolean;
 }>();
 
-// Both Cancel variants (fix 6: a disabled button while creating, not a
-// styled link) share the same layout and DOM-order classes.
 const CANCEL_CLASS = 'w-full min-[900px]:order-2';
 
 const kb = computed(() => requestKb(props.bytes));
@@ -38,9 +27,6 @@ const meterFillClass = computed(() =>
   props.sizeOver ? 'bg-destructive' : 'bg-primary');
 const blockReasonId = 'import-panel-block-reason';
 const schemaBlocked = computed(() => !props.schemaCheck.ok);
-// A schema failure outside any entry or detail has no row to point to, so
-// the reason names the whole document instead of asking to deselect
-// entries (docs/design/linkedin-import-ui.md, "Action panel").
 const schemaGeneralOnly = computed(() =>
   !props.schemaCheck.ok && props.schemaCheck.entryIds.length === 0);
 const blocked = computed(() => props.sizeOver || schemaBlocked.value);
@@ -48,8 +34,6 @@ const blocked = computed(() => props.sizeOver || schemaBlocked.value);
 const reasonRef = ref<HTMLParagraphElement>();
 defineExpose({ focusReason: (): void => reasonRef.value?.focus() });
 
-// Announces once per crossing, per "Accessibility": sizeOver when the size
-// passes the limit, sizeOk when it drops back below it.
 const announcement = ref('');
 watch(() => props.sizeOver, (over, wasOver) => {
   if (wasOver === undefined) return;

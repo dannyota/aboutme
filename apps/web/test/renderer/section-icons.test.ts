@@ -14,10 +14,6 @@ import SectionHeading from
 import { resolveRenderModel } from
   '../../app/components/resume/resolveRenderModel';
 
-// The schema accepts any kebab-case Lucide name as a section iconKey; the
-// renderer draws a curated set and falls back to the section type's icon
-// (docs/design/templates/contract.md §5.3).
-
 function section(
   sectionType: Section['sectionType'],
   iconKey?: string,
@@ -68,7 +64,6 @@ describe('section heading icons', () => {
     expect(sectionIconKey(section('custom', 'star'))).toBe('star');
     expect(sectionIconKey(section('custom'))).toBeUndefined();
     expect(sectionIconKey(section('custom', ''))).toBe('');
-    // Own properties only: an Object.prototype name is not an icon.
     expect(sectionIconKey(section('work', 'constructor'))).toBe('briefcase');
   });
 

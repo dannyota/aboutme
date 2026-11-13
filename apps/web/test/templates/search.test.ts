@@ -8,27 +8,13 @@ import {
   type TemplateSearchSubject,
 } from '../../app/templates/search';
 
-// The editor's template panel search box matches a template's name, its
-// purpose, sample tags, and the labels of any role or Library filter chip it
-// belongs to, in both site languages, case- and diacritic-insensitively, with
-// every whitespace-separated query term required (DESIGN.md, editor
-// Templates panel).
-
-// role: backend
 const onePageTight = galleryTemplate('one-page-tight')!;
-// role: frontend
 const engineerCompact = galleryTemplate('engineer-compact')!;
-// role: devops
 const nordicMuted = galleryTemplate('nordic-muted')!;
-// role: fresher
 const minimalAir = galleryTemplate('minimal-air')!;
-// role: brse
 const internationalLang = galleryTemplate('international-lang')!;
-// role: security
 const consultingFormal = galleryTemplate('consulting-formal')!;
-// no role, no sample, but an ATS filter chip member
 const classicSerif = galleryTemplate('classic-serif')!;
-// no role, but a first-job filter chip member
 const graduateFriendly = galleryTemplate('graduate-friendly')!;
 
 describe('normalizeSearchText', () => {
@@ -103,7 +89,6 @@ describe('matchesTemplateSearch', () => {
   });
 
   it('matches purpose text regardless of diacritics', () => {
-    // "kỹ năng" (skill) appears only in the Vietnamese purpose text.
     expect(matchesTemplateSearch(engineerCompact, 'ky nang')).toBe(true);
   });
 
@@ -155,8 +140,6 @@ describe('matchesTemplateSearch', () => {
 
   it('matches a Vietnamese filter chip label without diacritics, in the '
     + 'style of a short, informal query', () => {
-    // "Kỹ thuật" (technical) names the filter chip; a job seeker types it
-    // without diacritics as "ky thuat".
     expect(matchesTemplateSearch(engineerCompact, 'ky thuat')).toBe(true);
   });
 });

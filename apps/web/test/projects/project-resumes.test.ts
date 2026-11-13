@@ -258,7 +258,6 @@ describe('project resumes section', () => {
       await resumes.add('resume-2');
 
       expect(api.read).toHaveBeenCalledWith('project-1');
-      // On load, for the privacy decision, and for the reload.
       expect(linker.resumes).toHaveBeenCalledTimes(3);
       expect(resumes.linked.value.has('resume-2')).toBe(true);
       expect(resumes.status.value).toBeNull();
@@ -316,7 +315,6 @@ describe('adding to a second published resume', () => {
     resumeSummary('resume-3', '1', 'Data'),
   ];
 
-  /** The account as the server holds it now; tests change it mid-way. */
   interface Account {
     items: ResumeSummary[] | null;
     linked: string[] | null;
@@ -497,8 +495,6 @@ describe('adding to a second published resume', () => {
     const { resumes, sent, linker, now } = privacySetup(['resume-3']);
     await flushPromises();
     linker.link.mockImplementationOnce(async (_owner, resumeId) => {
-      // Another tab publishes and links while the request is in flight;
-      // the linker's own revision retry would also land here.
       now.items = [...published()];
       now.linked = ['resume-1'];
       sent.push(resumeId);

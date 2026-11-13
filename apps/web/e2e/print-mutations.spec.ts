@@ -511,8 +511,7 @@ for (const fixture of ['print-main-overflow', 'sample-modern-sidebar-vi']) {
         expect(await page.evaluate(() => {
           const faces = [...document.fonts].filter((face) =>
             face.family.replaceAll('"', '') === 'Be Vietnam Pro');
-          // CSS-connected faces cannot be deleted from document.fonts.
-          // Rename the descriptors so the requested family becomes absent.
+          // CSS Font Loading: CSS-connected faces cannot leave document.fonts.
           faces.forEach((face) => {
             face.family = 'Unavailable Print Font';
           });

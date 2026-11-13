@@ -1,12 +1,4 @@
 <script setup lang="ts">
-/**
- * /guide/mcp: "Kết nối trợ lý AI với aboutme.vn" / "Connect your AI
- * assistant to aboutme.vn" (docs/design/mcp-guide.md). Server-rendered,
- * reads no API, and shows the same content signed in or out. Sections
- * follow "Page structure" in order: header block, what the assistant can
- * do, Connect Claude, try a request, privacy and control, other apps, and
- * troubleshooting.
- */
 import { computed, nextTick, provide, ref } from 'vue';
 import { guideCopy, mcpServerUrl } from '@/i18n/guide';
 import { pageTitle } from '@/i18n/meta';
@@ -28,8 +20,7 @@ useSiteSeo(() => ({
 }));
 
 const announcement = ref('');
-// Clearing first lets a second identical message announce again, the same
-// pattern the verify page uses for its one shared live region.
+// Clear first: a live region announces only changes (WAI-ARIA).
 provide(verifyAnnounceKey, (message: string) => {
   announcement.value = '';
   void nextTick(() => {

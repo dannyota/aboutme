@@ -1,8 +1,3 @@
-// Copy for the pending second-factor page (`/login/second-factor`): the
-// passkey, authenticator-app (TOTP), and recovery-code completion of an
-// enrolled password or provider login, or a settings reauthentication. See
-// docs/design/second-factor-authentication.md and
-// docs/design/totp-second-factor-contract.md.
 import type { Locale } from './locale';
 
 export type SecondFactorMessage
@@ -38,9 +33,6 @@ export type SecondFactorCopy = {
     readonly label: string;
     readonly button: string;
     readonly pending: string;
-    /** Localized remaining cool-down time, rounded up to a whole unit; see
-     * docs/design/totp-second-factor-contract.md "Per-account TOTP failure
-     * budget" for the 15-minute-to-24-hour range this formats. */
     readonly cooldown: (seconds: number) => string;
   };
   readonly recovery: {

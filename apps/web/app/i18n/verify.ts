@@ -1,5 +1,3 @@
-// The verify page (/verify) in both site languages. Copy follows
-// docs/design/deployment-transparency/page.md and visual.md.
 import type {
   CheckStatus,
   ComponentName,
@@ -62,7 +60,6 @@ export interface VerifyCopy {
     readonly title: string;
     readonly detail: (count: number, version: string, commit: string)
     => string;
-    /** Signed builds of different versions, so there is no one release. */
     readonly detailMixed: string;
   };
   readonly checkedAt: (time: string) => string;
@@ -460,7 +457,6 @@ export const verifyCopy: Readonly<Record<Locale, VerifyCopy>> = {
   },
 };
 
-/** Limits name the actual reporter; an absent document makes no AWS claim. */
 export function verifyLimits(
   locale: Locale,
   reporter: ReportingPlatform,
@@ -511,7 +507,6 @@ export function verifyLimits(
   };
 }
 
-/** "AWS Singapore" or the GreenNode region, for the Running step. */
 export function platformPlace(document: DeploymentDocument): string {
   if (document.provider === 'aws') {
     return document.region === 'ap-southeast-1'
@@ -521,7 +516,6 @@ export function platformPlace(document: DeploymentDocument): string {
   return `GreenNode ${document.region}`;
 }
 
-/** 24-hour "10:14" in the viewer's own time zone. */
 export function clockTime(at: string | number, locale: Locale): string {
   return new Intl.DateTimeFormat(locale === 'vi' ? 'vi-VN' : 'en-GB', {
     hour: '2-digit',

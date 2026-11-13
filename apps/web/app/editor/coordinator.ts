@@ -33,16 +33,6 @@ export type {
   ResumeMutationCoordinator,
 } from './coordinatorTypes';
 
-/**
- * Builds the resume mutation coordinator: the debounced, at-most-one-in-flight
- * write queue that turns editor commands into server attempts, reconciles the
- * server's response against the local optimistic state, and recovers from
- * conflicts, opaque outcomes, and session loss.
- *
- * The coordinator's behavior lives in the sibling `coordinator*` modules; this
- * factory only builds the shared context and wires each module's functions
- * into the public interface.
- */
 export function createMutationCoordinator(
   deps: CoordinatorDeps,
 ): ResumeMutationCoordinator {

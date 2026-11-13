@@ -60,7 +60,6 @@ export interface ResolvedRenderModel {
     readonly align: 'left' | 'center';
     readonly detailsLayout: 'inline' | 'stacked';
     readonly iconStyle: 'none' | 'outline';
-    /** Where a photo sits; absent means top (ADR 0013). */
     readonly photoPosition: 'top' | 'left' | 'right';
   };
   readonly nameHeading: 'h1' | 'p';
@@ -80,7 +79,6 @@ const resolveSections = (
   keys.flatMap((key) => {
     const section = content[key];
     if (section === undefined) return [];
-    // A heading icon the renderer lacks draws its section type's icon.
     const iconKey = sectionIconKey(section);
     return [{
       key,

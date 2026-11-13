@@ -78,7 +78,6 @@ async function glyphExtent(
   page: PDFPageProxy, font: Font,
   glyph: { fontChar?: string; operatorListId?: string; accent?: unknown },
 ): Promise<Extent | undefined> {
-  // Font paths and Type3 boxes are optional evidence, not a text prerequisite.
   try {
     if (font.isType3Font) {
       const program = glyph.operatorListId === undefined
@@ -150,8 +149,6 @@ export function pdfTextExtents(
     typeof value === 'number' && Number.isFinite(value) && value > 0;
   const negative = (value: number | undefined): value is number =>
     typeof value === 'number' && Number.isFinite(value) && value < 0;
-  // Use declared bounds to cap fallback metrics; never cap measured glyph ink.
-  // Without usable metrics, the baseline and transform give a 0.8/-0.2 em box.
   const fallback = {
     ascent: Math.min(positive(style?.ascent) ? style.ascent : 0.8,
       ...[font?.ascent, font?.bounds?.ascent].filter(positive)),

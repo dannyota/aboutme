@@ -251,7 +251,6 @@ function nuxtInputs(root: string): {
       const name = item.name.getText().replace(/^['"]|['"]$/gu, '');
       requireCondition(ts.isStringLiteralLike(item.initializer)
         || name.startsWith('#'), IMPORT_ERROR);
-      // Generated virtual modules use the config and schema source hashes.
       aliases.set(name, ts.isStringLiteralLike(item.initializer)
         ? sourcePath(root, resolve(root, 'apps/web', item.initializer.text))
         : undefined);
@@ -445,7 +444,6 @@ function renderDependencyVersions(lock: {
     for (const dependency of new Set([
       ...Object.keys(required), ...Object.keys(optionalDependencies),
     ])) {
-      // Peers are host-provided tools such as linters and type checkers.
       visit(dependency, path, !Object.hasOwn(required, dependency));
     }
   };
@@ -500,7 +498,6 @@ function crc32(bytes: Buffer): number {
   return (crc ^ 0xffffffff) >>> 0;
 }
 
-/** Decode bounded RGB/RGBA data; reject metadata and trailing payloads. */
 export function pngDimensions(bytes: Buffer): {
   width: number;
   height: number;
@@ -645,7 +642,6 @@ export function validatePages(
   return entries;
 }
 
-/** Bootstrap existing assets without launching a browser or writing PNGs. */
 export function refreshHashes(root = REPOSITORY): void {
   const directory = join(root, PAGES_PATH);
   const entries = readManifest(directory);

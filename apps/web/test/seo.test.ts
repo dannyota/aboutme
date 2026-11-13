@@ -17,8 +17,6 @@ registerEndpoint('/api/v1/me', (event) => {
   setResponseStatus(event, 401);
   return { error: { code: 'session_required', message: 'Sign in.' } };
 });
-// /verify fetches this in the browser only (useDeploymentDocument); a 404
-// keeps it out of every other page's metadata assertions.
 registerEndpoint('/.well-known/deployment.json', (event) => {
   setResponseStatus(event, 404);
   return null;
@@ -30,7 +28,6 @@ function meta(selector: string): string | null {
 
 let current: Awaited<ReturnType<typeof mountSuspended>> | undefined;
 
-/** Mounts the app at `route`; it stays mounted so its head tags stay set. */
 async function visit(route: string): Promise<void> {
   current?.unmount();
   current = await mountSuspended(AppRoot, { route });
@@ -138,8 +135,7 @@ describe('site page search metadata', () => {
         );
         expect(meta('meta[name="twitter:card"]')).toBe('summary_large_image');
         expect(document.head.querySelector('meta[name="robots"]')).toBeNull();
-        // Stops Safari and other browsers from auto-linking digit runs such
-        // as sample resume date ranges into tel: links, on every page.
+        // Safari links digit runs such as dates as phone numbers by default.
         expect(meta('meta[name="format-detection"]')).toBe(
           'telephone=no, date=no, address=no, email=no',
         );
@@ -184,9 +180,7 @@ describe('site page search metadata', () => {
 
   it('keeps structured data off the other site pages', async () => {
     await visit('/privacy');
-    // The homepage's ld+json entry is disposed on unmount, and that
-    // removal reaches the DOM through the same debounced setTimeout(0)
-    // flush as a new push; wait for it instead of racing flushPromises().
+    // @unhead/vue removes the ld+json entry on its setTimeout(0) flush.
     await vi.waitFor(() => expect(
       document.head.querySelector('script[type="application/ld+json"]'),
     ).toBeNull());

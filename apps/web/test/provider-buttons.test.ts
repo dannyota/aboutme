@@ -163,8 +163,6 @@ describe('provider buttons', () => {
       expect(wrapper.find('[data-testid="provider-buttons"]').exists()).toBe(
         false,
       );
-      // The brand panel beside the form lists unrelated facts; check the
-      // form column only (DESIGN.md, auth pages).
       const form = wrapper.find('[data-auth-form]');
       expect((form.exists() ? form : wrapper).text())
         .not.toMatch(/Google|hoặc/u);

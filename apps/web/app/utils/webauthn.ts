@@ -1,14 +1,3 @@
-/**
- * WebAuthn assertion helpers for the pending second-factor page.
- *
- * Converts only the accepted canonical fields between the server's unpadded
- * base64url JSON (docs/design/passkey-second-factor-contract.md#webauthn-json)
- * and the browser's byte-array WebAuthn API. Every conversion validates its
- * input and throws `WebAuthnDataInvalid` on anything outside the accepted
- * shape, so a malformed or hostile options response never reaches
- * `navigator.credentials.get`. This module never handles registration: the
- * pending page only ever runs an assertion ceremony.
- */
 import type { components } from '../api/generated/openapi';
 
 export type AssertionCredentialJSON
@@ -24,7 +13,6 @@ const KNOWN_TRANSPORTS: readonly string[] = [
   'internal',
 ];
 
-/** Thrown when server-supplied WebAuthn data is not the accepted shape. */
 export class WebAuthnDataInvalid extends Error {
   constructor() {
     super('webauthn: malformed data');
@@ -32,7 +20,6 @@ export class WebAuthnDataInvalid extends Error {
   }
 }
 
-/** True when this browser can attempt a WebAuthn ceremony at all. */
 export function isWebAuthnSupported(): boolean {
   return typeof window !== 'undefined'
     && typeof window.PublicKeyCredential === 'function'
@@ -40,7 +27,6 @@ export function isWebAuthnSupported(): boolean {
     && typeof navigator.credentials?.get === 'function';
 }
 
-/** Encodes bytes as canonical unpadded base64url. */
 export function encodeBase64Url(bytes: ArrayBuffer | Uint8Array): string {
   const view = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
   let binary = '';
@@ -51,16 +37,6 @@ export function encodeBase64Url(bytes: ArrayBuffer | Uint8Array): string {
     .replace(/=+$/u, '');
 }
 
-/**
- * Decodes canonical unpadded base64url. Throws `WebAuthnDataInvalid` for
- * anything else — wrong type, empty, padded, or out-of-alphabet characters.
- *
- * Returns `Uint8Array<ArrayBuffer>`, not the bare `Uint8Array` (which
- * widens to `Uint8Array<ArrayBufferLike>`): the result always feeds a WebAuthn
- * `BufferSource` field (`PublicKeyCredentialDescriptor.id`,
- * `PublicKeyCredentialRequestOptions.challenge`), and only the
- * `ArrayBuffer`-backed form satisfies that DOM type.
- */
 export function decodeBase64Url(value: unknown): Uint8Array<ArrayBuffer> {
   if (typeof value !== 'string' || !BASE64URL_PATTERN.test(value)) {
     throw new WebAuthnDataInvalid();
@@ -113,12 +89,6 @@ function parseCredentialDescriptor(
   };
 }
 
-/**
- * Validates and converts an accepted assertion `publicKey` object (the
- * server's `WebAuthnAssertionPublicKey`, received as `unknown` JSON) into
- * `PublicKeyCredentialRequestOptions`. Throws `WebAuthnDataInvalid` for a
- * malformed response instead of forwarding it to the browser.
- */
 export function parseAssertionOptions(
   publicKey: unknown,
 ): PublicKeyCredentialRequestOptions {
@@ -159,12 +129,6 @@ export function parseAssertionOptions(
   return options;
 }
 
-/**
- * Runs `navigator.credentials.get`. Rejects with the browser's own
- * `DOMException` on cancellation, timeout, or any other WebAuthn failure —
- * see `isWebAuthnCancellation` — and with a `NotAllowedError` when the
- * browser resolves with no credential.
- */
 export async function requestAssertion(
   options: PublicKeyCredentialRequestOptions,
 ): Promise<PublicKeyCredential> {
@@ -175,18 +139,11 @@ export async function requestAssertion(
   return credential as PublicKeyCredential;
 }
 
-/** True for a user-cancelled or timed-out WebAuthn ceremony. */
 export function isWebAuthnCancellation(error: unknown): boolean {
   return error instanceof DOMException
     && (error.name === 'NotAllowedError' || error.name === 'AbortError');
 }
 
-/**
- * Converts a completed assertion into the exact accepted completion body.
- * `clientExtensionResults` is always sent as `{}`: v0.4.2 requests no
- * extensions and the server rejects anything else, regardless of what a
- * browser attaches to `getClientExtensionResults()`.
- */
 export function assertionToJSON(
   credential: PublicKeyCredential,
 ): AssertionCredentialJSON {

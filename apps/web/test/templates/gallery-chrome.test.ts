@@ -11,9 +11,6 @@ import {
 } from '../../app/templates/catalog';
 import { setSiteLocale } from '../support/locale';
 
-// The gallery header and filter chips (DESIGN.md, template gallery). The
-// dot is decorative: the chip text carries the meaning it names.
-
 function stubViewport(wide = false) {
   const query = '(width >= 1024px)';
   const media = Object.assign(new EventTarget(), {
@@ -165,8 +162,6 @@ describe('template gallery chrome', () => {
     const wrapper = await mountGallery('/templates?filter=ats&role=frontend');
     await flushPromises();
 
-    // Navigation settles asynchronously, so assert the replace call, then
-    // wait for the route and the pressed chip to follow.
     const router = useRouter();
     const replace = vi.spyOn(router, 'replace');
     const chip = (role: string) => wrapper.get(`[data-role="${role}"]`);
@@ -443,7 +438,6 @@ describe('Library sheet and focus', () => {
       );
       control.focus();
       expect(document.activeElement).toBe(control);
-      // Layout can blur the hidden control before matchMedia emits change.
       control.blur();
       expect(document.activeElement).toBe(document.body);
       resize(!startsWide);
