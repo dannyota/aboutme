@@ -276,8 +276,12 @@ Go serves 503 for rendered HTML that breaks any of these rules:
 - No `script`, `form`, `iframe`, `img`, media or embedding element, and no event
   or resource attribute. SVG only as static icons: `svg`, `g`, `path`, `circle`,
   `rect`, `line`, `polyline`, `polygon` and `title`, with presentation
-  attributes and no reference, `url()` paint, animation or embedded image.
+  attributes and a numeric `transform` (only `rotate`, `translate` and `scale`
+  with plain numbers), and no reference, `url()` paint, animation or embedded
+  image.
 - One `main#public-project`, one `h1`, and one skip link to the main region.
+- The response's CSP is the resume page's with `style-src 'self'` and no
+  `'unsafe-inline'`; the gate keeps its own.
 - Anchors: the credit once, as on the resume page; `a.public-back` once, to the
   resume `url`, with the accessible name in the
   [page design](ui/project-pages.md#shared-frame); internal links only to the
