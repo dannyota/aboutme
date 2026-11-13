@@ -357,7 +357,8 @@ Rules the above encodes:
 - Colors and levels have no cleared form: `hexColor` cannot be `""` and `level`
   cannot be `""`. For those, absence is the only unset state. `colors.accent`
   and `colors.surface` are the two optional colors ([Color roles](colors.md)).
-- Entry `id` is never rendered and never emitted as an HTML attribute.
+- Entry `id` is never rendered and never emitted as an HTML attribute, except as
+  `data-project-entry` on a linked project title's anchor.
 
 ## 7. Columns
 

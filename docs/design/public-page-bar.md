@@ -128,8 +128,9 @@ row wraps and the button sits under the credit; the Vietnamese row still fits.
   resume on any screen. A reader sees it first, where the download is most
   useful, and the page needs no script for it.
 - The resume keeps its own top padding (`--page-margin-y`) under the bar.
-- When the owner turned PDF download off, the bar holds the brand alone on the
-  left, at the same height.
+- When the owner turned PDF download off, the bar drops only Download PDF, at
+  the same height. With no available project, the brand stands alone on the
+  left.
 - Print hides the bar, as today.
 - Under `forced-colors: active`, the mark strokes in `CanvasText` and the button
   shows a `ButtonBorder` border.
