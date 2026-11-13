@@ -62,12 +62,18 @@ filename change must preserve selected test paths and execution coverage.
 
 ## Code comments
 
-A comment explains a constraint that the code cannot express clearly. Useful
-examples include a security invariant, a non-obvious failure boundary, an
-external protocol requirement, or why a tempting simplification is unsafe.
+Design docs, not code comments, hold decisions and explanations; comments drift
+from the code and mislead agents (owner, 2026-11-13).
 
-Keep a comment beside the smallest unit it governs. Link to an ADR or design
-section when the reasoning is longer than a short paragraph.
+- Code has no comments, except tool directives (`//go:build`, `//go:embed`,
+  `//nolint`, `# shellcheck`, `// @ts-expect-error`, `eslint-disable`, license
+  and generated-code markers, sqlc query annotations) and one line on why for a
+  behaviour of an external tool or service that no design doc owns, naming its
+  source.
+- No doc comments that only repeat a name, and no comments that restate the code
+  or a design doc. A rule the code must keep belongs in the design doc that owns
+  it, or in a test that fails when it breaks.
+- Delete such comments in code you touch.
 
 Do not leave these in code, tests, or living docs:
 
