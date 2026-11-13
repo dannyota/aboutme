@@ -79,70 +79,74 @@ func TestProjectValidators_SVGIsStaticIconsOnly(t *testing.T) {
 	}
 }
 
-// TestProjectValidators_StyleDeclaresNoContent proves project page CSS may
-// not declare content at all, whatever its value or where the declaration
-// sits, in both modes, in the style element and in style attributes, while
-// names that only contain the word still pass.
-func TestProjectValidators_StyleDeclaresNoContent(t *testing.T) {
+// projectModes runs a source edit through both corpus modes and returns
+// each mode's rejection.
+func projectModes(t *testing.T, edit func(source string) string) map[string]string {
+	t.Helper()
 	origin := mustPublicOrigin(t)
 	corpus := readProjectCorpus(t)
 	page, list := corpus["project-en-every-field"], corpus["list-vi-two-projects"]
-	modes := map[string]struct {
-		source   string
-		validate func(string) string
-	}{
-		"project": {page.HTML, func(source string) string {
-			return projectHTMLRejection([]byte(source), projectCorpusPage(t, page), origin)
-		}},
-		"project-list": {list.HTML, func(source string) string {
-			return projectListHTMLRejection([]byte(source), projectCorpusList(t, list), origin)
-		}},
+	return map[string]string{
+		"project":      projectHTMLRejection([]byte(edit(page.HTML)), projectCorpusPage(t, page), origin),
+		"project-list": projectListHTMLRejection([]byte(edit(list.HTML)), projectCorpusList(t, list), origin),
 	}
-	styles := map[string]string{
-		"after a nested rule":         `h1::before{@media all{}content:"unbound text"}`,
-		"after a closing brace":       `h1::before{h2{}content:"x"}`,
-		"after a semicolon":           `h1::before{color:red;content:none}`,
-		"after an opening brace":      `h1::before{content :""}`,
-		"uppercase":                   `h1::before{CONTENT:none}`,
-		"empty string":                `h1::before{content:""}`,
-		"none":                        `h1::before{content:none}`,
-		"after a comment":             `h1::before{/**/content:''}`,
-		"value inside a string":       `h1::before{--a:"x";content:"y"}`,
-		"start of the style":          `content:none`,
-		"before whitespace and colon": "h1::before{content\n:none}",
-		"text in another declaration": `h1::before{--a:"}content:x"}`,
-	}
-	attributes := map[string]string{
-		"start of the attribute": `content:none`,
-		"empty string":           `content:""`,
-		"after a semicolon":      `color:red;content:none`,
-		"uppercase":              `CONTENT : none`,
-	}
-	allowed := map[string]string{
-		"justify-content": `.a{justify-content:center;align-content:start;place-content:end}`,
-		"class name":      `.content:hover{color:red}`,
-		"id":              `#content{color:red}`,
-		"underscore":      `.a{--my_content:1}`,
-	}
-	for mode, m := range modes {
-		for name, css := range styles {
-			if got := m.validate(replaceOnce(m.source, "<style>/* project page style */</style>", "<style>"+css+"</style>")); got != "style_content" {
-				t.Errorf("%s style %s: rejection = %q, want style_content", mode, name, got)
-			}
-		}
-		for name, declarations := range attributes {
-			if got := m.validate(replaceOnce(m.source, "<h1>", `<h1 style='`+declarations+`'>`)); got != "style_content" {
-				t.Errorf("%s style attribute %s: rejection = %q, want style_content", mode, name, got)
-			}
-		}
-		for name, css := range allowed {
-			if got := m.validate(replaceOnce(m.source, "<style>/* project page style */</style>", "<style>"+css+"</style>")); got != "" {
-				t.Errorf("%s style %s: rejection = %q, want accepted", mode, name, got)
+}
+
+// TestProjectValidators_CarryNoInlineCSS proves both modes refuse every style
+// element and every style attribute, wherever it sits and whatever it holds.
+func TestProjectValidators_CarryNoInlineCSS(t *testing.T) {
+	for name, test := range map[string]struct{ old, replacement, rule string }{
+		"empty style element in the head":  {"</head>", "<style></style></head>", "style_element"},
+		"harmless style element":           {"</head>", "<style>h1{color:red}</style></head>", "style_element"},
+		"style element in the body":        {"</main>", "<style>h1{color:red}</style></main>", "style_element"},
+		"style attribute":                  {"<h1>", `<h1 style="color:red">`, "style_attribute"},
+		"empty style attribute":            {"<h1>", `<h1 style="">`, "style_attribute"},
+		"style attribute with a resource":  {"<h1>", `<h1 style="background:url(/x)">`, "style_attribute"},
+		"style attribute on an svg":        {"<svg ", `<svg style="color:red" `, "svg_attribute"},
+		"content through a style element":  {"</head>", `<style>h1::before{content:"x"}</style></head>`, "style_element"},
+		"marker text through an attribute": {"<h1>", `<h1 style='display:list-item;list-style-type:"x"'>`, "style_attribute"},
+	} {
+		for mode, rule := range projectModes(t, func(source string) string {
+			return strings.Replace(source, test.old, test.replacement, 1)
+		}) {
+			if rule != test.rule {
+				t.Errorf("%s in %s: rejection = %q, want %q", name, mode, rule, test.rule)
 			}
 		}
 	}
-	if strings.Contains(page.HTML, "content:") || strings.Contains(list.HTML, "content:") {
-		t.Fatal("the corpus reference style already declares content")
+}
+
+// TestProjectValidators_LoadExactlyTheTwoStylesheets proves both modes
+// require the font and project stylesheets once each, with rel and href only
+// and one shared 16-hex-digit version, and refuse any other stylesheet.
+func TestProjectValidators_LoadExactlyTheTwoStylesheets(t *testing.T) {
+	const fonts = `<link rel="stylesheet" href="/_nuxt/assets/print-fonts.css?v=0123456789abcdef">`
+	const pages = `<link rel="stylesheet" href="/_nuxt/assets/project-pages.css?v=0123456789abcdef">`
+	for name, test := range map[string]struct{ old, replacement, rule string }{
+		"as rendered":              {fonts, fonts, ""},
+		"reversed order":           {fonts + pages, pages + fonts, ""},
+		"missing fonts":            {fonts, "", "stylesheet"},
+		"missing project styles":   {pages, "", "stylesheet"},
+		"fonts twice":              {fonts, fonts + fonts, "stylesheet"},
+		"project styles twice":     {pages, pages + pages, "stylesheet"},
+		"different versions":       {pages, strings.Replace(pages, "0123456789abcdef", "fedcba9876543210", 1), "stylesheet"},
+		"unversioned":              {pages, `<link rel="stylesheet" href="/_nuxt/assets/project-pages.css">`, "stylesheet"},
+		"uppercase version":        {pages, strings.Replace(pages, "abcdef", "ABCDEF", 1), "stylesheet"},
+		"short version":            {pages, strings.Replace(pages, "0123456789abcdef", "0123456789abcde", 1), "stylesheet"},
+		"extra attribute":          {pages, strings.Replace(pages, "<link ", `<link media="all" `, 1), "stylesheet"},
+		"resume template styles":   {pages, `<link rel="stylesheet" href="/_nuxt/assets/print.css?v=0123456789abcdef">`, "stylesheet"},
+		"third stylesheet":         {"</head>", `<link rel="stylesheet" href="/_nuxt/assets/print.css?v=0123456789abcdef"></head>`, "stylesheet"},
+		"other origin":             {pages, `<link rel="stylesheet" href="https://evil.example/_nuxt/assets/project-pages.css?v=0123456789abcdef">`, "stylesheet"},
+		"alternate stylesheet":     {pages, strings.Replace(pages, `rel="stylesheet"`, `rel="alternate stylesheet"`, 1), "link_element"},
+		"query beyond the version": {pages, strings.Replace(pages, "abcdef", "abcdef&x=1", 1), "stylesheet"},
+	} {
+		for mode, rule := range projectModes(t, func(source string) string {
+			return replaceOnce(source, test.old, test.replacement)
+		}) {
+			if rule != test.rule {
+				t.Errorf("%s in %s: rejection = %q, want %q", name, mode, rule, test.rule)
+			}
+		}
 	}
 }
 
@@ -150,73 +154,65 @@ func TestProjectValidators_StyleDeclaresNoContent(t *testing.T) {
 // the resume page's format-detection element exactly, at most once.
 func TestProjectValidators_AcceptTheFormatDetectionMeta(t *testing.T) {
 	const element = `<meta name="format-detection" content="telephone=no, date=no, address=no, email=no">`
-	for _, addition := range []struct {
-		name, head, want string
-	}{
-		{"once", element, ""},
-		{"twice", element + element, "meta_format_detection"},
-		{"other content", `<meta name="format-detection" content="telephone=no">`, "meta_format_detection"},
+	for name, test := range map[string]struct{ replacement, rule string }{
+		"as rendered":   {element, ""},
+		"absent":        {"", ""},
+		"twice":         {element + element, "meta_format_detection"},
+		"other content": {`<meta name="format-detection" content="telephone=no">`, "meta_format_detection"},
 	} {
-		for mode, rule := range projectHeadRules(t, addition.head) {
-			if rule != addition.want {
-				t.Errorf("%s format-detection in %s: rejection = %q, want %q", addition.name, mode, rule, addition.want)
+		for mode, rule := range projectModes(t, func(source string) string {
+			return replaceOnce(source, element, test.replacement)
+		}) {
+			if rule != test.rule {
+				t.Errorf("%s format-detection in %s: rejection = %q, want %q", name, mode, rule, test.rule)
 			}
 		}
 	}
 }
 
-// projectHeadRules adds head elements after the viewport meta of both corpus
-// modes and returns each mode's rejection.
-func projectHeadRules(t *testing.T, head string) map[string]string {
-	t.Helper()
-	origin := mustPublicOrigin(t)
-	corpus := readProjectCorpus(t)
-	page, list := corpus["project-en-every-field"], corpus["list-vi-two-projects"]
-	viewport := `<meta name="viewport" content="width=device-width, initial-scale=1">`
-	return map[string]string{
-		"project":      projectHTMLRejection([]byte(replaceOnce(page.HTML, viewport, viewport+head)), projectCorpusPage(t, page), origin),
-		"project-list": projectListHTMLRejection([]byte(replaceOnce(list.HTML, viewport, viewport+head)), projectCorpusList(t, list), origin),
-	}
-}
-
-// TestProjectValidators_QuotedCommentMarkersStayInStrings proves the style
-// checks read comment markers inside a CSS string as string text, and reject
-// an unterminated string or comment, in both modes, in the style element and
-// in style attributes.
-func TestProjectValidators_QuotedCommentMarkersStayInStrings(t *testing.T) {
-	origin := mustPublicOrigin(t)
-	corpus := readProjectCorpus(t)
-	page, list := corpus["project-en-every-field"], corpus["list-vi-two-projects"]
-	modes := map[string]struct {
-		source   string
-		validate func(string) string
-	}{
-		"project": {page.HTML, func(source string) string {
-			return projectHTMLRejection([]byte(source), projectCorpusPage(t, page), origin)
-		}},
-		"project-list": {list.HTML, func(source string) string {
-			return projectListHTMLRejection([]byte(source), projectCorpusList(t, list), origin)
-		}},
-	}
-	const photo = "url(/api/v1/public/resumes/other-resume/photo)"
-	for name, test := range map[string]struct {
-		rule, declarations, styleRule, attributeRule string
-	}{
-		"comment markers in content":    {"h1::before", `content:"/*private@example.test*/"`, "style_content", "style_content"},
-		"comment markers around a url":  {"h1", `--a:"/*";background-image:` + photo + `;--b:"*/"`, "style_element", "inline_style"},
-		"escaped quote before a marker": {"h1", `--a:"\"/*";background-image:` + photo + `;--b:"*/"`, "style_element", "inline_style"},
-		"unterminated string":           {"h1", `color:red;--a:"unterminated`, "style_element", "inline_style"},
-		"unterminated comment":          {"h1", `color:red;/* unterminated`, "style_element", "inline_style"},
+// TestProjectValidators_SVGTransformIsNumericOnly proves an icon's transform
+// may only rotate, translate and scale by plain numbers, in both modes.
+func TestProjectValidators_SVGTransformIsNumericOnly(t *testing.T) {
+	for value, accepted := range map[string]bool{
+		"rotate(-8 15 16)":            true,
+		"rotate(45)":                  true,
+		"rotate(1,2,3)":               true,
+		"translate(1 2)":              true,
+		"translate(-.5)":              true,
+		"scale(1.5, 2)":               true,
+		"rotate(1) translate(2,3)":    true,
+		"rotate(1),scale(+2)":         true,
+		" translate(1)scale(2) ":      true,
+		"rotate(1) url(#x)":           false,
+		"url(#x)":                     false,
+		"matrix(1,0,0,1,0,0)":         false,
+		"rotate(var(--a))":            false,
+		"translate(1px)":              false,
+		"rotate(1deg)":                false,
+		"rotate(1e3)":                 false,
+		"skewX(1)":                    false,
+		"ROTATE(1)":                   false,
+		"rotate()":                    false,
+		"rotate(1 2)":                 false,
+		"translate(1 2 3)":            false,
+		"scale(1,,2)":                 false,
+		"rotate(calc(1 + 2))":         false,
+		"rotate(1)\u0000translate(1)": false,
+		"":                            false,
 	} {
-		for mode, m := range modes {
-			styled := replaceOnce(m.source, "<style>/* project page style */</style>", "<style>"+test.rule+"{"+test.declarations+"}</style>")
-			if got := m.validate(styled); got != test.styleRule {
-				t.Errorf("%s in a %s style element: rejection = %q, want %q", name, mode, got, test.styleRule)
+		want := "svg_attribute"
+		if accepted {
+			want = ""
+		}
+		for mode, rule := range projectValidatorRules(t, `<svg viewBox="0 0 1 1"><g transform="`+value+`"><path d="M0 0"></path></g></svg>`) {
+			if rule != want {
+				t.Errorf("transform %q in %s: rejection = %q, want %q", value, mode, rule, want)
 			}
-			attributed := replaceOnce(m.source, "<h1>", `<h1 style='`+test.declarations+`'>`)
-			if got := m.validate(attributed); got != test.attributeRule {
-				t.Errorf("%s in a %s style attribute: rejection = %q, want %q", name, mode, got, test.attributeRule)
-			}
+		}
+	}
+	for mode, rule := range projectValidatorRules(t, `<svg viewBox="0 0 1 1"><image transform="rotate(1)"></image></svg>`) {
+		if rule != "svg_element" {
+			t.Errorf("transform on an image in %s: rejection = %q, want svg_element", mode, rule)
 		}
 	}
 }

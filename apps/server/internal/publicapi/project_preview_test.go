@@ -174,7 +174,7 @@ func TestProjectRequests_BlankIsWhatTheRendererTrims(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if blankText(page.Resume.OwnerName) || page.Resume.OwnerName != bom+" — Resume" {
+	if project.Blank(page.Resume.OwnerName) || page.Resume.OwnerName != bom+" — Resume" {
 		t.Errorf("ownerName = %q, want the default title the renderer reads as non-blank", page.Resume.OwnerName)
 	}
 	if broken := decodeProjectEnvelopeRules(t, page); len(broken) != 0 {

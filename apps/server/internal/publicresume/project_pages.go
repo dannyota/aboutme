@@ -35,7 +35,9 @@ type ProjectPages struct {
 	// the list, or only the requested project for a project page. It is
 	// empty when the page is unavailable.
 	Projects []PublicProject
-	// Available counts every available project of the resume.
+	// Available counts available projects: on the list, the ones it shows;
+	// on a project page, the requested one when shown and every other
+	// linked, visible project, whose document the page does not read.
 	Available int
 }
 
@@ -124,8 +126,9 @@ func (r *Reader) readProjectRow(ctx context.Context, slug, projectSlug string) (
 }
 
 // Pages decodes the read and keeps only the projects whose links the public
-// projection shows, once per project slug, in layout and entry order, with
-// each description sanitized again. A malformed column or document is
+// projection shows and whose name, in the language project.ChooseText picks,
+// the renderer can show, once per project slug, in layout and entry order,
+// with each description sanitized again. A malformed column or document is
 // ErrUnavailable. Pages that are not Shown answer as an unknown resume.
 func (p ProjectRead) Pages() (ProjectPages, error) {
 	projectSlug := p.projectSlug
@@ -144,9 +147,14 @@ func (p ProjectRead) Pages() (ProjectPages, error) {
 			continue
 		}
 		seen[entry.link.ProjectSlug] = true
-		pages.Available++
+		if projectSlug != "" && entry.link.ProjectSlug != projectSlug {
+			// Another project of a page; the page statement reads no other
+			// document, so it counts as available.
+			pages.Available++
+			continue
+		}
 		raw, found := documents[entry.link.EntryID]
-		if projectSlug != "" && (entry.link.ProjectSlug != projectSlug || !found) {
+		if !found && projectSlug != "" {
 			continue
 		}
 		if !found {
@@ -156,6 +164,12 @@ func (p ProjectRead) Pages() (ProjectPages, error) {
 		if err != nil {
 			return ProjectPages{}, ErrUnavailable
 		}
+		if _, _, renderable := project.ChooseText(document, p.public.Lng); !renderable {
+			// A name the renderer would read as blank: the project is not
+			// available, so it is never shown and never fails a page.
+			continue
+		}
+		pages.Available++
 		pages.Projects = append(pages.Projects, PublicProject{Slug: entry.link.ProjectSlug, URL: entry.link.URL, EntryLink: entry.entryLink, Document: document})
 	}
 	return pages, nil

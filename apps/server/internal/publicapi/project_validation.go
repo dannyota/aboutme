@@ -79,10 +79,13 @@ type projectValidator struct {
 	meta   *headMeta
 	rule   string
 
-	htmlRoot, title, canonical, main               *html.Node
-	mains, headings, styles, stylesheets, favicons int
-	skipLinks, credits, backs, descriptions        int
-	internalSeen, externalSeen                     map[string]int
+	htmlRoot, title, canonical, main *html.Node
+	mains, headings, favicons        int
+	// stylesheetVersions maps each project stylesheet path to the version
+	// its one link carries.
+	stylesheetVersions                      map[string]string
+	skipLinks, credits, backs, descriptions int
+	internalSeen, externalSeen              map[string]int
 }
 
 func projectPageRejection(source []byte, want projectExpectation, origin publicresume.PublicOrigin) string {
@@ -98,7 +101,7 @@ func projectPageRejection(source []byte, want projectExpectation, origin publicr
 	}
 	v := &projectValidator{
 		want: want, origin: origin, meta: newProjectHeadMeta(want, origin),
-		internalSeen: map[string]int{}, externalSeen: map[string]int{},
+		internalSeen: map[string]int{}, externalSeen: map[string]int{}, stylesheetVersions: map[string]string{},
 	}
 	v.walk(document)
 	if v.rule != "" {
@@ -147,12 +150,14 @@ func (v *projectValidator) visitElement(node *html.Node) {
 			return
 		}
 	}
-	if name := unexpectedResourceAttribute(node); name != "" {
-		v.reject(name)
+	if attributeCount(node, "style") != 0 {
+		// The pages carry no inline CSS; all of it is in the versioned
+		// project stylesheet.
+		v.reject("style_attribute")
 		return
 	}
-	if attributeCount(node, "style") != 0 && declaresStyleContent(attribute(node, "style")) {
-		v.reject("style_content")
+	if name := unexpectedResourceAttribute(node); name != "" {
+		v.reject(name)
 		return
 	}
 	switch node.Data {
@@ -174,12 +179,7 @@ func (v *projectValidator) visitElement(node *html.Node) {
 	case "link":
 		v.visitLink(node)
 	case "style":
-		v.styles++
-		if v.styles > 1 || unsafeInlineStyle(textNode(node)) {
-			v.reject("style_element")
-		} else if declaresStyleContent(textNode(node)) {
-			v.reject("style_content")
-		}
+		v.reject("style_element")
 	case "main":
 		v.mains++
 		if v.mains > 1 || attribute(node, "id") != "public-project" || !onlyAttributes(node, "id", "class") {
@@ -226,8 +226,7 @@ func (v *projectValidator) visitLink(node *html.Node) {
 			v.reject("favicon")
 		}
 	case rel == "stylesheet":
-		v.stylesheets++
-		if v.stylesheets > 1 || !onlyAttributes(node, "rel", "href") || !versionedAsset(attribute(node, "href"), "/_nuxt/assets/print-fonts.css") {
+		if !onlyAttributes(node, "rel", "href") || !v.projectStylesheet(attribute(node, "href")) {
 			v.reject("stylesheet")
 		}
 	case relHasToken(rel, "canonical"):
@@ -254,8 +253,8 @@ func (v *projectValidator) finish() string {
 		return "canonical"
 	case v.want.faviconHref != "" && v.favicons != 1:
 		return "favicon"
-	case v.styles != 1:
-		return "style_element"
+	case len(v.stylesheetVersions) != projectStylesheetCount:
+		return "stylesheet"
 	case v.main == nil:
 		return "main"
 	case v.headings != 1:

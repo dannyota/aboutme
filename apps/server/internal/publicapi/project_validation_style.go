@@ -1,61 +1,44 @@
 package publicapi
 
-// Static content rules the project validators add to the shared resource
-// checks: SVG only as static icons, and no CSS-generated text.
+// Rules the project validators add to the shared resource checks: only the
+// two versioned stylesheets, and SVG only as static icons.
 
 import (
+	"regexp"
 	"strings"
 
 	"golang.org/x/net/html"
 )
 
-// declaresStyleContent reports whether css may declare the content
-// property, whatever its value, or cannot be scanned. The project pages'
-// stylesheet declares no content, and any declaration could put text on the
-// page outside the validated tree. With comments outside strings removed and
-// strings kept, it matches the name content wherever the character before it
-// cannot continue a name or selector (not a letter, digit, "_", "-", "." or
-// "#") and the next character that is not whitespace is ":". That holds after
-// any brace, nested rule or semicolon, and it errs toward rejection, such as
-// for an element selector named content with a pseudo-class.
-func declaresStyleContent(css string) bool {
-	scanned, ok := cssWithoutComments(css)
-	if !ok {
-		return true
-	}
-	lower := strings.ToLower(scanned)
-	const name = "content"
-	for offset := 0; ; {
-		found := strings.Index(lower[offset:], name)
-		if found < 0 {
+// The two stylesheets the project pages load, each once, with one shared
+// content version. The pages carry no inline CSS.
+const (
+	printFontsStylesheet   = "/_nuxt/assets/print-fonts.css"
+	projectPagesStylesheet = "/_nuxt/assets/project-pages.css"
+	projectStylesheetCount = 2
+)
+
+// projectStylesheet records one stylesheet link and reports whether it is
+// one of the two the pages load, not seen before, with the same version as
+// the other.
+func (v *projectValidator) projectStylesheet(href string) bool {
+	for _, path := range []string{printFontsStylesheet, projectPagesStylesheet} {
+		if !versionedAsset(href, path) {
+			continue
+		}
+		if _, seen := v.stylesheetVersions[path]; seen {
 			return false
 		}
-		at := offset + found
-		if (at == 0 || !cssNameOrSelectorByte(lower[at-1])) && nextNonSpaceByte(lower[at+len(name):]) == ':' {
-			return true
+		version := strings.TrimPrefix(href, path+"?v=")
+		for _, other := range v.stylesheetVersions {
+			if other != version {
+				return false
+			}
 		}
-		offset = at + 1
+		v.stylesheetVersions[path] = version
+		return true
 	}
-}
-
-// cssNameOrSelectorByte reports a byte that continues a CSS name, class or
-// id before it, so the word after it is not a property of its own.
-func cssNameOrSelectorByte(b byte) bool {
-	return b >= 'a' && b <= 'z' || b >= '0' && b <= '9' || b == '_' || b == '-' || b == '.' || b == '#'
-}
-
-// nextNonSpaceByte returns the first byte of value that is not CSS
-// whitespace, or 0 when there is none.
-func nextNonSpaceByte(value string) byte {
-	for i := 0; i < len(value); i++ {
-		switch value[i] {
-		case ' ', '\t', '\n', '\r', '\f':
-			continue
-		default:
-			return value[i]
-		}
-	}
-	return 0
+	return false
 }
 
 // staticIconRule returns "" for an SVG element of a static icon, or the rule
@@ -66,12 +49,37 @@ func staticIconRule(node *html.Node) string {
 		return "svg_element"
 	}
 	for _, attr := range node.Attr {
-		if attr.Namespace != "" || !staticIconAttribute(attr.Key) || unsafeInlineStyle(attr.Val) {
+		if attr.Namespace != "" || unsafeInlineStyle(attr.Val) {
+			return "svg_attribute"
+		}
+		if attr.Key == "transform" {
+			if !staticIconTransform.MatchString(attr.Val) {
+				return "svg_attribute"
+			}
+			continue
+		}
+		if !staticIconAttribute(attr.Key) {
 			return "svg_attribute"
 		}
 	}
 	return ""
 }
+
+// staticIconTransform admits a transform list of rotate(a), rotate(a x y),
+// translate(x), translate(x y), scale(x) and scale(x y) with plain numbers
+// (an optional sign and decimals) separated by whitespace or a comma, so a
+// transform can only position a shape: no url(), var(), other function or
+// unit.
+var staticIconTransform = regexp.MustCompile(
+	`^\s*` + staticIconTransformFunction + `(?:\s*,?\s*` + staticIconTransformFunction + `)*\s*$`)
+
+// The number and argument patterns staticIconTransform is built from.
+const (
+	staticIconNumber            = `[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)`
+	staticIconSeparator         = `(?:\s*,\s*|\s+)`
+	staticIconTransformFunction = `(?:rotate\(\s*` + staticIconNumber + `(?:` + staticIconSeparator + staticIconNumber + staticIconSeparator + staticIconNumber + `)?\s*\)` +
+		`|(?:translate|scale)\(\s*` + staticIconNumber + `(?:` + staticIconSeparator + staticIconNumber + `)?\s*\))`
+)
 
 func staticIconElement(name string) bool {
 	switch name {

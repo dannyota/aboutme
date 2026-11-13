@@ -18,7 +18,6 @@ import (
 
 	"danny.vn/aboutme/apps/server/internal/directrender"
 	"danny.vn/aboutme/apps/server/internal/project"
-	"danny.vn/aboutme/apps/server/internal/publicformat"
 )
 
 // projectPageSections is the name-only corpus page's resume: a project
@@ -107,7 +106,7 @@ func TestProjectPages_ServeTheCorpusPages(t *testing.T) {
 			}
 			requireCorpusEnvelope(t, renderer.envelope(test.mode), test.corpus)
 			header := response.Header()
-			if header.Get("Cache-Control") != "no-cache, must-revalidate" || header.Get("Content-Security-Policy") != publicformat.BaseCSP ||
+			if header.Get("Cache-Control") != "no-cache, must-revalidate" || header.Get("Content-Security-Policy") != projectPageCSP ||
 				header.Get("X-Robots-Tag") != "noindex, noarchive" || header.Get("Content-Type") != "text/html; charset=utf-8" || header.Get("ETag") == "" {
 				t.Fatalf("headers = %#v", header)
 			}

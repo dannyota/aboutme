@@ -11,7 +11,6 @@ import (
 
 	"danny.vn/aboutme/apps/server/internal/previewcard"
 	"danny.vn/aboutme/apps/server/internal/publiccache"
-	"danny.vn/aboutme/apps/server/internal/publicformat"
 	"danny.vn/aboutme/apps/server/internal/publicresume"
 	"danny.vn/aboutme/apps/server/internal/publicstate"
 )
@@ -19,7 +18,14 @@ import (
 // projectFormatVersion names the cached project page format. It rises
 // whenever either page's request or validation changes, so no cached page
 // of an older format is served.
-const projectFormatVersion = 1
+const projectFormatVersion = 2
+
+// projectPageCSP is the resume page's policy with style-src 'self' alone:
+// the project pages load their CSS only from versioned stylesheets and carry
+// none inline. The gate for a project address keeps publicformat.BaseCSP.
+const projectPageCSP = "default-src 'none'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'none'; " +
+	"script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; manifest-src 'self'; " +
+	"media-src 'none'; worker-src 'none'"
 
 // NewProjectListHandler creates the handler for /{slug}/projects. It shares
 // the resume page's dependencies.
@@ -59,7 +65,7 @@ func newProjectHandler(dependencies HTMLDependencies, page bool) (http.Handler, 
 			serveHTMLError(w, request, http.StatusServiceUnavailable)
 			return
 		}
-		defer lease.Release()
+		defer releaseAfterFlush(w, lease)
 		// No view is observed on a project page (ADR 0022). The pass check
 		// runs after admission and before the pages are built, the
 		// availability decision and any public cache lookup: without a pass
@@ -107,7 +113,7 @@ func newProjectHandler(dependencies HTMLDependencies, page bool) (http.Handler, 
 			return
 		}
 		extra := make(http.Header)
-		extra.Set("Content-Security-Policy", publicformat.BaseCSP)
+		extra.Set("Content-Security-Policy", projectPageCSP)
 		if !snapshot.DiscoveryEnabled {
 			extra.Set("X-Robots-Tag", "noindex, noarchive")
 		}

@@ -17,6 +17,8 @@ import (
 	"testing"
 	"unicode/utf16"
 	"unicode/utf8"
+
+	"danny.vn/aboutme/apps/server/internal/project"
 )
 
 var (
@@ -112,7 +114,7 @@ func (d *envelopeDecoder) common(envelope map[string]any) string {
 	d.require(isString && decoderSlug.MatchString(slug), "resume slug")
 	d.require(resume["url"] == origin+"/"+slug, "resume url is origin/slug")
 	owner, isString := resume["ownerName"].(string)
-	d.require(isString && decoderBoundedText(owner, 2240) && !blankText(owner), "ownerName is non-blank and at most 2240 bytes")
+	d.require(isString && decoderBoundedText(owner, 2240) && !project.Blank(owner), "ownerName is non-blank and at most 2240 bytes")
 	lng, isString := resume["lng"].(string)
 	d.require(isString && len(lng) <= 35 && decoderResumeLng.MatchString(lng), "lng is a tag of at most 35 characters")
 	primary, _, _ := strings.Cut(strings.ToLower(lng), "-")
@@ -148,19 +150,19 @@ func (d *envelopeDecoder) preview(preview map[string]any, origin, slug string) {
 }
 
 // text checks the fields a list row and a project page share.
-func (d *envelopeDecoder) text(project map[string]any, listURL string) {
-	slug, isString := project["slug"].(string)
+func (d *envelopeDecoder) text(fields map[string]any, listURL string) {
+	slug, isString := fields["slug"].(string)
 	d.require(isString && len(slug) >= 2 && len(slug) <= 40 && decoderProjectSlug.MatchString(slug), "project slug")
-	d.require(project["url"] == listURL+"/"+slug, "project url is listUrl/slug")
-	if lang, present := project["lang"]; present {
+	d.require(fields["url"] == listURL+"/"+slug, "project url is listUrl/slug")
+	if lang, present := fields["lang"]; present {
 		value, isLang := lang.(string)
 		d.require(isLang && decoderProjectLang.MatchString(value), "lang is a primary subtag")
 	}
-	name, isString := project["name"].(string)
-	d.require(isString && decoderText(name, 120) && !blankText(name), "name is non-blank and at most 120 code points")
-	d.optionalText(project, "role", 120)
-	d.optionalText(project, "summary", 300)
-	if dates, present := project["dates"]; present {
+	name, isString := fields["name"].(string)
+	d.require(isString && decoderText(name, 120) && !project.Blank(name), "name is non-blank and at most 120 code points")
+	d.optionalText(fields, "role", 120)
+	d.optionalText(fields, "summary", 300)
+	if dates, present := fields["dates"]; present {
 		d.dates(dates)
 	}
 }

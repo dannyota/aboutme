@@ -7,7 +7,6 @@ package publicapi
 import (
 	"errors"
 	"strings"
-	"unicode"
 	"unicode/utf8"
 
 	"github.com/rivo/uniseg"
@@ -121,10 +120,10 @@ func buildProjectRequest(input projectPageInput) (directrender.ProjectRenderRequ
 func projectPageResume(input projectPageInput) directrender.ProjectPageResume {
 	public := input.snapshot.Public
 	owner := public.Document.PersonalDetails.FullName
-	if blankText(owner) {
+	if project.Blank(owner) {
 		owner = publicpage.EffectiveTitle(input.snapshot.PublicTitle, owner)
 	}
-	if blankText(owner) {
+	if project.Blank(owner) {
 		owner = publicpage.EffectiveTitle(nil, public.Document.PersonalDetails.FullName)
 	}
 	scheme := schema.Light
@@ -152,34 +151,24 @@ func projectFaviconHref(snapshot publicresume.Snapshot) string {
 	return publicpage.FaviconHref(*snapshot.FaviconEmoji)
 }
 
-// chooseProjectText applies docs/design/projects.md "Language": the text of
-// the resume language's primary subtag, else the default language, which an
-// und resume always uses. A chosen text with a blank name falls back to the
-// default language. lang is the chosen key when it is not the resume
-// language's primary subtag, else "".
+// chooseProjectText is project.ChooseText as an error. The reader leaves
+// out every project without a renderable name, so the error is only a
+// guard.
 func chooseProjectText(document project.Document, resumeLng string) (project.Text, string, error) {
-	primary, _, _ := strings.Cut(strings.ToLower(resumeLng), "-")
-	key := document.DefaultLanguage
-	if text, found := document.Text[primary]; found && primary != "und" && !blankText(text.Name) {
-		key = primary
-	}
-	text, found := document.Text[key]
-	if !found || blankText(text.Name) {
+	text, lang, ok := project.ChooseText(document, resumeLng)
+	if !ok {
 		return project.Text{}, "", errProjectWithoutName
 	}
-	if key == primary {
-		return text, "", nil
-	}
-	return text, key, nil
+	return text, lang, nil
 }
 
 // projectDescription is the summary, else the first 160 characters of the
 // outcome, else "".
 func projectDescription(text project.Text) string {
-	if !blankText(text.Summary) {
+	if !project.Blank(text.Summary) {
 		return text.Summary
 	}
-	if blankText(text.Outcome) {
+	if project.Blank(text.Outcome) {
 		return ""
 	}
 	return firstGraphemes(text.Outcome, maxOutcomeDescriptionRunes)
@@ -201,20 +190,6 @@ func firstGraphemes(text string, maxRunes int) string {
 		_, end = graphemes.Positions()
 	}
 	return text[:end]
-}
-
-// blankText reports whether text is empty or only whitespace as the
-// renderer's String.prototype.trim reads it: Unicode space separators, tab,
-// vertical tab, form feed, the byte order mark and line terminators. It is
-// not Go's strings.TrimSpace, which also trims U+0085 and keeps U+FEFF.
-func blankText(text string) bool {
-	return strings.IndexFunc(text, func(r rune) bool {
-		switch r {
-		case '\t', '\v', '\f', '\n', '\r', '\ufeff', '\u2028', '\u2029':
-			return false
-		}
-		return !unicode.Is(unicode.Zs, r)
-	}) < 0
 }
 
 // renderableLink is link when the renderer's URL parser accepts it, else "".
