@@ -257,6 +257,12 @@ Asymmetries a designer will otherwise assume away: `custom` has `city` but no
 `country`; `project` has neither; `certificate` carries a single `{y,m?}` and
 never a range; `language` has no body.
 
+A `project` entry named in the render context's project link map links its title
+to its project page instead of `link`. The anchor sits inside `<strong>`, so the
+title keeps its weight, and takes the link color and underline of a `link`
+title. Only the public page and the PDF of a published resume pass the map
+([project entry points](../project-entry-points.md)).
+
 ### 5.3 Section heading
 
 The heading text is `displayName`. `iconKey` renders as an inline lucide SVG
