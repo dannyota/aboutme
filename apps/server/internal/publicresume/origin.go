@@ -43,7 +43,7 @@ func ParsePublicOrigin(raw, environment string) (PublicOrigin, error) {
 	if port != "" {
 		host += ":" + port
 	}
-	if !canonicalHost(hostname) {
+	if strings.Contains(u.Host, "%") || !canonicalHost(hostname) {
 		return PublicOrigin{}, errors.New("public origin host must be canonical")
 	}
 	if scheme != "https" && scheme != "http" {
@@ -74,10 +74,12 @@ func canonicalHost(hostname string) bool {
 		return addr.Zone() == "" && !addr.Is4In6() && addr.String() == hostname
 	}
 	labels := strings.Split(strings.TrimSuffix(hostname, "."), ".")
-	last := labels[len(labels)-1]
-	if last == "" {
-		return true
+	for _, label := range labels {
+		if label == "" || strings.Trim(label, "abcdefghijklmnopqrstuvwxyz0123456789-") != "" {
+			return false
+		}
 	}
+	last := labels[len(labels)-1]
 	if strings.HasPrefix(last, "0x") {
 		return false
 	}
