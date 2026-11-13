@@ -54,8 +54,6 @@ type GetResumePreviewCardRow struct {
 	PNG     []byte
 }
 
-// A stored card is derived data (ADR 0014); every public read passes the
-// live-state gate before it reads one.
 func (q *Queries) GetResumePreviewCard(ctx context.Context, resumeID uuid.UUID) (GetResumePreviewCardRow, error) {
 	row := q.db.QueryRow(ctx, getResumePreviewCard, resumeID)
 	var i GetResumePreviewCardRow
@@ -76,7 +74,6 @@ type ListLiveResumePreviewCardVersionsRow struct {
 	CardVersion *string
 }
 
-// Every live resume and the version of its stored card, NULL when none.
 func (q *Queries) ListLiveResumePreviewCardVersions(ctx context.Context) ([]ListLiveResumePreviewCardVersionsRow, error) {
 	rows, err := q.db.Query(ctx, listLiveResumePreviewCardVersions)
 	if err != nil {
@@ -103,10 +100,6 @@ WHERE id = $1
 FOR SHARE
 `
 
-// FOR SHARE makes a card store wait for, or block, an unpublish, rename, or
-// delete of the same resume, since those lock the row for update. The row
-// returned is the latest committed one, so the caller recomputes the card
-// version from it before it writes.
 func (q *Queries) LockResumeForPreviewCard(ctx context.Context, id uuid.UUID) (Resume, error) {
 	row := q.db.QueryRow(ctx, lockResumeForPreviewCard, id)
 	var i Resume

@@ -59,16 +59,10 @@ func (q *Queries) DeleteResumeShowcase(ctx context.Context, resumeID uuid.UUID) 
 }
 
 const getResumeShowcase = `-- name: GetResumeShowcase :one
-
 SELECT resume_id, requested_at, role, card_version, template_id FROM resume_showcase
 WHERE resume_id = $1
 `
 
-// Community showcase queries (docs/design/showcase.md, ADR 0028). The
-// resume_showcase row exists only while the opt-in does. Statements name their
-// columns, never * or s.*: sqlc expands a star into every column when it
-// generates, so a released binary fails once a migration drops one
-// (docs/design/release-floors.md "Schema floor").
 func (q *Queries) GetResumeShowcase(ctx context.Context, resumeID uuid.UUID) (ResumeShowcase, error) {
 	row := q.db.QueryRow(ctx, getResumeShowcase, resumeID)
 	var i ResumeShowcase
@@ -88,7 +82,6 @@ WHERE resume_id = $1
 FOR UPDATE
 `
 
-// Locks the opt-in row so concurrent derived-value writes serialize.
 func (q *Queries) GetResumeShowcaseForUpdate(ctx context.Context, resumeID uuid.UUID) (ResumeShowcase, error) {
 	row := q.db.QueryRow(ctx, getResumeShowcaseForUpdate, resumeID)
 	var i ResumeShowcase
@@ -228,11 +221,6 @@ type ListShowcaseRow struct {
 	Language        string
 }
 
-// The public listing. One statement checks all three listing conditions: the
-// opt-in row exists, the resume is live, and sign in to view is off. It reads
-// committed state on every call; nothing caches it. The page needs only the
-// personal details (for the card's image text), so it reads no other document
-// part; schema_version tells the caller whether those details are current.
 func (q *Queries) ListShowcase(ctx context.Context, arg ListShowcaseParams) ([]ListShowcaseRow, error) {
 	rows, err := q.db.Query(ctx, listShowcase,
 		arg.Role,

@@ -195,8 +195,6 @@ type DeleteExpiredSlugTombstonesPageParams struct {
 	LimitRows int32
 }
 
-// A released slug stays reserved and unlinked from any account for 180 days
-// (docs/design/product.md), then the privacy sweep deletes the reservation.
 func (q *Queries) DeleteExpiredSlugTombstonesPage(ctx context.Context, arg DeleteExpiredSlugTombstonesPageParams) (int64, error) {
 	result, err := q.db.Exec(ctx, deleteExpiredSlugTombstonesPage, arg.Cutoff, arg.LimitRows)
 	if err != nil {
@@ -288,12 +286,6 @@ type ExpireIdempotencyPageRow struct {
 	ReleasedBytes   int64
 }
 
-// Candidates come from expired records in (expires_at, id) order, not from
-// every account. Each record's user is locked before any replay row or usage
-// counter, matching every resume writer. LIMIT counts only rows whose user
-// lock succeeded, so SKIP LOCKED passes over a busy user's records and later
-// users still fill the page. ARRAY() reads every locked row before the first
-// replay row is locked.
 func (q *Queries) ExpireIdempotencyPage(ctx context.Context, arg ExpireIdempotencyPageParams) (ExpireIdempotencyPageRow, error) {
 	row := q.db.QueryRow(ctx, expireIdempotencyPage, arg.Cutoff, arg.LimitRows)
 	var i ExpireIdempotencyPageRow
@@ -378,8 +370,6 @@ type GetExpiredSessionsBacklogRow struct {
 	OldestAgeSeconds int64
 }
 
-// oldest_age_seconds is age since the original sign-in, like the session
-// metadata backlog.
 func (q *Queries) GetExpiredSessionsBacklog(ctx context.Context, arg GetExpiredSessionsBacklogParams) (GetExpiredSessionsBacklogRow, error) {
 	row := q.db.QueryRow(ctx, getExpiredSessionsBacklog, arg.Now, arg.Cutoff)
 	var i GetExpiredSessionsBacklogRow
@@ -480,11 +470,6 @@ type GetSessionMetadataBacklogRow struct {
 	OldestAgeSeconds int64
 }
 
-// oldest_age_seconds is age since the original sign-in, not since
-// absolute_expires_at, matching every other *_oldest_seconds field: a
-// session's absolute expiry is sign-in plus the fixed 90-day absolute timeout
-// (docs/design/security.md), so subtracting that interval back out of
-// absolute_expires_at recovers the sign-in time.
 func (q *Queries) GetSessionMetadataBacklog(ctx context.Context, arg GetSessionMetadataBacklogParams) (GetSessionMetadataBacklogRow, error) {
 	row := q.db.QueryRow(ctx, getSessionMetadataBacklog, arg.Now, arg.Cutoff)
 	var i GetSessionMetadataBacklogRow
@@ -513,11 +498,6 @@ type RedactSessionMetadataPageParams struct {
 	LimitRows int32
 }
 
-// Session IP and user agent are redacted before the session's absolute expiry
-// (docs/design/operations.md), not by created_at, so a rotation or reissue
-// successor that inherits the original absolute expiry cannot extend how long
-// its metadata survives. The caller's cutoff already carries the redaction
-// lead ahead of now, so this query only compares absolute_expires_at to it.
 func (q *Queries) RedactSessionMetadataPage(ctx context.Context, arg RedactSessionMetadataPageParams) (int64, error) {
 	result, err := q.db.Exec(ctx, redactSessionMetadataPage, arg.Cutoff, arg.LimitRows)
 	if err != nil {
@@ -527,13 +507,9 @@ func (q *Queries) RedactSessionMetadataPage(ctx context.Context, arg RedactSessi
 }
 
 const tryLockIdempotencyExpirySweep = `-- name: TryLockIdempotencyExpirySweep :one
-
 SELECT pg_try_advisory_lock(hashtextextended('aboutme.idempotency-expiry-sweep.v1', 0))
 `
 
-// Privacy retention queries. Every mutation is bounded and ordered;
-// command-level advisory locks are session locks held on a dedicated pooled
-// connection for the whole run.
 func (q *Queries) TryLockIdempotencyExpirySweep(ctx context.Context) (bool, error) {
 	row := q.db.QueryRow(ctx, tryLockIdempotencyExpirySweep)
 	var pg_try_advisory_lock bool

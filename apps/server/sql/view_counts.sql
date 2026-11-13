@@ -1,10 +1,4 @@
--- View count queries (docs/design/viewer-analytics/counting.md). Tables hold
--- daily numbers only; days are Asia/Ho_Chi_Minh dates.
-
 -- name: GetLiveViewResumeBySlug :one
--- The same live gate as GetPublicResumeBySlug, with only what the view-count
--- start and the sign-in "view" start need: the owner, the sign-in switch, and
--- the pass epoch.
 SELECT id, user_id, sign_in_to_view, view_pass_epoch FROM resumes
 WHERE slug = sqlc.arg(slug)::text AND live = true;
 
@@ -13,10 +7,6 @@ SELECT id, user_id FROM resumes
 WHERE id = sqlc.arg(id)::uuid AND live = true;
 
 -- name: AddResumeViewDays :exec
--- Target-list unnest zips the equal-length arrays row by row. The parent
--- CTE key-share locks each surviving resume in id order before the insert:
--- a resume whose deletion commits first is skipped rather than failing the
--- foreign key for the whole batch, and a locked resume stays until commit.
 WITH parent AS MATERIALIZED (
     SELECT id FROM resumes
     WHERE id = ANY(sqlc.arg(resume_ids)::uuid[])
@@ -46,7 +36,6 @@ ON CONFLICT (resume_id, day) DO UPDATE SET
     crawler = d.crawler + EXCLUDED.crawler;
 
 -- name: AddResumeShareSignalDays :exec
--- Locks the parent resumes the same way as AddResumeViewDays.
 WITH parent AS MATERIALIZED (
     SELECT id FROM resumes
     WHERE id = ANY(sqlc.arg(resume_ids)::uuid[])
@@ -67,8 +56,6 @@ ON CONFLICT (resume_id, day, platform) DO UPDATE SET
     fetches = s.fetches + EXCLUDED.fetches;
 
 -- name: ListViewSummaries :many
--- Every owned resume that is live or has counts, with totals over the last
--- 7, 30, and 90 days.
 SELECT r.id, r.title, r.slug, r.live,
        COALESCE(sum(d.counted) FILTER (WHERE d.day >= sqlc.arg(since7)::date), 0)::bigint AS real7,
        COALESCE(sum(d.bot + d.datacenter + d.anomaly + d.invalid + d.crawler)
@@ -106,7 +93,6 @@ HAVING sum(fetches) > 0
 ORDER BY sum(fetches) DESC, platform;
 
 -- name: DeleteOldResumeViewDaysPage :execrows
--- Daily counts are kept 400 days (docs/design/viewer-analytics/README.md).
 WITH candidates AS MATERIALIZED (
     SELECT resume_id, day
     FROM resume_view_days

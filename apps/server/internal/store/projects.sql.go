@@ -231,8 +231,6 @@ type ProjectStoredDocumentEqualsParams struct {
 	UserID   uuid.UUID
 }
 
-// Compares the stored document with a replacement in the jsonb form
-// ReplaceProjectCAS stores, so formatting or key order is never a change.
 func (q *Queries) ProjectStoredDocumentEquals(ctx context.Context, arg ProjectStoredDocumentEqualsParams) (bool, error) {
 	row := q.db.QueryRow(ctx, projectStoredDocumentEquals, arg.Document, arg.ID, arg.UserID)
 	var equal bool

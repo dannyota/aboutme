@@ -1,15 +1,8 @@
--- Community showcase queries (docs/design/showcase.md, ADR 0028). The
--- resume_showcase row exists only while the opt-in does. Statements name their
--- columns, never * or s.*: sqlc expands a star into every column when it
--- generates, so a released binary fails once a migration drops one
--- (docs/design/release-floors.md "Schema floor").
-
 -- name: GetResumeShowcase :one
 SELECT resume_id, requested_at, role, card_version, template_id FROM resume_showcase
 WHERE resume_id = sqlc.arg(resume_id);
 
 -- name: GetResumeShowcaseForUpdate :one
--- Locks the opt-in row so concurrent derived-value writes serialize.
 SELECT resume_id, requested_at, role, card_version, template_id FROM resume_showcase
 WHERE resume_id = sqlc.arg(resume_id)
 FOR UPDATE;
@@ -47,11 +40,6 @@ SELECT resume_id FROM resume_showcase
 ORDER BY resume_id;
 
 -- name: ListShowcase :many
--- The public listing. One statement checks all three listing conditions: the
--- opt-in row exists, the resume is live, and sign in to view is off. It reads
--- committed state on every call; nothing caches it. The page needs only the
--- personal details (for the card's image text), so it reads no other document
--- part; schema_version tells the caller whether those details are current.
 SELECT r.id, r.slug, r.schema_version, r.personal_details,
        s.card_version, s.template_id, s.role, l.language
 FROM resume_showcase s
