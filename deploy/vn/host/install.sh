@@ -356,6 +356,8 @@ echo "deb [signed-by=/etc/apt/keyrings/crowdsec.gpg] https://packagecloud.io/cro
 say "CrowdSec repository in place"
 apt-get update -qq
 
+# 2. CrowdSec config goes in before the package starts the service, so its
+# local API never tries 127.0.0.1:8080, which Go owns.
 install -d -m 0755 /etc/crowdsec/acquis.d
 install_crowdsec_file "$bundle/edge/crowdsec/config.yaml.local" /etc/crowdsec/config.yaml.local
 install_crowdsec_file "$bundle/edge/crowdsec/config.yaml.local" /etc/crowdsec/config.yaml.postgresql
@@ -403,6 +405,8 @@ for package_pin in "crowdsec=$CROWDSEC_VERSION" "crowdsec-firewall-bouncer-nftab
 done
 
 
+# 4. Configuration files. PostgreSQL files belong to postgres; the firewall
+# bouncer file is built in step 5.
 systemctl stop aboutme-deployment-document.timer aboutme-deployment-document.service 2>/dev/null || true
 etc=$bundle/host/etc
 copy_tree "$etc" /etc \
