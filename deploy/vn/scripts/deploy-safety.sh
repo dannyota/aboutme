@@ -25,8 +25,6 @@ aboutme_edges_stable() {
   done
 }
 
-# Take retention before the fence, as retention and the watcher do. Keep app
-# readiness waits outside this lock so overdue cleanup still fails closed.
 aboutme_edge_transition() (
   umask 077
   [[ -d /run/aboutme && ! -L /run/aboutme &&

@@ -18,7 +18,6 @@ import (
 	"danny.vn/aboutme/deploy/observer/internal/platform"
 )
 
-// fixture reads a recorded-shape awsJson1_1 response body from testdata.
 func fixture(t *testing.T, name string) []byte {
 	t.Helper()
 	b, err := os.ReadFile(filepath.Join("..", "..", "..", "testdata", "ecs", name))
@@ -28,23 +27,15 @@ func fixture(t *testing.T, name string) []byte {
 	return b
 }
 
-// listTasksBody is the subset of a ListTasksInput this test server reads to
-// pick the right fixture, without importing the platform's own request
-// type.
 type listTasksBody struct {
 	ServiceName string `json:"serviceName"`
 }
 
-// route names the fixture or HTTP status this test server returns for one
-// call. A zero status means 200 with body.
 type route struct {
 	body   []byte
 	status int
 }
 
-// newServer starts a test server standing in for the ECS control plane. It
-// dispatches ListTasks by the request's serviceName and DescribeTasks
-// unconditionally, since a run makes exactly one DescribeTasks call.
 func newServer(t *testing.T, listByService map[string]route, describe route) *httptest.Server {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -98,10 +89,6 @@ func newLister(t *testing.T, srv *httptest.Server) *Lister {
 	})
 }
 
-// TestRunningMapsCountsAndReplicas covers the component mapping table, an
-// ignored container, a PENDING task, a STOPPED container, and two tasks with
-// the same digest counted as replicas 2 with the earliest start
-// (docs/design/deployment-transparency/document.md, "Component mapping").
 func TestRunningMapsCountsAndReplicas(t *testing.T) {
 	srv := newServer(t, map[string]route{
 		"aboutme-prod-app":         {body: fixture(t, "list_tasks_app.json")},
@@ -151,9 +138,6 @@ func TestRunningMapsCountsAndReplicas(t *testing.T) {
 	}
 }
 
-// TestRunningFailsOnMissingDigest asserts a RUNNING container without an
-// image digest fails the whole run rather than being dropped
-// (docs/design/deployment-transparency/document.md, "Sanitizer").
 func TestRunningFailsOnMissingDigest(t *testing.T) {
 	srv := newServer(t, map[string]route{
 		"aboutme-prod-app":         {body: fixture(t, "list_tasks_app_single.json")},
@@ -167,9 +151,6 @@ func TestRunningFailsOnMissingDigest(t *testing.T) {
 	}
 }
 
-// TestRunningFailsOnListTasksError asserts a platform read failure fails the
-// whole run and writes nothing (docs/design/deployment-transparency/README.md,
-// "Run, freshness, and staleness").
 func TestRunningFailsOnListTasksError(t *testing.T) {
 	errBody := []byte(`{"__type":"com.amazonaws.ecs#ServerException","message":"internal error"}`)
 	srv := newServer(t, map[string]route{
@@ -184,9 +165,6 @@ func TestRunningFailsOnListTasksError(t *testing.T) {
 	}
 }
 
-// TestRunningFailsOnDescribeFailures: a task ListTasks returned but
-// DescribeTasks could not describe fails the read instead of dropping out
-// of the document.
 func TestRunningFailsOnDescribeFailures(t *testing.T) {
 	var describe map[string]any
 	if err := json.Unmarshal(fixture(t, "describe_tasks.json"), &describe); err != nil {
@@ -207,7 +185,6 @@ func TestRunningFailsOnDescribeFailures(t *testing.T) {
 	}
 }
 
-// TestMapComponent is the pure form of the component mapping table.
 func TestMapComponent(t *testing.T) {
 	cases := []struct {
 		role      role

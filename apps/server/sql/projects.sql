@@ -21,8 +21,6 @@ INSERT INTO projects (user_id, slug, document, created_at, updated_at)
 VALUES ($1, $2, $3, $4, $4) RETURNING *;
 
 -- name: ProjectStoredDocumentEquals :one
--- Compares the stored document with a replacement in the jsonb form
--- ReplaceProjectCAS stores, so formatting or key order is never a change.
 SELECT (document = sqlc.arg(document)::jsonb)::bool AS equal
 FROM projects WHERE id = sqlc.arg(id) AND user_id = sqlc.arg(user_id);
 

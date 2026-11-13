@@ -16,9 +16,6 @@ import (
 	"danny.vn/aboutme/deploy/observer/internal/platform"
 )
 
-// newTLSServer starts an httptest TLS server that serves body for any GET
-// request to the pods path, and returns a Config with Host, Port, TokenFile,
-// and CAFile pointed at it, as a real in-cluster client would be configured.
 func newTLSServer(t *testing.T, body []byte) *Lister {
 	t.Helper()
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -77,10 +74,6 @@ func fixture(t *testing.T, name string) []byte {
 	return b
 }
 
-// TestRunningMapsCountsAndReplicas covers the component mapping, an ignored
-// container, a non-running container, and replicas counted with the
-// earliest start (docs/design/deployment-transparency/document.md,
-// "Component mapping").
 func TestRunningMapsCountsAndReplicas(t *testing.T) {
 	l := newTLSServer(t, fixture(t, "pod_list.json"))
 
@@ -125,9 +118,6 @@ func TestRunningMapsCountsAndReplicas(t *testing.T) {
 	}
 }
 
-// TestRunningFailsOnInvalidImageID asserts a running container whose imageID
-// has no valid "@sha256:<hex>" suffix fails the whole run
-// (docs/design/deployment-transparency/README.md, "Kubernetes").
 func TestRunningFailsOnInvalidImageID(t *testing.T) {
 	l := newTLSServer(t, fixture(t, "pod_list_invalid_digest.json"))
 
@@ -136,8 +126,6 @@ func TestRunningFailsOnInvalidImageID(t *testing.T) {
 	}
 }
 
-// TestDigestFromImageID is the pure form of the imageID digest extraction
-// rule.
 func TestDigestFromImageID(t *testing.T) {
 	valid := "sha256:a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5"
 	cases := []struct {

@@ -1,24 +1,3 @@
-/**
- * Authenticator-app (TOTP) second-factor journey over the trusted HTTPS
- * harness. One spec serves two browser modes, mirroring
- * `second-factor.spec.ts`. `totp` runs against a server whose TOTP
- * enrollment flag is on and walks enrollment, step acceptance, replay and
- * concurrency rejection, replacement, recovery, passkey coexistence,
- * revocation, and removal. `totp-disabled` runs against the same stack
- * restarted with the flag off and proves enrollment answers exactly like an
- * unregistered route while verification, removal, state, passkeys, and
- * recovery keep working.
- *
- * The setup secret, provisioning URI, and every code are computed in this
- * process with `totp-fixture.ts` and never leave it: the evidence file holds
- * only booleans, the fixed scenario name, and the origin. CI also runs the
- * `totp` journey as shards that run in parallel against one harness (see
- * "Enabled-proof sharding" below) and records section timing to a sidecar
- * the evidence schema never covers.
- *
- * Contract: docs/design/totp-second-factor-contract.md,
- * docs/design/totp-key-management.md, and ADR 0017.
- */
 import {
   expect,
   test,
@@ -128,15 +107,10 @@ import {
 const MODE = process.env.ABOUTME_BROWSER_MODE ?? 'totp';
 const ENABLED_EVIDENCE_NAME = 'totp-second-factor-proof.json';
 const DISABLED_EVIDENCE_PATH = '/evidence/totp-enrollment-disabled-proof.json';
-// Diagnostic only: per-section wall-clock timing, never covered by
-// verify-evidence.mjs and never read by it.
 const ENABLED_TIMING_NAME = 'totp-timing.json';
 const TOTP_LOGIN_INPUT = '#second-factor-totp-code';
 const TOTP_SETUP_INPUT = '#totp-code';
 
-// Teardown's own sign-in never needs the full WAIT_LANDING_MS: a real
-// account's post-login navigation is a fast client-side route change, and an
-// account that never existed fails at the password check, not by hanging.
 const CLEANUP_LANDING_MS = 15_000;
 
 const EXPECTED_PAGE_FAILURES: ReadonlyMap<string, readonly number[]> = new Map([
@@ -184,10 +158,6 @@ if (SHARDS !== null && SHARDS.length > 1) {
   test.describe.configure({ mode: 'parallel' });
 }
 
-// --- Failure reporting (see second-factor-lib.ts) ---------------------------
-
-// CI diagnostics only (see totp-fixture.ts "CI section timing"); never part
-// of the withheld browser output or the verified evidence.
 const timer = newSectionTimer();
 
 function role(next: AccountRole): void {
@@ -201,10 +171,6 @@ function beginTeardown(): void {
   recordTeardown();
 }
 
-/**
- * Closed test ids a failure may name. They are component ids, not secrets,
- * and each maps to one word inside run.sh's [a-z0-9-] stage filter.
- */
 const DIAG_TEST_IDS: ReadonlyArray<readonly [string, string]> = [
   ['second-factor-reauth-password', 'reauth'],
   ['totp-setup-dialog', 'setupdialog'],
@@ -219,7 +185,6 @@ const DIAG_TEST_IDS: ReadonlyArray<readonly [string, string]> = [
   ['second-factor-totp', 'pendingtotp'],
 ];
 
-/** Names the closed test id a failed locator waited for, if any. */
 function waitedFor(message: string): string {
   const match = /getByTestId\('([a-z0-9-]+)'\)/u.exec(message);
   if (match === null) return 'none';
@@ -231,14 +196,12 @@ let failureSeen = 'none';
 let failurePage = 'unknown';
 let failurePageState = 'page-unread';
 
-/** Lists which closed test ids are visible on the page right now. */
 async function visibleWords(page: Page): Promise<string> {
   const words: string[] = [];
   for (const [id, word] of DIAG_TEST_IDS) {
     try {
       if (await page.getByTestId(id).first().isVisible()) words.push(word);
     } catch {
-      // A closed page shows nothing.
     }
   }
   return words.length > 0 ? words.join('-') : 'none';
@@ -251,8 +214,6 @@ test.afterEach(({}, testInfo) => {
     testInfo.status ?? 'unknown',
     testInfo.error?.message ?? '',
   );
-  // run.sh prints only the last stage line, so the closed diagnostic rides
-  // on the failure line itself.
   const message = testInfo.error?.message ?? '';
   const errorKind = /strict mode violation/u.test(message) ? 'strict'
     : /waitForResponse/u.test(message) ? 'response-wait'
@@ -290,8 +251,6 @@ function classifyTotpConsole(message: ConsoleMessage): string | null {
   return `${index < 0 ? 'other' : `path${index}`}-${status}`;
 }
 
-// --- Page helpers ------------------------------------------------------
-
 // A settings mutation that replaces the session, such as TOTP removal, sets
 // a new session cookie with a new CSRF secret, and the page keeps the old
 // token until its own /api/v1/me refetch lands (sessions.vue
@@ -303,21 +262,11 @@ function classifyTotpConsole(message: ConsoleMessage): string | null {
 // the runner is slow.
 const TOKEN_REFETCH_HOLD_MS = 1_000;
 
-/**
- * Holds the page's next /api/v1/me request, then passes it on. Call it before
- * the action that replaces the session; the returned wait resolves once the
- * page has the refetched response, and the next mutation awaits it. A page
- * that never refetches fails the wait. The request goes on from the browser,
- * not from route.fetch, since only the browser trusts the harness CA.
- */
 async function holdTokenRefetch(page: Page): Promise<() => Promise<void>> {
   await page.route(`${ORIGIN}/api/v1/me`, async (route: Route) => {
     await new Promise((resolve) => {
       setTimeout(resolve, TOKEN_REFETCH_HOLD_MS);
     });
-    // A stale-token retry refetches /api/v1/me itself and can cancel the
-    // held request, so continuing it may fail; the console check still
-    // reports the retry's 403.
     await route.continue().catch(() => undefined);
   }, { times: 1 });
   const refetched = page.waitForResponse(
@@ -327,8 +276,6 @@ async function holdTokenRefetch(page: Page): Promise<() => Promise<void>> {
   ).then(async (response) => {
     await response.finished();
   });
-  // Awaited by the caller later; this only keeps an early failure from
-  // counting as unhandled before then.
   refetched.catch(() => undefined);
   return () => refetched;
 }
@@ -372,11 +319,6 @@ async function factorState(page: Page): Promise<FactorState> {
   });
 }
 
-/** Submits one TOTP code on the pending login page and returns the status. */
-/**
- * A closed, secret-free trace of the last pending TOTP submission, printed
- * with a failure so a hosted run shows how far the request got.
- */
 let verifyTrace = 'none';
 const TOTP_VERIFY_PATH = '/api/v1/auth/second-factor/totp/verify';
 
@@ -399,20 +341,11 @@ async function submitPendingTotpCode(page: Page, code: string): Promise<number> 
   const input = page.locator(TOTP_LOGIN_INPUT);
   await input.click();
   await input.fill(code);
-  // The recovery form's button has the same name, so scope to the TOTP form.
   await page.getByTestId('second-factor-totp-form')
     .locator('button[type="submit"]').click();
   return (await response).status();
 }
 
-/** Completes the open pending authentication with a valid TOTP code. */
-/**
- * Answers the settings reauthentication on an enrolled account. The password
- * opens a pending reauthentication, and a fresh code from the current secret
- * completes it (second-factor-authentication.md, "Enrollment and
- * management": primary and an active factor must both be recent). The page
- * then returns to settings.
- */
 async function reauthenticateEnrolled(
   page: Page,
   password: string,
@@ -438,7 +371,6 @@ async function completeWithTotp(page: Page, code: string): Promise<void> {
   await landedAfter(page, '/login/second-factor');
 }
 
-/** Reads the grouped secret from the open setup dialog. */
 async function readSetupSecret(page: Page): Promise<string> {
   await expect(page.getByTestId('totp-setup-dialog')).toBeVisible();
   await expect(page.getByTestId('totp-qr')).toBeVisible();
@@ -448,7 +380,6 @@ async function readSetupSecret(page: Page): Promise<string> {
   return secret;
 }
 
-/** Proves opening the setup dialog issues no external network request. */
 async function proveQrIsLocal(
   page: Page,
   counters: DiagnosticCounters,
@@ -474,19 +405,12 @@ async function proveQrIsLocal(
   expect(foreign).toBe(false);
 }
 
-/**
- * The newest step one account's accepted codes have used. The server accepts
- * only a step greater than the credential's last used step, so every later
- * accepted code must come from a newer step. Each fictional account gets its
- * own tracker because last_used_step is per credential.
- */
 interface StepTracker { last: number }
 
 function newStepTracker(): StepTracker {
   return { last: -1 };
 }
 
-/** Returns a code from a step newer than every step the tracker has used, taking the next step without waiting unless it is already spent. */
 async function freshCode(
   page: Page,
   secret: string,
@@ -501,14 +425,12 @@ async function freshCode(
   return codeForStep(secret, step);
 }
 
-/** Waits on the real clock until the current step reaches `step` (totp-second-factor-contract.md, "TOTP profile and code verification"). */
 async function waitForStepAtLeast(page: Page, step: number): Promise<void> {
   const target = step * TOTP_PERIOD_SECONDS;
   const waitMs = (target - Date.now() / 1000) * 1000;
   if (waitMs > 0) await page.waitForTimeout(Math.ceil(waitMs) + 500);
 }
 
-/** Submits one TOTP code in the settings setup dialog and returns status. */
 async function submitSetupCode(page: Page, code: string): Promise<number> {
   const response = page.waitForResponse((candidate) => {
     const url = new URL(candidate.url());
@@ -523,12 +445,6 @@ async function submitSetupCode(page: Page, code: string): Promise<number> {
   return (await response).status();
 }
 
-/**
- * Starts (or replaces) TOTP setup and returns the freshly read secret plus
- * the enrollment token the server issued. The token is held only in process
- * memory, for the HTTP-level supersession fixture; it never reaches evidence
- * or console output.
- */
 async function startTotpSetupCapturing(
   page: Page,
 ): Promise<{ enrollmentId: string; secret: string }> {
@@ -553,15 +469,10 @@ async function startTotpSetupCapturing(
   return { enrollmentId, secret };
 }
 
-/** Starts (or replaces) TOTP setup and returns the freshly read secret. */
 async function startTotpSetup(page: Page): Promise<string> {
   return (await startTotpSetupCapturing(page)).secret;
 }
 
-/**
- * Enrolls a first TOTP credential on a freshly signed-in account, proving
- * the reauthentication gate and the one-time recovery reveal.
- */
 async function enrollFirstTotp(
   page: Page,
   password: string,
@@ -582,8 +493,6 @@ async function enrollFirstTotp(
   return { codes, secret };
 }
 
-// --- Enabled-enrollment journey ------------------------------------------
-
 const ENABLED_TITLE = 'proves the authenticator-app second factor over native HTTPS';
 const SHARD_ROLES: Readonly<Record<string, readonly string[]>> = TOTP_SHARD_ROLES;
 
@@ -598,10 +507,6 @@ for (const shard of SHARDS ?? [null]) {
   });
 }
 
-/**
- * Walks the enabled journey for one shard's roles, or for every role when
- * `shard` is null, and writes that run's evidence and timing.
- */
 async function provesEnabledJourney(
   browser: Browser,
   context: BrowserContext,
@@ -657,7 +562,6 @@ async function provesEnabledJourney(
   context.on('page', attach);
   await installExternalRequestFirewall(context, counters);
   await installExternalWebSocketFirewall(context, counters);
-  // Account preparation must work when live registration is unavailable.
   let registrations = 0;
   await context.route(`${ORIGIN}/api/v1/auth/password/register`, async (route) => {
     registrations += 1;
@@ -709,14 +613,9 @@ async function provesEnabledJourney(
   let recoveryCleanupCode = '';
   let attemptsCleanupCode = '';
   const extraContexts: BrowserContext[] = [];
-  // Browser cleanup covers the roles this shard visits. The host fixture
-  // removes every remaining seeded account by its exact identity.
   const visitedAccounts: Partial<Record<AccountRole, true>> = {};
 
   try {
-    // 1. A fictional primary account with a password and a linked provider,
-    //    plus a connected agent and a second session, all created before
-    //    enrollment so completion's epoch change can be proved against them.
     if (runsRole('primary')) {
     role('primary');
     stage('primary-account');
@@ -778,10 +677,6 @@ async function provesEnabledJourney(
     expect(await meStatus(otherPage)).toBe(200);
     steps.otherSessionStarted = true;
 
-    // 2. First enrollment demands recent reauthentication, renders the QR
-    //    with no external request, and issues the one-time recovery set.
-    //    Primary spends 2 admitted attempts here: the superseded-enrollment
-    //    completion and the accepted completion.
     stage('enroll-first-totp');
     await gotoHydrated(page, '/app/settings/sessions');
     await expect(page.getByTestId('totp-status')).toContainText('Not set up.');
@@ -796,11 +691,6 @@ async function provesEnabledJourney(
     await proveQrIsLocal(page, counters);
     steps.qrIsLocal = true;
 
-    // 3. Abandoning setup and starting again supersedes the first enrollment
-    //    row. Proving the old enrollmentId with the new secret's own code
-    //    against the completion route (an authenticated HTTP fixture, since
-    //    the settings dialog always names its own current enrollment) shows
-    //    the superseded row is gone, not merely that a stale code fails.
     stage('enrollment-superseded');
     await page.getByTestId('totp-setup-cancel').click();
     await expect(page.getByTestId('totp-setup-dialog')).toHaveCount(0);
@@ -827,10 +717,6 @@ async function provesEnabledJourney(
     expect(supersededResult).toEqual({ code: 'enrollment_invalid', status: 400 });
     steps.supersededEnrollmentRejected = true;
 
-    // Non-ASCII digits never leave the settings form, and the server
-    // rejects them as a malformed request when sent directly
-    // (totp-second-factor-contract.md, "TOTP profile and code verification").
-    // The decode failure spends no admitted attempt.
     stage('unicode-digits-rejected');
     const unicodeCode = toFullwidthDigits(codeNow(secret, systemClock()));
     const setupInput = page.locator(TOTP_SETUP_INPUT);
@@ -863,14 +749,10 @@ async function provesEnabledJourney(
     const firstCodes = await readRevealedCodes(page);
     await closeRevealAndProveCleared(page, firstCodes);
     await expect(page.getByTestId('totp-added-success')).toBeVisible();
-    // Completion replaced the session, and passkey-coexistence adds a
-    // passkey on this same page. Waiting here, before meStatus reads
-    // /api/v1/me itself, also keeps the hold on the page's own refetch.
     await enrolledTokenRefetched();
     steps.enrolled = true;
     steps.recoveryRevealedOnce = true;
 
-    // 4. The epoch change ended every other session and the agent grant.
     stage('revocation');
     expect(await meStatus(otherPage)).toBe(401);
     steps.otherSessionRevoked = true;
@@ -884,9 +766,6 @@ async function provesEnabledJourney(
     expect(state.totpEnabled).toBe(true);
     expect(state.recoveryRemaining).toBe(10);
 
-    // 5. A passkey enrolled alongside TOTP adds no recovery codes and the
-    //    pending page lists passkey before TOTP before recovery. Account
-    //    mutation, not a pending completion, so it spends nothing.
     stage('passkey-coexistence');
     const pool = await AuthenticatorPool.attach(context, page);
     const authPrimary = await pool.add();
@@ -902,17 +781,11 @@ async function provesEnabledJourney(
     await expect(page.getByTestId('recovery-codes-list')).toHaveCount(0);
     steps.passkeyCoexistence = true;
 
-    // 6. Password sign-in stops at the pending page; the fixed method order
-    //    is passkey, then authenticator app, then recovery code. A pending
-    //    status read, not a completion, so it spends nothing.
     stage('password-pending');
     await signOut(page);
     expect(await passwordSignIn(page, primaryEmail, primaryPassword))
       .toBe('pending');
     expect(await meStatus(page)).toBe(401);
-    // Each pending-method section can render on its own reactive update
-    // after the page hydrates, so wait for all three before reading their
-    // DOM order instead of racing a single immediate snapshot.
     await expect(page.getByTestId('second-factor-passkey')).toBeVisible();
     await expect(page.getByTestId('second-factor-totp')).toBeVisible();
     await expect(page.getByTestId('second-factor-recovery')).toBeVisible();
@@ -929,9 +802,6 @@ async function provesEnabledJourney(
     ]);
     steps.passwordPending = true;
 
-    // 7. Wrong-session HTTP fixture: the pending verify route bound to one
-    //    session rejects a foreign pending cookie. Pending authentication
-    //    fails before admission, so it spends nothing.
     stage('wrong-session');
     const foreignSessionResult = await trustedPost(
       ca,
@@ -947,8 +817,6 @@ async function provesEnabledJourney(
     expect(foreignSessionResult.status).toBe(401);
     steps.wrongSessionRejected = true;
 
-    // 8. Provider sign-in on the enrolled account also stops at pending, then
-    //    completes with one admitted attempt.
     stage('provider-pending');
     await signOut(page);
     await watchingCallback(page, () => signInWithGoogle(page, {
@@ -963,9 +831,6 @@ async function provesEnabledJourney(
     await completeWithTotp(page, await freshCode(page, secret, primaryTracker));
     await expectSignedInApp(page);
 
-    // 9. Removing TOTP while a passkey remains is non-final (one admitted
-    //     reauthentication attempt); removing the remaining passkey then
-    //     turns enforcement off.
     stage('remove-totp');
     await gotoHydrated(page, '/app/settings/sessions');
     await forceReauthOnce(page, '/api/v1/me/second-factor/totp');
@@ -985,8 +850,6 @@ async function provesEnabledJourney(
     expect(state.totpEnabled).toBe(false);
     steps.oneRemoved = true;
 
-    // The removal replaced the session, so the passkey removal waits for
-    // the page's replacement CSRF token (holdTokenRefetch).
     stage('final-removal');
     await tokenRefetched();
     await page.locator('[data-testid^="passkey-remove-"]').first().click();
@@ -1006,15 +869,8 @@ async function provesEnabledJourney(
       .toBe('session');
     primaryCleanupCode = '';
     steps.finalRemoved = true;
-    // Primary's admitted attempts: 2 (enrollment) + 1 (provider pending)
-    // + 1 (remove-totp reauth) = 4.
     }
 
-    // 10. A ninth fictional account carries the previous-step, current-step,
-    //     and next-step tolerance case against its own enrollment: each
-    //     accepts one pending login on a fresh sign-in, since a step only
-    //     accepts a code greater than the credential's last used step.
-    //     Skew's admitted attempts: 1 (enrollment) + 3 (step tolerance) = 4.
     if (runsRole('skew')) {
     role('skew');
     stage('skew-account');
@@ -1028,8 +884,6 @@ async function provesEnabledJourney(
     const skewSecret = skewEnrolled.secret;
     skewCleanupCode = skewEnrolled.codes[9] as string;
 
-    // Earlier stages used steps up to the current one, so wait until the
-    // previous step is newer than any of them.
     stage('previous-step');
     await signOut(page);
     expect(await passwordSignIn(page, skewEmail, skewPassword))
@@ -1059,8 +913,6 @@ async function provesEnabledJourney(
     steps.nextStepAccepted = true;
     }
 
-    // 11. A second fictional account carries the same-step replay and
-    //     invalid-code cases against its own enrollment.
     if (runsRole('replay')) {
     role('replay');
     stage('replay-account');
@@ -1074,10 +926,6 @@ async function provesEnabledJourney(
     let replaySecret = replayEnrolled.secret;
     replayCleanupCode = replayEnrolled.codes[9] as string;
 
-    // 12. A replayed code and an invalid code are both rejected as failed
-    //     verification, then a valid code still completes the same pending
-    //     row. Replay's admitted attempts: 1 (enrollment) + 2 (same-step
-    //     replay) + 2 (invalid code) = 5.
     stage('same-step-replay');
     expect(await passwordSignIn(page, replayEmail, replayPassword))
       .toBe('pending');
@@ -1088,7 +936,6 @@ async function provesEnabledJourney(
     await signOut(page);
     expect(await passwordSignIn(page, replayEmail, replayPassword))
       .toBe('pending');
-    // The already-consumed step is no longer greater than last_used_step.
     expect(await submitPendingTotpCode(page, usedCode)).toBe(401);
     steps.sameStepReplayRejected = true;
 
@@ -1102,9 +949,6 @@ async function provesEnabledJourney(
     await expectSignedInApp(page);
     }
 
-    // 13. A third fictional account carries the concurrent-submission case
-    //     against its own enrollment. Concurrent's admitted attempts: 1
-    //     (enrollment) + 2 (race) + 1 (browser resume) = 4.
     if (runsRole('concurrent')) {
     role('concurrent');
     stage('concurrent-account');
@@ -1139,8 +983,6 @@ async function provesEnabledJourney(
     expect(race.filter((result) => result.status === 204)).toHaveLength(1);
     expect(race.filter((result) => result.status === 401)).toHaveLength(1);
     steps.concurrentUseRejected = true;
-    // The race winner's session went to this test's own HTTP client, not the
-    // browser, so the browser signs in again before it opens settings.
     stage('concurrent-browser-sign-in');
     expect(await passwordSignIn(page, concurrentEmail, concurrentPassword))
       .toBe('pending');
@@ -1150,10 +992,6 @@ async function provesEnabledJourney(
     await expectSignedInApp(page);
     }
 
-    // 14. A fourth fictional account carries replacement against its own
-    //     enrollment. Replace's admitted attempts: 1 (enrollment) + 1
-    //     (reauth) + 1 (replacement completion) + 1 (old-secret rejection)
-    //     + 1 (new-secret login) = 5.
     if (runsRole('replace')) {
     role('replace');
     stage('replace-account');
@@ -1179,8 +1017,6 @@ async function provesEnabledJourney(
     await reauthenticateEnrolled(
       page, replacePassword, replaceSecret, replaceTracker,
     );
-    // The replace notice lives in the setup dialog, which opens only after
-    // the retried start succeeds.
     stage('replace-start');
     const oldReplaceSecret = replaceSecret;
     replaceSecret = await startTotpSetup(page);
@@ -1210,9 +1046,6 @@ async function provesEnabledJourney(
     await expectSignedInApp(page);
     }
 
-    // 15. A fifth fictional account carries the wrong-epoch fixture against
-    //     its own enrollment. Epoch's admitted attempts: 1 (enrollment) + 1
-    //     (reauth) + 1 (bump completion) + 1 (stale attempt) = 4.
     if (runsRole('epoch')) {
     role('epoch');
     stage('epoch-account');
@@ -1267,10 +1100,6 @@ async function provesEnabledJourney(
     await staleContext.close();
     }
 
-    // 16. A sixth fictional account carries both locales and the
-    //     password-reset preservation case against its own enrollment.
-    //     Locale's admitted attempts: 1 (enrollment) + 2 (locales) + 1
-    //     (post-reset completion) = 4.
     if (runsRole('locale')) {
     role('locale');
     stage('locale-account');
@@ -1303,7 +1132,6 @@ async function provesEnabledJourney(
     steps.locales = true;
     steps.viewports = true;
 
-    // 17. A password reset revokes sessions but preserves enforcement.
     stage('password-reset');
     const resetPassword = runPassword();
     await gotoHydrated(page, '/forgot-password');
@@ -1325,9 +1153,6 @@ async function provesEnabledJourney(
     await expectSignedInApp(page);
     }
 
-    // 18. A seventh fictional account carries the recovery-completion case,
-    //     which needs a still-enrolled TOTP credential to remain. Recovery's
-    //     admitted attempts: 1 (enrollment) + 1 (recovery completion) = 2.
     if (runsRole('recovery')) {
     role('recovery');
     stage('recovery-account');
@@ -1349,9 +1174,6 @@ async function provesEnabledJourney(
     steps.recoveryCompletion = true;
     }
 
-    // 19. An eighth fictional account carries attempt exhaustion, whose five
-    //     failures would otherwise spend another account's whole budget.
-    //     Attempts' admitted attempts: 1 (enrollment) + 5 (exhaustion) = 6.
     if (runsRole('attempts')) {
     role('attempts');
     stage('attempts-account');
@@ -1384,18 +1206,13 @@ async function provesEnabledJourney(
     }
     expect(registrations).toBe(0);
   } finally {
-    // Snapshot the page before teardown navigates away from the failure.
     try {
       failureSeen = await visibleWords(page);
       failurePage = landingCategory(page.url());
       failurePageState = await pageStateWords(page);
     } catch {
-      // A closed page leaves the defaults.
     }
     beginTeardown();
-    // Deletes only the accounts the active shard visited (every account on
-    // the unsharded default), so a shard's cleanup step reports on exactly
-    // its own accounts.
     const removed: boolean[] = [];
     if (visitedAccounts.primary) {
       removed.push(await deleteAccount(page, {
@@ -1469,10 +1286,6 @@ async function provesEnabledJourney(
       `${JSON.stringify({ schemaVersion: 1, sections: timer.finish() }, null, 2)}\n`,
       { flag: 'wx', mode: 0o600 },
     );
-    // A shard's evidence lists only the steps it proved: the closed-list
-    // schema check in verify-evidence.mjs accepts any true subset of the
-    // full step set for this scenario and expects every step to be present
-    // and true only once its results are combined across every shard.
     const provenSteps = Object.fromEntries(
       Object.entries(steps).filter(([, proved]) => proved === true),
     );
@@ -1492,9 +1305,6 @@ async function provesEnabledJourney(
       }, null, 2)}\n`,
       { flag: 'wx', mode: 0o600 },
     );
-    // The active shard's own last-executed role's completion step, or
-    // attemptsExhausted on the unsharded default (whose last role is always
-    // attempts).
     const journeyDone = activeRoles === null || activeRoles.has('attempts')
       ? steps.attemptsExhausted
       : activeRoles.has('recovery') ? steps.recoveryCompletion
@@ -1505,8 +1315,6 @@ async function provesEnabledJourney(
     failOnUnexpectedConsole(journeyDone);
   }
 }
-
-// --- Disabled-enrollment journey -----------------------------------------
 
 test('proves disabled TOTP enrollment answers as an unregistered route',
   async ({ context, page }) => {
@@ -1594,8 +1402,6 @@ test('proves disabled TOTP enrollment answers as an unregistered route',
       expect(probes.recovery)
         .toEqual({ code: 'authentication_required', status: 401 });
       steps.recoveryStillWorks = true;
-      // Passkey enrollment stays on, and this fresh sign-in is recent
-      // primary proof for a first factor, so options are issued.
       expect(probes.passkeyOptions.status).toBe(200);
       steps.passkeyStillWorks = true;
 
@@ -1605,10 +1411,6 @@ test('proves disabled TOTP enrollment answers as an unregistered route',
       await gotoHydrated(page, '/app/settings/sessions');
       await expect(page.getByTestId('totp-status')).toContainText('Chưa thiết lập.');
       await expect(page.getByTestId('totp-setup-start')).toHaveCount(0);
-      // The header shows the signed-out account links until its own /me read
-      // settles, and this block's text can arrive first. Those links are
-      // wider than the phone width in Vietnamese, so the width is measured
-      // on the signed-in header.
       await expect(page.getByTestId('account-menu')).toBeVisible();
       expect(await page.evaluate(() =>
         document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
@@ -1619,13 +1421,11 @@ test('proves disabled TOTP enrollment answers as an unregistered route',
       steps.locales = true;
       steps.viewports = true;
     } finally {
-      // Snapshot the page before teardown navigates away from the failure.
       try {
         failureSeen = await visibleWords(page);
         failurePage = landingCategory(page.url());
         failurePageState = await pageStateWords(page);
       } catch {
-        // A closed page leaves the defaults.
       }
       beginTeardown();
       steps.cleanup = await deleteSignedInAccount(page).catch(() => false);
@@ -1649,14 +1449,6 @@ test('proves disabled TOTP enrollment answers as an unregistered route',
     }
   });
 
-// --- Shared journey helpers ------------------------------------------------
-
-/**
- * Signs in again in one locale at one proof width and completes the pending
- * page entirely by keyboard through the authenticator-app field, checking
- * the localized copy, the phishing guidance, the accessible names, the
- * focus order, and that nothing overflows the viewport.
- */
 async function provePendingLocale(
   page: Page,
   context: BrowserContext,
@@ -1705,11 +1497,6 @@ interface DisabledProbes {
   readonly unregistered: TrustedResult;
 }
 
-/**
- * Probes every TOTP route from the signed-in page while enrollment is off:
- * the two enrollment routes must match a never-registered path, and the
- * flag-independent routes must answer with their own codes.
- */
 async function probeDisabledRoutes(
   page: Page,
   csrf: string,
@@ -1736,7 +1523,6 @@ async function probeDisabledRoutes(
         };
         if (typeof parsed.error?.code === 'string') code = parsed.error.code;
       } catch {
-        // A bodiless response leaves the code null.
       }
       return { code, status: response.status };
     };

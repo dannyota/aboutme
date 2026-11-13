@@ -1,9 +1,3 @@
-// Command observer publishes https://aboutme.vn/.well-known/deployment.json
-// (docs/design/deployment-transparency/README.md). It asks the platform
-// which image digests are running, checks each one against the signed
-// GitHub build record, and publishes the result. It never reports the
-// application's own version; every claim comes from the platform or from
-// Sigstore-signed provenance.
 package main
 
 import (
@@ -20,16 +14,11 @@ import (
 	"github.com/aws/aws-lambda-go/lambda"
 )
 
-// version and commit are set at build time
-// (deploy/observer/Dockerfile); both are empty in a build that does not set
-// them.
 var (
 	version string
 	commit  string
 )
 
-// versionString formats the observer's own build information for the
-// version subcommand.
 func versionString() string {
 	return fmt.Sprintf("observer %s %s", version, commit)
 }
@@ -41,10 +30,6 @@ func main() {
 	}
 }
 
-// dispatch runs the subcommand named by args. It never prints a platform
-// object, an ARN, an account ID, or an environment value beyond the
-// configured names (docs/design/deployment-transparency/document.md,
-// "Sanitizer").
 func dispatch(args []string) error {
 	if len(args) == 0 {
 		return errors.New("usage: observer <lambda|run|version>")
@@ -62,9 +47,6 @@ func dispatch(args []string) error {
 	}
 }
 
-// runLambda builds the observer once and starts the Lambda runtime loop,
-// so a warm invocation reuses the verifier's TUF trust root and HTTP client
-// (docs/design/deployment-transparency/README.md, "Where the observer runs").
 func runLambda() error {
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stderr, nil)))
 	ctx := context.Background()
@@ -82,9 +64,6 @@ func runLambda() error {
 	return nil
 }
 
-// runLoop parses --interval, builds the observer once, and runs it every
-// tick until the process is signaled to stop
-// (docs/design/deployment-transparency/README.md, "Kubernetes").
 func runLoop(args []string) error {
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stderr, nil)))
 	fs := flag.NewFlagSet("run", flag.ContinueOnError)

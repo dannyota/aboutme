@@ -13,7 +13,7 @@ Baseline references below `host/`, `tests/`, and `edge/` start at `deploy/vn/`.
 
 | Location                                                                                                                   | Change                                                                           |
 | -------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| `host/install.sh:17`, `:435`                                                                                               | Package pin and installed catalog filename. Keep ordinary migration invocation.  |
+| `host/install.sh:11`, `:429`                                                                                               | Package pin and installed catalog filename. Keep ordinary migration invocation.  |
 | `host/crowdsec-db.sh:15`, `:223`, `:225`, `:262`                                                                           | Sole catalog path, exact comparison, and epoch digest.                           |
 | `host/crowdsec-provision.sh:75`, `host/crowdsec-vacuum.sh:18`                                                              | Package assertion and catalog path.                                              |
 | `host/crowdsec-schema-v1.8.1.tsv:1`                                                                                        | Replace with generated `crowdsec-schema-v1.8.2.tsv`.                             |
@@ -57,8 +57,8 @@ access.
 ## Installation and recovery
 
 Use the existing operator reset, with no installer reset flag or automatic loss.
-`install.sh:387` suppresses package startup and registration; `:432` installs
-helpers and catalog before the ordinary migration at `:541`. On an occupied
+`install.sh:381` suppresses package startup and registration; `:426` installs
+helpers and catalog before the ordinary migration at `:535`. On an occupied
 1.8.1 database that call fails target preflight, stops consumers, and refuses
 `fresh-admission` (`crowdsec-migrate.sh:173`, `:181`, `:182`). It cannot
 complete without reset. No new controller, admission exception, or marker
@@ -97,7 +97,7 @@ A failed reset revokes its lease, retains failure denial, and stops consumers
 explicit `--reset`, restore the recorded edge, and finish the installer. Do not
 clear fences/markers manually. For downgrade, use the reviewed 1.8.1 bundle's
 installer to install its authenticated package with startup suppressed and its
-matching helpers/catalog (`install.sh:136`). At occupied-catalog refusal, reset
+matching helpers/catalog (`install.sh:130`). At occupied-catalog refusal, reset
 under that old bundle, restore the edge, and finish its installer. CrowdSec
 state is lost again. Preserve notice/fence fixes; never restore the application
 cluster for CrowdSec. Image rollback alone retains the working host bundle.

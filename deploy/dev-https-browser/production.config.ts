@@ -1,10 +1,5 @@
 import { defineConfig } from '@playwright/test';
 
-// Keep failure-page ARIA snapshots (`error-context.md`) suppressed for the
-// pinned Playwright 1.64.0 runner. A page-content snapshot could hold a
-// secret; see docs/runbooks/totp-keys.md "Production proofs".
-// This runner-internal environment switch requires verification whenever
-// the pinned Playwright package changes.
 process.env.PLAYWRIGHT_NO_COPY_PROMPT = '1';
 
 const baseURL = 'https://aboutme.vn';
@@ -26,11 +21,6 @@ for (const name of ['UPDATE_GOLDEN', 'PLAYWRIGHT_UPDATE_SNAPSHOTS']) {
   }
 }
 
-// The production journey touches a live host over the network, not a local
-// dev server, so every step budget is wider than the local harness uses.
-// A step that never settles must still fail at its own stage rather than
-// silently consume the run; see totp-production.spec.ts for the per-step
-// wrap that turns any error into one fixed, secret-free message.
 export default defineConfig({
   forbidOnly: true,
   fullyParallel: false,

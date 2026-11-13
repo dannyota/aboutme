@@ -1,7 +1,3 @@
-# One Bottlerocket ECS host with a fixed Elastic IP and its ECS services.
-# The AMI and user data are ignored after creation: Bottlerocket updates in
-# place during the maintenance window.
-
 data "aws_ssm_parameter" "bottlerocket" {
   name = "/aws/service/bottlerocket/aws-ecs-2/arm64/latest/image_id"
 }
@@ -28,21 +24,19 @@ resource "aws_instance" "host" {
     cpu_credits = "unlimited"
   }
 
-  # Hop limit 1 keeps bridge-network containers away from instance metadata.
+  # Hop limit 1 keeps bridge-network containers away from instance metadata (EC2 IMDSv2 hop limit).
   metadata_options {
     http_endpoint               = "enabled"
     http_tokens                 = "required"
     http_put_response_hop_limit = 1
   }
 
-  # OS volume.
   root_block_device {
     volume_type = "gp3"
     volume_size = 2
     encrypted   = true
   }
 
-  # Container data volume.
   ebs_block_device {
     device_name = "/dev/xvdb"
     volume_type = "gp3"
@@ -62,8 +56,7 @@ resource "aws_instance" "host" {
     "user.max_user_namespaces" = "16384"
   EOT
 
-  # The data volume is set at creation only; AWS reports computed fields and
-  # default tags on it that would otherwise force a replacement.
+  # AWS reports computed fields and default tags on the data volume that would otherwise force a replacement (AWS provider).
   lifecycle {
     ignore_changes = [ami, user_data, ebs_block_device]
   }

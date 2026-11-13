@@ -13,8 +13,6 @@ import {
 } from './harness-lib';
 import { ALLOWED_ORIGIN, httpFailureStatus } from './network-policy';
 
-// Node-only capture endpoint, reached only by Playwright control code over
-// loopback HTTP; the browser's page/context firewall never sees it.
 const ORIGIN = ALLOWED_ORIGIN;
 const CAPTURE_URL = 'http://127.0.0.1:20444/api/messages';
 const CAPTURE_TOKEN_PATH = '/uat-input/mail-capture-token';
@@ -22,15 +20,10 @@ const EVIDENCE_PATH = '/evidence/sample-start-proof.json';
 const SAMPLE_PATH = '/templates/engineer-compact';
 const NEXT_PATH = '/app/new?sample=engineer-compact&lng=en';
 const NEXT_LOGIN_PATH = `/login?next=${encodeURIComponent(NEXT_PATH)}`;
-// The engineer-compact sample (packages/schema/samples/engineer-compact.*.json).
-// Both languages keep the English headline (docs/design/vietnam-tech-resumes.md),
-// so the location, which each language spells its own way, tells the English
-// and Vietnamese samples apart.
 const SAMPLE_HEADLINE = 'Senior Frontend Engineer · React, TypeScript, Next.js';
 const ENGLISH_SAMPLE_LOCATION = 'Cau Giay, Hanoi';
 const VIETNAMESE_SAMPLE_LOCATION = 'Cầu Giấy, Hà Nội';
 
-// sampleLocation reads the location detail of a submitted sample document.
 function sampleLocation(document: {
   personalDetails?: { details?: unknown };
 } | undefined): unknown {
@@ -40,8 +33,6 @@ function sampleLocation(document: {
     .find((detail) => detail.type === 'location')?.value;
 }
 
-// Mirrors RESUME_CAP in apps/web/app/composables/useResumeList.ts; the
-// browser proof runs isolated from the web app source.
 const RESUME_CAP = 3;
 const SCHEMA_VERSION = '6';
 
@@ -60,12 +51,10 @@ function captureClient(token: string): CaptureClient {
   const headers = { Authorization: `Bearer ${token}` };
   return {
     async reset() {
-      // loopback HTTP to the local mail capture harness
       const response = await fetch(CAPTURE_URL, { method: 'DELETE', headers });
       if (!response.ok) throw new Error(`capture reset failed: ${response.status}`);
     },
     async messages() {
-      // loopback HTTP to the local mail capture harness
       const response = await fetch(CAPTURE_URL, { headers });
       if (!response.ok) throw new Error(`capture read failed: ${response.status}`);
       const body = (await response.json()) as { messages: CapturedMessage[] };
@@ -74,8 +63,6 @@ function captureClient(token: string): CaptureClient {
   };
 }
 
-// secret returns a runtime-random password that satisfies the D2 policy
-// (15-128 code points, not common/breached) without ever leaving test memory.
 function secret(): string {
   return randomBytes(24).toString('base64url');
 }
@@ -108,15 +95,11 @@ function verifyURL(token: string): string {
   return `${ORIGIN}/verify-email#token=${token}`;
 }
 
-// gotoHydrated navigates and then waits for the Nuxt app to hydrate, so a
-// Vue-bound form is interactive rather than a stale SSR shell.
 async function gotoHydrated(page: Page, url: string): Promise<void> {
   await page.goto(url);
   await waitForHydration(page);
 }
 
-// resumeCount reads the account's resume list through the same authenticated
-// API the web app calls, so a reload can be proven to create nothing.
 async function resumeCount(page: Page): Promise<number> {
   return page.evaluate(async (schemaVersion) => {
     const response = await fetch('/api/v1/resumes', {
@@ -159,7 +142,7 @@ test('proves register-to-create from a gallery sample', async ({
           injectedMediaBusyConsoleErrors += 1;
           return false;
         }
-      } catch { /* Count unparseable locations through the normal policy. */ }
+      } catch {  }
       return isUnexpectedConsoleError(message);
     },
   });
@@ -176,8 +159,6 @@ test('proves register-to-create from a gallery sample', async ({
   const email = randomEmail();
   const password = secret();
 
-  // 1. Signed out, the sample's "use this sample" link leads to registration
-  // and keeps the intended destination.
   stage('sample-page');
   await gotoHydrated(page, SAMPLE_PATH);
   stage('sample-click');
@@ -187,8 +168,6 @@ test('proves register-to-create from a gallery sample', async ({
   const registerNext = new URL(page.url()).searchParams.get('next');
   expect(registerNext).toBe(NEXT_PATH);
 
-  // 2. A visitor who already has an account keeps the same next on the
-  // register page's sign-in link.
   stage('register-sign-in-link');
   await expect(page.getByTestId('register-sign-in')).toHaveAttribute(
     'href',
@@ -206,8 +185,6 @@ test('proves register-to-create from a gallery sample', async ({
     'Check your email',
   );
 
-  // 3. Verify through the captured link, opened in a new tab like the real
-  // email would.
   stage('verify-link');
   const verifyToken = await waitForLink(capture, 'verify', email);
   const verifyPage = await context.newPage();
@@ -217,8 +194,6 @@ test('proves register-to-create from a gallery sample', async ({
     'Email verified',
   );
 
-  // 4. The verify page's sign-in link keeps the same next; sign in and land
-  // on the sample's confirm page.
   stage('verify-signin-link');
   const signInLink = verifyPage.getByTestId('verify-sign-in');
   await expect(signInLink).toHaveAttribute('href', NEXT_LOGIN_PATH);
@@ -252,15 +227,12 @@ test('proves register-to-create from a gallery sample', async ({
   await expect(verifyPage.locator('html')).toHaveAttribute('lang', 'en');
   await expect(verifyPage.getByLabel('Title')).toHaveValue(suggestedTitle);
 
-  // 5. A reload of the confirm page creates nothing.
   stage('reload');
   await verifyPage.reload();
   await waitForHydration(verifyPage);
   await expect(verifyPage.locator('[data-new-resume="confirm"]')).toBeVisible();
   expect(await resumeCount(verifyPage)).toBe(0);
 
-  // 6. Confirm creates the resume and opens the editor with the sample
-  // content.
   stage('create-title');
   await verifyPage.getByLabel('Title').fill('Sample Start Resume');
   let englishBeforeTogglePayload: string | null = null;
@@ -332,9 +304,6 @@ test('proves register-to-create from a gallery sample', async ({
     SAMPLE_HEADLINE,
   );
 
-  // An authenticated user can begin the Vietnamese sample without changing
-  // the English sample already created above. The confirm screen must keep
-  // that sample choice while the interface language changes.
   stage('vietnamese-sample-open');
   await verifyPage
     .context()
@@ -443,8 +412,6 @@ test('proves register-to-create from a gallery sample', async ({
   await verifyPage.reload();
   await waitForHydration(verifyPage);
 
-  // 7. Fill the account to the resume cap, then the confirm page hides the
-  // create button.
   stage('fill-cap');
   for (let count = 2; count < RESUME_CAP; count += 1) {
     await createBlankResume(verifyPage, uniqueTitle());

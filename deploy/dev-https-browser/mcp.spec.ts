@@ -71,11 +71,6 @@ function stage(name: string): void {
   console.log(`mcp-stage:${name}`);
 }
 
-// The native stack serves Nuxt in development mode, which compiles a route on
-// its first visit. On a fresh server, such as a hosted runner, the editor and
-// settings routes can hydrate later than the default five-second expect
-// timeout. A failure adds one fixed stage naming the failure and route class
-// only, never the URL, page text, or error.
 const FIRST_VISIT_HYDRATION_MS = 40_000;
 
 function routeClass(page: Page): string {
@@ -160,7 +155,6 @@ function parseJSON(body: string, label: string): Record<string, unknown> {
     const parsed = object(JSON.parse(body));
     if (parsed !== null) return parsed;
   } catch {
-    // Report a fixed error that cannot expose a token, code, or response body.
   }
   throw new Error(`${label} returned invalid JSON`);
 }
@@ -279,7 +273,6 @@ async function bestEffortDelete(
   try {
     await deleteRecordedResume(page, resumeID);
   } catch {
-    // The fixture cleanup is the final fail-closed cleanup for an aborted proof.
   }
 }
 

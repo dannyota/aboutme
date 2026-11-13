@@ -1,7 +1,3 @@
-# VPC with one public subnet for the host and two private subnets for RDS.
-# There is no NAT gateway; RDS needs no outbound access.
-
-# Standard Availability Zones only; RDS and this design use no Local Zones.
 data "aws_availability_zones" "available" {
   state = "available"
   filter {
@@ -51,15 +47,11 @@ resource "aws_route_table_association" "public" {
   route_table_id = aws_route_table.public.id
 }
 
-# The default security group allows nothing.
 resource "aws_default_security_group" "main" {
   vpc_id = aws_vpc.main.id
 }
 
-# The host group admits no inbound traffic; the database group trusts it.
-# CloudFront reaches the host through aws_security_group.cloudfront_origin.
-# Its description is stale but kept: changing it replaces the group, which
-# the database rule references.
+# Changing a security group's description replaces the group, which the database rule references (AWS provider).
 resource "aws_security_group" "host" {
   name        = "${var.name}-host"
   description = "aboutme-prod host - HTTPS from Cloudflare only"
@@ -74,9 +66,6 @@ resource "aws_vpc_security_group_egress_rule" "host_all" {
   description       = "Image pulls, AWS APIs, mail"
 }
 
-# The CloudFront origin-facing prefix list weighs 55 rules against the
-# default quota of 60 per group (docs/design/cloudfront-edge.md, "Origin
-# access"), so it gets its own group rather than joining aws_security_group.host.
 data "aws_ec2_managed_prefix_list" "cloudfront_origin" {
   name = "com.amazonaws.global.cloudfront.origin-facing"
 }

@@ -21,9 +21,6 @@ func init() {
 	caddy.RegisterModule(SafeMetadataEncoder{})
 }
 
-// SafeMetadataEncoder replaces an operational log entry with a timestamp,
-// severity, and fixed marker. It is used where upstream, TLS, or CrowdSec
-// messages and fields can contain request data or a decision address.
 type SafeMetadataEncoder struct {
 	Marker          string `json:"marker,omitempty"`
 	zapcore.Encoder `json:"-"`

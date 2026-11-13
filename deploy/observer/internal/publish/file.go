@@ -11,7 +11,6 @@ import (
 	"danny.vn/aboutme/deploy/observer/internal/document"
 )
 
-// FilePublisher atomically replaces deployment.json in one existing directory.
 type FilePublisher struct {
 	directory string
 	syncFile  func(*os.File) error
@@ -19,7 +18,6 @@ type FilePublisher struct {
 	rename    func(string, string) error
 }
 
-// NewFilePublisher returns a publisher for the host's public directory.
 func NewFilePublisher(directory string) *FilePublisher {
 	return &FilePublisher{
 		directory: directory,
@@ -29,8 +27,6 @@ func NewFilePublisher(directory string) *FilePublisher {
 	}
 }
 
-// Put fsyncs a complete temporary file before rename. A directory fsync error
-// after rename is reported even though the complete new document is visible.
 func (p *FilePublisher) Put(ctx context.Context, body []byte) (retErr error) {
 	if len(body) > document.MaxBytes {
 		return errors.New("document exceeds size limit")

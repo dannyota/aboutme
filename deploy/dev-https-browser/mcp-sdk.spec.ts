@@ -3,11 +3,6 @@ import { randomBytes } from 'node:crypto';
 import { constants } from 'node:fs';
 import { lstat, open, readdir, rename, unlink } from 'node:fs/promises';
 
-// Browser helper for the MCP owner workflow. The host Go runner owns OAuth,
-// the loopback callback, and every resume call; this helper only signs in
-// and approves consent through the private handoff files. See
-// docs/design/mcp-owner-workflow.md#browser-helper-interface.
-
 const BROWSER_DIR = '/mcp-browser';
 const CREDENTIAL_FILE = '/mcp-credentials/login.env';
 const READY_NAME = 'browser-ready';
@@ -34,8 +29,6 @@ const STEP_TIMEOUT_MS = 60_000;
 const MAX_REQUEST_BYTES = 64 * 1024;
 const MAX_CREDENTIAL_BYTES = 4096;
 
-// The step the helper reached, reported in the final stage on failure. The
-// vocabulary is fixed, like the result codes.
 type HelperStep =
   | 'ready'
   | 'request'
@@ -50,8 +43,6 @@ type HelperStep =
   | 'callback-pending'
   | 'callback-timeout';
 
-// CallbackError classifies Chromium's navigation failure. Only these words
-// are ever printed; the browser's own error text never is.
 type CallbackError =
   | 'aborted'
   | 'refused'
@@ -62,9 +53,7 @@ type CallbackError =
   | 'reset'
   | 'other';
 
-// callbackError maps one net:: error name to a fixed word. A 204 answer ends
-// a top-level navigation with ERR_ABORTED after the request was delivered,
-// which is the runner's normal callback reply, not a failure.
+// A 204 answer ends a top-level navigation with net::ERR_ABORTED after the request was delivered (Chromium).
 function callbackError(text: string): CallbackError {
   if (text.includes('ERR_ABORTED')) return 'aborted';
   if (text.includes('ERR_CONNECTION_REFUSED')) return 'refused';
@@ -95,8 +84,6 @@ type HelperResult =
   | 'consent_failed'
   | 'timeout';
 
-// HelperFailure carries only a fixed result code, so no URL, credential, or
-// page text can reach the Playwright log through an error message.
 class HelperFailure extends Error {
   constructor(readonly result: Exclude<HelperResult, 'completed'>) {
     super(`mcp-sdk helper: ${result}`);
@@ -133,8 +120,6 @@ async function sleep(milliseconds: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
-// readPrivate opens without following links and accepts only a regular
-// mode-0600 file owned by this user and within the size bound.
 async function readPrivate(path: string, limit: number): Promise<Buffer> {
   const handle = await open(
     path,
@@ -158,8 +143,6 @@ async function readPrivate(path: string, limit: number): Promise<Buffer> {
   }
 }
 
-// writeAtomic publishes a mode-0600 file through an exclusive temporary name
-// and a rename, so the runner never reads a partial result.
 async function writeAtomic(name: string, contents: string): Promise<void> {
   const temporary = `${BROWSER_DIR}/.${name}-${randomBytes(8).toString('hex')}`;
   const handle = await open(
@@ -199,7 +182,6 @@ async function requireHandoffDirectory(empty: boolean): Promise<void> {
   }
 }
 
-// waitForRequest reads the runner's request once and unlinks it at once.
 async function waitForRequest(deadline: number): Promise<Buffer> {
   const path = `${BROWSER_DIR}/${REQUEST_NAME}`;
   while (Date.now() < deadline) {
@@ -260,8 +242,6 @@ function parseRequest(data: Buffer, mode: WorkflowMode): Handoff {
   return { authorizationURL, callback: callbackOf(authorizationURL), origin };
 }
 
-// callbackOf returns the loopback callback the runner registered. The helper
-// only lets the browser reach it; Go alone validates the callback itself.
 function callbackOf(authorizationURL: URL): URL {
   const values = authorizationURL.searchParams.getAll('redirect_uri');
   if (values.length !== 1) throw new HelperFailure('origin_rejected');
@@ -287,8 +267,6 @@ function callbackOf(authorizationURL: URL): URL {
   return callback;
 }
 
-// readLogin reads only the two named keys. Any other line is ignored and
-// never kept; a duplicate or empty named key fails.
 async function readLogin(): Promise<Login> {
   let text: string;
   try {
@@ -326,12 +304,8 @@ function parsed(value: string): URL | null {
   }
 }
 
-// FlowGuard records any navigation, redirect, or frame that leaves the
-// expected origin or the exact callback. A recorded violation stops the flow
-// before the next credential fill or consent action.
 class FlowGuard {
   violated = false;
-  // Callback and consent observations, reported as fixed words only.
   callbackRequested = false;
   callbackFailure: CallbackError | null = null;
   callbackStatus = 0;
@@ -400,9 +374,6 @@ class FlowGuard {
     });
   }
 
-  // requireLoginPage runs immediately before each saved-value fill: the top
-  // page must be the exact login path on the expected origin, with no child
-  // frame, and `next` must name only the relative internal authorize target.
   requireLoginPage(): void {
     const url = parsed(this.page.url());
     if (
@@ -426,9 +397,6 @@ class FlowGuard {
     }
   }
 
-  // callbackDelivered reports the callback the runner answers with 204: the
-  // navigation is cancelled after delivery, so an abort counts as delivered,
-  // as does any response below 400.
   callbackDelivered(): boolean {
     return this.callbackFailure === 'aborted'
       || (this.callbackStatus > 0 && this.callbackStatus < 400);
@@ -439,7 +407,6 @@ class FlowGuard {
       || this.callbackStatus >= 400;
   }
 
-  // callbackStep names how far the loopback navigation got, in fixed words.
   callbackStep(): HelperStep {
     if (!this.callbackRequested) return 'callback-not-started';
     if (this.callbackFailure !== null) return `callback-failed-${this.callbackFailure}`;
@@ -447,7 +414,6 @@ class FlowGuard {
     return 'callback-timeout';
   }
 
-  // pageClass names the current route, never its URL.
   pageClass(): string {
     const url = parsed(this.page.url());
     if (url === null) return 'other';
@@ -490,8 +456,6 @@ async function onPath(page: Page, origin: string, paths: readonly string[]): Pro
   return new URL(page.url()).pathname;
 }
 
-// signIn fills the two saved values exactly once. A second login page after
-// the submit is a failed login, never a refill.
 async function signIn(page: Page, guard: FlowGuard, login: Login): Promise<void> {
   stage('login');
   step('login');
@@ -528,16 +492,8 @@ async function signIn(page: Page, guard: FlowGuard, login: Login): Promise<void>
   } catch {
     throw new HelperFailure(guard.violated ? 'origin_rejected' : 'login_failed');
   }
-  // The password login answers 202 only for an account enrolled in a second
-  // factor. This helper signs in with a password alone, so it names that
-  // outcome instead of reporting a generic login failure.
   if (status === 202) throw new HelperFailure('second_factor_required');
   if (status !== 204) throw new HelperFailure('login_failed');
-  // The login page opens `next`, the authorization endpoint, as a full page
-  // load, and the endpoint redirects to the consent page. The helper only
-  // waits for that page: a second navigation of its own would race the login
-  // page's and fail whenever the page's started later. Exactly one request to
-  // the endpoint proves the login page made the return by itself.
   try {
     await onPath(page, guard.handoff.origin, ['/authorize']);
   } catch {
@@ -560,11 +516,6 @@ async function approveConsent(page: Page, guard: FlowGuard, handoff: Handoff): P
     guard.requireConsentPage();
     step('callback');
     await approve.click();
-    // The consent page approves through a POST and then navigates the top
-    // level to the runner's loopback callback. The runner answers 204, which
-    // completes the request without replacing the page, so the helper waits
-    // for the callback response rather than for a URL change. The route
-    // handler lets that one http navigation through from the https page.
     await expect.poll(
       () => guard.callbackDelivered() || guard.callbackRejected(),
       { timeout: STEP_TIMEOUT_MS },

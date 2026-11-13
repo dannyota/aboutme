@@ -2,8 +2,6 @@ package main
 
 import "testing"
 
-// clearObserverEnv resets every OBSERVER_* and the AWS_REGION variable
-// loadConfig reads, so each test starts from nothing.
 func clearObserverEnv(t *testing.T) {
 	t.Helper()
 	for _, name := range []string{

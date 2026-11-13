@@ -43,7 +43,6 @@ const (
 	caddyRepo  = "ghcr.io/dannyota/aboutme-caddy"
 )
 
-// release065 is a whole release: server 1, web 2, caddy 3, all v0.6.5.
 func release065() Input {
 	t0 := observed.Add(-10 * time.Minute)
 	return Input{
@@ -114,7 +113,6 @@ func TestMaintenanceUsesTheCaddyImageAndSkipsRelease(t *testing.T) {
 	if m.Name != platform.Maintenance || m.Image != caddyRepo || m.RunningImages[0].Signature.Status != "verified" {
 		t.Fatalf("maintenance = %+v", m)
 	}
-	// An older maintenance Caddy does not affect the release.
 	if doc.Summary != SummaryVerified || doc.Release == nil || doc.Release.Version != "v0.6.5" {
 		t.Errorf("summary %q release %+v", doc.Summary, doc.Release)
 	}

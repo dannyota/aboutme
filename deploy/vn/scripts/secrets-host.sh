@@ -33,11 +33,6 @@ member() {
   return 1
 }
 
-# Every write goes to a fresh mktemp file inside a directory only root can
-# write, which root just created and so may chmod, then replaces the target
-# with one rename (mv -T never follows a link at the target). No path is
-# checked and then written in a separate step under a directory another user
-# controls.
 require_root_dir() {
   [[ -d $1 && ! -L $1 ]] || die "$1 is not a directory"
   [[ $(stat -c '%u %a' -- "$1") == "0 $2" ]] || die "$1 must be owned by root with mode $2"

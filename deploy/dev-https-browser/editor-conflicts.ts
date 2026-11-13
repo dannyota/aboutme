@@ -59,12 +59,6 @@ export async function proveConflictAndTemplate(
   await expect(page.locator('[data-state="saved"]')).toBeVisible();
 
   state.editorDiagnosticStage = 'conflict-same-value';
-  // A realtime refetch after the remote save could adopt the winner before
-  // the paused write's 412 arrives. Reads of the resume issued after that
-  // save are held until the 412 has set the read barrier, so the editor
-  // itself must complete the barrier before it sends the next edit. The
-  // runner prints only the stage, so each step renames it, and a failed
-  // barrier check names what the route saw and the save state on screen.
   const resumePath = `/api/v1/resumes/${accepted.metadata.id}`;
   const saveStatus = page.getByTestId('save-status');
   let personalWrites = 0;
@@ -81,7 +75,6 @@ export async function proveConflictAndTemplate(
     const pathname = new URL(request.url()).pathname;
     if (pathname === personalPath && request.method() === 'PATCH') {
       personalWrites += 1;
-      // The editor's write comes first; the second is the remote save.
       if (personalWrites === 2) holdReads = true;
     } else if (holdReads && request.method() === 'GET') {
       heldReads.push(request);
@@ -116,8 +109,6 @@ export async function proveConflictAndTemplate(
     }
     state.editorDiagnosticStage = 'conflict-same-value-stale';
     expect((await staleSameValue).status()).toBe(412);
-    // While every read is held the 412 leaves the barrier set and nothing
-    // queued, which the editor shows as unsaved.
     state.editorDiagnosticStage = 'conflict-same-value-barrier';
     try {
       await expect(saveStatus).toHaveAttribute('data-state', 'dirty');
@@ -233,7 +224,6 @@ export async function proveConflictAndTemplate(
     .toBeVisible();
   await expect(partial.getByRole('button', { name: 'Tiếng Việt', exact: true }))
     .toBeVisible();
-  // The primary action comes last so it stacks first on phones.
   const partialActions = partial.locator(
     '[data-action="keep-partial"], [data-action="restore-pre-apply"], [data-action="retry-remaining"]',
   );

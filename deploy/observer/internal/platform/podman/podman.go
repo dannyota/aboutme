@@ -1,5 +1,3 @@
-// Package podman reads the root reporter's bounded observation file. It never
-// connects to Podman or copies build claims from the host report.
 package podman
 
 import (
@@ -17,24 +15,18 @@ import (
 	"danny.vn/aboutme/deploy/observer/schema"
 )
 
-// MaxBytes bounds both the file read and the decoded observation.
 const MaxBytes = 64 << 10
 
-// Lister reads one atomic snapshot written by the host reporter.
 type Lister struct {
 	path        string
 	now         func() time.Time
 	observation time.Time
 }
 
-// New returns a file adapter with no Podman access.
 func New(path string) *Lister { return &Lister{path: path, now: time.Now} }
 
-// ObservationTime returns the root reporter's clock from the last valid read.
 func (l *Lister) ObservationTime() time.Time { return l.observation }
 
-// Running rejects a failed, invalid, or expired observation as a platform read
-// failure, so the previous public document can age into stale.
 func (l *Lister) Running(ctx context.Context) ([]platform.Image, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -117,7 +109,7 @@ func parse(body []byte, now time.Time) ([]platform.Image, time.Time, error) {
 	return images, observed, err
 }
 
-// Token validation rejects keys that a map decoder would silently overwrite.
+// encoding/json keeps the last of duplicate object keys, so tokens are checked for duplicates (encoding/json).
 func uniqueJSONValue(decoder *json.Decoder, depth int) error {
 	if depth > 16 {
 		return errors.New("observation JSON is too deeply nested")

@@ -1,7 +1,3 @@
-# Scheduled privacy jobs, alarms, the site health check and monthly OS
-# updates. Budgets and anomaly monitoring are account-level and live outside
-# this repository.
-
 terraform {
   required_providers {
     aws = {
@@ -12,7 +8,6 @@ terraform {
 }
 
 locals {
-  # Times are UTC. Vietnam is UTC+7.
   jobs = {
     idempotency-expiry-sweep = "cron(5 * * * ? *)"
     media-deletion-sweep     = "cron(15 * * * ? *)"
@@ -21,8 +16,6 @@ locals {
     release-snapshot-sweep   = "cron(0 20 * * ? *)"
   }
 }
-
-# ---- Scheduled jobs ----
 
 resource "aws_scheduler_schedule_group" "jobs" {
   name = "${var.name}-jobs"
@@ -88,21 +81,16 @@ resource "aws_scheduler_schedule" "job" {
       task_count          = 1
     }
 
-    # Scheduler retries only a failed task start, not a job that runs and
-    # fails. release-snapshot-sweep retries so a start failure does not cost
-    # a day of its 30-day margin.
+    # EventBridge Scheduler retries only a failed task start, not a job that runs and fails (EventBridge Scheduler ECS targets).
     retry_policy {
       maximum_retry_attempts = each.key == "release-snapshot-sweep" ? 2 : 0
     }
   }
 
-  # deploy.sh owns the state and pins the target to the released revision.
   lifecycle {
     ignore_changes = [state, target[0].ecs_parameters[0].task_definition_arn]
   }
 }
-
-# ---- Notifications ----
 
 resource "aws_sns_topic" "alerts" {
   name = "${var.name}-alerts"
@@ -128,12 +116,6 @@ resource "aws_sns_topic_policy" "alerts" {
   })
 }
 
-# Every stopped app, web or job task sends mail: a crash, a failed job, or a
-# deploy. The event carries the stop reason and exit codes.
-# Any stopped service task alerts. A scheduled job task alerts only when it
-# failed: a container exited non-zero, or the task stopped for another reason
-# than its essential container finishing (for example it never started).
-# Hourly jobs that succeed stop cleanly every run and stay quiet.
 resource "aws_cloudwatch_event_rule" "task_stopped" {
   name        = "${var.name}-task-stopped"
   description = "aboutme-prod ECS service task stopped or scheduled job failed"
@@ -162,8 +144,6 @@ resource "aws_cloudwatch_event_target" "task_stopped" {
   rule = aws_cloudwatch_event_rule.task_stopped.name
   arn  = aws_sns_topic.alerts.arn
 }
-
-# ---- Alarms ----
 
 locals {
   alarms = {
@@ -215,9 +195,6 @@ locals {
   }
 }
 
-# A TOTP key failure logs this fixed JSON message and fails closed for that
-# row only; it never changes /readyz. See docs/design/totp-key-management.md,
-# "Key failures".
 resource "aws_cloudwatch_log_metric_filter" "totp_unavailable" {
   name           = "${var.name}-totp-unavailable"
   log_group_name = "/aboutme/prod"
@@ -245,7 +222,6 @@ resource "aws_cloudwatch_metric_alarm" "alarm" {
   alarm_actions       = [aws_sns_topic.alerts.arn]
 }
 
-# A failed EC2 system check moves the host to healthy hardware.
 resource "aws_cloudwatch_metric_alarm" "host_recover" {
   alarm_name          = "${var.name}-host-recover"
   namespace           = "AWS/EC2"
@@ -259,7 +235,7 @@ resource "aws_cloudwatch_metric_alarm" "host_recover" {
   alarm_actions       = ["arn:aws:automate:ap-southeast-1:ec2:recover", aws_sns_topic.alerts.arn]
 }
 
-# ---- Site health (Route 53 metrics exist only in us-east-1) ----
+# Route 53 health check metrics exist only in us-east-1 (Route 53 guide).
 
 # Readiness includes the database, so the site-down alarm fires when users
 # cannot use the site. The ECS container check stays on /healthz so a database
@@ -316,8 +292,6 @@ resource "aws_cloudwatch_metric_alarm" "site" {
   actions_enabled     = var.site_alarm_enabled
   alarm_actions       = [aws_sns_topic.alerts_us_east_1.arn]
 }
-
-# ---- Monthly Bottlerocket update: first Sunday 20:00 UTC ----
 
 resource "aws_ssm_maintenance_window" "updates" {
   name              = "${var.name}-updates"

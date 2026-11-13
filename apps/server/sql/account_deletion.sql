@@ -1,7 +1,3 @@
--- Account deletion follows the lock order in docs/design/data.md: these
--- account-scoped locks come first, then slug advisory locks in sorted
--- order, then public_state.
-
 -- name: LockCanonicalAccountEmail :exec
 SELECT pg_advisory_xact_lock(
   hashtextextended('aboutme.email.v1:' || sqlc.arg(email)::text, 0)
@@ -37,7 +33,4 @@ WHERE id = sqlc.arg(id)::uuid
 DELETE FROM users WHERE id = sqlc.arg(id)::uuid;
 
 -- name: GetResumeOwnerBySlug :one
--- Resolves the account that holds a current resume slug, for the operator
--- deletion command (docs/design/showcase.md "Report and account deletion").
--- A tombstoned slug has no resume row and so has no owner.
 SELECT id, user_id FROM resumes WHERE slug = sqlc.arg(slug)::text;

@@ -1,4 +1,3 @@
-# Network. docs/design/vietnam-production.md, "Host".
 resource "vngcloud_vserver_network" "main" {
   project_id = var.project_id
   name       = "aboutme-prod"
@@ -14,10 +13,6 @@ resource "vngcloud_vserver_subnet" "main" {
   zone_id    = var.zone_id
 }
 
-# Firewall. docs/design/vietnam-production.md, "Edge" (80 and 443 public) and
-# "Host" (key-only SSH on the configured port).
-# Egress is left to the provider default. The default egress rule is
-# unconfirmed, so the probe checks outbound access before the first deploy.
 resource "vngcloud_vserver_secgroup" "main" {
   project_id  = var.project_id
   name        = "aboutme-prod"
@@ -61,8 +56,6 @@ resource "vngcloud_vserver_secgrouprule" "ssh" {
   description       = "aboutme-prod-ssh"
 }
 
-# The host. docs/design/vietnam-production.md, "Host". Both disks are encrypted
-# because a server with plain disks refuses an encrypted volume.
 resource "vngcloud_vserver_server" "main" {
   project_id                = var.project_id
   name                      = "aboutme-prod"
@@ -78,8 +71,7 @@ resource "vngcloud_vserver_server" "main" {
   security_group            = [vngcloud_vserver_secgroup.main.id]
   attach_floating           = true
 
-  # No ssh_key: the admin key arrives through cloud-init. The provider requires
-  # user_data_base64_encode with user_data; the API takes the encoded form.
+  # The provider requires user_data_base64_encode with user_data; the API takes the encoded form (terraform-provider-vngcloud).
   user_data = base64encode(templatefile("${path.module}/../host/cloud-init.yaml.tftpl", {
     admin_ssh_public_key = var.admin_ssh_public_key
     ssh_port             = var.ssh_port
@@ -94,7 +86,6 @@ resource "vngcloud_vserver_server" "main" {
   }
 }
 
-# Data volume. docs/design/vietnam-production.md, "Host".
 resource "vngcloud_vserver_volume" "data" {
   project_id      = var.project_id
   name            = "aboutme-prod-data"

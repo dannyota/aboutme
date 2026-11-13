@@ -34,19 +34,6 @@ const secondFactor = mode === 'second-factor'
   || mode === 'second-factor-disabled'
   || mode === 'totp'
   || mode === 'totp-disabled';
-// The enabled second-factor and TOTP journeys each warm every page they use,
-// then walk enrollment, several pending sign-ins, the negative cases, and
-// teardown in one test, so each gets its own budget. The TOTP journey also
-// waits for fresh 30-second steps between accepted codes, so it gets more.
-// Each disabled journey opens three pages and makes a handful of calls, so it
-// gets a much smaller one. Together with the stack restart between phases,
-// both fit inside the hosted job's own limit. mcp-sdk.spec.ts calls
-// test.setTimeout with its own handoff and step bounds once it runs; this
-// default only covers setup before that call. The entry journey audits four
-// pages in both themes in one test, which took 22 to 30 seconds on hosted
-// runners, so it gets the multi-page budget too. linkedin-import's
-// cross-engine test waits out the real 15-second read.ts time cap on a
-// hostile fixture, plus filling the resume cap, so it gets a still wider one.
 const timeout = mode === 'totp'
   ? 1_800_000
   : mode === 'second-factor'
@@ -62,9 +49,6 @@ const timeout = mode === 'totp'
           || mode === 'linkedin'
           ? 120_000 : 30_000;
 
-// Both second-factor modes run one spec, and both TOTP modes run another.
-// The server enrollment flag, not the spec file, is what differs within
-// each pair; the spec selects its own test from ABOUTME_BROWSER_MODE.
 const specName = mode === 'second-factor-disabled'
   ? 'second-factor'
   : mode === 'totp-disabled' ? 'totp' : mode;
@@ -75,25 +59,10 @@ for (const name of ['UPDATE_GOLDEN', 'PLAYWRIGHT_UPDATE_SNAPSHOTS']) {
   }
 }
 
-// A second-factor step that never settles must fail at its own stage, not
-// silently consume the whole test budget and report the teardown stage
-// instead. Both waits are bounded well above the slowest observed hosted
-// navigation, so only a genuinely stuck step trips them.
-//
-// These two are `use` options. Playwright declares them on
-// PlaywrightTestOptions only, so a value at the top level of the config is
-// read by nobody and every mode runs unbounded. Bounding another mode's proof
-// needs its own brief, so every mode but this one keeps the unlimited default
-// it runs with today.
-// The navigation bound covers one landing per journey that reaches an app
-// page before the signed-in warm pass has run, so it is wider than an
-// ordinary warm navigation needs.
+// navigationTimeout and actionTimeout exist only under `use`; at the top level of the config nobody reads them (Playwright TestOptions).
 const actionTimeout = secondFactor ? 20_000 : 0;
 const navigationTimeout = secondFactor ? 120_000 : 0;
 
-// The enabled TOTP journey runs each shard ABOUTME_TOTP_SHARD lists as its
-// own test (totp.spec.ts "Enabled-proof sharding"), all at the same time, so
-// it gets one worker per listed shard. Every other mode runs one worker.
 const totpShards = process.env.ABOUTME_TOTP_SHARD ?? '';
 const workers = mode === 'totp' && totpShards !== ''
   ? totpShards.split(',').length

@@ -1,5 +1,3 @@
-# RDS PostgreSQL and the private media bucket.
-
 resource "aws_db_subnet_group" "main" {
   name       = var.name
   subnet_ids = var.private_subnet_ids
@@ -9,7 +7,7 @@ resource "aws_db_parameter_group" "main" {
   name   = var.name
   family = "postgres18"
 
-  # RDS records this parameter as applying at reboot.
+  # RDS applies this parameter at reboot (RDS parameter groups).
   parameter {
     name         = "rds.force_ssl"
     value        = "1"
@@ -108,11 +106,7 @@ resource "aws_s3_bucket_policy" "media" {
   depends_on = [aws_s3_bucket_public_access_block.media]
 }
 
-# Production minimum-release fence and deployment operation lock. OpenTofu
-# owns only the table; the deploy role manages the singleton "application"
-# item at runtime, per docs/design/passkey-release-fence.md. No
-# server_side_encryption block means AWS-owned keys, the encryption this
-# table uses.
+# No server_side_encryption block means AWS-owned keys (DynamoDB encryption at rest).
 resource "aws_dynamodb_table" "release_fence" {
   name         = "${var.name}-release-fence"
   billing_mode = "PAY_PER_REQUEST"

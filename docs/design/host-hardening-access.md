@@ -23,7 +23,7 @@ transport, not automatic cancellation of durable host operations. [Noble SSH]
 **Forwarding.** Propose `AllowTcpForwarding local`, `PermitOpen none`,
 `AllowStreamLocalForwarding no`, and `PermitTunnel no`. A privately rendered,
 attended drill exception may replace `PermitOpen` with only the drill host and
-SSH port, then restore `none`. `V/scripts/restore-drill.sh:486` uses `ssh -W`;
+SSH port, then restore `none`. `V/scripts/restore-drill.sh:450` uses `ssh -W`;
 blanket forwarding denial breaks that recovery path. Validate exception removal
 after success and failure. This limits convenient pivots by a stolen operator
 key; an administrator with a shell and sudo can bypass it. The workflow's
@@ -51,7 +51,7 @@ transport, rejected forwarding, and the scoped drill path before closing the
 first. Syntax or login failure restores the saved config. [OpenSSH]
 
 **Security group.** `V/prod/variables.tf:65-88` supplies public defaults;
-`V/prod/main.tf:51-62` creates IPv4 SSH rules. The accepted design describes
+`V/prod/main.tf:46-57` creates IPv4 SSH rules. The accepted design describes
 broad SSH ingress; the snapshot does not prove the provider's effective SG.
 Require nonempty explicit `ssh_allowlist` of reviewed operator IPv4 `/32`
 addresses initially; reject unrestricted prefixes and missing values. Keep
@@ -78,8 +78,8 @@ Port secrecy is not authentication; history retains earlier disclosures.
 
 Literal/default search found these locations; values are intentionally omitted:
 
-- `V/prod/variables.tf:68,76,82,83,86,87`; `V/prod/main.tf:52,135,136`;
-  `V/prod/prod.tfvars.example:4,5`;
+- `V/prod/variables.tf:68,76,82,83,86,87`; `V/prod/main.tf:47,126,127`;
+  `V/prod/prod.tfvars.example:2,3`;
   `V/prod/tests/drill-network.tftest.hcl:64,74`.
 - `V/README.md:68,73,74`; `V/scripts/ssh-lib.sh:2`; `V/probe/probe.sh:8`;
   `V/probe/README.md:14,15,46`.

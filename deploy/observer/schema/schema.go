@@ -1,6 +1,3 @@
-// Package schema holds the closed JSON Schema of the deployment document
-// (docs/design/deployment-transparency/document.md) and validates bytes
-// against it.
 package schema
 
 import (
@@ -11,8 +8,6 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
-// V1 is deployment.v1.json, byte for byte.
-//
 //go:embed deployment.v1.json
 var V1 []byte
 
@@ -36,8 +31,6 @@ func mustCompile() *jsonschema.Schema {
 	return s
 }
 
-// Validate reports whether b is one JSON value that satisfies the version 1
-// schema.
 func Validate(b []byte) error {
 	inst, err := jsonschema.UnmarshalJSON(bytes.NewReader(b))
 	if err != nil {

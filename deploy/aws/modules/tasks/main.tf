@@ -1,15 +1,8 @@
-# ECS task definitions. Images here are the initial revision only; deploy.sh
-# registers later revisions by digest, and the services ignore that drift.
-
 locals {
   param     = "arn:aws:ssm:ap-southeast-1:${var.account_id}:parameter/aboutme/prod"
   db_url    = "postgres://%s@${var.db_endpoint}:5432/%s?sslmode=verify-full&sslrootcert=/etc/ssl/rds/global-bundle.pem"
   master_pw = "${var.db_master_secret_arn}:password::"
 
-  # The app task references a provider's credentials only while that provider
-  # is listed. An unlisted provider's parameters need not exist; a listed
-  # provider's must exist before a deploy, and deploy.sh refuses to start one
-  # while any task secret is missing.
   login_providers = var.provider_login_enabled == "" ? [] : split(",", var.provider_login_enabled)
   google_secrets = contains(local.login_providers, "google") ? [
     { name = "GOOGLE_CLIENT_ID", valueFrom = "${local.param}/oauth/google-client-id" },
@@ -20,9 +13,6 @@ locals {
     { name = "LINKEDIN_CLIENT_SECRET", valueFrom = "${local.param}/oauth/linkedin-client-secret" },
   ] : []
 
-  # The previous key names no parameter when unset, so an absent slot never
-  # makes ECS fail on a missing SSM parameter. See
-  # docs/design/totp-key-management.md, "Key ring".
   totp_previous_secret = var.totp_previous_key_slot == "" ? [] : [
     { name = "TOTP_PREVIOUS_KEY", valueFrom = "${local.param}/totp/key-${var.totp_previous_key_slot}" },
   ]
@@ -42,8 +32,6 @@ locals {
     { name = "MEDIA_REGION", value = "ap-southeast-1" },
   ]
 
-  # Caddy's edge listeners; see deploy/caddy/production/entrypoint.sh and
-  # docs/design/cloudfront-edge.md. CloudFront is the only edge.
   caddy_env = [
     { name = "EDGES", value = "cloudfront" },
   ]
@@ -79,9 +67,6 @@ locals {
     { name = "PUBLIC_RENDERER_BUILD_DIGEST", value = var.image_web },
   ])
 
-  # One-shot task that runs as the RDS master user on the first deploy: it
-  # creates the fixed roles, applies database and schema grants, and sets
-  # their SCRAM login verifiers.
   admin_tasks = {
     db-setup = {
       entry_point = ["/usr/local/bin/db-setup"]
@@ -116,9 +101,6 @@ resource "aws_ecs_task_definition" "app" {
         { name = "VIEW_PASS_KEY", valueFrom = "${local.param}/view-pass-key" },
         { name = "TOTP_ACTIVE_KEY", valueFrom = "${local.param}/totp/key-${var.totp_active_key_slot}" },
       ], local.google_secrets, local.linkedin_secrets, local.totp_previous_secret)
-      # SYS_ADMIN lets Docker's seccomp profile allow the user namespaces that
-      # Chromium's sandbox needs. The image runs as a non-root user, so the
-      # process gains no effective capability.
       linuxParameters = {
         initProcessEnabled = true
         sharedMemorySize   = 128
@@ -134,14 +116,11 @@ resource "aws_ecs_task_definition" "app" {
       logConfiguration = local.logs["server"]
     },
     {
-      name      = "caddy"
-      image     = var.image_caddy
-      memory    = 128
-      cpu       = 128
-      essential = true
-      # No port mapping: Caddy binds host port 8443 through host networking with
-      # SO_REUSEPORT, and ECS must place this task beside a running maintenance
-      # task during a deploy handoff (deploy/aws/scripts/handoff.sh).
+      name             = "caddy"
+      image            = var.image_caddy
+      memory           = 128
+      cpu              = 128
+      essential        = true
       environment      = local.caddy_env
       secrets          = local.caddy_secrets
       linuxParameters  = { tmpfs = [{ containerPath = "/run/caddy", size = 1 }] }
@@ -158,12 +137,11 @@ resource "aws_ecs_task_definition" "maintenance" {
   execution_role_arn       = var.exec_role_arns["maintenance"]
   container_definitions = jsonencode([
     {
-      name      = "caddy"
-      image     = var.image_caddy
-      memory    = 128
-      cpu       = 128
-      essential = true
-      # No port mapping, for the same reason as the app's Caddy container.
+      name             = "caddy"
+      image            = var.image_caddy
+      memory           = 128
+      cpu              = 128
+      essential        = true
       environment      = concat(local.caddy_env, [{ name = "MAINTENANCE", value = "1" }])
       secrets          = local.caddy_secrets
       linuxParameters  = { tmpfs = [{ containerPath = "/run/caddy", size = 1 }] }
@@ -259,12 +237,6 @@ resource "aws_ecs_task_definition" "jobs" {
   }])
 }
 
-# One-shot key rotation task, run through deploy.sh --totp-key-reencrypt, never
-# scheduled. It reuses the app execution and task roles rather than new ones,
-# so the deploy role's pass-role scope does not grow. See
-# docs/design/totp-key-management.md, "Rotation", and
-# docs/design/passkey-release-fence.md, "Authenticator-app key
-# re-encryption".
 resource "aws_ecs_task_definition" "totp_reencrypt" {
   family                   = "${var.name}-totp-reencrypt"
   network_mode             = "bridge"

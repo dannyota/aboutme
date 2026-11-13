@@ -521,12 +521,6 @@ step_maintenance_down() {
   say "maintenance down"
 }
 
-# First install only, as postgres over peer authentication: the database
-# owner role aboutme (CREATEROLE, like the RDS master) and the database, then
-# the pgBackRest stanza (docs/design/vietnam-production.md, "PostgreSQL").
-# The password goes to psql on standard input and never on a command line;
-# log_min_error_statement is raised for the session so a failed statement
-# cannot log it.
 step_db_bootstrap() {
   [[ -s $secrets/db-admin-password ]] || die "run secrets.sh first: $secrets/db-admin-password is missing"
   {

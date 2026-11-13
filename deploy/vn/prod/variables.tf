@@ -225,8 +225,6 @@ variable "state_passphrase" {
   }
 }
 
-# The two URLs below are the provider's documented defaults. Whether they still
-# answer after the GreenNode domain move is unconfirmed.
 variable "token_url" {
   type        = string
   description = "IAM token endpoint"

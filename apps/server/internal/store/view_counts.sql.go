@@ -40,7 +40,6 @@ type AddResumeShareSignalDaysParams struct {
 	Fetches   []int32
 }
 
-// Locks the parent resumes the same way as AddResumeViewDays.
 func (q *Queries) AddResumeShareSignalDays(ctx context.Context, arg AddResumeShareSignalDaysParams) error {
 	_, err := q.db.Exec(ctx, addResumeShareSignalDays,
 		arg.ResumeIds,
@@ -92,10 +91,6 @@ type AddResumeViewDaysParams struct {
 	Crawler    []int32
 }
 
-// Target-list unnest zips the equal-length arrays row by row. The parent
-// CTE key-share locks each surviving resume in id order before the insert:
-// a resume whose deletion commits first is skipped rather than failing the
-// foreign key for the whole batch, and a locked resume stays until commit.
 func (q *Queries) AddResumeViewDays(ctx context.Context, arg AddResumeViewDaysParams) error {
 	_, err := q.db.Exec(ctx, addResumeViewDays,
 		arg.ResumeIds,
@@ -157,7 +152,6 @@ type DeleteOldResumeViewDaysPageParams struct {
 	LimitRows int32
 }
 
-// Daily counts are kept 400 days (docs/design/viewer-analytics/README.md).
 func (q *Queries) DeleteOldResumeViewDaysPage(ctx context.Context, arg DeleteOldResumeViewDaysPageParams) (int64, error) {
 	result, err := q.db.Exec(ctx, deleteOldResumeViewDaysPage, arg.Cutoff, arg.LimitRows)
 	if err != nil {
@@ -184,7 +178,6 @@ func (q *Queries) GetLiveViewResumeByID(ctx context.Context, id uuid.UUID) (GetL
 }
 
 const getLiveViewResumeBySlug = `-- name: GetLiveViewResumeBySlug :one
-
 SELECT id, user_id, sign_in_to_view, view_pass_epoch FROM resumes
 WHERE slug = $1::text AND live = true
 `
@@ -196,11 +189,6 @@ type GetLiveViewResumeBySlugRow struct {
 	ViewPassEpoch int32
 }
 
-// View count queries (docs/design/viewer-analytics/counting.md). Tables hold
-// daily numbers only; days are Asia/Ho_Chi_Minh dates.
-// The same live gate as GetPublicResumeBySlug, with only what the view-count
-// start and the sign-in "view" start need: the owner, the sign-in switch, and
-// the pass epoch.
 func (q *Queries) GetLiveViewResumeBySlug(ctx context.Context, slug string) (GetLiveViewResumeBySlugRow, error) {
 	row := q.db.QueryRow(ctx, getLiveViewResumeBySlug, slug)
 	var i GetLiveViewResumeBySlugRow
@@ -371,8 +359,6 @@ type ListViewSummariesRow struct {
 	Filtered90 int64
 }
 
-// Every owned resume that is live or has counts, with totals over the last
-// 7, 30, and 90 days.
 func (q *Queries) ListViewSummaries(ctx context.Context, arg ListViewSummariesParams) ([]ListViewSummariesRow, error) {
 	rows, err := q.db.Query(ctx, listViewSummaries,
 		arg.Since7,

@@ -1,10 +1,4 @@
 #!/usr/bin/env bash
-# Installs and configures everything the production host needs besides the
-# containers (docs/design/vietnam-production.md, "Host", "PostgreSQL", "Edge",
-# "Scheduled jobs", "Logs, metrics, and alarms"). Runs as root on the host.
-# Usage: install.sh <bundle-dir>, where bundle-dir is a copy of deploy/vn.
-# Every step is safe to re-run. It never prints a secret and never reads the
-# contents of /etc/aboutme/secrets.
 set -euo pipefail
 
 PGDG_SIGNER_FPR=B97B0AFCAA1A47F044F244A07FCC7D46ACCC4CF8

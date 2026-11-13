@@ -40,10 +40,6 @@ const CUSTOM_LINK = 'https://orcid.example/0000-0001';
 const PAGE_TITLE = 'Danny from aboutme.vn';
 const PAGE_EMOJI = '\u{1F680}';
 const PDF_NAME = 'Public-proof-resume-Resume.pdf';
-// The fixture adds no profile section, so the description falls back to the
-// job title and employer joined by a comma (docs/design/link-previews.md,
-// "Text rules", fallback 2). The image text is the scrubbed full name alone,
-// since the fixture sets no headline.
 const PUBLIC_PROOF_DESCRIPTION = 'Engineer, Example Corp';
 const PUBLIC_PROOF_IMAGE_ALT = 'Public proof resume';
 let createdID: string | undefined;
@@ -59,10 +55,6 @@ test.beforeEach(() => {
   currentStage = 'none';
 });
 
-// run.sh prints only bounded stage lines, and a later test's stages would
-// hide an earlier failure, so each failing test prints one closed line naming
-// its stage. The stage names are fixed words in this file; the outcome word
-// is the only thing derived from the error, and never its text.
 test.afterEach(({}, testInfo) => {
   if (testInfo.status === 'skipped') return;
   if (testInfo.status === testInfo.expectedStatus) return;
@@ -72,15 +64,11 @@ test.afterEach(({}, testInfo) => {
   console.log(`public-stage:fail-${name}-${outcome}`);
 });
 
-// One head meta element, by its naming attribute's value (for example
-// "og:title") and its decoded content.
 interface HeadMetaTag {
   readonly key: string;
   readonly value: string;
 }
 
-// The preview meta elements the page head must carry, in the order
-// docs/design/link-previews.md, "Page head", requires.
 const LINK_PREVIEW_KEYS: readonly string[] = [
   'description',
   'og:type',
@@ -99,17 +87,12 @@ const LINK_PREVIEW_KEYS: readonly string[] = [
   'twitter:image:alt',
 ];
 
-// Tags the page head must never carry: X and Discord fall back to Open Graph,
-// and no tag may tint the mobile browser bar.
 const FORBIDDEN_HEAD_KEYS: readonly string[] = [
   'twitter:title',
   'twitter:description',
   'theme-color',
 ];
 
-// decodeHeadAttribute reverses the escaping the renderer applies to a
-// double-quoted attribute value. &amp; decodes last, so an already-escaped
-// entity such as &amp;lt; is not doubly unescaped.
 function decodeHeadAttribute(value: string): string {
   return value
     .replaceAll('&quot;', '"')
@@ -119,8 +102,6 @@ function decodeHeadAttribute(value: string): string {
     .replaceAll('&amp;', '&');
 }
 
-// headMetaTags lists every name= or property= meta element inside the page's
-// <head>, in document order, with its content decoded.
 function headMetaTags(html: string): HeadMetaTag[] {
   const head = /<head[^>]*>([\s\S]*?)<\/head>/iu.exec(html)?.[1] ?? '';
   const pattern = /<meta\s+(?:name|property)="([^"]*)"\s+content="([^"]*)"\s*\/?>/gu;
@@ -131,10 +112,6 @@ function headMetaTags(html: string): HeadMetaTag[] {
   return tags;
 }
 
-// expectLinkPreviewHead checks the page's raw HTML against every rule in
-// docs/design/link-previews.md, "Page head": each expected element appears
-// once, in order, with the exact value, and the forbidden ones never appear.
-// A failure names only the closed tag key, never the resume-derived value.
 function expectLinkPreviewHead(
   html: string,
   expected: readonly HeadMetaTag[],
@@ -163,8 +140,6 @@ function expectLinkPreviewHead(
   }
 }
 
-// The stored preview card's byte cap (docs/design/link-previews.md, "Preview
-// card").
 const CARD_MAX_BYTES = 524_288;
 
 interface FetchedImage {
@@ -184,8 +159,6 @@ async function fetchImage(page: Page, url: string): Promise<FetchedImage> {
   }, url);
 }
 
-// Reads a PNG's IHDR width and height (big-endian, at byte offsets 16 and
-// 20; docs/design/link-previews.md pins every card to 1200 by 630).
 function expectPNGSize(body: readonly number[]): void {
   const bytes = Uint8Array.from(body);
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -218,15 +191,11 @@ test.afterEach(async ({ browser }, testInfo) => {
   }
 });
 
-// --- Sign in to view (docs/design/viewer-analytics/sign-in-to-view.md) ------
-
 const SEVEN_DAYS_SECONDS = 7 * 24 * 60 * 60;
 const JOIN_INVITE_FLOOR_MS = 5_000;
 const JOIN_INVITE_CLOSED_KEY = 'aboutme.joinInvite.closedAt';
 const VIEW_PASS_COOKIE = '__Host-view-pass';
 
-// What the sign-in-to-view test proved. The hydration test writes the run's
-// evidence, so it refuses to write until every step here is true.
 const viewSteps = {
   gate: false,
   gatedRoutes: false,
@@ -248,9 +217,6 @@ interface GatedStatuses {
   readonly live: number;
 }
 
-// gatedStatuses reads the gated public routes from a page whose CSP allows
-// same-origin fetches. The live stream is skipped when `withLive` is false,
-// because a served stream stays open.
 async function gatedStatuses(
   page: Page,
   slug: string,
@@ -278,9 +244,6 @@ async function gatedStatuses(
   }, { slug, withLive });
 }
 
-// expectPassCookie checks the pass cookie's attributes and size without ever
-// recording its value (design "Pass cookie"; AC-VIEW-007), and that the
-// sign-in made no account session (AC-VIEW-005).
 async function expectPassCookie(context: BrowserContext): Promise<void> {
   const cookies = await context.cookies(ORIGIN);
   const passes = cookies.filter((cookie) => cookie.name === VIEW_PASS_COOKIE);
@@ -312,8 +275,6 @@ async function readResumeRevision(page: Page, id: string): Promise<string> {
   }, id);
 }
 
-// publishWithSignIn publishes the resume live at its current revision with
-// the sign-in switch set as given (downloads on, discovery off).
 async function publishWithSignIn(
   page: Page,
   id: string,
@@ -361,17 +322,8 @@ test('proves sign in to view gates a resume, admits a pass holder, and '
   test.setTimeout(240_000);
   const slug = `gate-${crypto.randomUUID().slice(0, 8)}`;
   const counters = newDiagnosticCounters();
-  // Set right after the resume is deleted: only then is a 404 for the page
-  // document itself expected.
   let deleted = false;
-  // The signed-out viewer's one visit to /guide/mcp, the application page
-  // the gated reads below run from. Its shell's GET /api/v1/me gets a 401,
-  // and the browser logs that once. Only that one line, from that page,
-  // while that visit is open, is excused; any other /api/v1/me failure, a
-  // second one, or one from another viewer still counts.
   let guideVisit: { readonly page: Page; excused: boolean } | null = null;
-  // excuseGuideVisitMeConsole reports whether message is that one line, and
-  // uses up the visit's single excuse when it is.
   const excuseGuideVisitMeConsole = (message: ConsoleMessage): boolean => {
     const visit = guideVisit;
     if (visit === null || visit.excused) return false;
@@ -384,8 +336,6 @@ test('proves sign in to view gates a resume, admits a pass holder, and '
     visit.excused = true;
     return true;
   };
-  // Gated routes answer 404 to an anonymous fetch on purpose, so the
-  // browser's own console line for those exact reads is expected.
   const attach = pageDiagnosticsAttacher(counters, {
     countConsoleError: (message) => {
       if (excuseGuideVisitMeConsole(message)) return false;
@@ -461,8 +411,6 @@ test('proves sign in to view gates a resume, admits a pass holder, and '
   const gatedPublish = await publishWithSignIn(page, resumeID, slug, true);
   expect(gatedPublish.status, JSON.stringify(gatedPublish.body)).toBe(200);
 
-  // A phone-sized window, short enough that the resume scrolls, so the
-  // invite proof below sees the bottom bar and the scroll rule.
   const anonymous = await openContext({ width: 390, height: 400 });
   const anon = anonymous.page;
   let startResponseAt = 0;
@@ -487,15 +435,12 @@ test('proves sign in to view gates a resume, admits a pass holder, and '
   await expect(anon).toHaveTitle(PAGE_TITLE);
   await expect(anon.locator('#public-gate h1')).toHaveText(PAGE_TITLE);
   await expect(anon.locator('#public-resume')).toHaveCount(0);
-  // The gate stays light whatever the owner's color scheme
-  // (docs/design/public-page-theme.md, "What stays light").
   await expect(anon.locator('[data-color-scheme]')).toHaveCount(0);
   await expect(anon.locator('script')).toHaveCount(0);
   const gateBody = await anon.evaluate(() => document.body.innerHTML);
   expect(gateBody).not.toContain('Public proof resume');
   expect(gateBody).not.toContain('Example Corp');
   stage('view-gate-providers');
-  // Google and LinkedIn are offered; GitHub never is.
   await expect(anon.locator('a.gate-provider')).toHaveCount(2);
   await expect(gateLink(anon, 'google')).toHaveCount(1);
   await expect(gateLink(anon, 'linkedin')).toHaveCount(1);
@@ -503,7 +448,6 @@ test('proves sign in to view gates a resume, admits a pass holder, and '
   expect((await anonymous.context.cookies(ORIGIN)).map((cookie) => cookie.name))
     .not.toContain(VIEW_PASS_COOKIE);
   stage('view-gate-query');
-  // Only the two closed ?signin= values reach the page.
   await anon.goto(`${ORIGIN}/${slug}?signin=cancelled`);
   await expect(anon.locator('.gate-message')).toHaveCount(1);
   await anon.goto(`${ORIGIN}/${slug}?signin=other`);
@@ -511,9 +455,6 @@ test('proves sign in to view gates a resume, admits a pass holder, and '
   viewSteps.gate = true;
 
   stage('view-gated-routes');
-  // The page's shell reads /api/v1/me once it hydrates, after goto returns.
-  // Waiting for that read and its console line keeps both inside this visit
-  // on every run, instead of racing the next navigation away from the page.
   guideVisit = { page: anon, excused: false };
   const meRead = anon.waitForResponse(
     (response) => response.url() === `${ORIGIN}/api/v1/me`
@@ -537,13 +478,10 @@ test('proves sign in to view gates a resume, admits a pass holder, and '
     start: 404,
     live: 404,
   });
-  // The visit ends here: from now on every /api/v1/me failure counts.
   guideVisit = null;
   viewSteps.gatedRoutes = true;
 
   stage('view-owner-gated');
-  // Public routes never read the account session: the signed-in owner gets
-  // the gate like any viewer (AC-VIEW-006).
   const ownerGate = await page.goto(`${ORIGIN}/${slug}`);
   expect(ownerGate?.status()).toBe(200);
   await expect(page.locator('#public-gate')).toHaveCount(1);
@@ -560,10 +498,6 @@ test('proves sign in to view gates a resume, admits a pass holder, and '
   // The invite proof runs first: its 5 s floor counts from view start, so
   // slower checks wait until it is done.
   stage('view-join-invite');
-  // The invite never shows in the first 5 s after view start, then shows
-  // for this pass holder once the scroll or dwell rule is met
-  // (design "Join invite"; AC-VIEW-008). The window is scrolled to the
-  // bottom at once, so only the 5 s floor holds it back.
   await expect.poll(() => startResponseAt).toBeGreaterThan(0);
   const startedAt = startResponseAt;
   const invite = anon.getByRole('region', {
@@ -593,7 +527,6 @@ test('proves sign in to view gates a resume, admits a pass holder, and '
   startResponseAt = 0;
   await anon.reload();
   await expect.poll(() => startResponseAt).toBeGreaterThan(0);
-  // Wait past the 5 s floor: a closed invite must not come back.
   await anon.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
   await anon.waitForTimeout(JOIN_INVITE_FLOOR_MS + 1_000);
   await expect(invite).toHaveCount(0);
@@ -706,7 +639,6 @@ test('proves a published resume hydrates in a real browser', async ({
     createdID = created.metadata.id;
     publishedSlug = `public-${crypto.randomUUID().slice(0, 8)}`;
 
-    // Publish requires at least a full name; fill it and wait for the autosave.
     stage('personal-details');
     await page.locator('[data-action="open-document"]').press('Enter');
     await page.locator('[data-field="fullName"] [data-field-input]')
@@ -714,8 +646,6 @@ test('proves a published resume hydrates in a real browser', async ({
     await page.locator('[data-field="fullName"] [data-field-input]').press('Tab');
     await expect(page.getByTestId('save-status')).toHaveAttribute('data-state', 'saved');
 
-    // Add one work section and entry, so the resume meets the publish
-    // completeness minimum (a full name plus at least one visible entry).
     stage('work-entry');
     await page.locator('[data-action="open-structure"]').press('Enter');
     await page.locator('[data-action="section-type"]').selectOption('work');
@@ -735,7 +665,6 @@ test('proves a published resume hydrates in a real browser', async ({
     await entry.locator('[data-entry-field="employer"] [data-field-input]').press('Tab');
     await expect(page.getByTestId('save-status')).toHaveAttribute('data-state', 'saved');
 
-    // The autosave advanced the revision; read the current one for If-Match.
     stage('read-revision');
     const currentRevision = await page.evaluate(async (id) => {
       const response = await fetch(`/api/v1/resumes/${id}`, {
@@ -750,8 +679,6 @@ test('proves a published resume hydrates in a real browser', async ({
       return revision;
     }, createdID);
 
-    // A custom https contact with discovery on: the Go validator requires the
-    // renderer's JSON-LD sameAs to match its own, custom links included.
     stage('write-contacts');
     const detailCSRF = await freshCSRF(page);
     const detailWrite = await page.evaluate(async (input) => {
@@ -798,8 +725,6 @@ test('proves a published resume hydrates in a real browser', async ({
     expect(detailWrite.status).toBe(200);
     expect(typeof detailWrite.revision).toBe('string');
 
-    // The owner picks the dark scheme. Only a v5 or later client can write it
-    // (docs/design/public-page-theme.md); the public page below must carry it.
     stage('write-color-scheme');
     const schemeCSRF = await freshCSRF(page);
     const schemeWrite = await page.evaluate(async (input) => {
@@ -829,8 +754,6 @@ test('proves a published resume hydrates in a real browser', async ({
     expect(schemeWrite.status, JSON.stringify(schemeWrite.body)).toBe(200);
     expect(typeof schemeWrite.revision).toBe('string');
 
-    // Publish: the resume must already hold a live slug before any public
-    // route will serve it.
     stage('publish');
     const csrf = await freshCSRF(page);
     const publishStatus = await page.evaluate(async (input) => {
@@ -866,13 +789,10 @@ test('proves a published resume hydrates in a real browser', async ({
     });
     expect(publishStatus.status, JSON.stringify(publishStatus.body)).toBe(200);
 
-    // Prove the page in a fresh context with no session cookies.
     stage('public-context');
     const publicContext = await browser.newContext();
     const publicPage = await publicContext.newPage();
     attachDiagnostics(publicPage);
-    // A signed-out public page may call only public endpoints, and none may
-    // answer as if a session were expected.
     publicPage.on('response', (publicResponse) => {
       const url = new URL(publicResponse.url());
       if (url.origin !== ORIGIN) return;
@@ -898,20 +818,16 @@ test('proves a published resume hydrates in a real browser', async ({
     stage('public-navigation');
     const response = await publicPage.goto(`${ORIGIN}/${publishedSlug}`);
     expect(response?.status()).toBe(200);
-    // The raw response body carries the server-rendered head before any
-    // client script can touch it, in the document order the renderer wrote.
     const publicHTML = await response?.text() ?? '';
     const structured = await publicPage
       .locator('script[type="application/ld+json"]')
       .textContent();
     expect(JSON.parse(structured ?? '{}').mainEntity?.sameAs).toEqual([CUSTOM_LINK]);
     await expect(publicPage.locator(`a[href="${CUSTOM_LINK}"]`)).toHaveText('orcid.example/0000-0001');
-    // Email and phone link after the server-checked rules (ADR 0013).
     await expect(publicPage.locator('a[href="mailto:proof@example.com"]')).toHaveText('proof@example.com');
     await expect(publicPage.locator('a[href="tel:+84374837720"]')).toHaveText('(+84) 374837720');
 
     stage('public-head');
-    // The owner's title and emoji favicon pass the server's exact-head check.
     await expect(publicPage).toHaveTitle(PAGE_TITLE);
     const icon = publicPage.locator('link[rel="icon"]');
     await expect(icon).toHaveCount(1);
@@ -920,12 +836,8 @@ test('proves a published resume hydrates in a real browser', async ({
     expect(decodeURIComponent(iconHref!.slice('data:image/svg+xml,'.length)))
       .toContain(`>${PAGE_EMOJI}</text>`);
 
-    // The link-preview tags: exact value, exact order, exactly once, and
-    // none of the tags the page must never send.
     stage('public-link-preview');
     const canonicalURL = `${ORIGIN}/${publishedSlug}`;
-    // The stored card's versioned URL (docs/design/link-previews.md, "Build,
-    // storage, and serving"); og:image and twitter:image share it below.
     const ogImageURL = headMetaTags(publicHTML)
       .find((tag) => tag.key === 'og:image')?.value ?? '';
     expect(new URL(ogImageURL).pathname).toMatch(new RegExp(
@@ -960,13 +872,11 @@ test('proves a published resume hydrates in a real browser', async ({
     expect(aliasImage.status).toBe(200);
     expect(aliasImage.body).toEqual(versionedImage.body);
 
-    // Every public page credits the site once, linking the canonical home.
     const credit = publicPage.locator('a.public-credit');
     await expect(credit).toHaveCount(1);
     await expect(credit).toHaveAttribute('href', `${new URL(publicPage.url()).origin}/`);
     await expect(credit).toHaveText('Built with aboutme.vn');
 
-    // Download is enabled, so the page links its own PDF.
     stage('public-download');
     const download = publicPage.locator('a.public-download');
     await expect(download).toHaveCount(1);
@@ -990,9 +900,6 @@ test('proves a published resume hydrates in a real browser', async ({
     await publicPage.emulateMedia({ media: 'screen' });
     expect(response?.headers()['content-security-policy']).toContain("default-src 'none'");
 
-    // The dark scheme reaches the served page and leaves the PDF alone
-    // (docs/design/public-page-theme.md, "What stays light"). The PDF fetch
-    // above already returned 200 with application/pdf.
     stage('public-color-scheme');
     await expect(publicPage.locator('.public-resume-page'))
       .toHaveAttribute('data-color-scheme', 'dark');
@@ -1011,19 +918,15 @@ test('proves a published resume hydrates in a real browser', async ({
       magic: '%PDF-',
     });
 
-    // SSR markup is present before hydration runs.
     stage('public-ssr');
     const main = publicPage.locator('#public-resume');
     await expect(main).toBeVisible();
     await expect(main).toHaveAttribute('data-revision', /^[1-9][0-9]*$/);
     await expect(publicPage).toHaveTitle(PAGE_TITLE);
 
-    // The client hydration mounts the Vue app on the SSR root.
     stage('public-hydration');
     await waitForHydration(publicPage, 'public-resume');
 
-    // The template stylesheets load under the page CSP and style the resume;
-    // DOM presence alone would pass on an unstyled page.
     stage('public-styling');
     const styling = await publicPage.evaluate(() => {
       const sheets = [...document.styleSheets].map((sheet) => ({
@@ -1050,11 +953,8 @@ test('proves a published resume hydrates in a real browser', async ({
     ]) {
       const sheet = styling.sheets.find((candidate) => candidate.href === path);
       expect(sheet?.rules ?? 0, `${path} loaded with rules`).toBeGreaterThan(0);
-      // A per-release version defeats the year-long immutable cache.
       expect(sheet?.search, `${path} version`).toMatch(/^\?v=[0-9a-f]{16}$/u);
     }
-    // The hydration script is versioned too, so a returning browser never
-    // runs a previous release's cached script against new HTML.
     const scriptURL = await publicPage
       .locator('script[type="module"]')
       .getAttribute('src');
@@ -1065,11 +965,10 @@ test('proves a published resume hydrates in a real browser', async ({
     expect(styling.resume?.boxSizing).toBe('border-box');
     expect(styling.resume?.paddingLeft).not.toBe('0px');
     expect(styling.resume?.fontVariable).not.toBe('');
-    // Computed font-family drops quotes around single-word family names.
+    // Computed font-family drops quotes around single-word family names (CSSOM serialization).
     const unquoted = (value?: string): string => (value ?? '').replaceAll('"', '');
     expect(unquoted(styling.resume?.fontFamily)).toBe(unquoted(styling.resume?.fontVariable));
 
-    // The skip link stays out of view until keyboard focus reaches it.
     stage('public-skip-link');
     const skip = publicPage.getByRole('link', { name: 'Skip to content' });
     const hidden = await skip.boundingBox();
@@ -1089,8 +988,6 @@ test('proves a published resume hydrates in a real browser', async ({
   expect(externalRequests).toEqual([]);
   expect(privateRequests).toEqual([]);
 
-  // The sign-in-to-view test runs first in this file; its evidence is part
-  // of this run's, so a missing step fails here rather than passing quietly.
   if (Object.values(viewSteps).some((done) => !done)) {
     stage('sign-in-to-view-incomplete');
     throw new Error('sign-in-to-view-incomplete');
@@ -1106,9 +1003,6 @@ test('proves a published resume hydrates in a real browser', async ({
   })}\n`, { flag: 'wx', mode: 0o600 });
 });
 
-// The MCP guide (/guide/mcp) is a static public page (docs/design/mcp-guide.md):
-// Vietnamese by default, English behind the site's aboutme-locale cookie, no
-// data fetch.
 test('the MCP guide page renders through Caddy in both '
   + 'languages', async ({ page }) => {
   const viResponse = await page.goto(`${ORIGIN}/guide/mcp`);
@@ -1127,21 +1021,14 @@ test('the MCP guide page renders through Caddy in both '
   );
 });
 
-// /guide itself reserves the root for later guides but holds no page of its
-// own (docs/design/mcp-guide.md, "Route"): it renders the app's normal
-// not-found page rather than a guide.
 test('/guide with no further path is not found', async ({ page }) => {
   const response = await page.goto(`${ORIGIN}/guide`);
   expect(response?.status()).toBe(404);
   await expect(page.getByTestId('error-page')).toBeVisible();
 });
 
-// The guide root is a Nuxt root, and /mcp stays the Go MCP endpoint
-// (docs/design/mcp-guide.md, "Route"): a request with no bearer token still
-// gets the protected-resource challenge (apps/server/internal/mcpapi/errors.go).
 test('POST /mcp without a token returns 401 with the metadata '
   + 'challenge', async ({ page }) => {
-  // Load a same-origin page first so the fetch below is not cross-origin.
   expect((await page.goto(`${ORIGIN}/guide/mcp`))?.status()).toBe(200);
   const rejected = await page.evaluate(async (origin) => {
     const response = await fetch(new URL('/mcp', origin), {

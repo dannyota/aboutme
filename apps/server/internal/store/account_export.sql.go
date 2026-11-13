@@ -14,7 +14,6 @@ import (
 )
 
 const getAccountExportProfile = `-- name: GetAccountExportProfile :one
-
 SELECT id, email, name, created_at, updated_at
 FROM users
 WHERE id = $1
@@ -28,9 +27,6 @@ type GetAccountExportProfileRow struct {
 	UpdatedAt time.Time
 }
 
-// Account export deliberately reads only portable profile fields, provider
-// names, and owner resume rows. Credentials, provider subjects, object keys,
-// and lifecycle records do not cross the HTTP export boundary.
 func (q *Queries) GetAccountExportProfile(ctx context.Context, id uuid.UUID) (GetAccountExportProfileRow, error) {
 	row := q.db.QueryRow(ctx, getAccountExportProfile, id)
 	var i GetAccountExportProfileRow
@@ -138,10 +134,6 @@ type ListAccountExportResumesRow struct {
 	ShowcaseRole        *string
 }
 
-// Carries sign_in_to_view with the other publish settings; the pass epoch
-// never leaves the server (docs/design/viewer-analytics/sign-in-to-view.md
-// "Setting"). The showcase columns are null without an opt-in
-// (docs/design/showcase.md "Privacy and abuse").
 func (q *Queries) ListAccountExportResumes(ctx context.Context, userID uuid.UUID) ([]ListAccountExportResumesRow, error) {
 	rows, err := q.db.Query(ctx, listAccountExportResumes, userID)
 	if err != nil {

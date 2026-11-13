@@ -1,8 +1,3 @@
-// Package kubernetes adapts the in-cluster Kubernetes API to
-// platform.Lister (docs/design/deployment-transparency/README.md,
-// "Kubernetes"). It calls only GET on the pods resource, with a Role that
-// grants "get" and "list" on pods in its own namespace, and never uses
-// client-go.
 package kubernetes
 
 import (
@@ -23,26 +18,17 @@ import (
 	"danny.vn/aboutme/deploy/observer/internal/platform"
 )
 
-// componentLabel is the label the observer reads to map a pod to a
-// component (docs/design/deployment-transparency/document.md, "Component
-// mapping"). The observer never writes it.
 const componentLabel = "app.kubernetes.io/component"
 
-// Default in-cluster paths, overridable in Config for tests.
 const (
 	defaultTokenFile = "/var/run/secrets/kubernetes.io/serviceaccount/token"
 	defaultCAFile    = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
 )
 
-// requestTimeout bounds one call to the API server.
 const requestTimeout = 10 * time.Second
 
-// maxPodListBytes bounds the pod list the observer decodes.
 const maxPodListBytes = 8 << 20
 
-// Config names the in-cluster API server and the paths the observer reads
-// its credentials from. Host, Port, TokenFile, and CAFile default to the
-// standard in-cluster values and are overridable for tests.
 type Config struct {
 	Namespace string
 	Host      string
@@ -51,17 +37,12 @@ type Config struct {
 	CAFile    string
 }
 
-// Lister lists the running images of the pods labeled with a known
-// component in one namespace. It implements platform.Lister.
 type Lister struct {
 	cfg     Config
 	client  *http.Client
 	podsURL string
 }
 
-// New returns a Lister for cfg, reading the API server's CA certificate
-// once. It defaults Host and Port from KUBERNETES_SERVICE_HOST and
-// KUBERNETES_SERVICE_PORT, and Namespace to "aboutme".
 func New(cfg Config) (*Lister, error) {
 	if cfg.Namespace == "" {
 		cfg.Namespace = "aboutme"
@@ -109,11 +90,6 @@ func New(cfg Config) (*Lister, error) {
 	return &Lister{cfg: cfg, client: client, podsURL: u.String()}, nil
 }
 
-// podList is the minimal shape the observer reads from a PodList
-// (docs/design/deployment-transparency/README.md, "Kubernetes"). Every other
-// field, including names, labels outside componentLabel, and annotations,
-// is never decoded, so it cannot reach the document
-// (docs/design/deployment-transparency/document.md, "Sanitizer").
 type podList struct {
 	Items []struct {
 		Metadata struct {
@@ -133,9 +109,6 @@ type podList struct {
 	} `json:"items"`
 }
 
-// Running implements platform.Lister. A pod counts only for the container
-// named like its component, and only while that container's state is
-// running.
 func (l *Lister) Running(ctx context.Context) ([]platform.Image, error) {
 	token, err := os.ReadFile(l.cfg.TokenFile)
 	if err != nil {
@@ -186,13 +159,8 @@ func (l *Lister) Running(ctx context.Context) ([]platform.Image, error) {
 	return platform.Aggregate(obs)
 }
 
-// imageIDDigest matches the "@sha256:<hex>" suffix of a container's
-// imageID, discarding any prefix such as "docker-pullable://" or
-// "containerd://" and the repository part
-// (docs/design/deployment-transparency/README.md, "Kubernetes").
 var imageIDDigest = regexp.MustCompile(`@(sha256:[0-9a-f]{64})$`)
 
-// digestFromImageID is the pure form of the imageID digest extraction rule.
 func digestFromImageID(imageID string) (string, bool) {
 	m := imageIDDigest.FindStringSubmatch(imageID)
 	if m == nil {

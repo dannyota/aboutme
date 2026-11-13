@@ -124,11 +124,6 @@ type AdvanceResumeRevisionCASParams struct {
 	ExpectedRevision int64
 }
 
-// Advances only the revision, the change signal every public artifact keys
-// on, and leaves the document, updated_at and every other column unchanged
-// (docs/design/projects-contract.md "Revision-only advance"). The returned
-// revision is the NEW one. A stale or non-matching expected revision updates
-// zero rows and surfaces as pgx.ErrNoRows.
 func (q *Queries) AdvanceResumeRevisionCAS(ctx context.Context, arg AdvanceResumeRevisionCASParams) (Resume, error) {
 	row := q.db.QueryRow(ctx, advanceResumeRevisionCAS, arg.ID, arg.UserID, arg.ExpectedRevision)
 	var i Resume
@@ -199,14 +194,7 @@ type BackfillResumeDocumentCASParams struct {
 	Revision          int64
 }
 
-// This system backfill intentionally does not change revision or updated_at:
-// it persists the same projected document already served to readers. It is
-// not user-scoped. See docs/adr/0004-resume-document-contract.md.
-// Fully named parameters distinguish the from/to schema versions. Both are
-// int32, and sqlc's positional naming would emit
-// `SchemaVersion` and `SchemaVersion_2`, neither carrying its direction.
-// A caller swapping them silently rewrites current rows back to the old
-// version. Named args make the pair unswappable at the call site.
+// sqlc names two positional int32 parameters SchemaVersion and SchemaVersion_2, so both are named (sqlc parameter naming).
 func (q *Queries) BackfillResumeDocumentCAS(ctx context.Context, arg BackfillResumeDocumentCASParams) (int64, error) {
 	result, err := q.db.Exec(ctx, backfillResumeDocumentCAS,
 		arg.PersonalDetails,
@@ -234,13 +222,6 @@ type BeginSessionRotationParams struct {
 	RotationGraceUntil *time.Time
 }
 
-// Single-row conditional UPDATE that decides the >24h rotation winner: only
-// a row that has neither already started rotating (rotation_grace_until
-// still NULL) nor been revoked is claimed. Under concurrent callers racing
-// the same session id, exactly one UPDATE affects a row (returns its id);
-// every other caller's UPDATE affects zero rows and pgx reports
-// pgx.ErrNoRows -- that caller lost the race and must not mint a second
-// successor (see internal/auth.SessionManager.Authenticate).
 func (q *Queries) BeginSessionRotation(ctx context.Context, arg BeginSessionRotationParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, beginSessionRotation, arg.ID, arg.RotationGraceUntil)
 	var id uuid.UUID
@@ -296,10 +277,6 @@ type ClaimAuthEmailJobsParams struct {
 	LimitRows      int32
 }
 
-// Bounded SKIP LOCKED claim: atomically transitions at most limit due pending
-// jobs to leased, increments attempts, stamps the lease pair, and returns the
-// leased rows. Two concurrent claimers are disjoint because each claims a
-// distinct row under FOR UPDATE SKIP LOCKED.
 func (q *Queries) ClaimAuthEmailJobs(ctx context.Context, arg ClaimAuthEmailJobsParams) ([]AuthEmailJob, error) {
 	rows, err := q.db.Query(ctx, claimAuthEmailJobs,
 		arg.LeaseOwner,
@@ -590,13 +567,6 @@ type ConsumeOAuthAuthorizationCodeParams struct {
 	CodeDigest     []byte
 }
 
-// Single-use consumption. One conditional UPDATE both takes the row lock
-// and decides the winner: under two concurrent exchanges of the same code the
-// second blocks, re-evaluates the predicate after the first commits, matches
-// no row, and surfaces as pgx.ErrNoRows. Unknown, expired, and already-consumed
-// codes therefore collapse to that one outcome, so no caller can branch on the
-// reason. issued_family_id records the token family this exchange creates,
-// which is what a later replay revokes.
 func (q *Queries) ConsumeOAuthAuthorizationCode(ctx context.Context, arg ConsumeOAuthAuthorizationCodeParams) (OAuthAuthorizationCode, error) {
 	row := q.db.QueryRow(ctx, consumeOAuthAuthorizationCode, arg.ConsumedAt, arg.IssuedFamilyID, arg.CodeDigest)
 	var i OAuthAuthorizationCode
@@ -630,16 +600,6 @@ type ConsumeOAuthTransactionParams struct {
 	ConsumedAt *time.Time
 }
 
-// Atomically claims a transaction: only a row that is unexpired and not yet
-// consumed (as of now, $2) is updated and returned. A handle that is
-// unknown, expired, or already consumed matches no row, so the caller sees
-// exactly one outcome (pgx.ErrNoRows) for all three cases -- see
-// internal/auth.ErrTransactionInvalid's doc comment for why that collapse
-// is deliberate. The provider-mismatch check (RFC 9700 mix-up defense)
-// happens in Go, after this still consumes the row: an attacker replaying
-// a valid handle against the wrong provider's callback burns the
-// transaction just like any other outcome, so it can never be retried
-// against the correct provider either.
 func (q *Queries) ConsumeOAuthTransaction(ctx context.Context, arg ConsumeOAuthTransactionParams) (OAuthTransaction, error) {
 	row := q.db.QueryRow(ctx, consumeOAuthTransaction, arg.HandleHash, arg.ConsumedAt)
 	var i OAuthTransaction
@@ -835,10 +795,6 @@ type CreateAuthEmailJobParams struct {
 	NextAttemptAt  *time.Time
 }
 
-// New jobs always start pending with attempts 0 (DEFAULT). The caller provides
-// the job id (a UUIDv7 it generated) so the outbox AAD binds to the stored row's
-// id; the caller has already encrypted the payload and computed the exact expiry
-// before commit.
 func (q *Queries) CreateAuthEmailJob(ctx context.Context, arg CreateAuthEmailJobParams) (AuthEmailJob, error) {
 	row := q.db.QueryRow(ctx, createAuthEmailJob,
 		arg.ID,
@@ -906,10 +862,6 @@ type CreateIdempotencyRecordRow struct {
 	StoredBytes     int32
 }
 
-// Returns PostgreSQL's normalized jsonb representation of the stored body
-// and approved headers plus the exact stored byte count, so the first
-// response and every replay use identical bytes and no caller recomputes
-// capacity accounting in Go.
 func (q *Queries) CreateIdempotencyRecord(ctx context.Context, arg CreateIdempotencyRecordParams) (CreateIdempotencyRecordRow, error) {
 	row := q.db.QueryRow(ctx, createIdempotencyRecord,
 		arg.UserID,
@@ -936,8 +888,6 @@ type CreateIdentityParams struct {
 	ProviderUserID string
 }
 
-// The caller checks the provider subject first for the common case. The
-// database uniqueness constraint remains the concurrency backstop.
 func (q *Queries) CreateIdentity(ctx context.Context, arg CreateIdentityParams) (Identity, error) {
 	row := q.db.QueryRow(ctx, createIdentity, arg.UserID, arg.Provider, arg.ProviderUserID)
 	var i Identity
@@ -977,10 +927,6 @@ type CreateOAuthAuthorizationCodeParams struct {
 	AuthEpoch     int64
 }
 
-// Code issue. expires_at is computed here, not passed in, so the exact
-// 60-second TTL the table checks can never be missed by a caller. Only the
-// code's digest is stored; the raw code exists solely in the redirect the user
-// agent carries.
 func (q *Queries) CreateOAuthAuthorizationCode(ctx context.Context, arg CreateOAuthAuthorizationCodeParams) (OAuthAuthorizationCode, error) {
 	row := q.db.QueryRow(ctx, createOAuthAuthorizationCode,
 		arg.CodeDigest,
@@ -1013,7 +959,6 @@ func (q *Queries) CreateOAuthAuthorizationCode(ctx context.Context, arg CreateOA
 }
 
 const createOAuthClient = `-- name: CreateOAuthClient :one
-
 INSERT INTO oauth_clients (client_name, redirect_uris, created_at, last_used_at)
 VALUES (
     $1,
@@ -1030,21 +975,6 @@ type CreateOAuthClientParams struct {
 	CreatedAt    time.Time
 }
 
-// ---------------------------------------------------------------------------
-// OAuth agent access: clients, authorization codes, grants, and
-// tokens. Storage is digest-only: no query here reads, writes, or returns raw
-// code or token material, and PKCE verifiers are never stored.
-//
-// Lock order is oauth_clients -> users -> oauth_grants ->
-// oauth_authorization_codes -> oauth_tokens. Every path that revokes a token
-// family first locks its grant row (GetOAuthGrantForUpdate), and every path
-// that mutates a client's rows first locks the client row
-// (GetOAuthClientForUpdate) -- which is also what makes the idle-client sweep
-// skip a client another transaction is consenting to.
-// ---------------------------------------------------------------------------
-// Dynamic client registration. The primary key returned here IS the
-// public client_id; there is no secret. last_used_at starts at created_at so
-// the column is never NULL and the ordering check holds from the first row.
 func (q *Queries) CreateOAuthClient(ctx context.Context, arg CreateOAuthClientParams) (OAuthClient, error) {
 	row := q.db.QueryRow(ctx, createOAuthClient, arg.ClientName, arg.RedirectURIs, arg.CreatedAt)
 	var i OAuthClient
@@ -1085,9 +1015,6 @@ type CreateOAuthTokenParams struct {
 	FamilyExpiresAt time.Time
 }
 
-// The first token of a family, issued by a code exchange. expires_at is
-// clamped to the family's own death so no token can outlive the family it
-// belongs to; the table's ordering check is the backstop for raw SQL.
 func (q *Queries) CreateOAuthToken(ctx context.Context, arg CreateOAuthTokenParams) (OAuthToken, error) {
 	row := q.db.QueryRow(ctx, createOAuthToken,
 		arg.TokenDigest,
@@ -1142,8 +1069,6 @@ type CreateOAuthTransactionParams struct {
 	ResumeID      *uuid.UUID
 }
 
-// resume_id is set only for purpose 'view' (docs/design/viewer-analytics/sign-in-to-view.md
-// "Sign-in flow"; AC-VIEW-004); every other purpose passes it as NULL.
 func (q *Queries) CreateOAuthTransaction(ctx context.Context, arg CreateOAuthTransactionParams) (OAuthTransaction, error) {
 	row := q.db.QueryRow(ctx, createOAuthTransaction,
 		arg.HandleHash,
@@ -1454,15 +1379,6 @@ type CreateSessionParams struct {
 	SecondFactorVerifiedAt *time.Time
 }
 
-// Always inserts a brand-new row -- used both by Issue (fixation defense: a
-// login never reuses an existing session row) and by the >24h rotation
-// winner's successor insert (internal/auth.SessionManager.Authenticate),
-// which passes the predecessor's user_id, reauthenticated_at,
-// absolute_expires_at, ua, and ip through unchanged so a rotation never
-// extends absolute expiry or silently satisfies the recent-reauth gate.
-// rotated_from is NULL for a fresh login and contains the predecessor id
-// for a rotated successor. The partial unique index makes this an exact,
-// one-successor lineage link.
 func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error) {
 	row := q.db.QueryRow(ctx, createSession,
 		arg.UserID,
@@ -1500,7 +1416,6 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (S
 }
 
 const createUser = `-- name: CreateUser :one
-
 INSERT INTO users (email, name, avatar_key) VALUES ($1, $2, $3) RETURNING id, email, name, avatar_key, created_at, updated_at, auth_epoch
 `
 
@@ -1510,10 +1425,6 @@ type CreateUserParams struct {
 	AvatarKey *string
 }
 
-// Hand-written, sqlc-annotated queries (`-- name: X :one/:many/:exec`) that
-// become type-safe Go methods in internal/store via `make generate`.
-// Relational schema changes belong in apps/server/migrations; see
-// docs/design/data.md.
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
 	row := q.db.QueryRow(ctx, createUser, arg.Email, arg.Name, arg.AvatarKey)
 	var i User
@@ -1650,9 +1561,6 @@ type DeleteExpiredIdempotencyRecordForKeyRow struct {
 	DeletedBytes   int64
 }
 
-// Deletes exactly this key's record if (and only if) it has expired, and
-// reports the counters to release — zero rows deleted still returns one
-// aggregate row of zeros.
 func (q *Queries) DeleteExpiredIdempotencyRecordForKey(ctx context.Context, arg DeleteExpiredIdempotencyRecordForKeyParams) (DeleteExpiredIdempotencyRecordForKeyRow, error) {
 	row := q.db.QueryRow(ctx, deleteExpiredIdempotencyRecordForKey,
 		arg.UserID,
@@ -1696,11 +1604,6 @@ type DeleteExpiredIdempotencyRecordsForUserRow struct {
 	DeletedBytes   int64
 }
 
-// The bounded request-path cleanup: at most limit_rows of the calling
-// user's expired records, deterministically oldest first by
-// (expires_at, id) on the composite index. FOR UPDATE SKIP LOCKED keeps
-// concurrent cleanup bounded and deadlock-free. Always returns one
-// aggregate row, even when nothing was deleted.
 func (q *Queries) DeleteExpiredIdempotencyRecordsForUser(ctx context.Context, arg DeleteExpiredIdempotencyRecordsForUserParams) (DeleteExpiredIdempotencyRecordsForUserRow, error) {
 	row := q.db.QueryRow(ctx, deleteExpiredIdempotencyRecordsForUser, arg.UserID, arg.ExpiresAt, arg.Limit)
 	var i DeleteExpiredIdempotencyRecordsForUserRow
@@ -1740,10 +1643,6 @@ type DeleteExpiredIdempotencyRecordsGlobalRow struct {
 	DeletedBytes   int64
 }
 
-// The scheduled privacy sweep's bounded page: oldest expired rows across
-// all users, grouped per user so the sweep can release each user's exact
-// counters (once per returned user) before committing that cleanup
-// transaction.
 func (q *Queries) DeleteExpiredIdempotencyRecordsGlobal(ctx context.Context, arg DeleteExpiredIdempotencyRecordsGlobalParams) ([]DeleteExpiredIdempotencyRecordsGlobalRow, error) {
 	rows, err := q.db.Query(ctx, deleteExpiredIdempotencyRecordsGlobal, arg.Now, arg.LimitRows)
 	if err != nil {
@@ -1782,10 +1681,6 @@ type DeleteExpiredOAuthAuthorizationCodesParams struct {
 	LimitRows int32
 }
 
-// Bounded cleanup, oldest expiry first on oauth_authorization_codes_expires_at_idx.
-// expires_at alone is the predicate: a consumed code keeps its original expiry,
-// so consumed and abandoned rows leave on the same schedule, and a row is never
-// removed while ConsumeOAuthAuthorizationCode could still claim it.
 func (q *Queries) DeleteExpiredOAuthAuthorizationCodes(ctx context.Context, arg DeleteExpiredOAuthAuthorizationCodesParams) (int64, error) {
 	result, err := q.db.Exec(ctx, deleteExpiredOAuthAuthorizationCodes, arg.Cutoff, arg.LimitRows)
 	if err != nil {
@@ -1880,9 +1775,6 @@ type DeleteIdentityForUserParams struct {
 	UserID uuid.UUID
 }
 
-// Unlinks one identity only when it belongs to the given user. The caller holds
-// the user-row lock, so the last-sign-in-method check and this delete cannot
-// interleave with another unlink.
 func (q *Queries) DeleteIdentityForUser(ctx context.Context, arg DeleteIdentityForUserParams) (int64, error) {
 	result, err := q.db.Exec(ctx, deleteIdentityForUser, arg.ID, arg.UserID)
 	if err != nil {
@@ -1895,8 +1787,6 @@ const deleteOAuthClient = `-- name: DeleteOAuthClient :execrows
 DELETE FROM oauth_clients WHERE id = $1
 `
 
-// Removing a client cascades its codes, grants, and tokens: deregistering an
-// agent ends every authorization it holds.
 func (q *Queries) DeleteOAuthClient(ctx context.Context, id uuid.UUID) (int64, error) {
 	result, err := q.db.Exec(ctx, deleteOAuthClient, id)
 	if err != nil {
@@ -1909,8 +1799,6 @@ const deleteOAuthClients = `-- name: DeleteOAuthClients :execrows
 DELETE FROM oauth_clients WHERE id = ANY($1::uuid[])
 `
 
-// Deletes exactly the candidate set the caller just locked. The batch bound
-// lives in ListIdleOAuthClientCandidates; this statement never widens it.
 func (q *Queries) DeleteOAuthClients(ctx context.Context, ids []uuid.UUID) (int64, error) {
 	result, err := q.db.Exec(ctx, deleteOAuthClients, ids)
 	if err != nil {
@@ -2008,11 +1896,6 @@ type DeleteResumeForUserCASParams struct {
 	Revision int64
 }
 
-// Revision-CAS delete returning the deleted row, so the caller can
-// validate the stored photo key and enqueue media cleanup in the same
-// transaction. Zero rows (stale revision, wrong owner, or missing id)
-// surfaces as pgx.ErrNoRows; the caller re-reads to distinguish staleness
-// from absence without creating an existence oracle.
 func (q *Queries) DeleteResumeForUserCAS(ctx context.Context, arg DeleteResumeForUserCASParams) (Resume, error) {
 	row := q.db.QueryRow(ctx, deleteResumeForUserCAS, arg.ID, arg.UserID, arg.Revision)
 	var i Resume
@@ -2130,12 +2013,6 @@ type DeleteTerminalOAuthTokensParams struct {
 	LimitRows int32
 }
 
-// Bounded token cleanup. An access token leaves as soon as it has expired or
-// been revoked: it carries no replay-detection role. A refresh token is kept
-// until its whole family has expired, because a superseded or revoked refresh
-// token that is presented again must still be recognized as a replay rather
-// than as an unknown token. rotated_from is ON DELETE SET NULL, so removing a
-// predecessor detaches its successor instead of cascading past the batch bound.
 func (q *Queries) DeleteTerminalOAuthTokens(ctx context.Context, arg DeleteTerminalOAuthTokensParams) (int64, error) {
 	result, err := q.db.Exec(ctx, deleteTerminalOAuthTokens, arg.Cutoff, arg.LimitRows)
 	if err != nil {
@@ -2184,9 +2061,6 @@ type EnqueueMediaDeletionJobParams struct {
 	ObjectKey string
 }
 
-// Records exact-key cleanup work in the caller's transaction (ADR 0009).
-// Duplicate enqueue of the immutable key is idempotent (zero rows); the
-// table's own check constraint rejects a malformed or cross-resume key.
 func (q *Queries) EnqueueMediaDeletionJob(ctx context.Context, arg EnqueueMediaDeletionJobParams) (int64, error) {
 	result, err := q.db.Exec(ctx, enqueueMediaDeletionJob, arg.ResumeID, arg.ObjectKey)
 	if err != nil {
@@ -2260,7 +2134,6 @@ const getDCRClient = `-- name: GetDCRClient :one
 SELECT id, client_name, redirect_uris, created_at, last_used_at, metadata_url FROM oauth_clients WHERE id = $1 AND metadata_url IS NULL
 `
 
-// Public UUID resolution excludes the internal UUID of a URL client.
 func (q *Queries) GetDCRClient(ctx context.Context, id uuid.UUID) (OAuthClient, error) {
 	row := q.db.QueryRow(ctx, getDCRClient, id)
 	var i OAuthClient
@@ -2298,14 +2171,6 @@ type GetIdempotencyCapacityRetryAfterRow struct {
 	EarliestExpiry time.Time
 }
 
-// Inputs for the capacity Retry-After decision: while an expired retained
-// row remains the caller retries in one second (the next mutation's
-// bounded cleanup frees space); otherwise the earliest retained expiry
-// says when space can next appear.
-// earliest_expiry falls back to the caller's own now when the user retains
-// no records at all (capacity rejection with zero retained records cannot
-// normally happen); the caller maps any earliest_expiry <= now to the
-// one-second branch.
 func (q *Queries) GetIdempotencyCapacityRetryAfter(ctx context.Context, arg GetIdempotencyCapacityRetryAfterParams) (GetIdempotencyCapacityRetryAfterRow, error) {
 	row := q.db.QueryRow(ctx, getIdempotencyCapacityRetryAfter, arg.UserID, arg.Now)
 	var i GetIdempotencyCapacityRetryAfterRow
@@ -2415,8 +2280,6 @@ type GetLiveOAuthGrantParams struct {
 	ClientID uuid.UUID
 }
 
-// The grant-skip read: a live grant with equal-or-wider scopes lets authorize
-// issue a code without a second consent.
 func (q *Queries) GetLiveOAuthGrant(ctx context.Context, arg GetLiveOAuthGrantParams) (OAuthGrant, error) {
 	row := q.db.QueryRow(ctx, getLiveOAuthGrant, arg.UserID, arg.ClientID)
 	var i OAuthGrant
@@ -2444,8 +2307,6 @@ type GetMediaDeletionJobByObjectKeyParams struct {
 	ObjectKey string
 }
 
-// Ambiguous-delete recovery proves the exact immutable cleanup job without
-// scanning or exposing unrelated object keys.
 func (q *Queries) GetMediaDeletionJobByObjectKey(ctx context.Context, arg GetMediaDeletionJobByObjectKeyParams) (MediaDeletionJob, error) {
 	row := q.db.QueryRow(ctx, getMediaDeletionJobByObjectKey, arg.ResumeID, arg.ObjectKey)
 	var i MediaDeletionJob
@@ -2469,8 +2330,6 @@ const getOAuthAuthorizationCodeByDigest = `-- name: GetOAuthAuthorizationCodeByD
 SELECT id, code_digest, client_id, user_id, scopes, code_challenge, redirect_uri, created_at, expires_at, consumed_at, issued_family_id, grant_id, auth_epoch FROM oauth_authorization_codes WHERE code_digest = $1
 `
 
-// Replay lookup: returns the row whether or not it was consumed, so the caller
-// can see the family a consumed code issued and revoke exactly those tokens.
 func (q *Queries) GetOAuthAuthorizationCodeByDigest(ctx context.Context, codeDigest []byte) (OAuthAuthorizationCode, error) {
 	row := q.db.QueryRow(ctx, getOAuthAuthorizationCodeByDigest, codeDigest)
 	var i OAuthAuthorizationCode
@@ -2496,8 +2355,6 @@ const getOAuthAuthorizationCodeByDigestForUpdate = `-- name: GetOAuthAuthorizati
 SELECT id, code_digest, client_id, user_id, scopes, code_challenge, redirect_uri, created_at, expires_at, consumed_at, issued_family_id, grant_id, auth_epoch FROM oauth_authorization_codes WHERE code_digest = $1 FOR UPDATE
 `
 
-// The locked replay lookup used before a consumed-code replay revokes the
-// family it issued, so the revocation and the row it read cannot interleave.
 func (q *Queries) GetOAuthAuthorizationCodeByDigestForUpdate(ctx context.Context, codeDigest []byte) (OAuthAuthorizationCode, error) {
 	row := q.db.QueryRow(ctx, getOAuthAuthorizationCodeByDigestForUpdate, codeDigest)
 	var i OAuthAuthorizationCode
@@ -2612,10 +2469,6 @@ type GetOAuthTokenAuthorityByDigestRow struct {
 	User       User
 }
 
-// The bearer boundary's single round trip: token row, its grant, and its
-// account in one query. The caller applies expiry, revocation, supersession,
-// and kind checks to the returned row; every rejection class therefore reads
-// the same rows and produces the same closed response.
 func (q *Queries) GetOAuthTokenAuthorityByDigest(ctx context.Context, tokenDigest []byte) (GetOAuthTokenAuthorityByDigestRow, error) {
 	row := q.db.QueryRow(ctx, getOAuthTokenAuthorityByDigest, tokenDigest)
 	var i GetOAuthTokenAuthorityByDigestRow
@@ -3003,8 +2856,6 @@ type GetPublicDiscoverySnapshotRow struct {
 	Slugs               []string
 }
 
-// The generation and eligible slug set are selected by one PostgreSQL
-// statement so aggregate discovery admission cannot pair different commits.
 func (q *Queries) GetPublicDiscoverySnapshot(ctx context.Context) (GetPublicDiscoverySnapshotRow, error) {
 	row := q.db.QueryRow(ctx, getPublicDiscoverySnapshot)
 	var i GetPublicDiscoverySnapshotRow
@@ -3169,12 +3020,6 @@ type GetPublicResumeProjectRow struct {
 	Projects     json.RawMessage
 }
 
-// One project page's snapshot: the live resume; its project link context as
-// the list reads it, each linked document without its descriptions; and the
-// whole document of the requested project, only when an entry that is not
-// hidden in a project section links it. The page reads the other documents
-// only to know whether another project has a name to show. The project id
-// never leaves the statement.
 func (q *Queries) GetPublicResumeProject(ctx context.Context, arg GetPublicResumeProjectParams) (GetPublicResumeProjectRow, error) {
 	row := q.db.QueryRow(ctx, getPublicResumeProject, arg.ProjectSlug, arg.Slug)
 	var i GetPublicResumeProjectRow
@@ -3230,13 +3075,6 @@ type GetPublicResumeProjectListRow struct {
 	Projects json.RawMessage
 }
 
-// The project list's snapshot: the live resume and, for each entry that is
-// not hidden in a project section and names a project of the same owner, the
-// entry id, the project slug and the project document with every
-// description removed. One statement reads both, so the projects belong to
-// the returned revision (docs/design/projects-contract.md "Project link
-// context"). The project id never leaves the statement, and the id is
-// compared as text, as in GetPublicResumeBySlug.
 func (q *Queries) GetPublicResumeProjectList(ctx context.Context, slug string) (GetPublicResumeProjectListRow, error) {
 	row := q.db.QueryRow(ctx, getPublicResumeProjectList, slug)
 	var i GetPublicResumeProjectListRow
@@ -3282,8 +3120,6 @@ const getResumeByID = `-- name: GetResumeByID :one
 SELECT id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at, public_title, favicon_emoji, sign_in_to_view, view_pass_epoch FROM resumes WHERE id = $1
 `
 
-// System-job read for the document-version backfill. It is intentionally
-// not user-scoped, unlike product reads. It adds no write path.
 func (q *Queries) GetResumeByID(ctx context.Context, id uuid.UUID) (Resume, error) {
 	row := q.db.QueryRow(ctx, getResumeByID, id)
 	var i Resume
@@ -3420,10 +3256,6 @@ type GetResumeViewGateStateRow struct {
 	ViewPassEpoch int32
 }
 
-// The "view" OAuth callback's re-read: live state, slug, the sign-in switch,
-// and the pass epoch, by resume ID, with no user scoping since the callback
-// authenticates no account (docs/design/viewer-analytics/sign-in-to-view.md
-// "Sign-in flow"; AC-VIEW-005).
 func (q *Queries) GetResumeViewGateState(ctx context.Context, id uuid.UUID) (GetResumeViewGateStateRow, error) {
 	row := q.db.QueryRow(ctx, getResumeViewGateState, id)
 	var i GetResumeViewGateStateRow
@@ -3457,9 +3289,6 @@ const getSessionByID = `-- name: GetSessionByID :one
 SELECT id, user_id, token_hash, csrf_secret, created_at, last_seen_at, reauthenticated_at, absolute_expires_at, rotation_grace_until, revoked_at, ua, ip, rotated_from, auth_epoch, second_factor_verified_at FROM sessions WHERE id = $1
 `
 
-// Loads a target so the caller can revoke its rotation partner.
-// RevokeSessionForUser returns only a row count, and the target need not be the
-// caller's current session, so the lineage values require this read.
 func (q *Queries) GetSessionByID(ctx context.Context, id uuid.UUID) (Session, error) {
 	row := q.db.QueryRow(ctx, getSessionByID, id)
 	var i Session
@@ -3487,8 +3316,6 @@ const getSessionByIDForUpdate = `-- name: GetSessionByIDForUpdate :one
 SELECT id, user_id, token_hash, csrf_secret, created_at, last_seen_at, reauthenticated_at, absolute_expires_at, rotation_grace_until, revoked_at, ua, ip, rotated_from, auth_epoch, second_factor_verified_at FROM sessions WHERE id = $1 FOR UPDATE
 `
 
-// Session-row lock for password add/change, which revokes the current session
-// and every sibling atomically.
 func (q *Queries) GetSessionByIDForUpdate(ctx context.Context, id uuid.UUID) (Session, error) {
 	row := q.db.QueryRow(ctx, getSessionByIDForUpdate, id)
 	var i Session
@@ -3522,8 +3349,6 @@ WHERE token_hash = $1
   )
 `
 
-// Returns a session only while its copied authentication epoch equals the
-// account's current epoch, so a stale-epoch credential reads as unknown.
 func (q *Queries) GetSessionByTokenHash(ctx context.Context, tokenHash []byte) (Session, error) {
 	row := q.db.QueryRow(ctx, getSessionByTokenHash, tokenHash)
 	var i Session
@@ -3573,9 +3398,6 @@ const getUserByCanonicalEmail = `-- name: GetUserByCanonicalEmail :one
 SELECT id, email, name, avatar_key, created_at, updated_at, auth_epoch FROM users WHERE email = $1
 `
 
-// Ownership read before a new-account insert. The caller passes the canonical
-// lowercase form; users.email is citext so the comparison is already
-// case-insensitive, and the unique constraint arbitrates the actual insert.
 func (q *Queries) GetUserByCanonicalEmail(ctx context.Context, email string) (User, error) {
 	row := q.db.QueryRow(ctx, getUserByCanonicalEmail, email)
 	var i User
@@ -3639,7 +3461,6 @@ SELECT id, email, name, avatar_key, created_at, updated_at, auth_epoch FROM user
 // order is user -> credential -> reset token -> sessions, per the user-row lock
 // rules in docs/design/security.md; queries expose only the locks it needs.
 // ---------------------------------------------------------------------------
-// The user-row lock every session issuer and password mutation serializes on.
 func (q *Queries) GetUserForUpdate(ctx context.Context, id uuid.UUID) (User, error) {
 	row := q.db.QueryRow(ctx, getUserForUpdate, id)
 	var i User
@@ -3715,7 +3536,6 @@ INSERT INTO lifecycle_audit_events (kind, occurred_at, media_job_id)
 VALUES ('identity_unlinked', $1::timestamptz, NULL)
 `
 
-// Records the unlink's kind and time only: no user, provider, or identity.
 func (q *Queries) InsertIdentityUnlinkedAuditEvent(ctx context.Context, occurredAt time.Time) error {
 	_, err := q.db.Exec(ctx, insertIdentityUnlinkedAuditEvent, occurredAt)
 	return err
@@ -3796,13 +3616,6 @@ type InsertRotatedOAuthTokenParams struct {
 	RotatedFrom uuid.UUID
 }
 
-// Refresh rotation. Every identity field -- family, client, user, grant,
-// and family expiry -- is read from the predecessor row rather than trusted
-// from the caller, so a rotated token structurally cannot join a different
-// family, client, user, or grant than the token it succeeds. A missing
-// predecessor selects no row and returns pgx.ErrNoRows instead of inserting an
-// orphan. The partial unique index on rotated_from means one predecessor can
-// mint at most one successor even under concurrent rotations.
 func (q *Queries) InsertRotatedOAuthToken(ctx context.Context, arg InsertRotatedOAuthTokenParams) (OAuthToken, error) {
 	row := q.db.QueryRow(ctx, insertRotatedOAuthToken,
 		arg.TokenDigest,
@@ -3845,8 +3658,6 @@ type InsertSlugTombstoneParams struct {
 	ReleasedAt time.Time
 }
 
-// Holds no account link (docs/design/product.md): the released slug and its
-// release time are the only claim needed to reserve it.
 func (q *Queries) InsertSlugTombstone(ctx context.Context, arg InsertSlugTombstoneParams) (SlugTombstone, error) {
 	row := q.db.QueryRow(ctx, insertSlugTombstone, arg.Slug, arg.ReleasedAt)
 	var i SlugTombstone
@@ -3875,9 +3686,7 @@ WHERE slug IS NOT NULL AND live = true AND seo_geo_enabled = true
 ORDER BY slug COLLATE "C" ASC
 `
 
-// Discovery bytes contain only eligible slugs in raw byte order. The
-// COALESCE is unreachable under the predicate and gives sqlc a non-null Go
-// string instead of a pointer.
+// COALESCE gives sqlc a non-null Go string instead of a pointer (sqlc nullability inference).
 func (q *Queries) ListEligiblePublicSlugs(ctx context.Context) ([]string, error) {
 	rows, err := q.db.Query(ctx, listEligiblePublicSlugs)
 	if err != nil {
@@ -3941,7 +3750,6 @@ const listIdentitiesByUserID = `-- name: ListIdentitiesByUserID :many
 SELECT id, user_id, provider, provider_user_id, created_at FROM identities WHERE user_id = $1 ORDER BY created_at ASC, id ASC
 `
 
-// Ordered by creation time then ID, oldest first with a deterministic tie-breaker.
 func (q *Queries) ListIdentitiesByUserID(ctx context.Context, userID uuid.UUID) ([]Identity, error) {
 	rows, err := q.db.Query(ctx, listIdentitiesByUserID, userID)
 	if err != nil {
@@ -4085,16 +3893,7 @@ type ListLiveOAuthGrantsForUserRow struct {
 	LastUsedAt  *time.Time
 }
 
-// The connected-agents list: client name, scopes, and when the agent was
-// connected and last used. Last-used comes from the grant's tokens rather than
-// a duplicated column, so there is one source of truth for agent activity.
-// Bounded by limit_rows; ordered newest-first with id as a deterministic
-// tiebreaker.
-//
-// The correlated ORDER BY ... LIMIT 1 is deliberate where max() would read
-// more naturally: sqlc cannot type an aggregate expression and emits
-// interface{} for it, while a plain nullable column reference keeps the Go
-// type *time.Time — NULL for a grant whose tokens have never been used.
+// sqlc types an aggregate such as max() as interface{}, so ORDER BY ... LIMIT 1 keeps *time.Time (sqlc type inference).
 func (q *Queries) ListLiveOAuthGrantsForUser(ctx context.Context, arg ListLiveOAuthGrantsForUserParams) ([]ListLiveOAuthGrantsForUserRow, error) {
 	rows, err := q.db.Query(ctx, listLiveOAuthGrantsForUser, arg.UserID, arg.LimitRows)
 	if err != nil {
@@ -4510,7 +4309,6 @@ type MarkAuthEmailJobSentParams struct {
 	ID     uuid.UUID
 }
 
-// SES accepted: clears every encryption and lease field and records sent_at.
 func (q *Queries) MarkAuthEmailJobSent(ctx context.Context, arg MarkAuthEmailJobSentParams) (int64, error) {
 	result, err := q.db.Exec(ctx, markAuthEmailJobSent, arg.SentAt, arg.ID)
 	if err != nil {
@@ -4532,9 +4330,6 @@ type MarkAuthEmailJobTerminalParams struct {
 	ID         uuid.UUID
 }
 
-// Permanent failure, expiry, or the eighth attempt: clears every encryption and
-// lease field and records terminal_at. A stale pending job may terminate
-// without ever being leased (attempts stays 0).
 func (q *Queries) MarkAuthEmailJobTerminal(ctx context.Context, arg MarkAuthEmailJobTerminalParams) (int64, error) {
 	result, err := q.db.Exec(ctx, markAuthEmailJobTerminal, arg.TerminalAt, arg.ID)
 	if err != nil {
@@ -4561,10 +4356,6 @@ type NormalizeIdempotencyResponseRow struct {
 	StoredBytes     int32
 }
 
-// Normalizes a candidate response through the same jsonb representation an
-// insert would store and reports the exact byte count the usage
-// reservation must account for — the one canonical byte expression shared
-// with backfill, insert, and cleanup.
 func (q *Queries) NormalizeIdempotencyResponse(ctx context.Context, arg NormalizeIdempotencyResponseParams) (NormalizeIdempotencyResponseRow, error) {
 	row := q.db.QueryRow(ctx, normalizeIdempotencyResponse, arg.ResponseBody, arg.ResponseHeaders)
 	var i NormalizeIdempotencyResponseRow
@@ -4780,16 +4571,7 @@ type PublishResumeCASParams struct {
 	UpdatedAt        time.Time
 }
 
-// sign_in_to_view is the caller's already-merged final value (an omitted
-// publish field keeps the stored value before this query ever runs; see
-// docs/design/viewer-analytics/sign-in-to-view.md "Setting", AC-VIEW-001).
-// view_pass_epoch rises exactly when the switch turns on (from false to
-// true, whatever the live transition) or when it stays on and the resume
-// becomes live again after not being live, so passes from an earlier
-// period stop working (design "Gated routes"; AC-VIEW-007). Both
-// conditions read resume.* as the pre-update row, since a single UPDATE
-// statement evaluates its FROM/SET expressions against the row as it was
-// before this statement.
+// A single UPDATE evaluates its SET and FROM expressions against the pre-update row (PostgreSQL UPDATE).
 func (q *Queries) PublishResumeCAS(ctx context.Context, arg PublishResumeCASParams) (Resume, error) {
 	row := q.db.QueryRow(ctx, publishResumeCAS,
 		arg.ID,
@@ -4983,10 +4765,6 @@ type ReleaseIdempotencyUsageParams struct {
 	ReleasedBytes int64
 }
 
-// Releases exactly the counters of physically deleted records, in the same
-// transaction as their deletion. The migration's purge-then-backfill order
-// plus transactional maintenance guarantee this can never underflow the
-// non-negative checks.
 func (q *Queries) ReleaseIdempotencyUsage(ctx context.Context, arg ReleaseIdempotencyUsageParams) (int64, error) {
 	result, err := q.db.Exec(ctx, releaseIdempotencyUsage, arg.UserID, arg.Records, arg.ReleasedBytes)
 	if err != nil {
@@ -5021,9 +4799,6 @@ type RequeueAuthEmailJobParams struct {
 	ID            uuid.UUID
 }
 
-// A temporary failure releases the lease back to pending with the next attempt
-// time, retaining ciphertext and the already-incremented attempt count. The
-// caller never requeues at attempts = 8 (that path marks terminal instead).
 func (q *Queries) RequeueAuthEmailJob(ctx context.Context, arg RequeueAuthEmailJobParams) (int64, error) {
 	result, err := q.db.Exec(ctx, requeueAuthEmailJob, arg.NextAttemptAt, arg.ID)
 	if err != nil {
@@ -5095,8 +4870,6 @@ type RevokeAllSessionsParams struct {
 	RevokedAt *time.Time
 }
 
-// Logout-everywhere: revokes every one of the user's not-already-revoked
-// sessions and reports how many rows that affected.
 func (q *Queries) RevokeAllSessions(ctx context.Context, arg RevokeAllSessionsParams) (int64, error) {
 	result, err := q.db.Exec(ctx, revokeAllSessions, arg.UserID, arg.RevokedAt)
 	if err != nil {
@@ -5116,9 +4889,6 @@ type RevokeOAuthGrantParams struct {
 	ID        uuid.UUID
 }
 
-// Internal revocation (RFC 7009 and consumed-code replay), where the grant id
-// came from a token row the caller already validated. Idempotent: revoking an
-// already-revoked grant affects zero rows.
 func (q *Queries) RevokeOAuthGrant(ctx context.Context, arg RevokeOAuthGrantParams) (int64, error) {
 	result, err := q.db.Exec(ctx, revokeOAuthGrant, arg.RevokedAt, arg.ID)
 	if err != nil {
@@ -5169,8 +4939,6 @@ type RevokeOAuthTokenFamilyParams struct {
 	FamilyID  uuid.UUID
 }
 
-// Superseded-token replay defense: every still-live member of one family dies
-// together, in the caller's transaction, under the grant row lock.
 func (q *Queries) RevokeOAuthTokenFamily(ctx context.Context, arg RevokeOAuthTokenFamilyParams) (int64, error) {
 	result, err := q.db.Exec(ctx, revokeOAuthTokenFamily, arg.RevokedAt, arg.FamilyID)
 	if err != nil {
@@ -5190,7 +4958,6 @@ type RevokeOAuthTokensForGrantParams struct {
 	GrantID   uuid.UUID
 }
 
-// Grant revocation kills every family issued under it, not just the newest.
 func (q *Queries) RevokeOAuthTokensForGrant(ctx context.Context, arg RevokeOAuthTokensForGrantParams) (int64, error) {
 	result, err := q.db.Exec(ctx, revokeOAuthTokensForGrant, arg.RevokedAt, arg.GrantID)
 	if err != nil {
@@ -5208,10 +4975,6 @@ type RevokeSessionParams struct {
 	RevokedAt *time.Time
 }
 
-// Idempotent: revoking an already-revoked (or nonexistent) session id
-// affects zero rows rather than erroring, so logout/revoke can be retried
-// safely. revoked_at is immediate and orthogonal to rotation_grace_until
-// and this query never changes that column.
 func (q *Queries) RevokeSession(ctx context.Context, arg RevokeSessionParams) error {
 	_, err := q.db.Exec(ctx, revokeSession, arg.ID, arg.RevokedAt)
 	return err
@@ -5236,10 +4999,6 @@ type RevokeSessionForUserParams struct {
 	Now        time.Time
 }
 
-// Revokes only a live session owned by user_id. The live predicates match
-// ListLiveSessionsForUser so a hidden expired session cannot be reported as
-// revoked. The affected-row count lets the caller return the same absence
-// result for missing, expired, and differently owned sessions.
 func (q *Queries) RevokeSessionForUser(ctx context.Context, arg RevokeSessionForUserParams) (int64, error) {
 	result, err := q.db.Exec(ctx, revokeSessionForUser,
 		arg.ID,
@@ -5282,25 +5041,6 @@ type StartSessionRotationGraceParams struct {
 	ID         uuid.UUID
 }
 
-// Starts a predecessor's short grace period after its successor is first
-// used. BeginSessionRotation parks rotation_grace_until at
-// min(now + rotationAge, its own absolute_expires_at) -- non-NULL, so the
-// rotation CAS still
-// admits exactly one winner, far enough out that a successor whose one and
-// only raw-token delivery was lost never orphans the lineage, and bounded
-// so a predecessor that is never superseded in practice still expires on a
-// credential's timescale rather than the session's. This is the statement
-// that converts that parked value into a real, short deadline once the
-// successor's token has provably reached a client.
-//
-// The `rotation_grace_until > grace_until` predicate makes it
-// monotonically SHRINKING and idempotent: the first call moves the
-// deadline in from the parked bound to first-use + rotationGrace;
-// every later call (the same successor's second, third, ... request, or a
-// concurrent one racing it) proposes a LATER deadline and therefore
-// matches no row. A predecessor's grace can never be pushed back out by
-// continued use of the successor, which would otherwise keep a superseded
-// credential alive indefinitely.
 func (q *Queries) StartSessionRotationGrace(ctx context.Context, arg StartSessionRotationGraceParams) error {
 	_, err := q.db.Exec(ctx, startSessionRotationGrace, arg.GraceUntil, arg.ID)
 	return err
@@ -5322,11 +5062,6 @@ type SupersedeOAuthTokenParams struct {
 	FamilyID     uuid.UUID
 }
 
-// Marks the presented refresh token superseded as part of a rotation. family_id
-// is part of the predicate, so a caller holding one family's identifier can
-// never mark a token belonging to another family, and a second supersession of
-// the same row affects nothing (pgx.ErrNoRows) -- which is exactly the replay
-// the caller turns into a whole-family revocation.
 func (q *Queries) SupersedeOAuthToken(ctx context.Context, arg SupersedeOAuthTokenParams) (OAuthToken, error) {
 	row := q.db.QueryRow(ctx, supersedeOAuthToken, arg.SupersededAt, arg.ID, arg.FamilyID)
 	var i OAuthToken
@@ -5358,9 +5093,6 @@ type TouchLastSeenAtParams struct {
 	LastSeenAt time.Time
 }
 
-// Unconditional: callers throttle to at most once per lastSeenThrottle
-// themselves (internal/auth.SessionManager.Authenticate) before issuing
-// this write, so it is not itself CAS-guarded.
 func (q *Queries) TouchLastSeenAt(ctx context.Context, arg TouchLastSeenAtParams) error {
 	_, err := q.db.Exec(ctx, touchLastSeenAt, arg.ID, arg.LastSeenAt)
 	return err
@@ -5379,9 +5111,6 @@ type TouchOAuthClientLastUsedParams struct {
 	TouchBefore time.Time
 }
 
-// Bounded activity record: at most one write per client per touch window. The
-// caller passes touch_before = now - window, so the throttle is enforced by
-// the predicate rather than by caller bookkeeping.
 func (q *Queries) TouchOAuthClientLastUsed(ctx context.Context, arg TouchOAuthClientLastUsedParams) (int64, error) {
 	result, err := q.db.Exec(ctx, touchOAuthClientLastUsed, arg.Now, arg.ID, arg.TouchBefore)
 	if err != nil {
@@ -5404,8 +5133,6 @@ type TouchOAuthTokenLastUsedParams struct {
 	TouchBefore time.Time
 }
 
-// Bounded activity record: at most one write per token per touch window,
-// and never on a revoked token. The caller passes touch_before = now - window.
 func (q *Queries) TouchOAuthTokenLastUsed(ctx context.Context, arg TouchOAuthTokenLastUsedParams) (int64, error) {
 	result, err := q.db.Exec(ctx, touchOAuthTokenLastUsed, arg.Now, arg.ID, arg.TouchBefore)
 	if err != nil {
@@ -5423,8 +5150,6 @@ type TouchReauthenticatedAtParams struct {
 	ReauthenticatedAt time.Time
 }
 
-// Records that this session's lineage just completed a full OAuth login
-// after a real reauthentication round trip, never by rotation.
 func (q *Queries) TouchReauthenticatedAt(ctx context.Context, arg TouchReauthenticatedAtParams) error {
 	_, err := q.db.Exec(ctx, touchReauthenticatedAt, arg.ID, arg.ReauthenticatedAt)
 	return err
@@ -5452,10 +5177,6 @@ type TryReserveIdempotencyUsageRow struct {
 	StoredBytes     int64
 }
 
-// Conditionally admits one new retained record of record_bytes stored
-// bytes within the caps. Zero rows (pgx.ErrNoRows) means the insert would
-// exceed a cap and the caller must reject with the typed capacity error
-// without committing the mutation.
 func (q *Queries) TryReserveIdempotencyUsage(ctx context.Context, arg TryReserveIdempotencyUsageParams) (TryReserveIdempotencyUsageRow, error) {
 	row := q.db.QueryRow(ctx, tryReserveIdempotencyUsage,
 		arg.UserID,
@@ -5539,10 +5260,6 @@ type UpdateResumeDocumentCASParams struct {
 	SchemaVersion   int32
 }
 
-// Returns the stored row, so the caller needs no reread; its revision is the
-// NEW revision (revision + 1), never the caller's expected one. A stale or
-// non-matching $3 updates zero rows and surfaces as pgx.ErrNoRows, which
-// internal/resume turns into *RevisionMismatchError or ErrNotFound.
 func (q *Queries) UpdateResumeDocumentCAS(ctx context.Context, arg UpdateResumeDocumentCASParams) (Resume, error) {
 	row := q.db.QueryRow(ctx, updateResumeDocumentCAS,
 		arg.ID,
@@ -5638,10 +5355,6 @@ type UpdateResumeTitleCASParams struct {
 	Title    string
 }
 
-// The returned revision is the NEW revision (revision + 1), never the
-// caller's expected one. A stale or non-matching $3 updates zero rows and
-// surfaces as pgx.ErrNoRows, which internal/resume turns into
-// *RevisionMismatchError or ErrNotFound.
 func (q *Queries) UpdateResumeTitleCAS(ctx context.Context, arg UpdateResumeTitleCASParams) (int64, error) {
 	row := q.db.QueryRow(ctx, updateResumeTitleCAS,
 		arg.ID,
@@ -5765,8 +5478,6 @@ type UpsertOAuthMetadataClientParams struct {
 	CreatedAt    time.Time
 }
 
-// Approval alone calls this query, before user and session locks. The unique
-// URL index serializes concurrent approvals and preserves the internal UUID.
 func (q *Queries) UpsertOAuthMetadataClient(ctx context.Context, arg UpsertOAuthMetadataClientParams) (OAuthClient, error) {
 	row := q.db.QueryRow(ctx, upsertOAuthMetadataClient,
 		arg.MetadataUrl,
@@ -5802,9 +5513,6 @@ type UpsertPasswordCredentialParams struct {
 	ChangedAt   time.Time
 }
 
-// Insert-or-replace the single credential under the row lock the caller
-// already holds (GetPasswordCredentialForUpdate), re-encoding the hash and
-// bumping changed_at on the conflict arm.
 func (q *Queries) UpsertPasswordCredential(ctx context.Context, arg UpsertPasswordCredentialParams) (PasswordCredential, error) {
 	row := q.db.QueryRow(ctx, upsertPasswordCredential,
 		arg.UserID,

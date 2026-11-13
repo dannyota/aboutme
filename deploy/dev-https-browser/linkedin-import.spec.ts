@@ -1,22 +1,3 @@
-/**
- * LinkedIn import browser proof (docs/design/linkedin-import.md, "Tests" and
- * "Browser proof"; docs/design/linkedin-import-ui.md; ADR 0023).
- *
- * One Chromium test proves the case the design's own "Browser proof"
- * paragraph describes: the create dialog's entry link, the app-page CSP,
- * picking a synthetic fixture, the review's contact defaults, the locale and
- * viewport persistence across a live review, deselecting a section, Create,
- * and the imported content landing in the editor, plus the request-log
- * privacy claims (no file bytes on the wire, no external request, and
- * nothing but the one create request between the pick and Create).
- *
- * A second test, run once against Chromium and once against a WebKit
- * browser launched directly (the harness's own project always runs
- * Chromium, so WebKit is opened the way apps/web/e2e/preview-gap.spec.ts
- * does), proves the four cases the design names for both engines: the
- * not-LinkedIn message, the not-English message, the 15-second time limit,
- * and the resume cap.
- */
 import {
   expect,
   test,
@@ -52,26 +33,17 @@ import { ALLOWED_ORIGIN, isExpectedAnonymousMeConsole } from './network-policy';
 const ORIGIN = ALLOWED_ORIGIN;
 const EVIDENCE_PATH = '/evidence/linkedin-import-proof.json';
 const FAILURE_EVIDENCE_PATH = '/evidence/linkedin-import-failure.json';
-// useResumeList.ts RESUME_CAP; the page reads that constant directly.
 const RESUME_CAP = 3;
-// read.ts TIME_LIMIT_MS: the fixed cap the page applies to every pick.
 const TIME_LIMIT_MS = 15_000;
 
 const recordedResumeIDs = new Set<string>();
 
-// The last stage reached before a failure, so failure evidence can name a
-// concrete checkpoint without the withheld browser console (gotchas.md
-// "Browser proofs withhold console output").
 let lastStage = 'start';
 function stage(name: string): void {
   lastStage = name;
   console.log(`linkedin-import-stage:${name}`);
 }
 
-// The two possible default titles a create can carry (importCopy en and vi
-// "defaultTitle"); a resume under either title that this run never recorded
-// is a stray from an earlier failed run whose assertions threw after the
-// server had already accepted the create, never one a person made by hand.
 const STRAY_TITLES = new Set(['LinkedIn resume', 'CV từ LinkedIn']);
 
 async function strayLinkedInResumeIDs(page: Page): Promise<string[]> {
@@ -114,20 +86,13 @@ function pdfBuffer(base64: string): Buffer {
   return Buffer.from(base64, 'base64');
 }
 
-/** Sets the hidden file input directly: Playwright's setInputFiles works on
- * a hidden input by design, matching how the page only ever opens it
- * through the visible Choose button (docs/design/linkedin-import-ui.md,
- * "Pick state"). */
+// Playwright's setInputFiles works on a hidden file input by design (Playwright setInputFiles).
 async function pickFile(page: Page, name: string, buffer: Buffer): Promise<void> {
   await page.locator('[data-testid="import-file-input"]').setInputFiles({
     buffer, mimeType: 'application/pdf', name,
   });
 }
 
-/** Fails the test if any request this page ever sends carries the picked
- * file's magic header in its body: the strongest available proof that the
- * file itself never leaves the browser (docs/design/linkedin-import.md,
- * "Privacy"). */
 function watchForFileBytes(page: Page, violations: string[]): void {
   page.on('request', (request) => {
     const body = request.postData();
@@ -137,11 +102,6 @@ function watchForFileBytes(page: Page, violations: string[]): void {
   });
 }
 
-// The two same-origin polls the app itself starts unprompted, and the only
-// ones a same-page navigation is expected to interrupt mid flight (see
-// isExpectedWebKitInterruptedFetch below): Nuxt's dev-server build-meta poll
-// (buildAssetsURL('builds/meta/<id>.json')) and the app's own capabilities
-// read.
 function isKnownInterruptedFetchPathname(pathname: string): boolean {
   return pathname.startsWith('/_nuxt/builds/meta/')
     || pathname === '/api/v1/capabilities';
@@ -157,14 +117,7 @@ function isKnownInterruptedFetchURL(url: string): boolean {
   return isKnownInterruptedFetchPathname(pathname);
 }
 
-// A local run of this proof observed WebKit report the capabilities poll's
-// interruption with its scheme and one slash dropped ("/localhost:20443/api/
-// v1/capabilities due to access control checks." instead of "https://
-// localhost:20443/api/v1/capabilities due to access control checks."), which
-// new URL cannot parse without a base. isKnownInterruptedFetchToken matches
-// that exact shape too, still scoped to this origin's host and the same two
-// known pathnames, so an unrelated blocked request is never mistaken for
-// this noise.
+// WebKit reports this poll's interruption with the scheme and one slash dropped ("/localhost:20443/api/..."), which new URL cannot parse (WebKit).
 const ORIGIN_HOST = new URL(ALLOWED_ORIGIN).host;
 
 function isKnownInterruptedFetchToken(token: string): boolean {
@@ -176,14 +129,7 @@ function isKnownInterruptedFetchToken(token: string): boolean {
 
 const INTERRUPTED_FETCH_URL = /(\S+) due to access control checks\.$/u;
 
-/** WebKit-only: true for a page error or console error that is the
- * browser's own report of a fetch or worker module import a same-page
- * navigation interrupted mid flight (one of the two known polls above, and
- * pdf.js's per-pick worker churn). Chromium reports the same interruption
- * as a silently dropped abort; WebKit raises it as an uncaught page error
- * (sometimes echoed to the console too) instead, on every engine this proof
- * runs, not a LinkedIn import defect. Narrowed to the known polls' URLs so
- * an unrelated blocked request is never mistaken for this noise. */
+// WebKit raises a fetch or worker import that a navigation interrupted as an uncaught page error; Chromium drops it silently (WebKit).
 function isExpectedWebKitInterruptedFetch(
   engine: 'chromium' | 'webkit',
   text: string,
@@ -194,13 +140,7 @@ function isExpectedWebKitInterruptedFetch(
   return match !== null && isKnownInterruptedFetchToken(match[1]!);
 }
 
-// isExpectedAnonymousMeConsole (network-policy.ts) matches only Chromium's
-// exact wording for a failed fetch's status line, which leaves the status
-// text empty ("...status of 401 ()"). A local WebKit run of this proof
-// showed the same single anonymous /api/v1/me read loginAsDevelopmentUser
-// triggers before sign-in completes reported with the status text filled in
-// instead ("...status of 401 (Unauthorized)"): the same expected event, in
-// WebKit's own wording, not a second, new failure.
+// WebKit fills the status text of a failed fetch's console line ("401 (Unauthorized)") where Chromium leaves it empty (WebKit console).
 const WEBKIT_ANONYMOUS_ME_CONSOLE =
   /^Failed to load resource: the server responded with a status of 401 \([^)]*\)$/u;
 
@@ -228,10 +168,6 @@ interface WindowRequest {
   readonly pathname: string;
 }
 
-/** Starts recording every same-origin request; the returned function stops
- * recording and returns what it saw, for "no request happens between the
- * pick and Create other than those the design allows"
- * (docs/design/linkedin-import.md, "Tests"). */
 function recordSameOriginRequests(page: Page): () => WindowRequest[] {
   const seen: WindowRequest[] = [];
   const onRequest = (request: Request): void => {
@@ -258,11 +194,6 @@ async function currentResumeCount(page: Page): Promise<number> {
   });
 }
 
-/** Creates only as many blank resumes as the signed-in account still needs
- * to reach the cap, so a leftover resume from an unrelated proof never
- * makes this test create (or delete) more than it must; every created id is
- * recorded for the shared cleanup hook immediately, before the loop
- * continues. */
 async function fillToResumeCap(page: Page): Promise<void> {
   let count = await currentResumeCount(page);
   while (count < RESUME_CAP) {
@@ -290,11 +221,6 @@ interface RedactedConsoleMessage {
   readonly text: string;
 }
 
-// Resume ids are UUIDs; the Nuxt build-meta poll's id is an opaque hash
-// segment ending in ".json" (isKnownInterruptedFetchPathname above). Both
-// are replaced so failure evidence never carries an identifier that could
-// be looked up against the harness (same bar as exports.spec.ts's
-// redactSavePath).
 const ID_PLACEHOLDER = '{id}';
 const UUID_SEGMENT =
   /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/giu;
@@ -333,8 +259,6 @@ function redactEvidenceText(text: string): string {
     .slice(0, EVIDENCE_TEXT_LIMIT);
 }
 
-// pathnameOf never throws: failure evidence is best-effort, and a console
-// message's own location URL is not guaranteed to parse.
 function pathnameOf(url: string): string {
   try {
     return redactPathname(new URL(url).pathname);
@@ -366,8 +290,6 @@ function diagnosticURL(token: string): { origin: string; path: string; shape: st
   return { origin, path, shape };
 }
 
-// --- The core create flow (Chromium) ----------------------------------------
-
 test('entry link, review, and create land the imported content in the editor', async ({
   context,
   page,
@@ -377,9 +299,6 @@ test('entry link, review, and create land the imported content in the editor', a
   await pinEnglish(context);
   await installExternalRequestFirewall(context, counters);
   await installExternalWebSocketFirewall(context, counters);
-  // Every test here starts signed out, like entry.spec.ts: the one expected
-  // console failure is the anonymous /api/v1/me read loginAsDevelopmentUser
-  // triggers before sign-in completes.
   pageDiagnosticsAttacher(counters, {
     countConsoleError: (message) =>
       !isExpectedAnonymousMeConsole(message.text(), message.location().url),
@@ -419,8 +338,6 @@ test('entry link, review, and create land the imported content in the editor', a
     steps.entryLink = true;
 
     stage('create-csp');
-    // ADR 0023 decision 4; docs/design/linkedin-import.md "Security": the
-    // app page policy is the only one carrying worker-src 'self'.
     expect(importResponse.headers()['content-security-policy'])
       .toContain('worker-src \'self\'');
     steps.cspWorkerSrc = true;
@@ -431,11 +348,6 @@ test('entry link, review, and create land the imported content in the editor', a
     ).toBeVisible();
 
     stage('create-pick-window-start');
-    // Picked while the interface is still English, so the review's default
-    // title (set once, at the pick, from the active locale's copy) is the
-    // English string the create assertion below expects; the locale switch
-    // that follows changes displayed copy only, never that already-set
-    // title (docs/design/linkedin-import-ui.md, "Review state").
     await page.setViewportSize({ width: 390, height: 844 });
     stopRecording = recordSameOriginRequests(page);
     await pickFile(page, 'basic-en.pdf', pdfBuffer(BASIC_EN_PDF_BASE64));
@@ -448,8 +360,6 @@ test('entry link, review, and create land the imported content in the editor', a
     await expect(reviewHeadingEn).toBeFocused();
 
     stage('create-contact-defaults');
-    // Email and phone start unchecked; the LinkedIn URL and the website
-    // start checked (docs/design/linkedin-import.md, Owner approval I5).
     await expect(
       page.getByRole('checkbox', { name: 'sample.person@example.com' }),
     ).not.toBeChecked();
@@ -475,10 +385,6 @@ test('entry link, review, and create land the imported content in the editor', a
       name: 'Kiểm tra nội dung từ LinkedIn',
     });
     await expect(reviewHeadingVi).toBeVisible();
-    // The switch above changed only displayed copy, never the file result
-    // or the selections (docs/design/linkedin-import-ui.md, "States"); the
-    // still-unchecked email checkbox is the same proof in the Vietnamese
-    // render.
     await expect(
       page.getByRole('checkbox', { name: 'sample.person@example.com' }),
     ).not.toBeChecked();
@@ -508,10 +414,6 @@ test('entry link, review, and create land the imported content in the editor', a
     await page.locator('[data-action="import-create"]').click();
     const createResponse = await createRequest;
     expect(createResponse.status()).toBe(201);
-    // The id is recorded for cleanup before any content assertion below can
-    // throw: a server that already accepted the create must never leave an
-    // untracked resume on the shared development account just because a
-    // later check in this test fails.
     const createBody = await createResponse.json() as { data?: { id?: unknown } };
     createdID = typeof createBody.data?.id === 'string'
       ? createBody.data.id
@@ -533,18 +435,6 @@ test('entry link, review, and create land the imported content in the editor', a
     stage('create-window-check');
     const windowRequests = stopRecording();
     stopRecording = undefined;
-    // No worker rearms during a successful pick (linkedin.vue's pick(): the
-    // worker already armed on page load is consumed, and a fresh one is
-    // only armed after a failed pick or Choose another PDF, neither of
-    // which happens on this path), so the create request is the only data
-    // request in this whole window (docs/design/linkedin-import.md, "Reading
-    // the file": no request happens between a pick that reaches the review
-    // and Create). The editor page's own module fetches can start landing in
-    // this same window once the browser's post-create navigation begins;
-    // `/_nuxt/` is asset traffic the dev server serves on demand, the same
-    // classification second-factor.spec.ts already gives that path prefix,
-    // not a second data request. Only a GET is ever asset traffic, so the
-    // drop is scoped to GET and every dropped request is proven to be one.
     const droppedNuxtAssetRequests = windowRequests.filter((request) =>
       request.pathname.startsWith('/_nuxt/'));
     expect(droppedNuxtAssetRequests.every(
@@ -575,9 +465,6 @@ test('entry link, review, and create land the imported content in the editor', a
     stage('create-done');
   } catch (error) {
     stopRecording?.();
-    // The evidence keeps the named stage; the console gets the exact source
-    // line too (exports.spec.ts), so this test's own failure is never lost
-    // behind a later test's stage line in the shared console log.
     const stageAtFailure = lastStage;
     const sourceLine = error instanceof Error
       ? /linkedin-import\.spec\.ts:([0-9]{1,4}):/u.exec(error.stack ?? '')?.[1]
@@ -608,8 +495,6 @@ test('entry link, review, and create land the imported content in the editor', a
   );
 });
 
-// --- Messages, the time limit, and the cap, in both engines -----------------
-
 let webkitBrowser: Browser | undefined;
 
 test.beforeAll(async () => {
@@ -636,13 +521,7 @@ for (const engine of ['chromium', 'webkit'] as const) {
       if (events.length === 16) events.shift();
       events.push(event);
     };
-    // The chromium fixture's own browser carries the config's baseURL to any
-    // context it creates. A directly launched WebKit browser has no baseURL,
-    // so it needs one explicitly; it needs no certificate bypass, because
-    // run.sh overlays the image's system trust bundle with the harness's
-    // exported root read-only for this mode (WebKit validates against that
-    // bundle, not the NSS database the certutil import prepares for
-    // Chromium), so WebKit trusts the same root Chromium does.
+    // A directly launched WebKit has no baseURL and validates against the system trust bundle, not Chromium's NSS database (Playwright WebKit).
     const context = await source.newContext(
       engine === 'webkit' ? { baseURL: ORIGIN } : {},
     );
@@ -661,11 +540,6 @@ for (const engine of ['chromium', 'webkit'] as const) {
           failure: /cancel|abort/i.test(failure) ? 'cancel-or-abort' : 'other',
         });
       });
-      // Same reasoning as the create-flow test above: filter the expected
-      // anonymous /api/v1/me read at sign-in. Page errors keep the shared
-      // counter (other proofs read it the same way) but this proof checks
-      // its own filtered list, so a WebKit-only interrupted-fetch report
-      // never fails the check.
       pageDiagnosticsAttacher(counters, {
         countConsoleError: (message) =>
           !isExpectedAnonymousMeConsoleAnyWording(
@@ -709,11 +583,6 @@ for (const engine of ['chromium', 'webkit'] as const) {
         'This is not a LinkedIn profile PDF.',
       );
       let windowRequests = stopRecording();
-      // A failed pick arms a fresh worker for the next one before Pick
-      // shows again (docs/design/linkedin-import.md, "Reading the file"),
-      // so this window may show one more same-origin GET than the create
-      // flow's window does; it must still never mutate and never leave the
-      // origin (the external-request firewall already covers the latter).
       expect(windowRequests.every((request) => request.method === 'GET'))
         .toBe(true);
 
@@ -751,18 +620,12 @@ for (const engine of ['chromium', 'webkit'] as const) {
 
       stage(`${engine}-done`);
 
-      // Inside the try, not after it: a failure here must reach the catch
-      // below the same way a failure earlier in this test does, so it too
-      // gets a failure-evidence record naming the last stage, the engine,
-      // and every unexpected console message this run actually saw.
       expect(fileByteViolations).toEqual([]);
       expect(counters.certificateErrors).toBe(0);
       expect(counters.externalRequests).toBe(0);
       expect(counters.consoleErrors).toBe(0);
       expect(unexpectedPageErrors).toEqual([]);
     } catch (error) {
-      // Same reasoning as the create-flow test's catch block: keep the named
-      // stage in the evidence and add the exact source line to the console.
       const stageAtFailure = lastStage;
       const sourceLine = error instanceof Error
         ? /linkedin-import\.spec\.ts:([0-9]{1,4}):/u.exec(error.stack ?? '')?.[1]

@@ -1,5 +1,3 @@
-// Package publish writes the deployment document to S3 or a host directory.
-// S3 also stores the verification cache.
 package publish
 
 import (
@@ -21,27 +19,16 @@ import (
 	"danny.vn/aboutme/deploy/observer/internal/verify"
 )
 
-// documentKey is the published document's fixed key. CloudFront appends the
-// viewer's path to the S3 origin, so the key matches the served path
-// exactly (docs/design/deployment-transparency/README.md, "Serving and
-// caching").
 const documentKey = ".well-known/deployment.json"
 
-// verifiedPrefix holds one cached verify.Evidence per digest.
 const verifiedPrefix = "verified/"
 
 const jsonContentType = "application/json"
 
-// maxCacheEntryBytes bounds one cached verify.Evidence read back.
 const maxCacheEntryBytes = 64 << 10
 
-// documentCacheControl matches the edge cache policy
-// (docs/design/deployment-transparency/README.md, "Serving and caching").
 const documentCacheControl = "public, max-age=30"
 
-// NewClient returns an S3 client for cfg. When endpoint is not empty, the
-// client addresses it directly with path-style requests, for an
-// S3-compatible store instead of Amazon S3.
 func NewClient(cfg aws.Config, endpoint string) *s3.Client {
 	return s3.NewFromConfig(cfg, func(o *s3.Options) {
 		if endpoint != "" {
@@ -51,18 +38,15 @@ func NewClient(cfg aws.Config, endpoint string) *s3.Client {
 	})
 }
 
-// Publisher writes the deployment document to one bucket.
 type Publisher struct {
 	client *s3.Client
 	bucket string
 }
 
-// NewPublisher returns a Publisher writing to bucket through client.
 func NewPublisher(client *s3.Client, bucket string) *Publisher {
 	return &Publisher{client: client, bucket: bucket}
 }
 
-// Put writes body as the published document.
 func (p *Publisher) Put(ctx context.Context, body []byte) error {
 	_, err := p.client.PutObject(ctx, &s3.PutObjectInput{
 		Bucket:       aws.String(p.bucket),
@@ -77,19 +61,15 @@ func (p *Publisher) Put(ctx context.Context, body []byte) error {
 	return nil
 }
 
-// Cache implements verify.Cache on the same bucket's verified/<digest>.json
-// keys.
 type Cache struct {
 	client *s3.Client
 	bucket string
 }
 
-// NewCache returns a Cache reading and writing bucket through client.
 func NewCache(client *s3.Client, bucket string) *Cache {
 	return &Cache{client: client, bucket: bucket}
 }
 
-// Get implements verify.Cache.
 func (c *Cache) Get(ctx context.Context, digest string) (verify.Evidence, bool, error) {
 	if !platform.ValidDigest(digest) {
 		return verify.Evidence{}, false, fmt.Errorf("publish: invalid digest %q", digest)
@@ -115,9 +95,6 @@ func (c *Cache) Get(ctx context.Context, digest string) (verify.Evidence, bool, 
 	return ev, true, nil
 }
 
-// Put implements verify.Cache. It refuses to store an Unchecked result or a
-// malformed digest (docs/design/deployment-transparency/verification.md,
-// "What verified means").
 func (c *Cache) Put(ctx context.Context, ev verify.Evidence) error {
 	if !platform.ValidDigest(ev.Digest) {
 		return fmt.Errorf("publish: invalid digest %q", ev.Digest)
@@ -144,12 +121,6 @@ func (c *Cache) Put(ctx context.Context, ev verify.Evidence) error {
 
 func verifiedKey(digest string) string { return verifiedPrefix + digest + ".json" }
 
-// isNotFound reports whether err is S3's NoSuchKey, a plain HTTP 404 as an
-// S3-compatible store may answer, or AccessDenied (HTTP 403). The
-// observer's role has no s3:ListBucket, so a GetObject on a missing
-// verified/<digest>.json key comes back as AccessDenied rather than
-// NoSuchKey (docs/design/deployment-transparency/README.md, "Access on
-// AWS"): S3 refuses to disclose whether a key the caller cannot list exists.
 func isNotFound(err error) bool {
 	var noSuchKey *types.NoSuchKey
 	if errors.As(err, &noSuchKey) {

@@ -57,7 +57,7 @@ Access and confinement proposals have their own pages:
 
 ### Kernel and network
 
-Home: `E/sysctl.d/90-aboutme.conf`, installed at `H/install.sh:530`. Bundled
+Home: `E/sysctl.d/90-aboutme.conf`, installed at `H/install.sh:524`. Bundled
 hardening at lines 11-14 is limited. Fail required checks on absent knobs; probe
 after boot and Podman network creation. Target: compromised containers unless
 named otherwise.
@@ -142,7 +142,7 @@ leaked backup, at the cost of crash diagnostics. [Core dumps] [Quadlet]
 
 ### Mounts, updates, time, and provider custody
 
-**Mounts.** S:244-255 and `H/data-volume.sh:84,124` show permissive fstab
+**Mounts.** S:244-255 and `H/data-volume.sh:77,117` show permissive fstab
 entries, not verified effective flags. Propose `nodev,nosuid` for the data
 filesystem and each bind target. Defer `noexec` until executable mappings,
 plugins, helpers, and restore paths are inventoried. No root remount. Keep
@@ -156,7 +156,7 @@ Preserve missing-data-volume refusal. [Mount]
 
 **Updates.** Retain daily Ubuntu security updates and manual reboots at
 `E/apt/apt.conf.d/52aboutme-unattended-upgrades:1-11`. Keep reviewed third-party
-pins at `H/install.sh:14-18,128-135`; do not silently unhold PostgreSQL,
+pins at `H/install.sh:8-12,122-129`; do not silently unhold PostgreSQL,
 pgBackRest, or CrowdSec. Propose weekly advisory review and expedited reviewed
 security-pin updates when applicable. Home: installer, watcher alerts for
 update/reboot backlog, and production runbook. Verify versions, update logs,
@@ -181,7 +181,7 @@ decision. [Time sync]
 
 **Cloud-init and control plane.** S:266-267 says cloud-init is done and enabled;
 `H/cloud-init.yaml.tftpl:25-54` writes boot diagnostics, and
-`V/prod/main.tf:89-94` ignores later user-data changes. Keep first-boot support;
+`V/prod/main.tf:81-86` ignores later user-data changes. Keep first-boot support;
 stop publishing raw sshd/listener diagnostics to serial logs. Do not disable
 cloud-init or delete its state until network/metadata/console recovery has a
 reboot proof. Home: cloud-init template and installer; disabling is deferred

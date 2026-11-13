@@ -18,8 +18,6 @@ import (
 	"github.com/sigstore/sigstore-go/pkg/root"
 )
 
-// The recorded public attestation for ghcr.io/dannyota/aboutme-server
-// v0.5.21 (verification.md, "What the release workflow produces").
 const (
 	recordedDigest = "sha256:d1c33a0a4c1cf1e4bdc2e868a457ae6f7dc7949886baf8b9697dafe501e6945c"
 	recordedCommit = "d73f404321d81175ec786bc79289cca06ce4bb5b"
@@ -69,9 +67,6 @@ func apiBody(bundles ...json.RawMessage) string {
 	return `{"attestations":[` + strings.Join(parts, ",") + `]}`
 }
 
-// fakeGitHub serves the attestations API and a registry. api maps a
-// predicate_type filter to a status and body; registry maps a request path
-// to a status and body. Unlisted paths answer 404.
 type fakeGitHub struct {
 	api      map[string]response
 	registry map[string]response
@@ -141,8 +136,6 @@ func TestRecordedProvenanceVerifies(t *testing.T) {
 	if len(p.Subjects) != 1 || p.Subjects[0] != "ghcr.io/dannyota/aboutme-server" {
 		t.Errorf("subjects = %v", p.Subjects)
 	}
-	// v0.5.21 predates SBOM attestations: GitHub and every registry
-	// repository answer, and none holds one.
 	if ev.SBOM.Status != NotFound {
 		t.Errorf("sbom status = %q, want not_found", ev.SBOM.Status)
 	}
@@ -235,8 +228,6 @@ func TestRateLimitedAPIFallsBackToRegistry(t *testing.T) {
 	if ev.Provenance.Status != Verified || ev.Provenance.Version != "v0.5.21" {
 		t.Fatalf("provenance = %+v, want verified v0.5.21", ev.Provenance)
 	}
-	// GitHub never answered for the SBOM and the registry holds none, so its
-	// absence is not proven: unchecked, not not_found.
 	if ev.SBOM.Status != Unchecked {
 		t.Errorf("sbom status = %q, want unchecked", ev.SBOM.Status)
 	}
@@ -270,9 +261,7 @@ func TestSecondTransparencyLogEntryIsInvalid(t *testing.T) {
 	if !ok || len(entries) != 1 {
 		t.Fatal("want one recorded tlog entry")
 	}
-	// A second entry from a log the trust root does not know: sigstore-go
-	// skips it and still passes on the first, so only the one-entry rule
-	// stops a published index from pointing at an unchecked entry.
+	// sigstore-go skips an entry from a log the trust root does not know and still passes on the first (sigstore-go).
 	first, ok := entries[0].(map[string]any)
 	if !ok {
 		t.Fatal("malformed tlog entry")
@@ -440,8 +429,6 @@ func digestOf(b []byte) string {
 }
 
 func TestCachedProvenanceIsReusedWhileTheSBOMIsChecked(t *testing.T) {
-	// The API fails for provenance; a fresh cached result must be used
-	// instead of asking again.
 	f := &fakeGitHub{api: map[string]response{"provenance": {500, `{}`}}}
 	cache := NewMemoryCache()
 	cached := Evidence{

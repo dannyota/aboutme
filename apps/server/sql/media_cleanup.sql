@@ -1,6 +1,3 @@
--- Media deletion and orphan-reconciliation queries. The document photo key is
--- the ownership authority; media_deletion_jobs is only durable cleanup work.
-
 -- name: ClaimMediaDeletionJobs :many
 WITH candidates AS MATERIALIZED (
     SELECT job.id

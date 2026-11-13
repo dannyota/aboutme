@@ -1,6 +1,3 @@
-# Creates the encrypted S3 bucket and KMS key that hold the production
-# OpenTofu state. It uses local state, kept only on the owner's machine; losing
-# it is recoverable with `tofu import`.
 terraform {
   required_version = "= 1.12.6"
   required_providers {

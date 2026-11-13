@@ -30,26 +30,16 @@ variable "ses_configuration_set" {
   type = string
 }
 
-# Email-and-password sign-up. Off keeps pending registrations verifiable and
-# every other password route working.
 variable "password_registration_enabled" {
   type        = bool
   description = "PASSWORD_REGISTRATION_ENABLED for the server"
 }
 
-# Off until a healthy capable release raises the production minimum-release
-# fence. See docs/design/passkey-release-fence.md.
 variable "passkey_enrollment_enabled" {
   type        = bool
   description = "PASSKEY_ENROLLMENT_ENABLED for the server"
 }
 
-# Off until a healthy v0.4.7 or later release raises the production
-# minimum-release fence to numeric 4007. See
-# docs/design/passkey-release-fence.md, "Authenticator-app key
-# re-encryption".
-# Turns on stored link-preview cards (docs/design/link-previews.md). The web
-# image that renders cards must be live first; see the production runbook.
 variable "preview_card_enabled" {
   type        = bool
   description = "PREVIEW_CARD_ENABLED for the server"
@@ -60,17 +50,11 @@ variable "totp_enrollment_enabled" {
   description = "TOTP_ENROLLMENT_ENABLED for the server"
 }
 
-# Off until SIGN_IN_TO_VIEW_ENABLED's own release raises the production
-# minimum-release fence to numeric 6026; see
-# docs/design/passkey-release-fence.md and
-# docs/design/viewer-analytics/sign-in-to-view.md, "Release and rollback".
 variable "sign_in_to_view_enabled" {
   type        = bool
   description = "SIGN_IN_TO_VIEW_ENABLED for the server"
 }
 
-# Chooses which protected totp/key-<slot> parameter supplies
-# TOTP_ACTIVE_KEY. See docs/design/totp-key-management.md, "Key ring".
 variable "totp_active_key_slot" {
   type        = string
   description = "Which totp/key-<slot> parameter supplies TOTP_ACTIVE_KEY: \"a\" or \"b\""
@@ -80,8 +64,6 @@ variable "totp_active_key_slot" {
   }
 }
 
-# Empty keeps TOTP_PREVIOUS_KEY unset, so the task definition names no
-# parameter for it and ECS never fails on a missing one.
 variable "totp_previous_key_slot" {
   type        = string
   description = "Which totp/key-<slot> parameter supplies TOTP_PREVIOUS_KEY: \"\", \"a\", or \"b\""
@@ -95,8 +77,6 @@ variable "totp_previous_key_slot" {
   }
 }
 
-# Only Google's and LinkedIn's credentials are wired, and LinkedIn turns on
-# only beside Google (docs/adr/0016-sign-in-providers.md).
 variable "provider_login_enabled" {
   type        = string
   description = "PROVIDER_LOGIN_ENABLED for the server: \"\" (off), \"google\", or \"google,linkedin\""

@@ -15,67 +15,25 @@ import (
 type Querier interface {
 	AcceptPrivacyNoticeRecipient(ctx context.Context, arg AcceptPrivacyNoticeRecipientParams) (int64, error)
 	ActivatePrivacyNoticeCampaign(ctx context.Context, arg ActivatePrivacyNoticeCampaignParams) (int64, error)
-	// Locks the parent resumes the same way as AddResumeViewDays.
 	AddResumeShareSignalDays(ctx context.Context, arg AddResumeShareSignalDaysParams) error
-	// Target-list unnest zips the equal-length arrays row by row. The parent
-	// CTE key-share locks each surviving resume in id order before the insert:
-	// a resume whose deletion commits first is skipped rather than failing the
-	// foreign key for the whole batch, and a locked resume stays until commit.
 	AddResumeViewDays(ctx context.Context, arg AddResumeViewDaysParams) error
 	AdvanceDiscoveryGeneration(ctx context.Context) (int64, error)
 	AdvancePrivacyNoticeCapture(ctx context.Context, arg AdvancePrivacyNoticeCaptureParams) (int64, error)
-	// Advances only the revision, the change signal every public artifact keys
-	// on, and leaves the document, updated_at and every other column unchanged
-	// (docs/design/projects-contract.md "Revision-only advance"). The returned
-	// revision is the NEW one. A stale or non-matching expected revision updates
-	// zero rows and surfaces as pgx.ErrNoRows.
 	AdvanceResumeRevisionCAS(ctx context.Context, arg AdvanceResumeRevisionCASParams) (Resume, error)
-	// Compare-and-advance on a valid code: the WHERE guard is the single-use
-	// rule, so a replayed step (equal, not greater) affects zero rows and the
-	// caller sees pgx.ErrNoRows. Requires the row already locked by
-	// GetTOTPCredentialForUpdate in this transaction.
 	AdvanceTOTPCredentialStep(ctx context.Context, arg AdvanceTOTPCredentialStepParams) (TotpCredential, error)
 	AdvanceUserAuthEpoch(ctx context.Context, id uuid.UUID) (User, error)
-	// This system backfill intentionally does not change revision or updated_at:
-	// it persists the same projected document already served to readers. It is
-	// not user-scoped. See docs/adr/0004-resume-document-contract.md.
-	// Fully named parameters distinguish the from/to schema versions. Both are
-	// int32, and sqlc's positional naming would emit
-	// `SchemaVersion` and `SchemaVersion_2`, neither carrying its direction.
-	// A caller swapping them silently rewrites current rows back to the old
-	// version. Named args make the pair unswappable at the call site.
+	// sqlc names two positional int32 parameters SchemaVersion and SchemaVersion_2, so both are named (sqlc parameter naming).
 	BackfillResumeDocumentCAS(ctx context.Context, arg BackfillResumeDocumentCASParams) (int64, error)
-	// Single-row conditional UPDATE that decides the >24h rotation winner: only
-	// a row that has neither already started rotating (rotation_grace_until
-	// still NULL) nor been revoked is claimed. Under concurrent callers racing
-	// the same session id, exactly one UPDATE affects a row (returns its id);
-	// every other caller's UPDATE affects zero rows and pgx reports
-	// pgx.ErrNoRows -- that caller lost the race and must not mint a second
-	// successor (see internal/auth.SessionManager.Authenticate).
 	BeginSessionRotation(ctx context.Context, arg BeginSessionRotationParams) (uuid.UUID, error)
 	CancelPrivacyNoticeRecipient(ctx context.Context, arg CancelPrivacyNoticeRecipientParams) (int64, error)
-	// Bounded SKIP LOCKED claim: atomically transitions at most limit due pending
-	// jobs to leased, increments attempts, stamps the lease pair, and returns the
-	// leased rows. Two concurrent claimers are disjoint because each claims a
-	// distinct row under FOR UPDATE SKIP LOCKED.
 	ClaimAuthEmailJobs(ctx context.Context, arg ClaimAuthEmailJobsParams) ([]AuthEmailJob, error)
-	// Media deletion and orphan-reconciliation queries. The document photo key is
-	// the ownership authority; media_deletion_jobs is only durable cleanup work.
 	ClaimMediaDeletionJobs(ctx context.Context, arg ClaimMediaDeletionJobsParams) ([]MediaDeletionJob, error)
 	ClaimPendingAuthentication(ctx context.Context, arg ClaimPendingAuthenticationParams) (PendingAuthentication, error)
-	// Conditional claim for the one-per-hour second_factor_attempts_exhausted
-	// mail cap, under the policy lock. Zero rows means the window has not
-	// elapsed and the caller must suppress the mail; the state change that
-	// triggered the attempt still applies regardless
-	// (docs/design/totp-second-factor-contract.md#per-account-totp-failure-budget).
 	ClaimSecondFactorAttemptMailWindow(ctx context.Context, arg ClaimSecondFactorAttemptMailWindowParams) (SecondFactorPolicy, error)
 	ClaimWebAuthnCeremony(ctx context.Context, arg ClaimWebAuthnCeremonyParams) (WebauthnCeremony, error)
 	ClassifyMediaObject(ctx context.Context, objectKey string) (ClassifyMediaObjectRow, error)
 	CleanupExpiredPasswordRegistrations(ctx context.Context, arg CleanupExpiredPasswordRegistrationsParams) (int64, error)
 	CleanupExpiredPasswordResetTokens(ctx context.Context, arg CleanupExpiredPasswordResetTokensParams) (int64, error)
-	// Bounded expiry cleanup, at most 200 rows per admitted enrollment start
-	// (docs/design/budgets.md), skipping rows a concurrent claim or rotation run
-	// already holds.
 	CleanupExpiredTOTPEnrollments(ctx context.Context, limitRows int32) (int64, error)
 	// Sent/terminal jobs are retained for seven days of audit, then removed in a
 	// bounded page, oldest outcome first.
@@ -85,24 +43,7 @@ type Querier interface {
 	CompletePrivacyNoticePurge(ctx context.Context, contentSha256 []byte) (int64, error)
 	ConsumeExpiredSlugTombstone(ctx context.Context, arg ConsumeExpiredSlugTombstoneParams) (uuid.UUID, error)
 	ConsumeLiveWebAuthnCeremoniesForBinding(ctx context.Context, arg ConsumeLiveWebAuthnCeremoniesForBindingParams) (int64, error)
-	// Single-use consumption. One conditional UPDATE both takes the row lock
-	// and decides the winner: under two concurrent exchanges of the same code the
-	// second blocks, re-evaluates the predicate after the first commits, matches
-	// no row, and surfaces as pgx.ErrNoRows. Unknown, expired, and already-consumed
-	// codes therefore collapse to that one outcome, so no caller can branch on the
-	// reason. issued_family_id records the token family this exchange creates,
-	// which is what a later replay revokes.
 	ConsumeOAuthAuthorizationCode(ctx context.Context, arg ConsumeOAuthAuthorizationCodeParams) (OAuthAuthorizationCode, error)
-	// Atomically claims a transaction: only a row that is unexpired and not yet
-	// consumed (as of now, $2) is updated and returned. A handle that is
-	// unknown, expired, or already consumed matches no row, so the caller sees
-	// exactly one outcome (pgx.ErrNoRows) for all three cases -- see
-	// internal/auth.ErrTransactionInvalid's doc comment for why that collapse
-	// is deliberate. The provider-mismatch check (RFC 9700 mix-up defense)
-	// happens in Go, after this still consumes the row: an attacker replaying
-	// a valid handle against the wrong provider's callback burns the
-	// transaction just like any other outcome, so it can never be retried
-	// against the correct provider either.
 	ConsumeOAuthTransaction(ctx context.Context, arg ConsumeOAuthTransactionParams) (OAuthTransaction, error)
 	ConsumeOldestLivePendingAuthentication(ctx context.Context, arg ConsumeOldestLivePendingAuthenticationParams) (PendingAuthentication, error)
 	ConsumeSecondFactorRecoveryCode(ctx context.Context, arg ConsumeSecondFactorRecoveryCodeParams) (SecondFactorRecoveryCode, error)
@@ -117,55 +58,16 @@ type Querier interface {
 	CountResumesForUser(ctx context.Context, userID uuid.UUID) (int64, error)
 	CountSecondFactorRecoveryCodes(ctx context.Context, userID uuid.UUID) (int64, error)
 	CountShowcase(ctx context.Context, arg CountShowcaseParams) (int64, error)
-	// Unlocked existence count (0 or 1) for the shared active-factor counter;
-	// one active TOTP credential per account.
 	CountTOTPCredentialsForUser(ctx context.Context, userID uuid.UUID) (int64, error)
-	// Rotation gate: the count a rotation run must see at zero before the key
-	// switch proceeds.
 	CountTOTPCredentialsOffActiveKey(ctx context.Context, activeKeyID string) (int64, error)
-	// Rotation gate for enrollments, paired with CountTOTPCredentialsOffActiveKey.
 	CountTOTPEnrollmentsOffActiveKey(ctx context.Context, activeKeyID string) (int64, error)
 	CreateAndClaimOrphanMediaDeletion(ctx context.Context, arg CreateAndClaimOrphanMediaDeletionParams) (MediaDeletionJob, error)
-	// New jobs always start pending with attempts 0 (DEFAULT). The caller provides
-	// the job id (a UUIDv7 it generated) so the outbox AAD binds to the stored row's
-	// id; the caller has already encrypted the payload and computed the exact expiry
-	// before commit.
 	CreateAuthEmailJob(ctx context.Context, arg CreateAuthEmailJobParams) (AuthEmailJob, error)
-	// Returns PostgreSQL's normalized jsonb representation of the stored body
-	// and approved headers plus the exact stored byte count, so the first
-	// response and every replay use identical bytes and no caller recomputes
-	// capacity accounting in Go.
 	CreateIdempotencyRecord(ctx context.Context, arg CreateIdempotencyRecordParams) (CreateIdempotencyRecordRow, error)
-	// The caller checks the provider subject first for the common case. The
-	// database uniqueness constraint remains the concurrency backstop.
 	CreateIdentity(ctx context.Context, arg CreateIdentityParams) (Identity, error)
-	// Code issue. expires_at is computed here, not passed in, so the exact
-	// 60-second TTL the table checks can never be missed by a caller. Only the
-	// code's digest is stored; the raw code exists solely in the redirect the user
-	// agent carries.
 	CreateOAuthAuthorizationCode(ctx context.Context, arg CreateOAuthAuthorizationCodeParams) (OAuthAuthorizationCode, error)
-	// ---------------------------------------------------------------------------
-	// OAuth agent access: clients, authorization codes, grants, and
-	// tokens. Storage is digest-only: no query here reads, writes, or returns raw
-	// code or token material, and PKCE verifiers are never stored.
-	//
-	// Lock order is oauth_clients -> users -> oauth_grants ->
-	// oauth_authorization_codes -> oauth_tokens. Every path that revokes a token
-	// family first locks its grant row (GetOAuthGrantForUpdate), and every path
-	// that mutates a client's rows first locks the client row
-	// (GetOAuthClientForUpdate) -- which is also what makes the idle-client sweep
-	// skip a client another transaction is consenting to.
-	// ---------------------------------------------------------------------------
-	// Dynamic client registration. The primary key returned here IS the
-	// public client_id; there is no secret. last_used_at starts at created_at so
-	// the column is never NULL and the ordering check holds from the first row.
 	CreateOAuthClient(ctx context.Context, arg CreateOAuthClientParams) (OAuthClient, error)
-	// The first token of a family, issued by a code exchange. expires_at is
-	// clamped to the family's own death so no token can outlive the family it
-	// belongs to; the table's ordering check is the backstop for raw SQL.
 	CreateOAuthToken(ctx context.Context, arg CreateOAuthTokenParams) (OAuthToken, error)
-	// resume_id is set only for purpose 'view' (docs/design/viewer-analytics/sign-in-to-view.md
-	// "Sign-in flow"; AC-VIEW-004); every other purpose passes it as NULL.
 	CreateOAuthTransaction(ctx context.Context, arg CreateOAuthTransactionParams) (OAuthTransaction, error)
 	CreatePasswordRegistration(ctx context.Context, arg CreatePasswordRegistrationParams) (PasswordRegistration, error)
 	CreatePasswordResetToken(ctx context.Context, arg CreatePasswordResetTokenParams) (PasswordResetToken, error)
@@ -175,24 +77,8 @@ type Querier interface {
 	CreateResume(ctx context.Context, arg CreateResumeParams) (Resume, error)
 	CreateSecondFactorPolicy(ctx context.Context, arg CreateSecondFactorPolicyParams) (SecondFactorPolicy, error)
 	CreateSecondFactorRecoveryCode(ctx context.Context, arg CreateSecondFactorRecoveryCodeParams) (SecondFactorRecoveryCode, error)
-	// Always inserts a brand-new row -- used both by Issue (fixation defense: a
-	// login never reuses an existing session row) and by the >24h rotation
-	// winner's successor insert (internal/auth.SessionManager.Authenticate),
-	// which passes the predecessor's user_id, reauthenticated_at,
-	// absolute_expires_at, ua, and ip through unchanged so a rotation never
-	// extends absolute expiry or silently satisfies the recent-reauth gate.
-	// rotated_from is NULL for a fresh login and contains the predecessor id
-	// for a rotated successor. The partial unique index makes this an exact,
-	// one-successor lineage link.
 	CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error)
-	// Starts one enrollment under the user lock, after DeleteTOTPEnrollmentForUser
-	// has removed any prior row in the same transaction: the atomic supersession
-	// (docs/design/totp-second-factor-contract.md#enrollment-and-replacement-api).
 	CreateTOTPEnrollment(ctx context.Context, arg CreateTOTPEnrollmentParams) (TotpEnrollment, error)
-	// Hand-written, sqlc-annotated queries (`-- name: X :one/:many/:exec`) that
-	// become type-safe Go methods in internal/store via `make generate`.
-	// Relational schema changes belong in apps/server/migrations; see
-	// docs/design/data.md.
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	CreateWebAuthnCeremony(ctx context.Context, arg CreateWebAuthnCeremonyParams) (WebauthnCeremony, error)
 	CreateWebAuthnCredential(ctx context.Context, arg CreateWebAuthnCredentialParams) (WebauthnCredential, error)
@@ -200,25 +86,9 @@ type Querier interface {
 	DeleteAccountUser(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteAuthenticationSecurityEventsPage(ctx context.Context, arg DeleteAuthenticationSecurityEventsPageParams) (int64, error)
 	DeleteCompletedMediaJobsPage(ctx context.Context, arg DeleteCompletedMediaJobsPageParams) (int64, error)
-	// Deletes exactly this key's record if (and only if) it has expired, and
-	// reports the counters to release — zero rows deleted still returns one
-	// aggregate row of zeros.
 	DeleteExpiredIdempotencyRecordForKey(ctx context.Context, arg DeleteExpiredIdempotencyRecordForKeyParams) (DeleteExpiredIdempotencyRecordForKeyRow, error)
-	// The bounded request-path cleanup: at most limit_rows of the calling
-	// user's expired records, deterministically oldest first by
-	// (expires_at, id) on the composite index. FOR UPDATE SKIP LOCKED keeps
-	// concurrent cleanup bounded and deadlock-free. Always returns one
-	// aggregate row, even when nothing was deleted.
 	DeleteExpiredIdempotencyRecordsForUser(ctx context.Context, arg DeleteExpiredIdempotencyRecordsForUserParams) (DeleteExpiredIdempotencyRecordsForUserRow, error)
-	// The scheduled privacy sweep's bounded page: oldest expired rows across
-	// all users, grouped per user so the sweep can release each user's exact
-	// counters (once per returned user) before committing that cleanup
-	// transaction.
 	DeleteExpiredIdempotencyRecordsGlobal(ctx context.Context, arg DeleteExpiredIdempotencyRecordsGlobalParams) ([]DeleteExpiredIdempotencyRecordsGlobalRow, error)
-	// Bounded cleanup, oldest expiry first on oauth_authorization_codes_expires_at_idx.
-	// expires_at alone is the predicate: a consumed code keeps its original expiry,
-	// so consumed and abandoned rows leave on the same schedule, and a row is never
-	// removed while ConsumeOAuthAuthorizationCode could still claim it.
 	DeleteExpiredOAuthAuthorizationCodes(ctx context.Context, arg DeleteExpiredOAuthAuthorizationCodesParams) (int64, error)
 	// OAuth start is unauthenticated and writes one row per request. Each start
 	// therefore clears a bounded batch of expired rows before creating its own.
@@ -237,42 +107,14 @@ type Querier interface {
 	DeleteExpiredOAuthTransactions(ctx context.Context, arg DeleteExpiredOAuthTransactionsParams) (int64, error)
 	DeleteExpiredPendingAuthentications(ctx context.Context, limitRows int32) (int64, error)
 	DeleteExpiredProjectSlugHoldsPage(ctx context.Context, arg DeleteExpiredProjectSlugHoldsPageParams) (int64, error)
-	// Deletes session rows, revoked or not, whose absolute expiry is at or before
-	// the cutoff, which the caller sets seven days before now. Rotation and reissue
-	// copy absolute_expires_at unchanged, so every token in a rotation chain is
-	// already dead by then.
-	//
-	// The statement never waits for a row lock. It first locks, with SKIP LOCKED,
-	// every row its delete reaches: the sessions, their expired pending
-	// authentications, WebAuthn ceremonies (also those bound to such a pending
-	// authentication) and TOTP enrollments, which ON DELETE CASCADE removes, and
-	// the successors whose rotated_from ON DELETE SET NULL clears. A session whose
-	// successor or referencing row it could not lock stays for a later page. So it
-	// takes no user lock, cannot deadlock with sign-in, rotation, revocation or
-	// account deletion, and never removes a live row.
-	//
-	// This relies on no new row referencing a dead session: every path that
-	// creates a pending authentication, ceremony or enrollment first locks its
-	// session and requires it live (lockLiveSession). A reference committed after
-	// this statement's snapshot would still be cascaded, and could make it wait.
 	DeleteExpiredSessionsPage(ctx context.Context, arg DeleteExpiredSessionsPageParams) (int64, error)
-	// A released slug stays reserved and unlinked from any account for 180 days
-	// (docs/design/product.md), then the privacy sweep deletes the reservation.
 	DeleteExpiredSlugTombstonesPage(ctx context.Context, arg DeleteExpiredSlugTombstonesPageParams) (int64, error)
 	DeleteExpiredWebAuthnCeremonies(ctx context.Context, limitRows int32) (int64, error)
-	// Unlinks one identity only when it belongs to the given user. The caller holds
-	// the user-row lock, so the last-sign-in-method check and this delete cannot
-	// interleave with another unlink.
 	DeleteIdentityForUser(ctx context.Context, arg DeleteIdentityForUserParams) (int64, error)
 	DeleteLifecycleAuditPage(ctx context.Context, arg DeleteLifecycleAuditPageParams) (int64, error)
-	// Removing a client cascades its codes, grants, and tokens: deregistering an
-	// agent ends every authorization it holds.
 	DeleteOAuthClient(ctx context.Context, id uuid.UUID) (int64, error)
-	// Deletes exactly the candidate set the caller just locked. The batch bound
-	// lives in ListIdleOAuthClientCandidates; this statement never widens it.
 	DeleteOAuthClients(ctx context.Context, ids []uuid.UUID) (int64, error)
 	DeleteOldResumeShareSignalDaysPage(ctx context.Context, arg DeleteOldResumeShareSignalDaysPageParams) (int64, error)
-	// Daily counts are kept 400 days (docs/design/viewer-analytics/README.md).
 	DeleteOldResumeViewDaysPage(ctx context.Context, arg DeleteOldResumeViewDaysPageParams) (int64, error)
 	DeletePasswordRegistration(ctx context.Context, id uuid.UUID) (int64, error)
 	DeletePasswordResetToken(ctx context.Context, id uuid.UUID) (int64, error)
@@ -280,45 +122,17 @@ type Querier interface {
 	DeleteProjectCAS(ctx context.Context, arg DeleteProjectCASParams) (int64, error)
 	DeleteRecoveredPrivacyNoticeJob(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteResumeForUser(ctx context.Context, arg DeleteResumeForUserParams) (int64, error)
-	// Revision-CAS delete returning the deleted row, so the caller can
-	// validate the stored photo key and enqueue media cleanup in the same
-	// transaction. Zero rows (stale revision, wrong owner, or missing id)
-	// surfaces as pgx.ErrNoRows; the caller re-reads to distinguish staleness
-	// from absence without creating an existence oracle.
 	DeleteResumeForUserCAS(ctx context.Context, arg DeleteResumeForUserCASParams) (Resume, error)
 	DeleteResumePublicCAS(ctx context.Context, arg DeleteResumePublicCASParams) (Resume, error)
 	DeleteResumeShowcase(ctx context.Context, resumeID uuid.UUID) (int64, error)
 	DeleteSecondFactorPolicyForUser(ctx context.Context, userID uuid.UUID) (int64, error)
 	DeleteSecondFactorRecoveryCodesForUser(ctx context.Context, userID uuid.UUID) (int64, error)
-	// Removal. Returns pgx.ErrNoRows when no credential exists, which the
-	// caller maps to 404 factor_not_found.
 	DeleteTOTPCredentialForUser(ctx context.Context, userID uuid.UUID) (TotpCredential, error)
-	// Claim by delete: totp_enrollments has no consumed_at column, so deleting
-	// the row already locked by GetTOTPEnrollmentForUpdate is the only exit for
-	// a successful completion or a disabled-flag completion attempt.
 	DeleteTOTPEnrollmentByID(ctx context.Context, id uuid.UUID) (int64, error)
-	// Deletes any existing enrollment row for the account, expired or not: the
-	// first half of atomic supersession on start, and the unconditional
-	// enrollment cleanup on removal.
 	DeleteTOTPEnrollmentForUser(ctx context.Context, userID uuid.UUID) (int64, error)
-	// Bounded token cleanup. An access token leaves as soon as it has expired or
-	// been revoked: it carries no replay-detection role. A refresh token is kept
-	// until its whole family has expired, because a superseded or revoked refresh
-	// token that is presented again must still be recognized as a replay rather
-	// than as an unknown token. rotated_from is ON DELETE SET NULL, so removing a
-	// predecessor detaches its successor instead of cascading past the batch bound.
 	DeleteTerminalOAuthTokens(ctx context.Context, arg DeleteTerminalOAuthTokensParams) (int64, error)
 	DeleteWebAuthnCredentialForUser(ctx context.Context, arg DeleteWebAuthnCredentialForUserParams) (WebauthnCredential, error)
-	// Records exact-key cleanup work in the caller's transaction (ADR 0009).
-	// Duplicate enqueue of the immutable key is idempotent (zero rows); the
-	// table's own check constraint rejects a malformed or cross-resume key.
 	EnqueueMediaDeletionJob(ctx context.Context, arg EnqueueMediaDeletionJobParams) (int64, error)
-	// Candidates come from expired records in (expires_at, id) order, not from
-	// every account. Each record's user is locked before any replay row or usage
-	// counter, matching every resume writer. LIMIT counts only rows whose user
-	// lock succeeded, so SKIP LOCKED passes over a busy user's records and later
-	// users still fill the page. ARRAY() reads every locked row before the first
-	// replay row is locked.
 	ExpireIdempotencyPage(ctx context.Context, arg ExpireIdempotencyPageParams) (ExpireIdempotencyPageRow, error)
 	FailPrivacyNoticeRecipient(ctx context.Context, arg FailPrivacyNoticeRecipientParams) (int64, error)
 	// Finds the exact unrevoked successor through rotated_from. The partial unique
@@ -328,26 +142,12 @@ type Querier interface {
 	FindLiveSuccessorSession(ctx context.Context, rotatedFrom *uuid.UUID) (Session, error)
 	GetAccountDeletedAuditEvent(ctx context.Context, id uuid.UUID) (LifecycleAuditEvent, error)
 	GetAccountDeletionSessionForUpdate(ctx context.Context, arg GetAccountDeletionSessionForUpdateParams) (Session, error)
-	// Account export deliberately reads only portable profile fields, provider
-	// names, and owner resume rows. Credentials, provider subjects, object keys,
-	// and lifecycle records do not cross the HTTP export boundary.
 	GetAccountExportProfile(ctx context.Context, id uuid.UUID) (GetAccountExportProfileRow, error)
 	GetAuthenticationSecurityEventsBacklog(ctx context.Context, arg GetAuthenticationSecurityEventsBacklogParams) (GetAuthenticationSecurityEventsBacklogRow, error)
 	GetCompletedMediaJobsBacklog(ctx context.Context, arg GetCompletedMediaJobsBacklogParams) (GetCompletedMediaJobsBacklogRow, error)
-	// Public UUID resolution excludes the internal UUID of a URL client.
 	GetDCRClient(ctx context.Context, id uuid.UUID) (OAuthClient, error)
-	// oldest_age_seconds is age since the original sign-in, like the session
-	// metadata backlog.
 	GetExpiredSessionsBacklog(ctx context.Context, arg GetExpiredSessionsBacklogParams) (GetExpiredSessionsBacklogRow, error)
 	GetExpiredSlugTombstonesBacklog(ctx context.Context, arg GetExpiredSlugTombstonesBacklogParams) (GetExpiredSlugTombstonesBacklogRow, error)
-	// Inputs for the capacity Retry-After decision: while an expired retained
-	// row remains the caller retries in one second (the next mutation's
-	// bounded cleanup frees space); otherwise the earliest retained expiry
-	// says when space can next appear.
-	// earliest_expiry falls back to the caller's own now when the user retains
-	// no records at all (capacity rejection with zero retained records cannot
-	// normally happen); the caller maps any earliest_expiry <= now to the
-	// one-second branch.
 	GetIdempotencyCapacityRetryAfter(ctx context.Context, arg GetIdempotencyCapacityRetryAfterParams) (GetIdempotencyCapacityRetryAfterRow, error)
 	GetIdempotencyExpiryBacklog(ctx context.Context, cutoff time.Time) (GetIdempotencyExpiryBacklogRow, error)
 	GetIdempotencyRecord(ctx context.Context, arg GetIdempotencyRecordParams) (IdempotencyRecord, error)
@@ -356,27 +156,14 @@ type Querier interface {
 	// so a token replacement that already committed cannot race this delivery.
 	GetLeasedAuthEmailJobForUpdate(ctx context.Context, arg GetLeasedAuthEmailJobForUpdateParams) (AuthEmailJob, error)
 	GetLifecycleAuditBacklog(ctx context.Context, arg GetLifecycleAuditBacklogParams) (GetLifecycleAuditBacklogRow, error)
-	// The grant-skip read: a live grant with equal-or-wider scopes lets authorize
-	// issue a code without a second consent.
 	GetLiveOAuthGrant(ctx context.Context, arg GetLiveOAuthGrantParams) (OAuthGrant, error)
 	GetLiveResumeByID(ctx context.Context, id uuid.UUID) (Resume, error)
 	GetLiveViewResumeByID(ctx context.Context, id uuid.UUID) (GetLiveViewResumeByIDRow, error)
-	// View count queries (docs/design/viewer-analytics/counting.md). Tables hold
-	// daily numbers only; days are Asia/Ho_Chi_Minh dates.
-	// The same live gate as GetPublicResumeBySlug, with only what the view-count
-	// start and the sign-in "view" start need: the owner, the sign-in switch, and
-	// the pass epoch.
 	GetLiveViewResumeBySlug(ctx context.Context, slug string) (GetLiveViewResumeBySlugRow, error)
-	// Ambiguous-delete recovery proves the exact immutable cleanup job without
-	// scanning or exposing unrelated object keys.
 	GetMediaDeletionJobByObjectKey(ctx context.Context, arg GetMediaDeletionJobByObjectKeyParams) (MediaDeletionJob, error)
 	GetMediaDeletionQueueState(ctx context.Context, arg GetMediaDeletionQueueStateParams) (GetMediaDeletionQueueStateRow, error)
 	GetMediaOrphanSweepCursor(ctx context.Context) (string, error)
-	// Replay lookup: returns the row whether or not it was consumed, so the caller
-	// can see the family a consumed code issued and revoke exactly those tokens.
 	GetOAuthAuthorizationCodeByDigest(ctx context.Context, codeDigest []byte) (OAuthAuthorizationCode, error)
-	// The locked replay lookup used before a consumed-code replay revokes the
-	// family it issued, so the revocation and the row it read cannot interleave.
 	GetOAuthAuthorizationCodeByDigestForUpdate(ctx context.Context, codeDigest []byte) (OAuthAuthorizationCode, error)
 	GetOAuthClient(ctx context.Context, id uuid.UUID) (OAuthClient, error)
 	GetOAuthClientByMetadataURL(ctx context.Context, metadataUrl string) (OAuthClient, error)
@@ -388,10 +175,6 @@ type Querier interface {
 	// The grant-row lock every token-family revocation takes first, so a rotation
 	// committing concurrently cannot resurrect a family the revocation just killed.
 	GetOAuthGrantForUpdate(ctx context.Context, id uuid.UUID) (OAuthGrant, error)
-	// The bearer boundary's single round trip: token row, its grant, and its
-	// account in one query. The caller applies expiry, revocation, supersession,
-	// and kind checks to the returned row; every rejection class therefore reads
-	// the same rows and produces the same closed response.
 	GetOAuthTokenAuthorityByDigest(ctx context.Context, tokenDigest []byte) (GetOAuthTokenAuthorityByDigestRow, error)
 	// Locks (creating if absent) the caller's usage row inside the current
 	// transaction. The no-op DO UPDATE assignment is what makes the conflict
@@ -416,96 +199,30 @@ type Querier interface {
 	GetProjectForUser(ctx context.Context, arg GetProjectForUserParams) (Project, error)
 	GetProjectSlugClaim(ctx context.Context, arg GetProjectSlugClaimParams) (uuid.UUID, error)
 	GetProjectSlugHold(ctx context.Context, arg GetProjectSlugHoldParams) (time.Time, error)
-	// The generation and eligible slug set are selected by one PostgreSQL
-	// statement so aggregate discovery admission cannot pair different commits.
 	GetPublicDiscoverySnapshot(ctx context.Context) (GetPublicDiscoverySnapshotRow, error)
 	GetPublicRealtimeResume(ctx context.Context, slug string) (GetPublicRealtimeResumeRow, error)
 	GetPublicResumeByOwner(ctx context.Context, arg GetPublicResumeByOwnerParams) (Resume, error)
 	GetPublicResumeBySlug(ctx context.Context, slug string) (GetPublicResumeBySlugRow, error)
-	// One project page's snapshot: the live resume; its project link context as
-	// the list reads it, each linked document without its descriptions; and the
-	// whole document of the requested project, only when an entry that is not
-	// hidden in a project section links it. The page reads the other documents
-	// only to know whether another project has a name to show. The project id
-	// never leaves the statement.
 	GetPublicResumeProject(ctx context.Context, arg GetPublicResumeProjectParams) (GetPublicResumeProjectRow, error)
-	// The project list's snapshot: the live resume and, for each entry that is
-	// not hidden in a project section and names a project of the same owner, the
-	// entry id, the project slug and the project document with every
-	// description removed. One statement reads both, so the projects belong to
-	// the returned revision (docs/design/projects-contract.md "Project link
-	// context"). The project id never leaves the statement, and the id is
-	// compared as text, as in GetPublicResumeBySlug.
 	GetPublicResumeProjectList(ctx context.Context, slug string) (GetPublicResumeProjectListRow, error)
 	GetPublicState(ctx context.Context) (PublicState, error)
-	// System-job read for the document-version backfill. It is intentionally
-	// not user-scoped, unlike product reads. It adds no write path.
 	GetResumeByID(ctx context.Context, id uuid.UUID) (Resume, error)
 	GetResumeForUser(ctx context.Context, arg GetResumeForUserParams) (Resume, error)
 	GetResumeForUserWithProjectLinks(ctx context.Context, arg GetResumeForUserWithProjectLinksParams) (GetResumeForUserWithProjectLinksRow, error)
-	// Resolves the account that holds a current resume slug, for the operator
-	// deletion command (docs/design/showcase.md "Report and account deletion").
-	// A tombstoned slug has no resume row and so has no owner.
 	GetResumeOwnerBySlug(ctx context.Context, slug string) (GetResumeOwnerBySlugRow, error)
-	// A stored card is derived data (ADR 0014); every public read passes the
-	// live-state gate before it reads one.
 	GetResumePreviewCard(ctx context.Context, resumeID uuid.UUID) (GetResumePreviewCardRow, error)
-	// Community showcase queries (docs/design/showcase.md, ADR 0028). The
-	// resume_showcase row exists only while the opt-in does. Statements name their
-	// columns, never * or s.*: sqlc expands a star into every column when it
-	// generates, so a released binary fails once a migration drops one
-	// (docs/design/release-floors.md "Schema floor").
 	GetResumeShowcase(ctx context.Context, resumeID uuid.UUID) (ResumeShowcase, error)
-	// Locks the opt-in row so concurrent derived-value writes serialize.
 	GetResumeShowcaseForUpdate(ctx context.Context, resumeID uuid.UUID) (ResumeShowcase, error)
-	// The "view" OAuth callback's re-read: live state, slug, the sign-in switch,
-	// and the pass epoch, by resume ID, with no user scoping since the callback
-	// authenticates no account (docs/design/viewer-analytics/sign-in-to-view.md
-	// "Sign-in flow"; AC-VIEW-005).
 	GetResumeViewGateState(ctx context.Context, id uuid.UUID) (GetResumeViewGateStateRow, error)
 	GetSecondFactorPolicyForUpdate(ctx context.Context, userID uuid.UUID) (SecondFactorPolicy, error)
-	// Loads a target so the caller can revoke its rotation partner.
-	// RevokeSessionForUser returns only a row count, and the target need not be the
-	// caller's current session, so the lineage values require this read.
 	GetSessionByID(ctx context.Context, id uuid.UUID) (Session, error)
-	// Session-row lock for password add/change, which revokes the current session
-	// and every sibling atomically.
 	GetSessionByIDForUpdate(ctx context.Context, id uuid.UUID) (Session, error)
-	// Returns a session only while its copied authentication epoch equals the
-	// account's current epoch, so a stale-epoch credential reads as unknown.
 	GetSessionByTokenHash(ctx context.Context, tokenHash []byte) (Session, error)
-	// oldest_age_seconds is age since the original sign-in, not since
-	// absolute_expires_at, matching every other *_oldest_seconds field: a
-	// session's absolute expiry is sign-in plus the fixed 90-day absolute timeout
-	// (docs/design/security.md), so subtracting that interval back out of
-	// absolute_expires_at recovers the sign-in time.
 	GetSessionMetadataBacklog(ctx context.Context, arg GetSessionMetadataBacklogParams) (GetSessionMetadataBacklogRow, error)
 	GetSlugClaim(ctx context.Context, slug string) (uuid.UUID, error)
 	GetSlugTombstoneForUpdate(ctx context.Context, slug string) (SlugTombstone, error)
-	// Authenticator-app (TOTP) second-factor queries. Every TOTP transaction
-	// takes locks in the order fixed by
-	// docs/design/totp-second-factor-contract.md#removal-recovery-and-races:
-	// user, current session when present, policy, credential, enrollment, then
-	// pending authentication when applicable. GetUserForUpdate,
-	// GetSessionByIDForUpdate, and GetSecondFactorPolicyForUpdate already exist
-	// in queries.sql; this file adds the credential and enrollment steps.
-	//
-	// Every mutation below that reads a value it also writes (the failure
-	// counter, the doubling cool-down, the monotonic step) must run inside the
-	// same transaction as a prior GetTOTPCredentialForUpdate, so the row stays
-	// locked from the first read through the write and no concurrent
-	// transaction can observe or apply a stale value in between.
-	// The credential-row lock. Callers read cooldown_until here, before any
-	// decryption, so a live cool-down short-circuits with no decrypt attempt and
-	// no failure counted (docs/design/totp-second-factor-contract.md#per-account-totp-failure-budget).
 	GetTOTPCredentialForUpdate(ctx context.Context, userID uuid.UUID) (TotpCredential, error)
-	// The enrollment-row lock, keyed by the enrollment token's digest. The
-	// caller checks user, session, epoch, and expiry against the returned row
-	// and collapses any mismatch to 400 enrollment_invalid.
 	GetTOTPEnrollmentForUpdate(ctx context.Context, tokenDigest []byte) (TotpEnrollment, error)
-	// Ownership read before a new-account insert. The caller passes the canonical
-	// lowercase form; users.email is citext so the comparison is already
-	// case-insensitive, and the unique constraint arbitrates the actual insert.
 	GetUserByCanonicalEmail(ctx context.Context, email string) (User, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (User, error)
@@ -514,46 +231,26 @@ type Querier interface {
 	// order is user -> credential -> reset token -> sessions, per the user-row lock
 	// rules in docs/design/security.md; queries expose only the locks it needs.
 	// ---------------------------------------------------------------------------
-	// The user-row lock every session issuer and password mutation serializes on.
 	GetUserForUpdate(ctx context.Context, id uuid.UUID) (User, error)
 	GetWebAuthnCeremonyByTokenDigestForUpdate(ctx context.Context, tokenDigest []byte) (WebauthnCeremony, error)
 	GetWebAuthnCredentialForUpdate(ctx context.Context, arg GetWebAuthnCredentialForUpdateParams) (WebauthnCredential, error)
 	HoldProjectSlug(ctx context.Context, arg HoldProjectSlugParams) error
 	InsertAccountDeletedAuditEvent(ctx context.Context, arg InsertAccountDeletedAuditEventParams) (LifecycleAuditEvent, error)
-	// Records the unlink's kind and time only: no user, provider, or identity.
 	InsertIdentityUnlinkedAuditEvent(ctx context.Context, occurredAt time.Time) error
 	InsertPasskeyCounterSecurityEvent(ctx context.Context, arg InsertPasskeyCounterSecurityEventParams) (AuthenticationSecurityEvent, error)
 	InsertPrivacyNoticeRecipient(ctx context.Context, arg InsertPrivacyNoticeRecipientParams) error
 	InsertResumeShowcase(ctx context.Context, arg InsertResumeShowcaseParams) error
-	// Refresh rotation. Every identity field -- family, client, user, grant,
-	// and family expiry -- is read from the predecessor row rather than trusted
-	// from the caller, so a rotated token structurally cannot join a different
-	// family, client, user, or grant than the token it succeeds. A missing
-	// predecessor selects no row and returns pgx.ErrNoRows instead of inserting an
-	// orphan. The partial unique index on rotated_from means one predecessor can
-	// mint at most one successor even under concurrent rotations.
 	InsertRotatedOAuthToken(ctx context.Context, arg InsertRotatedOAuthTokenParams) (OAuthToken, error)
-	// Holds no account link (docs/design/product.md): the released slug and its
-	// release time are the only claim needed to reserve it.
 	InsertSlugTombstone(ctx context.Context, arg InsertSlugTombstoneParams) (SlugTombstone, error)
-	// First install under the user lock. The caller generates id as a UUIDv7 and
-	// seals the secret with it before this insert (docs/design/totp-key-management.md#sealing).
 	InstallTOTPCredential(ctx context.Context, arg InstallTOTPCredentialParams) (TotpCredential, error)
 	LatchPrivacyNoticeAbort(ctx context.Context, contentSha256 []byte) (int64, error)
 	ListAccountDeletionResumeSetForUpdate(ctx context.Context, userID uuid.UUID) ([]ListAccountDeletionResumeSetForUpdateRow, error)
 	ListAccountExportProjects(ctx context.Context, userID uuid.UUID) ([]Project, error)
 	ListAccountExportProviders(ctx context.Context, userID uuid.UUID) ([]string, error)
-	// Carries sign_in_to_view with the other publish settings; the pass epoch
-	// never leaves the server (docs/design/viewer-analytics/sign-in-to-view.md
-	// "Setting"). The showcase columns are null without an opt-in
-	// (docs/design/showcase.md "Privacy and abuse").
 	ListAccountExportResumes(ctx context.Context, userID uuid.UUID) ([]ListAccountExportResumesRow, error)
-	// Discovery bytes contain only eligible slugs in raw byte order. The
-	// COALESCE is unreachable under the predicate and gives sqlc a non-null Go
-	// string instead of a pointer.
+	// COALESCE gives sqlc a non-null Go string instead of a pointer (sqlc nullability inference).
 	ListEligiblePublicSlugs(ctx context.Context) ([]string, error)
 	ListFailedPrivacyNoticeRecipients(ctx context.Context, failureCode *string) ([]PrivacyNoticeRecipient, error)
-	// Ordered by creation time then ID, oldest first with a deterministic tie-breaker.
 	ListIdentitiesByUserID(ctx context.Context, userID uuid.UUID) ([]Identity, error)
 	// The bounded idle-client sweep: clients registered before
 	// idle_before that hold no live grant and no live token. FOR UPDATE SKIP
@@ -566,18 +263,8 @@ type Querier interface {
 	// Startup readiness: the distinct key IDs every pending/leased (non-terminal,
 	// non-expired) job references. The key ring must decrypt all of them.
 	ListLiveAuthEmailJobKeyIDs(ctx context.Context, now time.Time) ([]string, error)
-	// The connected-agents list: client name, scopes, and when the agent was
-	// connected and last used. Last-used comes from the grant's tokens rather than
-	// a duplicated column, so there is one source of truth for agent activity.
-	// Bounded by limit_rows; ordered newest-first with id as a deterministic
-	// tiebreaker.
-	//
-	// The correlated ORDER BY ... LIMIT 1 is deliberate where max() would read
-	// more naturally: sqlc cannot type an aggregate expression and emits
-	// interface{} for it, while a plain nullable column reference keeps the Go
-	// type *time.Time — NULL for a grant whose tokens have never been used.
+	// sqlc types an aggregate such as max() as interface{}, so ORDER BY ... LIMIT 1 keeps *time.Time (sqlc type inference).
 	ListLiveOAuthGrantsForUser(ctx context.Context, arg ListLiveOAuthGrantsForUserParams) ([]ListLiveOAuthGrantsForUserRow, error)
-	// Every live resume and the version of its stored card, NULL when none.
 	ListLiveResumePreviewCardVersions(ctx context.Context) ([]ListLiveResumePreviewCardVersionsRow, error)
 	// Lists sessions that internal/auth also considers live:
 	//
@@ -608,123 +295,49 @@ type Querier interface {
 	ListResumeShowcasesForUser(ctx context.Context, userID uuid.UUID) ([]ResumeShowcase, error)
 	ListResumeViewDays(ctx context.Context, arg ListResumeViewDaysParams) ([]ListResumeViewDaysRow, error)
 	ListResumesForUser(ctx context.Context, userID uuid.UUID) ([]Resume, error)
-	// The public listing. One statement checks all three listing conditions: the
-	// opt-in row exists, the resume is live, and sign in to view is off. It reads
-	// committed state on every call; nothing caches it. The page needs only the
-	// personal details (for the card's image text), so it reads no other document
-	// part; schema_version tells the caller whether those details are current.
 	ListShowcase(ctx context.Context, arg ListShowcaseParams) ([]ListShowcaseRow, error)
-	// Bounded key-ring health check across both tables without decrypting. A
-	// healthy ring holds at most two distinct IDs (one active, at most one
-	// previous); reading up to three is enough to prove a third, unknown ID
-	// exists (docs/design/totp-key-management.md#key-failures).
 	ListTOTPActiveKeyIDs(ctx context.Context, now time.Time) ([]string, error)
-	// Bounded re-encryption batch: at most 200 rows off the active key, in id
-	// order after after_id, skipping any row a live factor transaction already
-	// holds (docs/design/totp-key-management.md#rotation). The after_id cursor
-	// lets the caller page past a row it already visited in an earlier batch of
-	// the same run (for example one that failed to decrypt and so stays off
-	// the active key), instead of reselecting it until the row budget is spent.
 	ListTOTPCredentialsOffActiveKey(ctx context.Context, arg ListTOTPCredentialsOffActiveKeyParams) ([]TotpCredential, error)
-	// Bounded re-encryption batch for enrollments, same shape and after_id
-	// paging cursor as ListTOTPCredentialsOffActiveKey. The caller deletes an
-	// expired row here outright instead of decrypting it
-	// (docs/design/totp-key-management.md#rotation).
 	ListTOTPEnrollmentsOffActiveKey(ctx context.Context, arg ListTOTPEnrollmentsOffActiveKeyParams) ([]TotpEnrollment, error)
 	ListUnqueuedPrivacyNoticeRecipients(ctx context.Context) ([]PrivacyNoticeRecipient, error)
 	ListUserPrivacyNoticeRecipientsForUpdate(ctx context.Context, userID *uuid.UUID) ([]PrivacyNoticeRecipient, error)
-	// Every owned resume that is live or has counts, with totals over the last
-	// 7, 30, and 90 days.
 	ListViewSummaries(ctx context.Context, arg ListViewSummariesParams) ([]ListViewSummariesRow, error)
 	ListWebAuthnCredentialsForUser(ctx context.Context, userID uuid.UUID) ([]WebauthnCredential, error)
-	// Account deletion follows the lock order in docs/design/data.md: these
-	// account-scoped locks come first, then slug advisory locks in sorted
-	// order, then public_state.
 	LockCanonicalAccountEmail(ctx context.Context, email string) error
 	LockPrivacyNoticeCommand(ctx context.Context) error
 	LockPrivacyNoticeJob(ctx context.Context, id uuid.UUID) error
 	LockPublicState(ctx context.Context) (PublicState, error)
-	// FOR SHARE makes a card store wait for, or block, an unpublish, rename, or
-	// delete of the same resume, since those lock the row for update. The row
-	// returned is the latest committed one, so the caller recomputes the card
-	// version from it before it writes.
 	LockResumeForPreviewCard(ctx context.Context, id uuid.UUID) (Resume, error)
 	LockSlugClaim(ctx context.Context, slug string) error
 	LockUserForResumeWrite(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
-	// SES accepted: clears every encryption and lease field and records sent_at.
 	MarkAuthEmailJobSent(ctx context.Context, arg MarkAuthEmailJobSentParams) (int64, error)
-	// Permanent failure, expiry, or the eighth attempt: clears every encryption and
-	// lease field and records terminal_at. A stale pending job may terminate
-	// without ever being leased (attempts stays 0).
 	MarkAuthEmailJobTerminal(ctx context.Context, arg MarkAuthEmailJobTerminalParams) (int64, error)
 	MarkClaimedMediaDeletionOverdue(ctx context.Context, arg MarkClaimedMediaDeletionOverdueParams) (bool, error)
 	MarkMediaDeletionOverduePage(ctx context.Context, arg MarkMediaDeletionOverduePageParams) (int64, error)
 	MediaObjectHasLiveReference(ctx context.Context, objectKey string) (bool, error)
-	// Normalizes a candidate response through the same jsonb representation an
-	// insert would store and reports the exact byte count the usage
-	// reservation must account for — the one canonical byte expression shared
-	// with backfill, insert, and cleanup.
 	NormalizeIdempotencyResponse(ctx context.Context, arg NormalizeIdempotencyResponseParams) (NormalizeIdempotencyResponseRow, error)
 	PrivacyNoticeAbortProof(ctx context.Context) (PrivacyNoticeAbortProofRow, error)
 	PrivacyNoticeCaptureProof(ctx context.Context) (PrivacyNoticeCaptureProofRow, error)
 	PrivacyNoticeDatabaseTime(ctx context.Context) (time.Time, error)
 	PrivacyNoticeTotals(ctx context.Context) (PrivacyNoticeTotalsRow, error)
 	ProjectDocumentBytes(ctx context.Context, document json.RawMessage) (int32, error)
-	// Compares the stored document with a replacement in the jsonb form
-	// ReplaceProjectCAS stores, so formatting or key order is never a change.
 	ProjectStoredDocumentEquals(ctx context.Context, arg ProjectStoredDocumentEqualsParams) (bool, error)
 	ProposeProjectSlug(ctx context.Context, arg ProposeProjectSlugParams) (string, error)
-	// sign_in_to_view is the caller's already-merged final value (an omitted
-	// publish field keeps the stored value before this query ever runs; see
-	// docs/design/viewer-analytics/sign-in-to-view.md "Setting", AC-VIEW-001).
-	// view_pass_epoch rises exactly when the switch turns on (from false to
-	// true, whatever the live transition) or when it stays on and the resume
-	// becomes live again after not being live, so passes from an earlier
-	// period stop working (design "Gated routes"; AC-VIEW-007). Both
-	// conditions read resume.* as the pre-update row, since a single UPDATE
-	// statement evaluates its FROM/SET expressions against the row as it was
-	// before this statement.
+	// A single UPDATE evaluates its SET and FROM expressions against the pre-update row (PostgreSQL UPDATE).
 	PublishResumeCAS(ctx context.Context, arg PublishResumeCASParams) (Resume, error)
 	PurgeRetiredPrivacyNoticeRecipients(ctx context.Context, contentSha256 []byte) (int64, error)
 	QueuePrivacyNoticeRecipient(ctx context.Context, arg QueuePrivacyNoticeRecipientParams) (int64, error)
 	RecordPendingAuthenticationFailure(ctx context.Context, arg RecordPendingAuthenticationFailureParams) (PendingAuthentication, error)
 	RecordPrivacyNoticeLateFailure(ctx context.Context, arg RecordPrivacyNoticeLateFailureParams) (int64, error)
-	// Increments the consecutive-failure counter, saturating at 1,000, and on
-	// every fifth consecutive failure sets a cool-down of 15 minutes doubling to
-	// at most 24 hours (docs/design/totp-second-factor-contract.md#per-account-totp-failure-budget).
-	// The WHERE guard repeats the cool-down check GetTOTPCredentialForUpdate
-	// already made, so this only ever applies to a row not currently cooling
-	// down. Every counted failure also sets last_failed_at, which gates whether a
-	// later valid code may reset the budget.
 	RecordTOTPCredentialFailure(ctx context.Context, arg RecordTOTPCredentialFailureParams) (TotpCredential, error)
 	RecoverPrivacyNoticeRecipient(ctx context.Context, arg RecoverPrivacyNoticeRecipientParams) (int64, error)
-	// Session IP and user agent are redacted before the session's absolute expiry
-	// (docs/design/operations.md), not by created_at, so a rotation or reissue
-	// successor that inherits the original absolute expiry cannot extend how long
-	// its metadata survives. The caller's cutoff already carries the redaction
-	// lead ahead of now, so this query only compares absolute_expires_at to it.
 	RedactSessionMetadataPage(ctx context.Context, arg RedactSessionMetadataPageParams) (int64, error)
-	// Key-ID compare-before-update: the WHERE clause only applies the rewrite
-	// when the row is still sealed under the exact key the caller decrypted, so
-	// a row already rewritten by a concurrent run is left alone.
 	ReencryptTOTPCredential(ctx context.Context, arg ReencryptTOTPCredentialParams) (int64, error)
-	// Key-ID compare-before-update for an unexpired enrollment row.
 	ReencryptTOTPEnrollment(ctx context.Context, arg ReencryptTOTPEnrollmentParams) (int64, error)
-	// Releases exactly the counters of physically deleted records, in the same
-	// transaction as their deletion. The migration's purge-then-backfill order
-	// plus transactional maintenance guarantee this can never underflow the
-	// non-negative checks.
 	ReleaseIdempotencyUsage(ctx context.Context, arg ReleaseIdempotencyUsageParams) (int64, error)
 	ReopenPrivacyNoticeCampaign(ctx context.Context, contentSha256 []byte) (int64, error)
 	ReplaceProjectCAS(ctx context.Context, arg ReplaceProjectCASParams) (Project, error)
-	// Replacement under the row lock from GetTOTPCredentialForUpdate: keeps the
-	// existing id and created_at, reseals under a fresh nonce, and resets the
-	// failure budget, including last_failed_at, because a fresh secret cannot
-	// inherit a stale cool-down.
 	ReplaceTOTPCredential(ctx context.Context, arg ReplaceTOTPCredentialParams) (TotpCredential, error)
-	// A temporary failure releases the lease back to pending with the next attempt
-	// time, retaining ciphertext and the already-incremented attempt count. The
-	// caller never requeues at attempts = 8 (that path marks terminal instead).
 	RequeueAuthEmailJob(ctx context.Context, arg RequeueAuthEmailJobParams) (int64, error)
 	RequeueClaimedMediaDeletion(ctx context.Context, arg RequeueClaimedMediaDeletionParams) (int64, error)
 	// Bounded stale-lease recovery: a lease that expired without a completed send
@@ -732,99 +345,32 @@ type Querier interface {
 	// never happened) and re-dueing immediately. Ordered so repeated calls make
 	// monotonic progress.
 	RequeueExpiredAuthEmailLeases(ctx context.Context, arg RequeueExpiredAuthEmailLeasesParams) (int64, error)
-	// Generic reset to the zero failure budget. Callers decide when this runs
-	// (a successful code at least 24 hours past the last failure, a replacement,
-	// or a removal); storage only guarantees it always clears all three fields
-	// together (docs/design/totp-second-factor-contract.md#per-account-totp-failure-budget).
-	// A completed password reset never calls this: it leaves the budget
-	// unchanged.
 	ResetTOTPCredentialFailureBudget(ctx context.Context, arg ResetTOTPCredentialFailureBudgetParams) (TotpCredential, error)
 	RetirePrivacyNoticeCampaign(ctx context.Context, arg RetirePrivacyNoticeCampaignParams) (int64, error)
-	// Logout-everywhere: revokes every one of the user's not-already-revoked
-	// sessions and reports how many rows that affected.
 	RevokeAllSessions(ctx context.Context, arg RevokeAllSessionsParams) (int64, error)
-	// Internal revocation (RFC 7009 and consumed-code replay), where the grant id
-	// came from a token row the caller already validated. Idempotent: revoking an
-	// already-revoked grant affects zero rows.
 	RevokeOAuthGrant(ctx context.Context, arg RevokeOAuthGrantParams) (int64, error)
 	// The settings-page revocation. Ownership is part of the predicate, so a
 	// missing, already-revoked, and differently owned grant all return
 	// pgx.ErrNoRows and no existence oracle appears.
 	RevokeOAuthGrantForUser(ctx context.Context, arg RevokeOAuthGrantForUserParams) (OAuthGrant, error)
-	// Superseded-token replay defense: every still-live member of one family dies
-	// together, in the caller's transaction, under the grant row lock.
 	RevokeOAuthTokenFamily(ctx context.Context, arg RevokeOAuthTokenFamilyParams) (int64, error)
-	// Grant revocation kills every family issued under it, not just the newest.
 	RevokeOAuthTokensForGrant(ctx context.Context, arg RevokeOAuthTokensForGrantParams) (int64, error)
-	// Idempotent: revoking an already-revoked (or nonexistent) session id
-	// affects zero rows rather than erroring, so logout/revoke can be retried
-	// safely. revoked_at is immediate and orthogonal to rotation_grace_until
-	// and this query never changes that column.
 	RevokeSession(ctx context.Context, arg RevokeSessionParams) error
-	// Revokes only a live session owned by user_id. The live predicates match
-	// ListLiveSessionsForUser so a hidden expired session cannot be reported as
-	// revoked. The affected-row count lets the caller return the same absence
-	// result for missing, expired, and differently owned sessions.
 	RevokeSessionForUser(ctx context.Context, arg RevokeSessionForUserParams) (int64, error)
 	SaveMediaOrphanSweepCursor(ctx context.Context, arg SaveMediaOrphanSweepCursorParams) (int64, error)
 	SealPrivacyNoticeCampaign(ctx context.Context, contentSha256 []byte) (int64, error)
-	// Starts a predecessor's short grace period after its successor is first
-	// used. BeginSessionRotation parks rotation_grace_until at
-	// min(now + rotationAge, its own absolute_expires_at) -- non-NULL, so the
-	// rotation CAS still
-	// admits exactly one winner, far enough out that a successor whose one and
-	// only raw-token delivery was lost never orphans the lineage, and bounded
-	// so a predecessor that is never superseded in practice still expires on a
-	// credential's timescale rather than the session's. This is the statement
-	// that converts that parked value into a real, short deadline once the
-	// successor's token has provably reached a client.
-	//
-	// The `rotation_grace_until > grace_until` predicate makes it
-	// monotonically SHRINKING and idempotent: the first call moves the
-	// deadline in from the parked bound to first-use + rotationGrace;
-	// every later call (the same successor's second, third, ... request, or a
-	// concurrent one racing it) proposes a LATER deadline and therefore
-	// matches no row. A predecessor's grace can never be pushed back out by
-	// continued use of the successor, which would otherwise keep a superseded
-	// credential alive indefinitely.
 	StartSessionRotationGrace(ctx context.Context, arg StartSessionRotationGraceParams) error
-	// Marks the presented refresh token superseded as part of a rotation. family_id
-	// is part of the predicate, so a caller holding one family's identifier can
-	// never mark a token belonging to another family, and a second supersession of
-	// the same row affects nothing (pgx.ErrNoRows) -- which is exactly the replay
-	// the caller turns into a whole-family revocation.
 	SupersedeOAuthToken(ctx context.Context, arg SupersedeOAuthTokenParams) (OAuthToken, error)
-	// Unconditional: callers throttle to at most once per lastSeenThrottle
-	// themselves (internal/auth.SessionManager.Authenticate) before issuing
-	// this write, so it is not itself CAS-guarded.
 	TouchLastSeenAt(ctx context.Context, arg TouchLastSeenAtParams) error
-	// Bounded activity record: at most one write per client per touch window. The
-	// caller passes touch_before = now - window, so the throttle is enforced by
-	// the predicate rather than by caller bookkeeping.
 	TouchOAuthClientLastUsed(ctx context.Context, arg TouchOAuthClientLastUsedParams) (int64, error)
-	// Bounded activity record: at most one write per token per touch window,
-	// and never on a revoked token. The caller passes touch_before = now - window.
 	TouchOAuthTokenLastUsed(ctx context.Context, arg TouchOAuthTokenLastUsedParams) (int64, error)
-	// Records that this session's lineage just completed a full OAuth login
-	// after a real reauthentication round trip, never by rotation.
 	TouchReauthenticatedAt(ctx context.Context, arg TouchReauthenticatedAtParams) error
-	// Privacy retention queries. Every mutation is bounded and ordered;
-	// command-level advisory locks are session locks held on a dedicated pooled
-	// connection for the whole run.
 	TryLockIdempotencyExpirySweep(ctx context.Context) (bool, error)
 	TryLockPrivacyRetentionSweep(ctx context.Context) (bool, error)
-	// Conditionally admits one new retained record of record_bytes stored
-	// bytes within the caps. Zero rows (pgx.ErrNoRows) means the insert would
-	// exceed a cap and the caller must reject with the typed capacity error
-	// without committing the mutation.
 	TryReserveIdempotencyUsage(ctx context.Context, arg TryReserveIdempotencyUsageParams) (TryReserveIdempotencyUsageRow, error)
 	UnlockIdempotencyExpirySweep(ctx context.Context) (bool, error)
 	UnlockPrivacyRetentionSweep(ctx context.Context) (bool, error)
 	UpdateCurrentSessionProofs(ctx context.Context, arg UpdateCurrentSessionProofsParams) (Session, error)
-	// Returns the stored row, so the caller needs no reread; its revision is the
-	// NEW revision (revision + 1), never the caller's expected one. A stale or
-	// non-matching $3 updates zero rows and surfaces as pgx.ErrNoRows, which
-	// internal/resume turns into *RevisionMismatchError or ErrNotFound.
 	UpdateResumeDocumentCAS(ctx context.Context, arg UpdateResumeDocumentCASParams) (Resume, error)
 	// The full-aggregate metadata write: title, lng, and the
 	// caller's complete already-projected document under ONE revision CAS. The
@@ -835,10 +381,6 @@ type Querier interface {
 	UpdateResumeMetadataAndDocumentCAS(ctx context.Context, arg UpdateResumeMetadataAndDocumentCASParams) (int64, error)
 	UpdateResumeShowcaseDerived(ctx context.Context, arg UpdateResumeShowcaseDerivedParams) error
 	UpdateResumeShowcaseRole(ctx context.Context, arg UpdateResumeShowcaseRoleParams) error
-	// The returned revision is the NEW revision (revision + 1), never the
-	// caller's expected one. A stale or non-matching $3 updates zero rows and
-	// surfaces as pgx.ErrNoRows, which internal/resume turns into
-	// *RevisionMismatchError or ErrNotFound.
 	UpdateResumeTitleCAS(ctx context.Context, arg UpdateResumeTitleCASParams) (int64, error)
 	UpdateWebAuthnCredentialAfterAssertion(ctx context.Context, arg UpdateWebAuthnCredentialAfterAssertionParams) (WebauthnCredential, error)
 	// Consent approval: records a new grant or refreshes the live one's
@@ -848,12 +390,7 @@ type Querier interface {
 	// list shows when the agent was first connected, not when it was last
 	// re-approved.
 	UpsertOAuthGrant(ctx context.Context, arg UpsertOAuthGrantParams) (OAuthGrant, error)
-	// Approval alone calls this query, before user and session locks. The unique
-	// URL index serializes concurrent approvals and preserves the internal UUID.
 	UpsertOAuthMetadataClient(ctx context.Context, arg UpsertOAuthMetadataClientParams) (OAuthClient, error)
-	// Insert-or-replace the single credential under the row lock the caller
-	// already holds (GetPasswordCredentialForUpdate), re-encoding the hash and
-	// bumping changed_at on the conflict arm.
 	UpsertPasswordCredential(ctx context.Context, arg UpsertPasswordCredentialParams) (PasswordCredential, error)
 	UpsertResumePreviewCard(ctx context.Context, arg UpsertResumePreviewCardParams) error
 }

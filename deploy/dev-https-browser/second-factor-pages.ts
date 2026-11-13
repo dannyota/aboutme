@@ -1,9 +1,3 @@
-/**
- * Page journeys shared by the two second-factor browser proofs: warming and
- * hydration, private fixture accounts, password sign-in and sign-out, recovery
- * codes, reauthentication, agent grants, and account teardown. They record stages
- * through the harness in `second-factor-lib.ts`.
- */
 import {
   expect,
   type BrowserContext,
@@ -35,8 +29,6 @@ import {
   WAIT_WARM_MS,
 } from './second-factor-lib';
 
-// --- Page helpers ----------------------------------------------------------
-
 export async function setLocale(
   context: BrowserContext,
   locale: 'en' | 'vi',
@@ -46,49 +38,23 @@ export async function setLocale(
   ]);
 }
 
-/**
- * Pages the journey opens that are safe to warm with no session, each with
- * the closed word that names it. A first visit is compiled on demand by the
- * harness's dev server, so paying them once, up front and in a stage of their
- * own, keeps a later failure about the behaviour under test rather than about
- * a cold route. None of these issues a request while signed out beyond the
- * reads each proof's console filter already accepts.
- *
- * The reset page takes its token from the URL fragment and is deliberately
- * absent. It reads the fragment during setup, on the client only, because
- * the token must never reach the server, and with no fragment it sets its
- * own failure state before hydration. The server render and the first client
- * render then disagree and the development build says so on the console.
- * Every other page here starts in the same state on both sides. The journey
- * opens the reset page with a real token under the first-visit bound.
- */
 export const WARM_ROUTES: ReadonlyArray<readonly [string, string]> = [
   ['/login', 'login'],
   ['/login/second-factor', 'login-second-factor'],
   ['/forgot-password', 'forgot-password'],
 ];
 
-/**
- * Pages that require a session. Warming these signed out would make the
- * account reads behind them answer 401, which is correct behaviour but noise
- * each proof would then have to accept everywhere, so they are warmed once
- * the journey has a session instead. The one landing that reaches an app
- * page before that runs under the landing bound.
- */
 export const SIGNED_IN_WARM_ROUTES: ReadonlyArray<readonly [string, string]> = [
   ['/app/resumes', 'app-resumes'],
   ['/app/settings/sessions', 'app-settings-sessions'],
 ];
 
-/** The signed-out page the disabled-enrollment journey opens first. */
 export const DISABLED_WARM_ROUTES: ReadonlyArray<readonly [string, string]> = [
   ['/login', 'login'],
 ];
 
-/** The counter classes a warm visit may move, as closed words. */
 export type CounterClass = 'certificate' | 'console' | 'external' | 'page';
 
-/** The first counter class that moved, or null when the visit was clean. */
 export function dirtiedCounter(
   before: DiagnosticCounters,
   after: DiagnosticCounters,
@@ -102,12 +68,6 @@ export function dirtiedCounter(
   return null;
 }
 
-/**
- * Opens each route once, so its first compile happens in a stage that names
- * it, and checks the diagnostic counters after every visit rather than once
- * at the end. A page that dirties a counter names itself and the counter
- * class before the assertion fails.
- */
 export async function warmRoutes(
   page: Page,
   routes: ReadonlyArray<readonly [string, string]>,
@@ -140,7 +100,6 @@ export async function gotoHydrated(page: Page, path: string): Promise<void> {
   await hydrated(page, WAIT_HYDRATE_MS);
 }
 
-/** Opens a page the warm pass skips, at first-visit cost. */
 export async function gotoFirstVisit(page: Page, url: string): Promise<void> {
   await page.goto(url, { timeout: WAIT_WARM_MS });
   await hydrated(page, WAIT_WARM_MS);
@@ -156,14 +115,11 @@ export async function meStatus(page: Page): Promise<number> {
   });
 }
 
-// --- Account journeys ------------------------------------------------------
-
 interface FactorLogin {
   readonly email: string;
   readonly password: string;
 }
 
-/** Reads only the private run-scoped accounts prepared by the local fixture. */
 export async function readSecondFactorAccounts(
   proof: 'passkey' | 'totp',
 ): Promise<(role: string) => FactorLogin> {
@@ -228,12 +184,6 @@ export async function readSecondFactorAccounts(
   };
 }
 
-/**
- * Submits the password sign-in form and reports whether the account was sent
- * to the pending second-factor page instead of receiving a session. The
- * fields are found by id and the button by its form, not by label, because
- * the locale journey signs in with the page in Vietnamese.
- */
 export async function passwordSignIn(
   page: Page,
   email: string,
@@ -267,16 +217,6 @@ export async function passwordSignIn(
   return 'session';
 }
 
-/**
- * Logs out from the settings page in English, whatever locale the previous
- * step left. In a sharded run, no-ops without navigating when no session
- * exists yet: a shard's first role has no session yet, and visiting
- * /app/settings/sessions while signed out logs unexpected 401s from the API
- * calls the settings page makes on the way to redirecting to /login. The
- * unsharded default always expects a session and still fails if there is
- * none, so a broken logout keeps failing an unsharded run. A caller that
- * wants another locale sets it after this returns.
- */
 export async function signOut(page: Page): Promise<void> {
   await setLocale(page.context(), 'en');
   if (isSharded()
@@ -284,22 +224,17 @@ export async function signOut(page: Page): Promise<void> {
   await gotoHydrated(page, '/app/settings/sessions');
   await page.getByRole('button', { name: 'Log out', exact: true }).click();
   await page.waitForURL(`${ORIGIN}/login`, { timeout: WAIT_NAVIGATION_MS });
-  // The logout response's Clear-Site-Data drops every cookie. The app writes
-  // the language choice back before it leaves for /login, so English
-  // survives without the proof pinning it again.
   await expect.poll(
     () => cookieValue(page.context(), LOCALE_COOKIE),
     { timeout: WAIT_RESPONSE_MS },
   ).toBe('en');
 }
 
-/** Asserts the browser holds a signed-in app session, wherever it landed. */
 export async function expectSignedInApp(page: Page): Promise<void> {
   expect(APP_LANDINGS).toContain(landingCategory(page.url()));
   expect(await meStatus(page)).toBe(200);
 }
 
-/** Submits one recovery code by keyboard and returns the response status. */
 export async function submitRecoveryCode(page: Page, code: string): Promise<number> {
   const response = page.waitForResponse((candidate) => {
     const url = new URL(candidate.url());
@@ -313,13 +248,11 @@ export async function submitRecoveryCode(page: Page, code: string): Promise<numb
   return (await response).status();
 }
 
-/** Completes the open pending authentication with one recovery code. */
 export async function completeWithRecovery(page: Page, code: string): Promise<void> {
   expect(await submitRecoveryCode(page, code)).toBe(204);
   await landedAfter(page, '/login/second-factor');
 }
 
-/** Answers the settings reauthentication prompt with the account password. */
 export async function reauthenticateWithPassword(
   page: Page,
   password: string,
@@ -331,12 +264,6 @@ export async function reauthenticateWithPassword(
     .toHaveCount(0);
 }
 
-/**
- * Makes the next request to `pathname` answer `403 reauth_required` inside the
- * browser, which drives the settings block into its reauthentication branch
- * without waiting out the fifteen-minute window. The request never leaves the
- * page, so the real route and its budgets are untouched.
- */
 export async function forceReauthOnce(page: Page, pathname: string): Promise<void> {
   let spent = false;
   await page.route(`${ORIGIN}${pathname}`, async (route: Route) => {
@@ -360,7 +287,6 @@ export async function forceReauthOnce(page: Page, pathname: string): Promise<voi
   });
 }
 
-/** Reads the one-time recovery codes from the open reveal dialog. */
 export async function readRevealedCodes(page: Page): Promise<string[]> {
   const reveal = page.getByTestId('recovery-reveal');
   const list = page.getByTestId('recovery-codes-list');
@@ -374,7 +300,6 @@ export async function readRevealedCodes(page: Page): Promise<string[]> {
   return codes;
 }
 
-/** Closes the reveal and proves the plaintext left every page-held store. */
 export async function closeRevealAndProveCleared(
   page: Page,
   codes: readonly string[],
@@ -394,9 +319,6 @@ export async function closeRevealAndProveCleared(
   expect(leaked).toBe(false);
 }
 
-// --- Agent grants ----------------------------------------------------------
-
-/** Registers a connected agent and completes one consent round trip. */
 export async function createAgentGrant(
   context: BrowserContext,
   page: Page,
@@ -481,7 +403,6 @@ export async function createAgentGrant(
   return accessToken;
 }
 
-/** The status a connected agent gets when it lists tools with its token. */
 export async function agentToolsStatus(page: Page, token: string): Promise<number> {
   return page.evaluate(async (bearer) => {
     const response = await fetch('/mcp', {
@@ -504,7 +425,6 @@ export async function agentToolsStatus(page: Page, token: string): Promise<numbe
   }, token);
 }
 
-/** One locale and width a pending sign-in is completed at by keyboard. */
 export interface PendingLocaleCase {
   readonly code: string;
   readonly email: string;
@@ -513,22 +433,12 @@ export interface PendingLocaleCase {
   readonly viewport: { readonly height: number; readonly width: number };
 }
 
-// --- Teardown --------------------------------------------------------------
-
 export interface AccountTeardown {
   readonly email: string;
   readonly password: string;
-  /** An unused recovery code, when the account is still enrolled. */
   readonly recoveryCode: string;
 }
 
-/**
- * Removes one fictional account. An enrolled account finishes its pending
- * sign-in with a spare recovery code, which sets both verification times and
- * therefore satisfies the deletion boundary without a further round trip.
- * `landingTimeoutMs` bounds the sign-in landing; a proof whose accounts land
- * fast in teardown passes a tighter bound than the first-visit one.
- */
 export async function deleteAccount(
   page: Page,
   account: AccountTeardown,
@@ -575,7 +485,6 @@ export async function deleteAccount(
   }
 }
 
-/** Deletes the account the current page is signed into. */
 export async function deleteSignedInAccount(page: Page): Promise<boolean> {
   await gotoHydrated(page, '/app/settings/sessions');
   if (await meStatus(page) !== 200) return false;

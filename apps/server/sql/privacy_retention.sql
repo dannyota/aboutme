@@ -1,7 +1,3 @@
--- Privacy retention queries. Every mutation is bounded and ordered;
--- command-level advisory locks are session locks held on a dedicated pooled
--- connection for the whole run.
-
 -- name: TryLockIdempotencyExpirySweep :one
 SELECT pg_try_advisory_lock(hashtextextended('aboutme.idempotency-expiry-sweep.v1', 0));
 
@@ -9,12 +5,6 @@ SELECT pg_try_advisory_lock(hashtextextended('aboutme.idempotency-expiry-sweep.v
 SELECT pg_advisory_unlock(hashtextextended('aboutme.idempotency-expiry-sweep.v1', 0));
 
 -- name: ExpireIdempotencyPage :one
--- Candidates come from expired records in (expires_at, id) order, not from
--- every account. Each record's user is locked before any replay row or usage
--- counter, matching every resume writer. LIMIT counts only rows whose user
--- lock succeeded, so SKIP LOCKED passes over a busy user's records and later
--- users still fill the page. ARRAY() reads every locked row before the first
--- replay row is locked.
 WITH locked AS MATERIALIZED (
     SELECT record.id
     FROM idempotency_records AS record
@@ -72,11 +62,6 @@ SELECT pg_try_advisory_lock(hashtextextended('aboutme.privacy-retention-sweep.v1
 SELECT pg_advisory_unlock(hashtextextended('aboutme.privacy-retention-sweep.v1', 0));
 
 -- name: RedactSessionMetadataPage :execrows
--- Session IP and user agent are redacted before the session's absolute expiry
--- (docs/design/operations.md), not by created_at, so a rotation or reissue
--- successor that inherits the original absolute expiry cannot extend how long
--- its metadata survives. The caller's cutoff already carries the redaction
--- lead ahead of now, so this query only compares absolute_expires_at to it.
 WITH candidates AS MATERIALIZED (
     SELECT id
     FROM sessions
@@ -92,11 +77,6 @@ FROM candidates
 WHERE session.id = candidates.id;
 
 -- name: GetSessionMetadataBacklog :one
--- oldest_age_seconds is age since the original sign-in, not since
--- absolute_expires_at, matching every other *_oldest_seconds field: a
--- session's absolute expiry is sign-in plus the fixed 90-day absolute timeout
--- (docs/design/security.md), so subtracting that interval back out of
--- absolute_expires_at recovers the sign-in time.
 SELECT count(*)::bigint AS backlog,
        (COALESCE(floor(extract(epoch FROM
            greatest(sqlc.arg(now)::timestamptz - (min(absolute_expires_at) - interval '90 days'), interval '0 seconds'))), 0))::bigint
@@ -106,24 +86,6 @@ WHERE absolute_expires_at <= sqlc.arg(cutoff)::timestamptz
   AND (ua IS NOT NULL OR ip IS NOT NULL);
 
 -- name: DeleteExpiredSessionsPage :execrows
--- Deletes session rows, revoked or not, whose absolute expiry is at or before
--- the cutoff, which the caller sets seven days before now. Rotation and reissue
--- copy absolute_expires_at unchanged, so every token in a rotation chain is
--- already dead by then.
---
--- The statement never waits for a row lock. It first locks, with SKIP LOCKED,
--- every row its delete reaches: the sessions, their expired pending
--- authentications, WebAuthn ceremonies (also those bound to such a pending
--- authentication) and TOTP enrollments, which ON DELETE CASCADE removes, and
--- the successors whose rotated_from ON DELETE SET NULL clears. A session whose
--- successor or referencing row it could not lock stays for a later page. So it
--- takes no user lock, cannot deadlock with sign-in, rotation, revocation or
--- account deletion, and never removes a live row.
---
--- This relies on no new row referencing a dead session: every path that
--- creates a pending authentication, ceremony or enrollment first locks its
--- session and requires it live (lockLiveSession). A reference committed after
--- this statement's snapshot would still be cascaded, and could make it wait.
 WITH candidates AS MATERIALIZED (
     SELECT id
     FROM sessions
@@ -178,8 +140,6 @@ USING doomed
 WHERE session.id = doomed.id;
 
 -- name: GetExpiredSessionsBacklog :one
--- oldest_age_seconds is age since the original sign-in, like the session
--- metadata backlog.
 SELECT count(*)::bigint AS backlog,
        (COALESCE(floor(extract(epoch FROM
            greatest(sqlc.arg(now)::timestamptz - (min(absolute_expires_at) - interval '90 days'), interval '0 seconds'))), 0))::bigint
@@ -252,8 +212,6 @@ FROM authentication_security_events
 WHERE occurred_at <= sqlc.arg(cutoff)::timestamptz;
 
 -- name: DeleteExpiredSlugTombstonesPage :execrows
--- A released slug stays reserved and unlinked from any account for 180 days
--- (docs/design/product.md), then the privacy sweep deletes the reservation.
 WITH candidates AS MATERIALIZED (
     SELECT id
     FROM slug_tombstones

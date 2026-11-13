@@ -13,7 +13,6 @@ import (
 )
 
 const claimMediaDeletionJobs = `-- name: ClaimMediaDeletionJobs :many
-
 WITH candidates AS MATERIALIZED (
     SELECT job.id
     FROM media_deletion_jobs AS job
@@ -42,8 +41,6 @@ type ClaimMediaDeletionJobsParams struct {
 	MaxRows        int32
 }
 
-// Media deletion and orphan-reconciliation queries. The document photo key is
-// the ownership authority; media_deletion_jobs is only durable cleanup work.
 func (q *Queries) ClaimMediaDeletionJobs(ctx context.Context, arg ClaimMediaDeletionJobsParams) ([]MediaDeletionJob, error) {
 	rows, err := q.db.Query(ctx, claimMediaDeletionJobs,
 		arg.LeaseID,

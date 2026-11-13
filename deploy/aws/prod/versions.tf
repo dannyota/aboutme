@@ -4,7 +4,6 @@ terraform {
     aws = { source = "hashicorp/aws", version = "~> 6.0" }
   }
 
-  # Bucket name comes from the ignored backend.hcl.
   backend "s3" {
     key          = "prod/terraform.tfstate"
     region       = "ap-southeast-1"

@@ -1,34 +1,4 @@
 #!/usr/bin/env bash
-# The quarterly restore drill (deploy/vn/README.md, "Restore drill").
-# Run it from the laptop. It orders a temporary
-# vServer, installs PostgreSQL 18 and pgBackRest on it from the bundle, restores
-# the latest backup and then a point-in-time target, checks each result, prints
-# the recovery times, and deletes the server.
-#
-#   restore-drill.sh --prod-host <ip> --vpc-id <id> \
-#     --subnet-id <id> --security-group-id <id> --max-price <vnd a month> \
-#     --admin-key-file <ssh-ed25519 public key> \
-#     [--target-time <ISO-8601 UTC, e.g. 2026-10-09T03:00:00Z>] \
-#     [--resume] [--keep] [--direct]
-#
-# - --resume adopts an existing server named aboutme-restore-drill, left by an
-#   earlier run, instead of refusing; the run then deletes it at the end.
-# - --keep leaves the server in place and prints its ID.
-# - The server has no public IP (the CLI never attaches one; wiki
-#   Compute-Servers.md). By default the script reaches its private address
-#   through the production host as an SSH jump host, so the security group must
-#   allow SSH from the production host. --direct connects to the private
-#   address straight from the laptop, for a VPN.
-#
-# The drill server is created with an encrypted root disk and no data disk.
-# The production copy lands on a separately created encrypted volume. A server
-# created with plain disks refuses an encrypted volume. Encryption at server
-# create adds one CES line of 30% of the flavor price (wiki Compute-Servers.md,
-# "Encrypted disks"). The volume needs `volume create-volume
-# --encryption-type-id` (CLI v0.59.0 and later); the script refuses an older CLI.
-# The exit trap deletes the server and the volume. Nothing here prints row data,
-# a secret, or secrets.conf: secrets.conf travels host to host in one pipe and
-# never touches the laptop disk.
 set -euo pipefail
 
 notice_host_invalid() { printf 'invalid_state\n' >&2; exit 1; }
@@ -355,12 +325,6 @@ order_server() {
   require_price "drill ${DATA_DISK_GB} GB encrypted volume" "$vquoted" "$max_price"
   require_price "drill total" "$(awk -v a="$quoted" -v b="$vquoted" 'BEGIN { printf "%d", a + b }')" "$max_price"
 
-  # First boot sets SSH access and a host key made for this run;
-  # host/install.sh owns the other host files (design "Host").
-  # The host key's public half is pinned before the first SSH (pin_host_key),
-  # so no connection trusts an unknown key. Its private half reaches the
-  # server only through the user data, lives in this run's tmpfs directory,
-  # and dies with the server.
   new_host_key
   file=$run/user-data.yaml
   {
@@ -497,8 +461,6 @@ connect_drill() {
   die "the drill server did not accept SSH within 10 minutes"
 }
 
-# Copies only host/ and the two scripts install.sh installs, never deploy/vn/prod
-# (it may hold ignored state and variable files).
 install_drill_host() {
   local bundle=/tmp/aboutme-bundle
   say "copying the bundle and installing PostgreSQL and pgBackRest"
@@ -513,15 +475,10 @@ install_drill_host() {
     die "expected exactly one data disk on the drill server, found: ${data_dev:-none}"
   rsh sudo bash "$bundle/host/data-volume.sh" "$data_dev" --format
   rsh sudo env ABOUTME_INSTALL_ONLY=postgres bash "$bundle/host/install.sh" "$bundle"
-  # Nothing on this server may archive WAL or back up to the production
-  # repository: stop the fresh cluster and any backup timer before the
-  # repository credentials arrive.
   rsh sudo systemctl stop postgresql@18-main.service
   rsh sudo bash -c 'systemctl stop "aboutme-backup*.timer" 2>/dev/null || true'
 }
 
-# One pipe from host to host. The file never reaches the laptop disk or the
-# terminal.
 copy_secrets() {
   say "copying pgBackRest secrets.conf from the production host"
   ssh "${prod_opts[@]}" "$ADMIN_USER@$prod_host" \

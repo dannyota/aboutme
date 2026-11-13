@@ -1,4 +1,3 @@
-# Remove this file after all ten records are imported and the next plan is empty.
 import {
   for_each = { for key, id in var.record_ids : key => id if contains(["apex", "www"], key) }
   to       = cloudflare_dns_record.address[each.key]

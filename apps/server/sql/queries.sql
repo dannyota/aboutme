@@ -1,8 +1,3 @@
--- Hand-written, sqlc-annotated queries (`-- name: X :one/:many/:exec`) that
--- become type-safe Go methods in internal/store via `make generate`.
--- Relational schema changes belong in apps/server/migrations; see
--- docs/design/data.md.
-
 -- name: CreateUser :one
 INSERT INTO users (email, name, avatar_key) VALUES ($1, $2, $3) RETURNING *;
 
@@ -16,35 +11,19 @@ SELECT * FROM users WHERE email = $1;
 SELECT * FROM identities WHERE provider = $1 AND provider_user_id = $2;
 
 -- name: CreateIdentity :one
--- The caller checks the provider subject first for the common case. The
--- database uniqueness constraint remains the concurrency backstop.
 INSERT INTO identities (user_id, provider, provider_user_id) VALUES ($1, $2, $3) RETURNING *;
 
 -- name: ListIdentitiesByUserID :many
--- Ordered by creation time then ID, oldest first with a deterministic tie-breaker.
 SELECT * FROM identities WHERE user_id = $1 ORDER BY created_at ASC, id ASC;
 
 -- name: DeleteIdentityForUser :execrows
--- Unlinks one identity only when it belongs to the given user. The caller holds
--- the user-row lock, so the last-sign-in-method check and this delete cannot
--- interleave with another unlink.
 DELETE FROM identities WHERE id = $1 AND user_id = $2;
 
 -- name: InsertIdentityUnlinkedAuditEvent :exec
--- Records the unlink's kind and time only: no user, provider, or identity.
 INSERT INTO lifecycle_audit_events (kind, occurred_at, media_job_id)
 VALUES ('identity_unlinked', sqlc.arg(occurred_at)::timestamptz, NULL);
 
 -- name: CreateSession :one
--- Always inserts a brand-new row -- used both by Issue (fixation defense: a
--- login never reuses an existing session row) and by the >24h rotation
--- winner's successor insert (internal/auth.SessionManager.Authenticate),
--- which passes the predecessor's user_id, reauthenticated_at,
--- absolute_expires_at, ua, and ip through unchanged so a rotation never
--- extends absolute expiry or silently satisfies the recent-reauth gate.
--- rotated_from is NULL for a fresh login and contains the predecessor id
--- for a rotated successor. The partial unique index makes this an exact,
--- one-successor lineage link.
 INSERT INTO sessions (
     user_id, token_hash, csrf_secret, created_at, last_seen_at, reauthenticated_at,
     absolute_expires_at, ua, ip, rotated_from, auth_epoch, second_factor_verified_at
@@ -53,8 +32,6 @@ INSERT INTO sessions (
 ) RETURNING *;
 
 -- name: GetSessionByTokenHash :one
--- Returns a session only while its copied authentication epoch equals the
--- account's current epoch, so a stale-epoch credential reads as unknown.
 SELECT * FROM sessions
 WHERE token_hash = $1
   AND EXISTS (
@@ -64,37 +41,11 @@ WHERE token_hash = $1
   );
 
 -- name: BeginSessionRotation :one
--- Single-row conditional UPDATE that decides the >24h rotation winner: only
--- a row that has neither already started rotating (rotation_grace_until
--- still NULL) nor been revoked is claimed. Under concurrent callers racing
--- the same session id, exactly one UPDATE affects a row (returns its id);
--- every other caller's UPDATE affects zero rows and pgx reports
--- pgx.ErrNoRows -- that caller lost the race and must not mint a second
--- successor (see internal/auth.SessionManager.Authenticate).
 UPDATE sessions SET rotation_grace_until = $2
 WHERE id = $1 AND rotation_grace_until IS NULL AND revoked_at IS NULL
 RETURNING id;
 
 -- name: StartSessionRotationGrace :exec
--- Starts a predecessor's short grace period after its successor is first
--- used. BeginSessionRotation parks rotation_grace_until at
--- min(now + rotationAge, its own absolute_expires_at) -- non-NULL, so the
--- rotation CAS still
--- admits exactly one winner, far enough out that a successor whose one and
--- only raw-token delivery was lost never orphans the lineage, and bounded
--- so a predecessor that is never superseded in practice still expires on a
--- credential's timescale rather than the session's. This is the statement
--- that converts that parked value into a real, short deadline once the
--- successor's token has provably reached a client.
---
--- The `rotation_grace_until > grace_until` predicate makes it
--- monotonically SHRINKING and idempotent: the first call moves the
--- deadline in from the parked bound to first-use + rotationGrace;
--- every later call (the same successor's second, third, ... request, or a
--- concurrent one racing it) proposes a LATER deadline and therefore
--- matches no row. A predecessor's grace can never be pushed back out by
--- continued use of the successor, which would otherwise keep a superseded
--- credential alive indefinitely.
 UPDATE sessions
 SET rotation_grace_until = sqlc.arg(grace_until)::timestamptz
 WHERE id = sqlc.arg(id)
@@ -103,28 +54,15 @@ WHERE id = sqlc.arg(id)
   AND rotation_grace_until > sqlc.arg(grace_until)::timestamptz;
 
 -- name: TouchLastSeenAt :exec
--- Unconditional: callers throttle to at most once per lastSeenThrottle
--- themselves (internal/auth.SessionManager.Authenticate) before issuing
--- this write, so it is not itself CAS-guarded.
 UPDATE sessions SET last_seen_at = $2 WHERE id = $1;
 
 -- name: TouchReauthenticatedAt :exec
--- Records that this session's lineage just completed a full OAuth login
--- after a real reauthentication round trip, never by rotation.
 UPDATE sessions SET reauthenticated_at = $2 WHERE id = $1;
 
 -- name: RevokeSession :exec
--- Idempotent: revoking an already-revoked (or nonexistent) session id
--- affects zero rows rather than erroring, so logout/revoke can be retried
--- safely. revoked_at is immediate and orthogonal to rotation_grace_until
--- and this query never changes that column.
 UPDATE sessions SET revoked_at = $2 WHERE id = $1 AND revoked_at IS NULL;
 
 -- name: RevokeSessionForUser :execrows
--- Revokes only a live session owned by user_id. The live predicates match
--- ListLiveSessionsForUser so a hidden expired session cannot be reported as
--- revoked. The affected-row count lets the caller return the same absence
--- result for missing, expired, and differently owned sessions.
 UPDATE sessions
 SET revoked_at = $3
 WHERE id = $1
@@ -135,8 +73,6 @@ WHERE id = $1
   AND (rotation_grace_until IS NULL OR rotation_grace_until >= sqlc.arg(now)::timestamptz);
 
 -- name: RevokeAllSessions :execrows
--- Logout-everywhere: revokes every one of the user's not-already-revoked
--- sessions and reports how many rows that affected.
 UPDATE sessions SET revoked_at = $2 WHERE user_id = $1 AND revoked_at IS NULL;
 
 -- name: ListLiveSessionsForUser :many
@@ -174,14 +110,9 @@ ORDER BY created_at DESC, id DESC;
 SELECT * FROM sessions WHERE rotated_from = $1 AND revoked_at IS NULL;
 
 -- name: GetSessionByID :one
--- Loads a target so the caller can revoke its rotation partner.
--- RevokeSessionForUser returns only a row count, and the target need not be the
--- caller's current session, so the lineage values require this read.
 SELECT * FROM sessions WHERE id = $1;
 
 -- name: CreateOAuthTransaction :one
--- resume_id is set only for purpose 'view' (docs/design/viewer-analytics/sign-in-to-view.md
--- "Sign-in flow"; AC-VIEW-004); every other purpose passes it as NULL.
 INSERT INTO oauth_transactions (
     handle_hash, provider, purpose, linking_user_id, state, pkce_verifier, nonce, redirect_uri, return_path, expires_at, resume_id
 ) VALUES (
@@ -189,16 +120,6 @@ INSERT INTO oauth_transactions (
 ) RETURNING *;
 
 -- name: ConsumeOAuthTransaction :one
--- Atomically claims a transaction: only a row that is unexpired and not yet
--- consumed (as of now, $2) is updated and returned. A handle that is
--- unknown, expired, or already consumed matches no row, so the caller sees
--- exactly one outcome (pgx.ErrNoRows) for all three cases -- see
--- internal/auth.ErrTransactionInvalid's doc comment for why that collapse
--- is deliberate. The provider-mismatch check (RFC 9700 mix-up defense)
--- happens in Go, after this still consumes the row: an attacker replaying
--- a valid handle against the wrong provider's callback burns the
--- transaction just like any other outcome, so it can never be retried
--- against the correct provider either.
 UPDATE oauth_transactions
 SET consumed_at = $2
 WHERE handle_hash = $1 AND consumed_at IS NULL AND expires_at > $2
@@ -248,10 +169,6 @@ SELECT count(*) FROM resumes WHERE user_id = $1;
 DELETE FROM resumes WHERE id = $1 AND user_id = $2;
 
 -- name: UpdateResumeDocumentCAS :one
--- Returns the stored row, so the caller needs no reread; its revision is the
--- NEW revision (revision + 1), never the caller's expected one. A stale or
--- non-matching $3 updates zero rows and surfaces as pgx.ErrNoRows, which
--- internal/resume turns into *RevisionMismatchError or ErrNotFound.
 UPDATE resumes
 SET personal_details = $4, content = $5, customization = $6,
     schema_version = $7, revision = revision + 1, updated_at = now()
@@ -259,11 +176,6 @@ WHERE id = $1 AND user_id = $2 AND revision = $3
 RETURNING *;
 
 -- name: AdvanceResumeRevisionCAS :one
--- Advances only the revision, the change signal every public artifact keys
--- on, and leaves the document, updated_at and every other column unchanged
--- (docs/design/projects-contract.md "Revision-only advance"). The returned
--- revision is the NEW one. A stale or non-matching expected revision updates
--- zero rows and surfaces as pgx.ErrNoRows.
 UPDATE resumes
 SET revision = revision + 1
 WHERE id = sqlc.arg(id) AND user_id = sqlc.arg(user_id)
@@ -271,24 +183,13 @@ WHERE id = sqlc.arg(id) AND user_id = sqlc.arg(user_id)
 RETURNING *;
 
 -- name: UpdateResumeTitleCAS :one
--- The returned revision is the NEW revision (revision + 1), never the
--- caller's expected one. A stale or non-matching $3 updates zero rows and
--- surfaces as pgx.ErrNoRows, which internal/resume turns into
--- *RevisionMismatchError or ErrNotFound.
 UPDATE resumes
 SET title = $4, revision = revision + 1, updated_at = now()
 WHERE id = $1 AND user_id = $2 AND revision = $3
 RETURNING revision;
 
 -- name: BackfillResumeDocumentCAS :execrows
--- This system backfill intentionally does not change revision or updated_at:
--- it persists the same projected document already served to readers. It is
--- not user-scoped. See docs/adr/0004-resume-document-contract.md.
--- Fully named parameters distinguish the from/to schema versions. Both are
--- int32, and sqlc's positional naming would emit
--- `SchemaVersion` and `SchemaVersion_2`, neither carrying its direction.
--- A caller swapping them silently rewrites current rows back to the old
--- version. Named args make the pair unswappable at the call site.
+-- sqlc names two positional int32 parameters SchemaVersion and SchemaVersion_2, so both are named (sqlc parameter naming).
 UPDATE resumes
 SET personal_details = sqlc.arg(personal_details),
     content = sqlc.arg(content),
@@ -302,8 +203,6 @@ WHERE id = sqlc.arg(id)
 SELECT id FROM resumes WHERE schema_version < $1 ORDER BY id LIMIT $2;
 
 -- name: GetResumeByID :one
--- System-job read for the document-version backfill. It is intentionally
--- not user-scoped, unlike product reads. It adds no write path.
 SELECT * FROM resumes WHERE id = $1;
 
 -- name: UpdateResumeMetadataAndDocumentCAS :one
@@ -323,20 +222,11 @@ WHERE id = $1 AND user_id = $2 AND revision = $3
 RETURNING revision;
 
 -- name: DeleteResumeForUserCAS :one
--- Revision-CAS delete returning the deleted row, so the caller can
--- validate the stored photo key and enqueue media cleanup in the same
--- transaction. Zero rows (stale revision, wrong owner, or missing id)
--- surfaces as pgx.ErrNoRows; the caller re-reads to distinguish staleness
--- from absence without creating an existence oracle.
 DELETE FROM resumes
 WHERE id = $1 AND user_id = $2 AND revision = $3
 RETURNING *;
 
 -- name: CreateIdempotencyRecord :one
--- Returns PostgreSQL's normalized jsonb representation of the stored body
--- and approved headers plus the exact stored byte count, so the first
--- response and every replay use identical bytes and no caller recomputes
--- capacity accounting in Go.
 INSERT INTO idempotency_records
     (user_id, route, idempotency_key, request_hash,
      response_status, response_body, response_headers, expires_at)
@@ -350,19 +240,12 @@ SELECT * FROM idempotency_records
 WHERE user_id = $1 AND route = $2 AND idempotency_key = $3;
 
 -- name: NormalizeIdempotencyResponse :one
--- Normalizes a candidate response through the same jsonb representation an
--- insert would store and reports the exact byte count the usage
--- reservation must account for — the one canonical byte expression shared
--- with backfill, insert, and cleanup.
 SELECT sqlc.arg(response_body)::jsonb AS response_body,
        sqlc.arg(response_headers)::jsonb AS response_headers,
        octet_length(sqlc.arg(response_body)::jsonb::text) +
        octet_length(sqlc.arg(response_headers)::jsonb::text) AS stored_bytes;
 
 -- name: DeleteExpiredIdempotencyRecordForKey :one
--- Deletes exactly this key's record if (and only if) it has expired, and
--- reports the counters to release — zero rows deleted still returns one
--- aggregate row of zeros.
 WITH deleted AS (
   DELETE FROM idempotency_records
   WHERE user_id = $1 AND route = $2 AND idempotency_key = $3
@@ -376,11 +259,6 @@ SELECT count(*)::bigint AS deleted_records,
 FROM deleted;
 
 -- name: DeleteExpiredIdempotencyRecordsForUser :one
--- The bounded request-path cleanup: at most limit_rows of the calling
--- user's expired records, deterministically oldest first by
--- (expires_at, id) on the composite index. FOR UPDATE SKIP LOCKED keeps
--- concurrent cleanup bounded and deadlock-free. Always returns one
--- aggregate row, even when nothing was deleted.
 WITH doomed AS (
   SELECT idempotency_records.id FROM idempotency_records
   WHERE idempotency_records.user_id = $1
@@ -400,10 +278,6 @@ SELECT count(*)::bigint AS deleted_records,
 FROM deleted;
 
 -- name: DeleteExpiredIdempotencyRecordsGlobal :many
--- The scheduled privacy sweep's bounded page: oldest expired rows across
--- all users, grouped per user so the sweep can release each user's exact
--- counters (once per returned user) before committing that cleanup
--- transaction.
 WITH doomed AS (
   SELECT id FROM idempotency_records
   WHERE expires_at <= sqlc.arg(now)::timestamptz
@@ -435,10 +309,6 @@ SET retained_records = idempotency_usage.retained_records
 RETURNING *;
 
 -- name: TryReserveIdempotencyUsage :one
--- Conditionally admits one new retained record of record_bytes stored
--- bytes within the caps. Zero rows (pgx.ErrNoRows) means the insert would
--- exceed a cap and the caller must reject with the typed capacity error
--- without committing the mutation.
 UPDATE idempotency_usage
 SET retained_records = retained_records + 1,
     stored_bytes = stored_bytes + sqlc.arg(record_bytes)::bigint
@@ -448,24 +318,12 @@ WHERE user_id = $1
 RETURNING retained_records, stored_bytes;
 
 -- name: ReleaseIdempotencyUsage :execrows
--- Releases exactly the counters of physically deleted records, in the same
--- transaction as their deletion. The migration's purge-then-backfill order
--- plus transactional maintenance guarantee this can never underflow the
--- non-negative checks.
 UPDATE idempotency_usage
 SET retained_records = retained_records - sqlc.arg(records)::bigint,
     stored_bytes = stored_bytes - sqlc.arg(released_bytes)::bigint
 WHERE user_id = $1;
 
 -- name: GetIdempotencyCapacityRetryAfter :one
--- Inputs for the capacity Retry-After decision: while an expired retained
--- row remains the caller retries in one second (the next mutation's
--- bounded cleanup frees space); otherwise the earliest retained expiry
--- says when space can next appear.
--- earliest_expiry falls back to the caller's own now when the user retains
--- no records at all (capacity rejection with zero retained records cannot
--- normally happen); the caller maps any earliest_expiry <= now to the
--- one-second branch.
 SELECT EXISTS (
          SELECT 1 FROM idempotency_records
          WHERE idempotency_records.user_id = $1
@@ -478,16 +336,11 @@ SELECT EXISTS (
          AS earliest_expiry;
 
 -- name: EnqueueMediaDeletionJob :execrows
--- Records exact-key cleanup work in the caller's transaction (ADR 0009).
--- Duplicate enqueue of the immutable key is idempotent (zero rows); the
--- table's own check constraint rejects a malformed or cross-resume key.
 INSERT INTO media_deletion_jobs (resume_id, object_key)
 VALUES ($1, $2)
 ON CONFLICT (object_key) DO NOTHING;
 
 -- name: GetMediaDeletionJobByObjectKey :one
--- Ambiguous-delete recovery proves the exact immutable cleanup job without
--- scanning or exposing unrelated object keys.
 SELECT *
 FROM media_deletion_jobs
 WHERE resume_id = sqlc.arg(resume_id)::uuid
@@ -499,8 +352,6 @@ FROM public_state
 WHERE singleton = true;
 
 -- name: GetPublicDiscoverySnapshot :one
--- The generation and eligible slug set are selected by one PostgreSQL
--- statement so aggregate discovery admission cannot pair different commits.
 SELECT
     ps.discovery_generation,
     COALESCE(
@@ -550,13 +401,6 @@ FROM resumes AS r
 WHERE r.slug = sqlc.arg(slug)::text AND r.live = true;
 
 -- name: GetPublicResumeProjectList :one
--- The project list's snapshot: the live resume and, for each entry that is
--- not hidden in a project section and names a project of the same owner, the
--- entry id, the project slug and the project document with every
--- description removed. One statement reads both, so the projects belong to
--- the returned revision (docs/design/projects-contract.md "Project link
--- context"). The project id never leaves the statement, and the id is
--- compared as text, as in GetPublicResumeBySlug.
 SELECT sqlc.embed(r), COALESCE((
     SELECT jsonb_agg(jsonb_build_object(
         'entryId', e.entry->>'id',
@@ -577,12 +421,6 @@ FROM resumes AS r
 WHERE r.slug = sqlc.arg(slug)::text AND r.live = true;
 
 -- name: GetPublicResumeProject :one
--- One project page's snapshot: the live resume; its project link context as
--- the list reads it, each linked document without its descriptions; and the
--- whole document of the requested project, only when an entry that is not
--- hidden in a project section links it. The page reads the other documents
--- only to know whether another project has a name to show. The project id
--- never leaves the statement.
 SELECT sqlc.embed(r), COALESCE((
     SELECT jsonb_agg(jsonb_build_object(
         'entryId', e.entry->>'id',
@@ -641,18 +479,12 @@ WHERE user_id = sqlc.arg(user_id)::uuid
   AND id = sqlc.arg(id)::uuid;
 
 -- name: GetResumeViewGateState :one
--- The "view" OAuth callback's re-read: live state, slug, the sign-in switch,
--- and the pass epoch, by resume ID, with no user scoping since the callback
--- authenticates no account (docs/design/viewer-analytics/sign-in-to-view.md
--- "Sign-in flow"; AC-VIEW-005).
 SELECT id, slug, live, sign_in_to_view, view_pass_epoch
 FROM resumes
 WHERE id = sqlc.arg(id)::uuid;
 
 -- name: ListEligiblePublicSlugs :many
--- Discovery bytes contain only eligible slugs in raw byte order. The
--- COALESCE is unreachable under the predicate and gives sqlc a non-null Go
--- string instead of a pointer.
+-- COALESCE gives sqlc a non-null Go string instead of a pointer (sqlc nullability inference).
 SELECT COALESCE(slug, '')::text AS slug
 FROM resumes
 WHERE slug IS NOT NULL AND live = true AND seo_geo_enabled = true
@@ -678,8 +510,6 @@ WHERE slug = sqlc.arg(slug)::text
 RETURNING id;
 
 -- name: InsertSlugTombstone :one
--- Holds no account link (docs/design/product.md): the released slug and its
--- release time are the only claim needed to reserve it.
 INSERT INTO slug_tombstones (slug, released_at)
 VALUES (
   sqlc.arg(slug)::text,
@@ -688,16 +518,7 @@ VALUES (
 RETURNING *;
 
 -- name: PublishResumeCAS :one
--- sign_in_to_view is the caller's already-merged final value (an omitted
--- publish field keeps the stored value before this query ever runs; see
--- docs/design/viewer-analytics/sign-in-to-view.md "Setting", AC-VIEW-001).
--- view_pass_epoch rises exactly when the switch turns on (from false to
--- true, whatever the live transition) or when it stays on and the resume
--- becomes live again after not being live, so passes from an earlier
--- period stop working (design "Gated routes"; AC-VIEW-007). Both
--- conditions read resume.* as the pre-update row, since a single UPDATE
--- statement evaluates its FROM/SET expressions against the row as it was
--- before this statement.
+-- A single UPDATE evaluates its SET and FROM expressions against the pre-update row (PostgreSQL UPDATE).
 WITH input AS (
   SELECT
     sqlc.arg(id)::uuid AS id,
@@ -750,7 +571,6 @@ RETURNING *;
 -- ---------------------------------------------------------------------------
 
 -- name: GetUserForUpdate :one
--- The user-row lock every session issuer and password mutation serializes on.
 SELECT * FROM users WHERE id = $1 FOR UPDATE;
 
 -- name: AdvanceUserAuthEpoch :one
@@ -949,9 +769,6 @@ RETURNING *;
 DELETE FROM second_factor_policies WHERE user_id = $1;
 
 -- name: GetUserByCanonicalEmail :one
--- Ownership read before a new-account insert. The caller passes the canonical
--- lowercase form; users.email is citext so the comparison is already
--- case-insensitive, and the unique constraint arbitrates the actual insert.
 SELECT * FROM users WHERE email = $1;
 
 -- name: GetPasswordCredential :one
@@ -961,9 +778,6 @@ SELECT * FROM password_credentials WHERE user_id = $1;
 SELECT * FROM password_credentials WHERE user_id = $1 FOR UPDATE;
 
 -- name: UpsertPasswordCredential :one
--- Insert-or-replace the single credential under the row lock the caller
--- already holds (GetPasswordCredentialForUpdate), re-encoding the hash and
--- bumping changed_at on the conflict arm.
 INSERT INTO password_credentials (user_id, encoded_hash, created_at, changed_at)
 VALUES ($1, $2, $3, $4)
 ON CONFLICT (user_id) DO UPDATE
@@ -1004,15 +818,9 @@ VALUES ($1, $2, $3, $4) RETURNING *;
 DELETE FROM password_reset_tokens WHERE id = $1;
 
 -- name: GetSessionByIDForUpdate :one
--- Session-row lock for password add/change, which revokes the current session
--- and every sibling atomically.
 SELECT * FROM sessions WHERE id = $1 FOR UPDATE;
 
 -- name: CreateAuthEmailJob :one
--- New jobs always start pending with attempts 0 (DEFAULT). The caller provides
--- the job id (a UUIDv7 it generated) so the outbox AAD binds to the stored row's
--- id; the caller has already encrypted the payload and computed the exact expiry
--- before commit.
 INSERT INTO auth_email_jobs (
     id, kind, state, registration_id, reset_token_id, user_id, token_digest,
     key_id, nonce, ciphertext, created_at, expires_at, next_attempt_at
@@ -1272,10 +1080,6 @@ WHERE id = 'crowdsec-postgres-paths-v1' AND state = 'sealed'
     AND (sqlc.narg(last_accepted_at)::timestamptz IS NULL OR moment.at >= sqlc.narg(last_accepted_at)::timestamptz);
 
 -- name: ClaimAuthEmailJobs :many
--- Bounded SKIP LOCKED claim: atomically transitions at most limit due pending
--- jobs to leased, increments attempts, stamps the lease pair, and returns the
--- leased rows. Two concurrent claimers are disjoint because each claims a
--- distinct row under FOR UPDATE SKIP LOCKED.
 UPDATE auth_email_jobs
 SET state = 'leased',
     attempts = attempts + 1,
@@ -1303,7 +1107,6 @@ WHERE id = sqlc.arg(id)::uuid
 FOR UPDATE;
 
 -- name: MarkAuthEmailJobSent :execrows
--- SES accepted: clears every encryption and lease field and records sent_at.
 UPDATE auth_email_jobs
 SET state = 'sent', key_id = NULL, nonce = NULL, ciphertext = NULL,
     next_attempt_at = NULL, lease_owner = NULL, lease_expires_at = NULL,
@@ -1311,9 +1114,6 @@ SET state = 'sent', key_id = NULL, nonce = NULL, ciphertext = NULL,
 WHERE id = sqlc.arg(id)::uuid AND state = 'leased';
 
 -- name: MarkAuthEmailJobTerminal :execrows
--- Permanent failure, expiry, or the eighth attempt: clears every encryption and
--- lease field and records terminal_at. A stale pending job may terminate
--- without ever being leased (attempts stays 0).
 UPDATE auth_email_jobs
 SET state = 'terminal', key_id = NULL, nonce = NULL, ciphertext = NULL,
     next_attempt_at = NULL, lease_owner = NULL, lease_expires_at = NULL,
@@ -1321,9 +1121,6 @@ SET state = 'terminal', key_id = NULL, nonce = NULL, ciphertext = NULL,
 WHERE id = sqlc.arg(id)::uuid AND state IN ('pending', 'leased');
 
 -- name: RequeueAuthEmailJob :execrows
--- A temporary failure releases the lease back to pending with the next attempt
--- time, retaining ciphertext and the already-incremented attempt count. The
--- caller never requeues at attempts = 8 (that path marks terminal instead).
 UPDATE auth_email_jobs
 SET state = 'pending',
     next_attempt_at = sqlc.arg(next_attempt_at)::timestamptz,
@@ -1381,23 +1178,8 @@ WHERE id IN (
     LIMIT sqlc.arg(limit_rows)::int
 );
 
--- ---------------------------------------------------------------------------
--- OAuth agent access: clients, authorization codes, grants, and
--- tokens. Storage is digest-only: no query here reads, writes, or returns raw
--- code or token material, and PKCE verifiers are never stored.
---
--- Lock order is oauth_clients -> users -> oauth_grants ->
--- oauth_authorization_codes -> oauth_tokens. Every path that revokes a token
--- family first locks its grant row (GetOAuthGrantForUpdate), and every path
--- that mutates a client's rows first locks the client row
--- (GetOAuthClientForUpdate) -- which is also what makes the idle-client sweep
--- skip a client another transaction is consenting to.
--- ---------------------------------------------------------------------------
 
 -- name: CreateOAuthClient :one
--- Dynamic client registration. The primary key returned here IS the
--- public client_id; there is no secret. last_used_at starts at created_at so
--- the column is never NULL and the ordering check holds from the first row.
 INSERT INTO oauth_clients (client_name, redirect_uris, created_at, last_used_at)
 VALUES (
     sqlc.arg(client_name),
@@ -1411,15 +1193,12 @@ RETURNING *;
 SELECT * FROM oauth_clients WHERE id = $1;
 
 -- name: GetDCRClient :one
--- Public UUID resolution excludes the internal UUID of a URL client.
 SELECT * FROM oauth_clients WHERE id = $1 AND metadata_url IS NULL;
 
 -- name: GetOAuthClientByMetadataURL :one
 SELECT * FROM oauth_clients WHERE metadata_url = sqlc.arg(metadata_url)::text COLLATE "C";
 
 -- name: UpsertOAuthMetadataClient :one
--- Approval alone calls this query, before user and session locks. The unique
--- URL index serializes concurrent approvals and preserves the internal UUID.
 INSERT INTO oauth_clients (metadata_url, client_name, redirect_uris, created_at, last_used_at)
 VALUES (sqlc.arg(metadata_url)::text, sqlc.arg(client_name), sqlc.arg(redirect_uris),
         sqlc.arg(created_at)::timestamptz, sqlc.arg(created_at)::timestamptz)
@@ -1435,17 +1214,12 @@ RETURNING *;
 SELECT * FROM oauth_clients WHERE id = $1 FOR UPDATE;
 
 -- name: TouchOAuthClientLastUsed :execrows
--- Bounded activity record: at most one write per client per touch window. The
--- caller passes touch_before = now - window, so the throttle is enforced by
--- the predicate rather than by caller bookkeeping.
 UPDATE oauth_clients
 SET last_used_at = sqlc.arg(now)::timestamptz
 WHERE id = sqlc.arg(id)
   AND last_used_at <= sqlc.arg(touch_before)::timestamptz;
 
 -- name: DeleteOAuthClient :execrows
--- Removing a client cascades its codes, grants, and tokens: deregistering an
--- agent ends every authorization it holds.
 DELETE FROM oauth_clients WHERE id = $1;
 
 -- name: ListIdleOAuthClientCandidates :many
@@ -1475,15 +1249,9 @@ LIMIT LEAST(sqlc.arg(limit_rows)::int, 200)
 FOR UPDATE SKIP LOCKED;
 
 -- name: DeleteOAuthClients :execrows
--- Deletes exactly the candidate set the caller just locked. The batch bound
--- lives in ListIdleOAuthClientCandidates; this statement never widens it.
 DELETE FROM oauth_clients WHERE id = ANY(sqlc.arg(ids)::uuid[]);
 
 -- name: CreateOAuthAuthorizationCode :one
--- Code issue. expires_at is computed here, not passed in, so the exact
--- 60-second TTL the table checks can never be missed by a caller. Only the
--- code's digest is stored; the raw code exists solely in the redirect the user
--- agent carries.
 INSERT INTO oauth_authorization_codes (
     code_digest, client_id, user_id, scopes, code_challenge, redirect_uri,
     created_at, expires_at, grant_id, auth_epoch
@@ -1497,23 +1265,12 @@ INSERT INTO oauth_authorization_codes (
 RETURNING *;
 
 -- name: GetOAuthAuthorizationCodeByDigest :one
--- Replay lookup: returns the row whether or not it was consumed, so the caller
--- can see the family a consumed code issued and revoke exactly those tokens.
 SELECT * FROM oauth_authorization_codes WHERE code_digest = $1;
 
 -- name: GetOAuthAuthorizationCodeByDigestForUpdate :one
--- The locked replay lookup used before a consumed-code replay revokes the
--- family it issued, so the revocation and the row it read cannot interleave.
 SELECT * FROM oauth_authorization_codes WHERE code_digest = $1 FOR UPDATE;
 
 -- name: ConsumeOAuthAuthorizationCode :one
--- Single-use consumption. One conditional UPDATE both takes the row lock
--- and decides the winner: under two concurrent exchanges of the same code the
--- second blocks, re-evaluates the predicate after the first commits, matches
--- no row, and surfaces as pgx.ErrNoRows. Unknown, expired, and already-consumed
--- codes therefore collapse to that one outcome, so no caller can branch on the
--- reason. issued_family_id records the token family this exchange creates,
--- which is what a later replay revokes.
 UPDATE oauth_authorization_codes
 SET consumed_at = sqlc.arg(consumed_at)::timestamptz,
     issued_family_id = sqlc.arg(issued_family_id)::uuid
@@ -1523,10 +1280,6 @@ WHERE code_digest = sqlc.arg(code_digest)
 RETURNING *;
 
 -- name: DeleteExpiredOAuthAuthorizationCodes :execrows
--- Bounded cleanup, oldest expiry first on oauth_authorization_codes_expires_at_idx.
--- expires_at alone is the predicate: a consumed code keeps its original expiry,
--- so consumed and abandoned rows leave on the same schedule, and a row is never
--- removed while ConsumeOAuthAuthorizationCode could still claim it.
 WITH candidates AS MATERIALIZED (
     SELECT candidate.id FROM oauth_authorization_codes AS candidate
     WHERE candidate.expires_at <= sqlc.arg(cutoff)::timestamptz
@@ -1555,8 +1308,6 @@ DO UPDATE SET scopes = EXCLUDED.scopes, auth_epoch = EXCLUDED.auth_epoch
 RETURNING *;
 
 -- name: GetLiveOAuthGrant :one
--- The grant-skip read: a live grant with equal-or-wider scopes lets authorize
--- issue a code without a second consent.
 SELECT * FROM oauth_grants
 WHERE user_id = $1 AND client_id = $2 AND revoked_at IS NULL;
 
@@ -1572,16 +1323,7 @@ SELECT * FROM oauth_grants WHERE id = $1 FOR UPDATE;
 SELECT count(*) FROM oauth_grants WHERE user_id = $1 AND revoked_at IS NULL;
 
 -- name: ListLiveOAuthGrantsForUser :many
--- The connected-agents list: client name, scopes, and when the agent was
--- connected and last used. Last-used comes from the grant's tokens rather than
--- a duplicated column, so there is one source of truth for agent activity.
--- Bounded by limit_rows; ordered newest-first with id as a deterministic
--- tiebreaker.
---
--- The correlated ORDER BY ... LIMIT 1 is deliberate where max() would read
--- more naturally: sqlc cannot type an aggregate expression and emits
--- interface{} for it, while a plain nullable column reference keeps the Go
--- type *time.Time — NULL for a grant whose tokens have never been used.
+-- sqlc types an aggregate such as max() as interface{}, so ORDER BY ... LIMIT 1 keeps *time.Time (sqlc type inference).
 SELECT grant_row.id, grant_row.client_id, client_row.client_name, client_row.metadata_url,
        grant_row.scopes, grant_row.created_at,
        (
@@ -1599,9 +1341,6 @@ ORDER BY grant_row.created_at DESC, grant_row.id DESC
 LIMIT sqlc.arg(limit_rows)::int;
 
 -- name: RevokeOAuthGrant :execrows
--- Internal revocation (RFC 7009 and consumed-code replay), where the grant id
--- came from a token row the caller already validated. Idempotent: revoking an
--- already-revoked grant affects zero rows.
 UPDATE oauth_grants
 SET revoked_at = sqlc.arg(revoked_at)::timestamptz
 WHERE id = sqlc.arg(id) AND revoked_at IS NULL;
@@ -1616,9 +1355,6 @@ WHERE id = sqlc.arg(id) AND user_id = sqlc.arg(user_id) AND revoked_at IS NULL
 RETURNING *;
 
 -- name: CreateOAuthToken :one
--- The first token of a family, issued by a code exchange. expires_at is
--- clamped to the family's own death so no token can outlive the family it
--- belongs to; the table's ordering check is the backstop for raw SQL.
 INSERT INTO oauth_tokens (
     token_digest, kind, family_id, client_id, user_id, grant_id,
     created_at, expires_at, family_expires_at
@@ -1632,13 +1368,6 @@ INSERT INTO oauth_tokens (
 RETURNING *;
 
 -- name: InsertRotatedOAuthToken :one
--- Refresh rotation. Every identity field -- family, client, user, grant,
--- and family expiry -- is read from the predecessor row rather than trusted
--- from the caller, so a rotated token structurally cannot join a different
--- family, client, user, or grant than the token it succeeds. A missing
--- predecessor selects no row and returns pgx.ErrNoRows instead of inserting an
--- orphan. The partial unique index on rotated_from means one predecessor can
--- mint at most one successor even under concurrent rotations.
 INSERT INTO oauth_tokens (
     token_digest, kind, family_id, rotated_from, client_id, user_id, grant_id,
     created_at, expires_at, family_expires_at
@@ -1654,10 +1383,6 @@ WHERE predecessor.id = sqlc.arg(rotated_from)::uuid
 RETURNING *;
 
 -- name: GetOAuthTokenAuthorityByDigest :one
--- The bearer boundary's single round trip: token row, its grant, and its
--- account in one query. The caller applies expiry, revocation, supersession,
--- and kind checks to the returned row; every rejection class therefore reads
--- the same rows and produces the same closed response.
 SELECT sqlc.embed(token_row), sqlc.embed(grant_row), sqlc.embed(user_row)
 FROM oauth_tokens AS token_row
 JOIN oauth_grants AS grant_row ON grant_row.id = token_row.grant_id
@@ -1665,11 +1390,6 @@ JOIN users AS user_row ON user_row.id = token_row.user_id
 WHERE token_row.token_digest = sqlc.arg(token_digest);
 
 -- name: SupersedeOAuthToken :one
--- Marks the presented refresh token superseded as part of a rotation. family_id
--- is part of the predicate, so a caller holding one family's identifier can
--- never mark a token belonging to another family, and a second supersession of
--- the same row affects nothing (pgx.ErrNoRows) -- which is exactly the replay
--- the caller turns into a whole-family revocation.
 UPDATE oauth_tokens
 SET superseded_at = sqlc.arg(superseded_at)::timestamptz
 WHERE id = sqlc.arg(id)
@@ -1679,21 +1399,16 @@ WHERE id = sqlc.arg(id)
 RETURNING *;
 
 -- name: RevokeOAuthTokenFamily :execrows
--- Superseded-token replay defense: every still-live member of one family dies
--- together, in the caller's transaction, under the grant row lock.
 UPDATE oauth_tokens
 SET revoked_at = sqlc.arg(revoked_at)::timestamptz
 WHERE family_id = sqlc.arg(family_id) AND revoked_at IS NULL;
 
 -- name: RevokeOAuthTokensForGrant :execrows
--- Grant revocation kills every family issued under it, not just the newest.
 UPDATE oauth_tokens
 SET revoked_at = sqlc.arg(revoked_at)::timestamptz
 WHERE grant_id = sqlc.arg(grant_id) AND revoked_at IS NULL;
 
 -- name: TouchOAuthTokenLastUsed :execrows
--- Bounded activity record: at most one write per token per touch window,
--- and never on a revoked token. The caller passes touch_before = now - window.
 UPDATE oauth_tokens
 SET last_used_at = sqlc.arg(now)::timestamptz
 WHERE id = sqlc.arg(id)
@@ -1701,12 +1416,6 @@ WHERE id = sqlc.arg(id)
   AND (last_used_at IS NULL OR last_used_at <= sqlc.arg(touch_before)::timestamptz);
 
 -- name: DeleteTerminalOAuthTokens :execrows
--- Bounded token cleanup. An access token leaves as soon as it has expired or
--- been revoked: it carries no replay-detection role. A refresh token is kept
--- until its whole family has expired, because a superseded or revoked refresh
--- token that is presented again must still be recognized as a replay rather
--- than as an unknown token. rotated_from is ON DELETE SET NULL, so removing a
--- predecessor detaches its successor instead of cascading past the batch bound.
 WITH candidates AS MATERIALIZED (
     SELECT candidate.id FROM oauth_tokens AS candidate
     WHERE (

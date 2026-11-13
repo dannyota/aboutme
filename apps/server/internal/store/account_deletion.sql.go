@@ -89,9 +89,6 @@ type GetResumeOwnerBySlugRow struct {
 	UserID uuid.UUID
 }
 
-// Resolves the account that holds a current resume slug, for the operator
-// deletion command (docs/design/showcase.md "Report and account deletion").
-// A tombstoned slug has no resume row and so has no owner.
 func (q *Queries) GetResumeOwnerBySlug(ctx context.Context, slug string) (GetResumeOwnerBySlugRow, error) {
 	row := q.db.QueryRow(ctx, getResumeOwnerBySlug, slug)
 	var i GetResumeOwnerBySlugRow
@@ -156,15 +153,11 @@ func (q *Queries) ListAccountDeletionResumeSetForUpdate(ctx context.Context, use
 }
 
 const lockCanonicalAccountEmail = `-- name: LockCanonicalAccountEmail :exec
-
 SELECT pg_advisory_xact_lock(
   hashtextextended('aboutme.email.v1:' || $1::text, 0)
 )
 `
 
-// Account deletion follows the lock order in docs/design/data.md: these
-// account-scoped locks come first, then slug advisory locks in sorted
-// order, then public_state.
 func (q *Queries) LockCanonicalAccountEmail(ctx context.Context, email string) error {
 	_, err := q.db.Exec(ctx, lockCanonicalAccountEmail, email)
 	return err

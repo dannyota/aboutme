@@ -1,13 +1,10 @@
-# DNS record ownership follows docs/adr/0026-vietnam-hosted-production.md.
 terraform {
   required_version = "= 1.12.6"
   required_providers {
     cloudflare = { source = "cloudflare/cloudflare", version = "= 5.27.0" }
   }
 
-  # vStorage in HCM04 speaks the S3 API and answers a create-only PUT on an
-  # existing key with 412, so the lock file works. bucket and
-  # shared_credentials_files come from the ignored backend.hcl.
+  # vStorage in HCM04 answers a create-only PUT on an existing key with 412, so the S3 lock file works (GreenNode vStorage).
   backend "s3" {
     key          = "dns/terraform.tfstate"
     region       = "HCM04"
@@ -23,7 +20,6 @@ terraform {
     skip_s3_checksum            = true
   }
 
-  # The passphrase comes from TF_VAR_state_passphrase, never from a file.
   encryption {
     key_provider "pbkdf2" "state" {
       passphrase = var.state_passphrase
@@ -42,5 +38,4 @@ terraform {
   }
 }
 
-# Authentication comes only from CLOUDFLARE_API_TOKEN.
 provider "cloudflare" {}

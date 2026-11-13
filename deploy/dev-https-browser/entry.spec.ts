@@ -13,7 +13,6 @@ import { ALLOWED_ORIGIN, isExpectedAnonymousMeConsole } from './network-policy';
 const ORIGIN = ALLOWED_ORIGIN;
 const EVIDENCE_PATH = '/evidence/entry-proof.json';
 
-// The seed identities are pinned by apps/server/cmd/dev-seed/seed_test.go.
 const SEED_EMAIL = 'dev@aboutme.invalid';
 const SEED_PASSWORD = 'aboutme-dev-password-1';
 const THEMES = ['light', 'dark'] as const;
@@ -45,9 +44,6 @@ function consoleStage(message: { location(): { url: string }; text(): string }):
   return `console-${path}-${/\b[45]\d\d\b/.test(message.text()) ? 'http' : 'other'}`;
 }
 
-// The header CTA reads "Create your resume" on marketing routes (the
-// homepage among them) and "Create account" everywhere else (DESIGN.md;
-// ADR 0020).
 async function expectSignedOutShell(
   page: Page,
   ctaLabel: 'Create account' | 'Create your resume' = 'Create account',
@@ -166,9 +162,6 @@ test('landing, sign-in, and the signed-in shell', async ({ browser }) => {
     await expect(
       page.getByRole('button', { name: 'Show password', exact: true }),
     ).toBeVisible();
-    // The harness runs with PROVIDER_LOGIN_ENABLED=google,linkedin, so the
-    // capabilities read must surface exactly Google then LinkedIn, and no
-    // GitHub link (docs/design/linkedin-sign-in.md "Design").
     await expect(
       page.getByRole('link', { name: /^Continue with / }),
     ).toHaveText(['Continue with Google', 'Continue with LinkedIn']);
@@ -212,7 +205,6 @@ test('landing, sign-in, and the signed-in shell', async ({ browser }) => {
     await expect(header.getByRole('link', { name: 'Sign in' })).toHaveCount(0);
     steps.signedInShell = true;
 
-    // Sign out through settings so the proof leaves no session.
     await page.goto(`${ORIGIN}/app/settings/sessions`);
     await waitForHydration(page);
     await expect(

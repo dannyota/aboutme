@@ -1,33 +1,3 @@
-/**
- * Passkey second-factor journey over the trusted HTTPS harness.
- *
- * One spec serves two browser modes. `second-factor` runs against a server
- * whose passkey enrollment flag is on and walks enrollment, pending password
- * and provider sign-in, recovery, revocation, and removal.
- * `second-factor-disabled` runs against the same stack restarted with the flag
- * off and proves enrollment answers exactly like an unregistered route while
- * verification, removal, state, and recovery routes keep working.
- *
- * Ceremonies use Chrome DevTools virtual authenticators. Exactly one simulates
- * presence at a time, so a registration whose `excludeCredentials` names an
- * existing credential still has a device that can answer, and every assertion
- * resolves against a known credential. Chrome allows one internal (platform)
- * authenticator per page, so the first is internal and every later one is a
- * USB security key.
- *
- * The proof spends three fictional accounts because every pending route shares
- * one bounded budget of ten attempts per account and client address in fifteen
- * minutes (docs/design/budgets.md). Attempt exhaustion alone costs five, so it
- * gets an account of its own.
- *
- * Recovery plaintext, credential material, cookies and CSRF values stay in
- * process memory. The evidence file holds only booleans, the fixed scenario
- * name, and the origin. Accounts carry a per-run marker and are deleted in a
- * `finally` path on success and failure alike.
- *
- * Contract: docs/design/passkey-second-factor-contract.md and
- * docs/design/second-factor-authentication.md.
- */
 import {
   expect,
   test,
@@ -123,9 +93,6 @@ const ENABLED_EVIDENCE_PATH = '/evidence/passkey-second-factor-proof.json';
 const DISABLED_EVIDENCE_PATH
   = '/evidence/passkey-enrollment-disabled-proof.json';
 
-// Every negative status this proof deliberately provokes inside the page,
-// keyed by the exact path that may answer with it. Anything else counts as a
-// console error and fails the run.
 const EXPECTED_PAGE_FAILURES: ReadonlyMap<string, readonly number[]> = new Map([
   ['/api/v1/me', [401]],
   ['/api/v1/me/second-factor', [401]],
@@ -140,11 +107,8 @@ const EXPECTED_PAGE_FAILURES: ReadonlyMap<string, readonly number[]> = new Map([
   ['/api/v1/auth/second-factor/recovery/verify', [401]],
   ['/api/v1/auth/password/login', [401]],
   ['/api/v1/auth/password/reauth', [401]],
-  // The revoked agent grant's tool call.
   ['/mcp', [401]],
 ]);
-// Startup reads of the app pages the journey lands on, named apart so a 401
-// says which page was still loading.
 const NAMED_API_READS: ReadonlyMap<string, string> = new Map([
   ['/api/v1/resumes', 'resumes'],
   ['/api/v1/sessions', 'sessions'],
@@ -170,13 +134,9 @@ const ACTIVE_ROLES = configureProof(
   MODE, 'ABOUTME_PASSKEY_SHARD', PASSKEY_SHARD_ROLES,
 );
 
-// The failed page's state in closed words, read just before teardown
-// navigates away from it.
 let failurePageState = 'page-unread';
 
 test.afterEach(({}, testInfo) => {
-  // One spec serves both modes, so the other mode's test is always skipped.
-  // Only a real failure may add a line.
   if (testInfo.status === 'skipped') return;
   if (testInfo.status === testInfo.expectedStatus) return;
   const message = testInfo.error?.message ?? '';
@@ -217,8 +177,6 @@ function classifySecondFactorConsole(message: ConsoleMessage): string | null {
           : url.pathname.startsWith('/_nuxt/') ? 'asset' : 'other');
   return `${path}-${status}`;
 }
-
-// --- Page helpers -----------------------------------------------------------
 
 interface FactorState {
   readonly status: number;
@@ -261,23 +219,16 @@ async function factorState(page: Page): Promise<FactorState> {
   });
 }
 
-/** Runs the pending passkey ceremony with the present virtual authenticator. */
 async function clickPasskey(page: Page): Promise<void> {
   await expect(page.getByTestId('second-factor-passkey')).toBeVisible();
   await page.getByTestId('second-factor-passkey-button').click();
 }
 
-/** Completes the open pending authentication with a passkey. */
 async function completeWithPasskey(page: Page): Promise<void> {
   await clickPasskey(page);
   await landedAfter(page, '/login/second-factor');
 }
 
-/**
- * Adds one passkey from the settings page. `expectCodes` states whether this
- * enrollment creates the factor policy and therefore the one-time recovery
- * set; the returned codes are read from the reveal dialog itself.
- */
 async function addPasskey(
   page: Page,
   expectCodes: boolean,
@@ -300,7 +251,6 @@ async function addPasskey(
   return codes;
 }
 
-/** Enrolls a first passkey on a freshly signed-in account. */
 async function enrollFirstPasskey(
   page: Page,
   password: string,
@@ -313,8 +263,6 @@ async function enrollFirstPasskey(
   await reauthenticateWithPassword(page, password);
   return addPasskey(page, true);
 }
-
-// --- Enabled-enrollment journey --------------------------------------------
 
 test('proves the passkey second factor over native HTTPS', async ({
   browser,
@@ -363,7 +311,6 @@ test('proves the passkey second factor over native HTTPS', async ({
   context.on('page', attach);
   await installExternalRequestFirewall(context, counters);
   await installExternalWebSocketFirewall(context, counters);
-  // Account preparation must work when live registration is unavailable.
   let registrations = 0;
   await context.route(`${ORIGIN}/api/v1/auth/password/register`, async (route) => {
     registrations += 1;
@@ -397,12 +344,9 @@ test('proves the passkey second factor over native HTTPS', async ({
   let recoveryCleanupCode = '';
   let attemptsCleanupCode = '';
   const extraContexts: BrowserContext[] = [];
-  // Browser cleanup covers the roles this shard visits. The host fixture
-  // removes every remaining seeded account by its exact identity.
   const visitedAccounts: Partial<Record<AccountRole, true>> = {};
 
   try {
-    // 1. A fictional primary account with a password and a linked provider.
     if (runsRole('primary')) {
     visitedAccounts.primary = true;
     authPrimary = await pool.add();
@@ -434,9 +378,6 @@ test('proves the passkey second factor over native HTTPS', async ({
     stage('primary-link-select-account');
     await page.getByLabel(LINK_ACCOUNT_LABEL).check();
     stage('primary-link-callback');
-    // Wait for the settings page itself, then judge the outcome from the
-    // closed callback vocabulary. Waiting for the clean URL alone would hang
-    // on an error redirect that has already finished loading.
     await watchingCallback(page, async () => {
       await Promise.all([
         page.waitForURL(
@@ -452,8 +393,6 @@ test('proves the passkey second factor over native HTTPS', async ({
     await expect(page.getByTestId('linked-provider-google')).toBeVisible();
     steps.providerAccount = true;
 
-    // 2. A connected agent and a second browser session, both created while
-    //    the account is still unenrolled.
     stage('agent-grant');
     const agentToken = await createAgentGrant(context, page);
     expect(await agentToolsStatus(page, agentToken)).toBe(200);
@@ -471,8 +410,6 @@ test('proves the passkey second factor over native HTTPS', async ({
     expect(await meStatus(otherPage)).toBe(200);
     steps.otherSessionStarted = true;
 
-    // 3. Enrollment demands recent reauthentication, then issues the one-time
-    //    recovery set exactly once.
     stage('enroll-first-passkey');
     await gotoHydrated(page, '/app/settings/sessions');
     await expect(page.getByTestId('second-factor-empty')).toBeVisible();
@@ -487,7 +424,6 @@ test('proves the passkey second factor over native HTTPS', async ({
     steps.recoveryRevealedOnce = true;
     expect(await pool.credentialCount(authPrimary)).toBe(1);
 
-    // 4. The epoch change ended every other session and the agent grant.
     stage('revocation');
     expect(await meStatus(otherPage)).toBe(401);
     steps.otherSessionRevoked = true;
@@ -496,7 +432,6 @@ test('proves the passkey second factor over native HTTPS', async ({
     expect(await meStatus(page)).toBe(200);
     await otherContext.close();
 
-    // 5. A second passkey on a second device adds no recovery codes.
     stage('second-passkey');
     const authSecondary = await pool.add();
     await gotoHydrated(page, '/app/settings/sessions');
@@ -509,8 +444,6 @@ test('proves the passkey second factor over native HTTPS', async ({
     expect(state.recoveryRemaining).toBe(10);
     steps.secondPasskeyAdded = true;
 
-    // 6. Regeneration replaces the set and moves the epoch, which kills a
-    //    pending login another browser is still holding.
     stage('stale-epoch');
     const staleContext = await browser.newContext();
     extraContexts.push(staleContext);
@@ -535,9 +468,6 @@ test('proves the passkey second factor over native HTTPS', async ({
     steps.staleEpochRejected = true;
     await staleContext.close();
 
-    // 7. Removing one of two passkeys keeps enforcement on. The list is in
-    //    creation order, so the newer credential goes and the one the present
-    //    authenticator holds stays.
     stage('remove-one');
     await gotoHydrated(page, '/app/settings/sessions');
     await page.locator('[data-testid^="passkey-remove-"]').last().click();
@@ -551,8 +481,6 @@ test('proves the passkey second factor over native HTTPS', async ({
     expect(state.passkeyCount).toBe(1);
     steps.oneRemoved = true;
 
-    // 8. Password sign-in stops at the pending page; only a verified passkey
-    //    finishes it.
     stage('password-pending');
     await signOut(page);
     expect(await passwordSignIn(page, primaryEmail, primaryPassword))
@@ -580,16 +508,13 @@ test('proves the passkey second factor over native HTTPS', async ({
     stage('pending-user-verification');
     await pool.setUserVerified(authPrimary, false);
     await clickPasskey(page);
-    // Bounded on purpose: an authenticator that can never verify must fail the
-    // ceremony, not hold the page until the five-minute WebAuthn timeout.
+    // An authenticator that never verifies would otherwise hold the page until the five-minute WebAuthn timeout (WebAuthn).
     await expect(page.getByTestId('second-factor-passkey-error'))
       .toBeVisible({ timeout: 30_000 });
     expect(new URL(page.url()).pathname).toBe('/login/second-factor');
     expect(await meStatus(page)).toBe(401);
     await pool.setUserVerified(authPrimary, true);
-    // A rejected ceremony must not stay outstanding: a second concurrent
-    // request would be refused by the browser, not by the server. Reloading
-    // discards it before the completion that follows.
+    // The browser refuses a second concurrent WebAuthn request, so the reload discards the rejected ceremony first (WebAuthn).
     await page.reload({ timeout: WAIT_NAVIGATION_MS });
     await hydrated(page, WAIT_HYDRATE_MS);
     steps.userVerificationRequired = true;
@@ -599,8 +524,6 @@ test('proves the passkey second factor over native HTTPS', async ({
     await expectSignedInApp(page);
     steps.passkeyCompletion = true;
 
-    // 9. A settings reauthentication opens a pending row bound to this exact
-    //    session, and the binding is enforced.
     stage('reauth-pending');
     await gotoHydrated(page, '/app/settings/sessions');
     await forceReauthOnce(page, '/api/v1/me/second-factor/recovery-codes');
@@ -633,7 +556,6 @@ test('proves the passkey second factor over native HTTPS', async ({
     await completeWithRecovery(page, primaryCodes[0] as string);
     expectLanding(page, 'landing-app-settings');
 
-    // 10. Provider sign-in on the enrolled account also stops at pending.
     stage('provider-pending');
     await signOut(page);
     await watchingCallback(page, () => signInWithGoogle(page, {
@@ -648,7 +570,6 @@ test('proves the passkey second factor over native HTTPS', async ({
     await completeWithRecovery(page, primaryCodes[1] as string);
     await expectSignedInApp(page);
 
-    // 11. Both locales at both proof widths on the pending page.
     stage('locales');
     await provePendingLocale(page, context, {
       code: primaryCodes[2] as string,
@@ -667,7 +588,6 @@ test('proves the passkey second factor over native HTTPS', async ({
     steps.locales = true;
     steps.viewports = true;
 
-    // 12. A password reset revokes sessions but preserves enforcement.
     stage('password-reset');
     const resetPassword = runPassword();
     await gotoHydrated(page, '/forgot-password');
@@ -688,7 +608,6 @@ test('proves the passkey second factor over native HTTPS', async ({
     await completeWithRecovery(page, primaryCodes[4] as string);
     await expectSignedInApp(page);
 
-    // 13. Removing the final factor turns second-factor sign-in off.
     stage('final-removal');
     await gotoHydrated(page, '/app/settings/sessions');
     await page.locator('[data-testid^="passkey-remove-"]').first().click();
@@ -711,8 +630,6 @@ test('proves the passkey second factor over native HTTPS', async ({
     steps.finalRemoved = true;
     }
 
-    // 14. A second fictional account carries the recovery-code and ceremony
-    //     cases, which need their own attempt budget.
     if (runsRole('recovery')) {
     visitedAccounts.recovery = true;
     role('recovery');
@@ -799,8 +716,6 @@ test('proves the passkey second factor over native HTTPS', async ({
     steps.concurrentCompletion = true;
     }
 
-    // 15. A third fictional account carries attempt exhaustion, whose five
-    //     failures would otherwise spend another account's whole budget.
     if (runsRole('attempts')) {
     visitedAccounts.attempts = true;
     role('attempts');
@@ -833,13 +748,9 @@ test('proves the passkey second factor over native HTTPS', async ({
     }
     expect(registrations).toBe(0);
   } finally {
-    // Read the page before teardown navigates away from a failure.
     failurePageState = await pageStateWords(page)
       + `-path-${landingCategory(page.url()).replace(/^landing-/u, '')}`;
     beginTeardown();
-    // Deletes only the accounts the active shard visited (every account on
-    // the unsharded default), so a shard's cleanup step reports on exactly
-    // its own accounts.
     const removed: boolean[] = [];
     if (visitedAccounts.primary) {
       removed.push(await deletePasskeyAccount(page, pool, {
@@ -869,10 +780,6 @@ test('proves the passkey second factor over native HTTPS', async ({
     for (const extra of extraContexts) {
       await extra.close().catch(() => undefined);
     }
-    // A shard's evidence lists only the steps it proved: the closed-list
-    // schema check in verify-evidence.mjs accepts any true subset of the
-    // full step set for this scenario and expects every step to be present
-    // and true only once its results are combined across every shard.
     const provenSteps = Object.fromEntries(
       Object.entries(steps).filter(([, proved]) => proved === true),
     );
@@ -892,8 +799,6 @@ test('proves the passkey second factor over native HTTPS', async ({
       }, null, 2)}\n`,
       { flag: 'wx', mode: 0o600 },
     );
-    // The completion step of the active shard's last role, or
-    // attemptsExhausted on the unsharded default.
     const journeyDone = ACTIVE_ROLES === null || ACTIVE_ROLES.has('attempts')
       ? steps.attemptsExhausted
       : ACTIVE_ROLES.has('recovery') ? steps.recoveryCompletion
@@ -901,8 +806,6 @@ test('proves the passkey second factor over native HTTPS', async ({
     failOnUnexpectedConsole(journeyDone);
   }
 });
-
-// --- Disabled-enrollment journey -------------------------------------------
 
 test('proves disabled passkey enrollment answers as an unregistered route',
   async ({ context, page }) => {
@@ -1009,10 +912,6 @@ test('proves disabled passkey enrollment answers as an unregistered route',
       await expect(page.getByTestId('second-factor-settings'))
         .toContainText('Chưa có passkey nào.');
       await expect(page.getByTestId('passkey-add')).toHaveCount(0);
-      // The header shows the signed-out account links until its own /me read
-      // settles, and this block's text can arrive first. Those links are
-      // wider than the phone width in Vietnamese, so the width is measured
-      // on the signed-in header.
       await expect(page.getByTestId('account-menu')).toBeVisible();
       expect(await page.evaluate(() =>
         document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
@@ -1025,7 +924,6 @@ test('proves disabled passkey enrollment answers as an unregistered route',
       steps.locales = true;
       steps.viewports = true;
     } finally {
-      // Read the page before teardown navigates away from a failure.
       failurePageState = await pageStateWords(page)
         + `-path-${landingCategory(page.url()).replace(/^landing-/u, '')}`;
       beginTeardown();
@@ -1049,19 +947,12 @@ test('proves disabled passkey enrollment answers as an unregistered route',
     }
   });
 
-// --- Shared journey helpers -------------------------------------------------
-
 interface CapturedAssertion {
   readonly body: string;
   readonly csrfToken: string;
   readonly pendingToken: string;
 }
 
-/**
- * Completes one pending sign-in with the virtual authenticator and keeps the
- * exact request bytes, so a replay of the same consumed ceremony can be proved
- * from Node. The captured value never leaves process memory.
- */
 async function captureAssertion(page: Page): Promise<CapturedAssertion> {
   const pattern = `${ORIGIN}/api/v1/auth/second-factor/passkey/verify`;
   const pendingToken = await cookieValue(page.context(), PENDING_COOKIE);
@@ -1079,11 +970,6 @@ async function captureAssertion(page: Page): Promise<CapturedAssertion> {
   return { body, csrfToken, pendingToken };
 }
 
-/**
- * Signs in again in one locale at one proof width and completes the pending
- * page entirely by keyboard, checking the localized copy, the accessible
- * names, the focus order, and that nothing overflows the viewport.
- */
 async function provePendingLocale(
   page: Page,
   context: BrowserContext,
@@ -1132,11 +1018,6 @@ interface DisabledProbes {
   readonly unregistered: TrustedResult;
 }
 
-/**
- * Probes every second-factor route from the signed-in page while enrollment
- * is off: the two enrollment routes must match a never-registered
- * path, and the flag-independent routes must answer with their own codes.
- */
 async function probeDisabledRoutes(
   page: Page,
   csrf: string,
@@ -1163,7 +1044,6 @@ async function probeDisabledRoutes(
         };
         if (typeof parsed.error?.code === 'string') code = parsed.error.code;
       } catch {
-        // A bodiless response leaves the code null.
       }
       return { code, status: response.status };
     };
@@ -1204,16 +1084,10 @@ async function probeDisabledRoutes(
   }, csrf);
 }
 
-// --- Teardown ---------------------------------------------------------------
-
 interface PasskeyAccountTeardown extends AccountTeardown {
   readonly authenticatorId: string;
 }
 
-/**
- * Removes one fictional passkey account, first making its own virtual
- * authenticator the one that answers.
- */
 async function deletePasskeyAccount(
   page: Page,
   pool: AuthenticatorPool,

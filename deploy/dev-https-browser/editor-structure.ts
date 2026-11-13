@@ -30,8 +30,6 @@ export async function proveKeyboardStructureAndContextActions(
     .getByRole('button', { name: 'Add section', exact: true })
     .press('Enter');
   await expect(page.locator('[data-state="saved"]')).toBeVisible();
-  // Adding a section opens it in the inspector; reopen Sections to add
-  // the next one.
   await page
     .getByRole('button', { name: '+ Add section', exact: true })
     .press('Enter');

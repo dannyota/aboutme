@@ -16,23 +16,14 @@ import (
 	"danny.vn/aboutme/deploy/observer/internal/verify"
 )
 
-// checker checks one running digest against the signed build record. It is
-// satisfied by *verify.Verifier; a narrow interface lets tests fake it
-// (docs/design/deployment-transparency/verification.md, "What verified
-// means").
 type checker interface {
 	Check(ctx context.Context, digest string) verify.Evidence
 }
 
-// publisher writes the encoded document to object storage or a host directory.
 type publisher interface {
 	Put(ctx context.Context, body []byte) error
 }
 
-// observer holds everything one run needs, built once so the verifier's
-// warm state (its TUF trust root, its cache) survives across Lambda
-// invocations (docs/design/deployment-transparency/README.md, "Where the
-// observer runs").
 type observer struct {
 	lister    platform.Lister
 	info      platform.Info
@@ -41,7 +32,6 @@ type observer struct {
 	build     document.BuildInfo
 }
 
-// wire builds one adapter, verifier, cache, and publisher per process.
 func wire(ctx context.Context, cfg config) (*observer, error) {
 	if cfg.Platform == platformPodman {
 		return newObserver(ctx, cfg, podmanplatform.New(cfg.ObservationFile),

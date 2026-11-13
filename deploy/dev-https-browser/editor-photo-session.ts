@@ -56,8 +56,6 @@ export async function provePhotoSessionPersistence(
       && url.origin === ORIGIN
       && url.pathname === `/api/v1/resumes/${resumeID}/photo`;
   });
-  // A photo uploaded in this session saves its default square crop once
-  // the image loads.
   const defaultCrop = page.waitForResponse((response) => {
     const request = response.request();
     const url = new URL(response.url());
@@ -297,9 +295,7 @@ type HeldReadKind = 'resume' | 'events';
 interface SessionReadHold {
   releaseBeforeSignIn(): Promise<void>;
   release(expectFailures?: boolean): Promise<void>;
-  /** Reads held now, by kind, for the release stage. */
   heldLabel(): string;
-  /** How the reads `release` let through ended, by kind; undefined before it starts. */
   outcomeLabel(): string | undefined;
 }
 
@@ -310,9 +306,6 @@ async function holdSessionReads(
 ): Promise<SessionReadHold> {
   const held: { request: Request; release(): void }[] = [];
   let released = false;
-  // Each held read's kind and the first way it ended, a response or a request
-  // failure, from the moment it is held, so a read that fails while held is
-  // counted too. The listeners only count; nothing waits on them.
   const outcomes = new Map<Request, { kind: HeldReadKind; ended?: 'response' | 'failed' }>();
   let releasing: Request[] | undefined;
   const kindOf = (request: Request): HeldReadKind => (
@@ -363,7 +356,6 @@ async function holdSessionReads(
       ].join('-');
     },
     releaseBeforeSignIn: async (): Promise<void> => {
-      // Reads arriving during this batch stay held until sign-in completes.
       const pending = [...held];
       pending.sort((left, right) => (
         Number(new URL(right.request.url()).pathname === '/api/v1/events')
@@ -403,9 +395,6 @@ async function holdSessionReads(
   };
 }
 
-// Counts what the editor page does once its session ends, for the failure
-// stage: resume reads refused with 401, realtime stream requests, and
-// document loads (a reload loses the retained edit).
 function observeSessionWindow(
   page: Page,
   resumeID: string,
@@ -436,8 +425,6 @@ function observeSessionWindow(
   };
 }
 
-// Checks the retained Headline. On failure, the stage names what the field
-// shows (never its text), the save state, and whether the sign-in dialog is open.
 async function expectHeadlineOrDiagnose(
   state: EditorProofState,
   page: Page,

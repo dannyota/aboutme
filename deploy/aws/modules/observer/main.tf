@@ -1,26 +1,14 @@
-# The deployment observer on AWS (docs/design/deployment-transparency/
-# README.md; ADR 0027): a Lambda function outside the host that reads which
-# image digests the production cluster runs, verifies them, and writes
-# deployment.json to a private bucket that only CloudFront reads. The ECR
-# repository holds a byte-for-byte copy of the attested GHCR image
-# (observer.sh). Until var.image_digest is set, only the repository, the
-# bucket, and the roles exist.
-
 locals {
   function_name = "${var.name}-observer"
   function_arn  = "arn:aws:lambda:ap-southeast-1:${var.account_id}:function:${local.function_name}"
   cluster_arn   = "arn:aws:ecs:ap-southeast-1:${var.account_id}:cluster/${var.name}"
   log_group     = "/aws/lambda/${local.function_name}"
-  # CloudFront appends the viewer path to the S3 origin, so the object key
-  # is the public path without its leading slash.
-  document_key = ".well-known/deployment.json"
-  enabled      = var.image_digest != ""
+  document_key  = ".well-known/deployment.json"
+  enabled       = var.image_digest != ""
   cluster_condition = {
     ArnEquals = { "ecs:cluster" = local.cluster_arn }
   }
 }
-
-# ---- Image repository ----
 
 resource "aws_ecr_repository" "observer" {
   name                 = "${var.name}-observer"
@@ -31,8 +19,6 @@ resource "aws_ecr_repository" "observer" {
   }
 }
 
-# Lambda pulls with its service principal, scoped to this one function; the
-# function's own role holds no ECR permission.
 resource "aws_ecr_repository_policy" "observer" {
   repository = aws_ecr_repository.observer.name
   policy = jsonencode({
@@ -64,8 +50,6 @@ resource "aws_ecr_lifecycle_policy" "observer" {
   })
 }
 
-# ---- Transparency bucket ----
-
 resource "aws_s3_bucket" "transparency" {
   bucket = var.bucket_name
 }
@@ -94,7 +78,6 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "transparency" {
   }
 }
 
-# Versioning stays off: the document is a snapshot and keeps no history.
 resource "aws_s3_bucket_policy" "transparency" {
   bucket = aws_s3_bucket.transparency.id
   policy = jsonencode({
@@ -129,8 +112,6 @@ resource "aws_s3_bucket_policy" "transparency" {
   depends_on = [aws_s3_bucket_public_access_block.transparency]
 }
 
-# ---- Observer role ----
-
 resource "aws_iam_role" "observer" {
   name = local.function_name
   assume_role_policy = jsonencode({
@@ -143,8 +124,6 @@ resource "aws_iam_role" "observer" {
   })
 }
 
-# Exactly the design's policy: two ECS reads on the production cluster, one
-# document write, the verification cache, and its own logs.
 resource "aws_iam_role_policy" "observer" {
   name = "observe-and-publish"
   role = aws_iam_role.observer.id
@@ -192,24 +171,17 @@ resource "aws_cloudwatch_log_group" "observer" {
   retention_in_days = 30
 }
 
-# ---- Function, schedule, alarm ----
-
 resource "aws_lambda_function" "observer" {
-  count         = local.enabled ? 1 : 0
-  function_name = local.function_name
-  role          = aws_iam_role.observer.arn
-  package_type  = "Image"
-  image_uri     = "${aws_ecr_repository.observer.repository_url}@${var.image_digest}"
-  architectures = ["arm64"]
-  memory_size   = 128
-  timeout       = 30
-  # A run ends within 30 s, starts every 60 s, and is never retried (the
-  # event invoke config below), so runs do not overlap. Reserved concurrency
-  # needs an account quota above the minimum unreserved pool; see
-  # var.reserved_concurrency.
+  count                          = local.enabled ? 1 : 0
+  function_name                  = local.function_name
+  role                           = aws_iam_role.observer.arn
+  package_type                   = "Image"
+  image_uri                      = "${aws_ecr_repository.observer.repository_url}@${var.image_digest}"
+  architectures                  = ["arm64"]
+  memory_size                    = 128
+  timeout                        = 30
   reserved_concurrent_executions = var.reserved_concurrency
 
-  # Names only, none of them secret, and none reaches the document.
   environment {
     variables = {
       OBSERVER_PLATFORM            = "ecs"
@@ -226,8 +198,6 @@ resource "aws_lambda_function" "observer" {
     log_group  = aws_cloudwatch_log_group.observer.name
   }
 
-  # observer.sh points the function at each verified copy by digest, as
-  # deploy.sh does for task definitions.
   lifecycle {
     ignore_changes = [image_uri]
   }
@@ -235,8 +205,7 @@ resource "aws_lambda_function" "observer" {
   depends_on = [aws_iam_role_policy.observer, aws_ecr_repository_policy.observer]
 }
 
-# Scheduler invokes asynchronously; Lambda would otherwise retry a failed run
-# twice and keep its event for hours. The next scheduled run replaces it.
+# Lambda retries a failed asynchronous invocation twice and keeps its event for hours unless configured (Lambda asynchronous invocation).
 resource "aws_lambda_function_event_invoke_config" "observer" {
   count                        = local.enabled ? 1 : 0
   function_name                = aws_lambda_function.observer[0].function_name
@@ -284,15 +253,12 @@ resource "aws_scheduler_schedule" "observer" {
     arn      = aws_lambda_function.observer[0].arn
     role_arn = aws_iam_role.scheduler.arn
 
-    # A missed run is replaced by the next one a minute later.
     retry_policy {
       maximum_retry_attempts = 0
     }
   }
 }
 
-# A failed run writes nothing, so the last document ages into stale; this
-# mails the owner (five or more errors in ten minutes).
 resource "aws_cloudwatch_metric_alarm" "errors" {
   count               = local.enabled ? 1 : 0
   alarm_name          = "${local.function_name}-errors"
@@ -308,8 +274,6 @@ resource "aws_cloudwatch_metric_alarm" "errors" {
   alarm_actions       = [var.alerts_topic_arn]
 }
 
-# No runs at all (a disabled schedule, a broken scheduler role) leave no
-# errors to count, so a separate alarm fires when invocations stop.
 resource "aws_cloudwatch_metric_alarm" "stopped" {
   count               = local.enabled ? 1 : 0
   alarm_name          = "${local.function_name}-stopped"
