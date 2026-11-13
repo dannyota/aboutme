@@ -1987,7 +1987,7 @@ const renewalInstall = `set -euo pipefail
 work=$(mktemp -d "$RUNNER_TEMP/vmonitor.XXXXXX")
 chmod 700 "$work"
 export GOBIN="$work/bin" GOPATH="$work/gopath" GOMODCACHE="$work/mod" GOCACHE="$work/cache"
-export GOTOOLCHAIN=local GOSUMDB=sum.golang.org GOPRIVATE= GONOSUMDB= GOINSECURE=
+export GOTOOLCHAIN=local GOSUMDB=sum.golang.org GOPRIVATE='' GONOSUMDB='' GOINSECURE=''
 mkdir -p "$GOBIN" "$GOPATH" "$GOMODCACHE" "$GOCACHE"
 go install danny.vn/vngcloud/cmd/vngcloud@v0.89.0
 identity=$(go version -m "$GOBIN/vngcloud" | awk '$1 == "mod" { print $2, $3, $4 }')
