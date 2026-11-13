@@ -2,6 +2,7 @@
 defineProps<{
   title?: string;
   titleLink?: string;
+  titleProjectEntry?: string;
   subtitle?: string;
   subtitleLink?: string;
   meta?: readonly string[];
@@ -22,8 +23,15 @@ defineProps<{
       v-if="title"
       class="entry-title"
     >
+      <strong v-if="titleLink && titleProjectEntry !== undefined">
+        <a
+          :data-project-entry="titleProjectEntry"
+          :href="titleLink"
+          style="color: var(--color-link); text-decoration: underline"
+        >{{ title }}</a>
+      </strong>
       <a
-        v-if="titleLink"
+        v-else-if="titleLink"
         :href="titleLink"
         rel="noopener noreferrer"
         style="color: var(--color-link); text-decoration: underline"

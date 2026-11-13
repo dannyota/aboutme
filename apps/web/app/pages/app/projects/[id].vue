@@ -27,7 +27,7 @@ import {
 } from '@/components/projects/projectDocument';
 import { issueMessage, issueTarget } from '@/components/projects/projectIssues';
 import { takeUnlinked } from '@/components/projects/projectLinks';
-import { useProjectResumes } from '@/components/projects/projectResumes';
+import { useProjectResumes } from '@/components/projects/projectResumesState';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,

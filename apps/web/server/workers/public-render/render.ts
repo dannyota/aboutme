@@ -91,12 +91,20 @@ export async function renderPublicResume(
       /^[0-9a-f]{16}$/u.test(version))) {
       throw new Error();
     }
+    const entryPoints = request.projectsUrl === undefined
+      ? {}
+      : {
+          projectsUrl: request.projectsUrl,
+          projectLinks: new Map((request.projectLinks ?? [])
+            .map(({ entryId, url }) => [entryId, url])),
+        };
     const body = await renderToString(
       createSSRApp({
         render: () =>
           h(PublicResumeApp, {
             publicResume: request.publicResume,
             homeHref: `${request.canonicalOrigin}/`,
+            ...entryPoints,
           }),
       }),
     );
@@ -147,6 +155,7 @@ export async function renderPublicResume(
       request.joinInvite === undefined
         ? ''
         : `data-join-invite="${escapeAttribute(request.joinInvite)}" `,
+      request.projectsUrl === undefined ? '' : 'data-project-links="" ',
       `data-revision="${request.publicResume.revision}">${body}</main>`,
       '<script type="module" ',
       `src="/_nuxt/assets/public-resume.mjs?v=${scriptVersion}"></script>`,

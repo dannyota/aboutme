@@ -24,7 +24,7 @@ Open items that outlived their shipped plans. One line each, with the evidence t
 
 - The signed-in header overflows by 27 px in English at 640 px wide, before and after the Projects link was added (measured in `apps/web/e2e/projects.spec.ts` runs on 2026-11-11, which therefore asserts only the page column at that width). It fits from 700 px, and Vietnamese fits everywhere.
 
-- `TestRealtimeRoutesDeliverCommittedDatabaseChangesThroughRealSessionMiddleware` failed once with `stream status 503` at `apps/server/internal/realtimeapi/service_test.go:581` (main run 43127593670 attempt 1, 462454fa, Server integration); the rerun passed and the test did not change. Find what makes the owner stream answer 503 there, likely the coordinator or hub not ready.
+- `TestRealtimeRoutesDeliverCommittedDatabaseChangesThroughRealSessionMiddleware` failed once with `stream status 503` when it opens the owner stream (`apps/server/internal/realtimeapi/service_test.go`) (main run 43127593670 attempt 1, 462454fa, Server integration); the rerun passed and the test did not change. Find what makes the owner stream answer 503 there, likely the coordinator or hub not ready.
 - Host-script tests still poll fixtures by loop count, so a wait's length depends on how fast the host forks `sleep`: `deploy/vn/tests/deploy-failure-test.sh:103`, `cutover-fence-test.sh:138`, `telegram-alert-test.sh` (lines 117, 192, 500, 516, 525), `watch-test.sh` (lines 285, 307, 395), and the CrowdSec retention, fixture and integration tests; `workload-lock-test.sh:23` waits with no deadline. Give them the deadline wait `deploy-safety-test.sh` now uses (`ABOUTME_TEST_WAIT_SECONDS`). That test's own failures on the Ubuntu gate came from a runner that started it with SIGHUP ignored; it now restarts itself with the default disposition.
 
 - An editor write still unresolved after its 23-hour retry window, when the read and reconcile at the cutoff finds it not landed, stays "Save failed" with no control (`apps/web/app/editor/coordinatorRetry.ts`). Add a recovery control for it.
@@ -32,7 +32,6 @@ Open items that outlived their shipped plans. One line each, with the evidence t
 - A session lost while a list rename or delete is unsettled leaves the list stuck: its leave guard blocks the redirect to sign-in and the list has no sign-in dialog, so only reloading the tab gets out, which drops the work after a warning (`apps/web/app/pages/app/resumes/index.vue`). Reuse the editor's session-loss dialog on the list.
 - While an editor page and the resume list are both mounted on the same resume, both queues can resend the same held write until the list unmounts; the shared Idempotency-Key makes the server apply it once, and an ordinary route change unmounts the list first (`apps/web/app/composables/useResumeList.ts`, the handover to the open editor). Make the list stop its queue for a resume as soon as an editor opens it.
 - The photo panel's Retry button stays enabled while its resend is in flight; the queue ignores the repeat, so nothing is sent twice, but the control should be disabled like the held-write alert's (`apps/web/app/components/editor/photo/PhotoPanel.vue`).
-- Nuxt warns `NUXT_B3011` that `apps/web/app/components/projects/projectResumes.ts` and `ProjectResumes.vue` resolve to the same component name. The page imports the `.vue` file explicitly, so nothing binds wrongly today; rename the `.ts` module (for example `projectResumesState.ts`) so the warning cannot hide a real collision.
 - A scheduled preview-card build for a resume deleted a second earlier logs `previewcard: scheduled build` with `reason=build_failed` (seen in the publish proof's server log on 2026-11-13). Confirm it cannot raise a host alert, then skip builds for deleted resumes instead of failing them.
 
 ## Production acceptance
@@ -50,6 +49,8 @@ Open items that outlived their shipped plans. One line each, with the evidence t
 - Add and review a host procedure for TOTP key re-encryption.
 - Add and review a host procedure for rotating the sign-in-to-view key.
 - A deploy whose migrate step applies nothing still sets `migration_may_be_applied` (`deploy/vn/scripts/deploy.sh` step 7), so any later failure, such as a smoke check, fails closed with maintenance up and the app stopped, as on 2026-10-22. Have the host report whether migrate applied a migration, and restore the previous release when none did.
+- Project create and replace charge the slug rate limiter inside the idempotency callback (`allowSlug` in `apps/server/internal/projectapi/mutations.go` and `replace.go`), which [ADR 0006](../adr/0006-transactional-idempotency.md) keeps free of external side effects, so a rolled-back attempt still spends a slot. Move admission outside the callback with a regression at the last free slot.
+- 141 medium and low rule-stating comments in `deploy/` and `scripts/` stayed in place during the comment sweep because no doc or test owns them. Give each a design or runbook line or a test, then delete the comment; rank deploy order and data handling first.
 
 ## Acceptance evidence gaps
 

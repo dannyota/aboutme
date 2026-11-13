@@ -45,6 +45,11 @@ resume text.
   mark both import, so a logo change reaches both.
 - The download icon is Lucide `download` at 16 px with `currentColor` stroke.
 - The download anchor's accessible name is its visible label.
+- When the resume links at least one available project
+  ([project entry points](project-entry-points.md)), `a.public-projects` sits
+  left of the download anchor, 8 px apart, both inside `span.public-actions`, so
+  they wrap together. Its accessible name is its visible label, and no count of
+  projects appears.
 
 ## Copy
 
@@ -54,6 +59,7 @@ The bar follows the resume language, as today.
 | -------- | --------------------- | ----------------------- |
 | Credit   | `Tạo bằng aboutme.vn` | `Built with aboutme.vn` |
 | Download | `Tải PDF`             | `Download PDF`          |
+| Projects | `Dự án`               | `Projects`              |
 
 ## Tokens
 
@@ -97,6 +103,8 @@ Measured contrast: the mark 5.0:1 light and 6.9:1 dark; credit text 5.7:1 and
 | Button padding         | 10 px left, 12 px right                                 |
 | Button type            | Be Vietnam Pro 500, 14 px on 20 px; icon 16 px, gap 6px |
 | Button, coarse pointer | 40 px high, same padding                                |
+| Projects button        | the button's style without an icon; 12 px each side     |
+| Touch target           | 44 px high on a coarse pointer; buttons stay 40 px      |
 | Credit hover           | link color and underline with a 3 px offset             |
 | Focus                  | 2 px ring, 2 px offset, on the credit and the button    |
 
@@ -120,8 +128,9 @@ row wraps and the button sits under the credit; the Vietnamese row still fits.
   resume on any screen. A reader sees it first, where the download is most
   useful, and the page needs no script for it.
 - The resume keeps its own top padding (`--page-margin-y`) under the bar.
-- When the owner turned PDF download off, the bar holds the brand alone on the
-  left, at the same height.
+- When the owner turned PDF download off, the bar drops only Download PDF, at
+  the same height. With no available project, the brand stands alone on the
+  left.
 - Print hides the bar, as today.
 - Under `forced-colors: active`, the mark strokes in `CanvasText` and the button
   shows a `ButtonBorder` border.

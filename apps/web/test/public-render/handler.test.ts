@@ -115,6 +115,28 @@ describe('internal public render handler', () => {
     expect(calls).toBe(0);
   });
 
+  it('accepts a request of exactly 557,056 bytes and refuses one more',
+    async () => {
+      let calls = 0;
+      const url = await start(async (...args) => {
+        calls += 1;
+        return ok(...args);
+      });
+      const source = JSON.stringify(request);
+      const sized = (bytes: number) => `${source.slice(0, -1)}${
+        ' '.repeat(bytes - Buffer.byteLength(source, 'utf8'))}}`;
+      const post = (body: string) => fetch(url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body,
+      });
+      expect(Buffer.byteLength(sized(557_056), 'utf8')).toBe(557_056);
+      expect((await post(sized(557_056))).status).toBe(200);
+      expect(calls).toBe(1);
+      expect((await post(sized(557_057))).status).toBe(413);
+      expect(calls).toBe(1);
+    });
+
   it('maps invalid UTF-8 and all closed-shape errors to 400', async () => {
     let calls = 0;
     const url = await start(async (...args) => {

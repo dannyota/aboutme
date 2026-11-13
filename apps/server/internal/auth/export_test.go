@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"golang.org/x/oauth2"
 
 	"danny.vn/aboutme/apps/server/internal/config"
@@ -54,6 +56,23 @@ func OIDCProviderEndpointForTest(ctx context.Context, svc *Service, provider Pro
 func GitHubProviderEndpointsForTest(svc *Service) (authorizeURL, tokenURL, apiBaseURL string) {
 	cfg := svc.githubOAuth2Config("https://localhost:20443/api/v1/auth/github/callback")
 	return cfg.Endpoint.AuthURL, cfg.Endpoint.TokenURL, svc.githubAPIBaseURLFor()
+}
+
+func ProviderHTTPTimeoutForTest() time.Duration {
+	return providerHTTPClient.Timeout
+}
+
+func SetProviderHTTPTimeoutForTest(t *testing.T, timeout time.Duration) {
+	t.Helper()
+	previous := providerHTTPClient
+	bounded := *previous
+	bounded.Timeout = timeout
+	providerHTTPClient = &bounded
+	t.Cleanup(func() { providerHTTPClient = previous })
+}
+
+func (s *TransactionStore) BeginViewForTest(ctx context.Context, provider Provider, resumeID uuid.UUID, redirectURI string) (string, Transaction, error) {
+	return s.beginView(ctx, provider, resumeID, redirectURI, "")
 }
 
 func LocalProviderHTTPClientForTest() *http.Client {

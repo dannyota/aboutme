@@ -1,10 +1,12 @@
 package oidctest
 
 import (
+	"bytes"
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -53,6 +55,7 @@ type Provider struct {
 	mu                    sync.Mutex
 	codes                 map[string]Claims
 	discoveryBlock        func()
+	stalls                map[string]*stall
 	lastTokenRedirectURI  string
 	lastTokenRedirectSeen bool
 	lastTokenRequest      TokenRequest
@@ -90,6 +93,7 @@ func NewProvider(t *testing.T) *Provider {
 		t:        t,
 		key:      key,
 		codes:    make(map[string]Claims),
+		stalls:   make(map[string]*stall),
 	}
 
 	mux := http.NewServeMux()
@@ -97,7 +101,7 @@ func NewProvider(t *testing.T) *Provider {
 	mux.HandleFunc("/jwks.json", p.serveJWKS)
 	mux.HandleFunc("/token", p.serveToken)
 
-	server := httptest.NewServer(mux)
+	server := httptest.NewServer(p.serveStalls(mux))
 	t.Cleanup(server.Close)
 
 	p.URL = server.URL
@@ -143,6 +147,51 @@ func (p *Provider) BlockDiscoveryForTest() (entered <-chan struct{}, release fun
 	p.mu.Unlock()
 
 	return enteredCh, func() { releaseOnce.Do(func() { close(releaseCh) }) }
+}
+
+type stall struct {
+	entered     chan struct{}
+	release     chan struct{}
+	enteredOnce sync.Once
+	releaseOnce sync.Once
+}
+
+func (p *Provider) StallForTest(path string) (entered <-chan struct{}, release func()) {
+	s := &stall{entered: make(chan struct{}), release: make(chan struct{})}
+	release = func() { s.releaseOnce.Do(func() { close(s.release) }) }
+
+	p.mu.Lock()
+	p.stalls[path] = s
+	p.mu.Unlock()
+	p.t.Cleanup(release)
+
+	return s.entered, release
+}
+
+func (p *Provider) serveStalls(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		p.mu.Lock()
+		s := p.stalls[r.URL.Path]
+		p.mu.Unlock()
+		if s == nil {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, "oidctest: reading stalled request body", http.StatusBadRequest)
+			return
+		}
+		r.Body = io.NopCloser(bytes.NewReader(body))
+
+		s.enteredOnce.Do(func() { close(s.entered) })
+		select {
+		case <-s.release:
+			next.ServeHTTP(w, r)
+		case <-r.Context().Done():
+		}
+	})
 }
 
 func (p *Provider) serveDiscovery(w http.ResponseWriter, _ *http.Request) {

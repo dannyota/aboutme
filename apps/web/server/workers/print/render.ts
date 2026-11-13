@@ -44,6 +44,9 @@ export async function renderPrintResume(
       render: () => h(PrintResumeApp, {
         document: envelope.document,
         lng: envelope.lng,
+        ...(envelope.version === 2
+          ? { projectLinks: new Map(Object.entries(envelope.projectLinks)) }
+          : {}),
       }),
     }));
     const styles = useResumeStyles(
