@@ -252,11 +252,12 @@ adds the renderer replaces it with the renderer's exact output.
   `dateFormat`, as on the resume page.
 - A list row carries at most its first six technologies and counts the rest in
   `moreTechnologies`, omitted when none; a project page carries all of them.
-- The list page has no description. A project page's is its summary, else the
-  first 160 characters of its outcome, else none; an empty `preview.description`
-  omits both description elements. The preview description is cut at a grapheme
-  boundary to 1024 bytes and the preview title to 2240 bytes, the limits the
-  renderer accepts; `pageTitle` is never cut.
+- The list page has no description. A project page's is its summary, else its
+  outcome cut at the last grapheme boundary within 160 characters, else none; an
+  empty `preview.description` omits both description elements. Nothing else is
+  cut: the renderer and the validator admit a preview description of up to 300
+  code points and 1,200 bytes, and a preview title of up to 683 code points and
+  2,727 bytes, the longest a stored project and resume can produce.
 
 Go serves 503 for rendered HTML that breaks any of these rules:
 
@@ -266,9 +267,12 @@ Go serves 503 for rendered HTML that breaks any of these rules:
   `pageUrl`, the favicon only when `faviconHref` is set, and the resume page's
   preview elements with `og:type` `website`, `og:url` equal to `pageUrl`, and
   the description pair only when set, and at most the resume page's one
-  `format-detection` element. One inline `style` that passes the inline style
-  check and has no `content` declaration, and no stylesheet but the versioned
-  `print-fonts.css`.
+  `format-detection` element. No CSS in the page: no `style` element and no
+  `style` attribute, and no stylesheet but the versioned `print-fonts.css` and
+  `project-pages.css`, each at `/_nuxt/assets/{name}?v={styleVersion}`. The
+  style version is a hash of every public stylesheet's content, so a cached
+  stylesheet never pairs with newer HTML. Inline CSS can render text in too many
+  ways to check, so the page's CSS comes only from the image.
 - No `script`, `form`, `iframe`, `img`, media or embedding element, and no event
   or resource attribute. SVG only as static icons: `svg`, `g`, `path`, `circle`,
   `rect`, `line`, `polyline`, `polygon` and `title`, with presentation
