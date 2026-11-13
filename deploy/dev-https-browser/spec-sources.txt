@@ -30,6 +30,7 @@ totp-production.spec.ts
 production.config.ts
 editor-fixtures.ts
 network-policy.ts
+project-pages.ts
 harness-lib.ts
 second-factor-lib.ts
 second-factor-pages.ts

@@ -24,6 +24,7 @@ import {
   installExternalWebSocketFirewall,
   newDiagnosticCounters,
   pageDiagnosticsAttacher,
+  signInWithGoogle,
   waitForHydration,
   pinEnglish,
 } from "./harness-lib";
@@ -32,6 +33,23 @@ import {
   httpFailureStatus,
   isExpectedAnonymousMeConsole,
 } from "./network-policy";
+import {
+  deleteRecordedProject,
+  gateFacts,
+  gateProviderLink,
+  hasViewPass,
+  isExpectedNotFoundConsole,
+  openPublic,
+  ownerCreateProject,
+  ownerLinkProject,
+  ownerRenameProject,
+  ownerSetEntryHidden,
+  ownerSetPublishState,
+  projectDocument,
+  projectPageFacts,
+  readNotFoundShape,
+  type NotFoundShape,
+} from "./project-pages";
 
 const ORIGIN = ALLOWED_ORIGIN;
 const EVIDENCE_PATH = "/evidence/publish-proof.json";
@@ -104,6 +122,7 @@ let currentStage = "setup";
 let failedStage: string | undefined;
 let countedConsoleFailure: string | undefined;
 let createdID: string | undefined;
+let createdProjectID: string | undefined;
 let writePublishEvidence: (() => Promise<void>) | undefined;
 
 function stage(name: string): void {
@@ -126,8 +145,9 @@ test.afterEach(async ({ browser }, info) => {
   let cleaning = true;
   try {
     for (const context of browser.contexts()) await context.close();
-    await deleteOutsideCounters(browser, createdID);
+    await deleteOutsideCounters(browser, createdID, createdProjectID);
     createdID = undefined;
+    createdProjectID = undefined;
     cleaning = false;
     if (info.title === "proves native HTTPS publish, discovery, and revocation") {
       steps.cleanup = true;
@@ -138,6 +158,10 @@ test.afterEach(async ({ browser }, info) => {
         }
         await writePublishEvidence();
       }
+    }
+    if (info.title === PROJECT_PAGES_TEST_TITLE) {
+      projectSteps.cleanup = true;
+      stage("projects-cleanup");
     }
   } catch (error) {
     if (info.status === info.expectedStatus) {
@@ -167,7 +191,9 @@ test.afterEach(async ({}, info) => {
       ? "publish"
       : info.title === DELETION_TEST_TITLE
         ? "deletion"
-        : "showcase";
+        : info.title === PROJECT_PAGES_TEST_TITLE
+          ? "projects"
+          : "showcase";
   await writeFile(
     `/evidence/${journey}-diagnostic.json`,
     `${JSON.stringify({ marker })}\n`,
@@ -281,10 +307,12 @@ async function signInWithPassword(page: Page): Promise<void> {
   );
 }
 
-// Cleanup uses a separate session after the counted contexts close.
+// Cleanup uses a separate session after the counted contexts close. It
+// deletes the resume first, so the project it linked is linked by none.
 async function deleteOutsideCounters(
   browser: Browser,
   resumeID: string,
+  projectID: string | undefined,
 ): Promise<void> {
   const cleanupCounters = newDiagnosticCounters();
   const cleanupContext = await browser.newContext();
@@ -294,6 +322,9 @@ async function deleteOutsideCounters(
     const cleanupPage = await cleanupContext.newPage();
     await signInWithPassword(cleanupPage);
     await deleteRecordedResume(cleanupPage, resumeID);
+    if (projectID !== undefined) {
+      await deleteRecordedProject(cleanupPage, projectID);
+    }
     expect(cleanupCounters.externalRequests).toBe(0);
   } finally {
     await cleanupContext.close();
@@ -314,6 +345,312 @@ async function auditDialog(page: Page): Promise<void> {
     ).toEqual([]);
   }
 }
+
+// The public project pages over the real stack: Caddy routes both addresses
+// to Go, Go admits the resume, gates and decides availability, and the
+// renderer writes pages with no inline CSS (docs/design/projects.md "Project
+// pages and entry points"; docs/design/projects-contract.md "Routes and
+// dispatch", "Representations"; AC-PROJ-005, AC-PROJ-006). It is declared
+// before the publish journey, whose cleanup writes the run's evidence, so
+// that evidence carries what this test proved and refuses to be written
+// until every step here is true.
+const PROJECT_PAGES_TEST_TITLE =
+  "proves the public project pages, their gate, and their revocations";
+const projectSteps = {
+  linked: false,
+  served: false,
+  unknownUniform: false,
+  hiddenUniform: false,
+  gate: false,
+  pass: false,
+  unpublishedUniform: false,
+  renamed: false,
+  cleanup: false,
+};
+const projectCounts = {
+  // Stylesheets loaded on the list and the page, two each.
+  stylesheets: 0,
+  // Elements with a style attribute on either page.
+  styleAttributes: 0,
+  // Answers byte for byte the unknown resume's 404.
+  uniformNotFound: 0,
+  // Addresses that served the gate, the unknown project's included.
+  gatedAddresses: 0,
+};
+// The project test's own diagnostics, unset until it finishes.
+const projectErrors = {
+  certificate: -1,
+  console: -1,
+  externalRequest: -1,
+  page: -1,
+};
+// A served list or project page: CSS only from the two versioned
+// stylesheets at one version, no inline style or script, noindex while SEO
+// and GEO is off (docs/design/projects-contract.md "Render envelope").
+const SERVED_PROJECT_PAGE = {
+  styleSources: ["style-src 'self'"],
+  unsafeInline: false,
+  robotsHeader: "noindex, noarchive",
+  stylesheets: ["print-fonts", "project-pages"],
+  styleVersions: 1,
+  loadedStylesheets: 2,
+  styleAttributes: 0,
+  styleElements: 0,
+  scripts: 0,
+  projectMains: 1,
+  gates: 0,
+};
+// The resume's gate standing in for a project address
+// (docs/design/viewer-analytics/sign-in-to-view.md "Gate").
+const GATE_FOR_PROJECT = {
+  noStore: true,
+  robotsHeader: "noindex, noarchive",
+  gates: 1,
+  projectMains: 0,
+  providers: 2,
+  providersWithPage: 2,
+  revealsName: false,
+};
+
+test(PROJECT_PAGES_TEST_TITLE, async ({ browser, context, page }) => {
+  test.setTimeout(180_000);
+  stage("projects-setup");
+  await pinEnglish(context);
+  const counters = newDiagnosticCounters();
+  const token = crypto.randomUUID().slice(0, 8);
+  const slug = `projects-${token}`;
+  const projectSlug = `harbor-${token}`;
+  const renamedSlug = `harbor-renamed-${token}`;
+  const unknownSlug = `missing-${token}`;
+  const projectName = `Harbor map ${token}`;
+  const content = projectDocument(projectName);
+  const listPath = `/${slug}/projects`;
+  const pagePath = `${listPath}/${projectSlug}`;
+  const unknownPath = `${listPath}/${unknownSlug}`;
+  let resumeID: string | undefined;
+  let viewerContext: BrowserContext | undefined;
+  // Every address this test reads as the uniform 404. Only the browser's
+  // line for a read of one of them is excused.
+  const notFoundPaths = new Set<string>();
+  const hooks = {
+    countConsoleError: (message: ConsoleMessage): boolean =>
+      !isExpectedAnonymousMeConsole(message.text(), message.location().url) &&
+      !isExpectedNotFoundConsole(message, notFoundPaths),
+    onCountedConsoleError: (message: ConsoleMessage): void => {
+      recordCountedConsole(message, resumeID, slug);
+    },
+  };
+  await installPublicGuards(context, counters);
+  pageDiagnosticsAttacher(counters, hooks)(page);
+  // An unavailable project address answers exactly as an unknown resume:
+  // the same status, headers that matter, robots and bytes.
+  let uniformNotFound: NotFoundShape | undefined;
+  const expectUniformNotFound = async (
+    target: Page,
+    path: string,
+  ): Promise<void> => {
+    notFoundPaths.add(path);
+    expect(await readNotFoundShape(target, path)).toEqual(uniformNotFound);
+    projectCounts.uniformNotFound += 1;
+  };
+  const projectHeading = (target: Page): Locator =>
+    target.getByRole("heading", { level: 1, name: projectName, exact: true });
+
+  try {
+    stage("projects-login");
+    await signInWithPassword(page);
+    // The setup goes through the owner API: this test proves the public
+    // pages, not the editor.
+    stage("projects-create-resume-status");
+    const created = await ownerCreate(
+      page,
+      `Project pages proof ${crypto.randomUUID()}`,
+      "Project pages proof resume",
+    );
+    createdID = resumeID = created.id;
+    expect(created.status).toBe(201);
+    const id = created.id ?? "";
+    stage("projects-create-project-status");
+    const project = await ownerCreateProject(page, projectSlug, content);
+    createdProjectID = project.id;
+    expect(project.status).toBe(201);
+    const projectID = project.id ?? "";
+    stage("projects-link-status");
+    const linked = await ownerLinkProject(page, id, projectID);
+    expect(linked.status).toBe(200);
+    stage("projects-link-entry");
+    expect(linked.entry).toBeDefined();
+    stage("projects-publish-status");
+    expect(
+      await ownerSetPublishState(page, id, {
+        slug,
+        live: true,
+        signInToView: false,
+      }),
+    ).toBe(200);
+    projectSteps.linked = true;
+
+    viewerContext = await browser.newContext();
+    await installPublicGuards(viewerContext, counters);
+    const viewer = await viewerContext.newPage();
+    pageDiagnosticsAttacher(counters, hooks)(viewer);
+
+    stage("projects-list-status");
+    const list = await openPublic(viewer, listPath);
+    expect(list.status()).toBe(200);
+    stage("projects-list-content");
+    const listFacts = await projectPageFacts(viewer, list);
+    expect(listFacts).toEqual(SERVED_PROJECT_PAGE);
+    await expect(
+      viewer.getByRole("link", { name: projectName, exact: true }),
+    ).toBeVisible();
+    stage("projects-page-status");
+    const served = await openPublic(viewer, pagePath);
+    expect(served.status()).toBe(200);
+    stage("projects-page-content");
+    const pageFacts = await projectPageFacts(viewer, served);
+    expect(pageFacts).toEqual(SERVED_PROJECT_PAGE);
+    await expect(projectHeading(viewer)).toBeVisible();
+    projectCounts.stylesheets =
+      listFacts.loadedStylesheets + pageFacts.loadedStylesheets;
+    projectCounts.styleAttributes =
+      listFacts.styleAttributes + pageFacts.styleAttributes;
+    projectSteps.served = true;
+
+    stage("projects-unknown-resume-status");
+    notFoundPaths.add(`/${unknownSlug}`);
+    uniformNotFound = await readNotFoundShape(viewer, `/${unknownSlug}`);
+    expect(uniformNotFound.status).toBe(404);
+    stage("projects-unknown-project-uniform");
+    await expectUniformNotFound(viewer, unknownPath);
+    projectSteps.unknownUniform = true;
+
+    stage("projects-hide-status");
+    expect(await ownerSetEntryHidden(page, id, linked, true)).toBe(200);
+    stage("projects-hidden-page-uniform");
+    await expectUniformNotFound(viewer, pagePath);
+    // It was the resume's only project, so the list goes with it.
+    stage("projects-hidden-list-uniform");
+    await expectUniformNotFound(viewer, listPath);
+    projectSteps.hiddenUniform = true;
+    stage("projects-show-status");
+    expect(await ownerSetEntryHidden(page, id, linked, false)).toBe(200);
+    stage("projects-shown-page-status");
+    expect((await openPublic(viewer, pagePath)).status()).toBe(200);
+
+    stage("projects-gate-on-status");
+    expect(
+      await ownerSetPublishState(page, id, {
+        slug,
+        live: true,
+        signInToView: true,
+      }),
+    ).toBe(200);
+    // The gate comes before availability, so a well-formed unknown address
+    // gets it too, differing only in the page its links return to.
+    const gateTexts = new Map<string, string>();
+    for (const [name, path, gatePage] of [
+      ["list", listPath, "projects"],
+      ["unknown", unknownPath, `projects/${unknownSlug}`],
+      ["page", pagePath, `projects/${projectSlug}`],
+    ] as const) {
+      stage(`projects-gate-${name}-status`);
+      const gate = await openPublic(viewer, path);
+      expect(gate.status()).toBe(200);
+      stage(`projects-gate-${name}-content`);
+      expect(
+        await gateFacts(viewer, gate, slug, gatePage, projectName),
+      ).toEqual(GATE_FOR_PROJECT);
+      gateTexts.set(name, await gate.text());
+      projectCounts.gatedAddresses += 1;
+    }
+    stage("projects-gate-unknown-same");
+    expect(gateTexts.get("unknown")).toBe(
+      gateTexts
+        .get("page")
+        ?.replaceAll(`page=projects/${projectSlug}`, `page=projects/${unknownSlug}`),
+    );
+    projectSteps.gate = true;
+
+    // The viewer is on the project's gate: signing in there returns to the
+    // project page with a pass for the resume.
+    stage("projects-pass-sign-in");
+    await signInWithGoogle(viewer, {
+      activator: gateProviderLink(viewer, slug, `projects/${projectSlug}`),
+      returnPath: pagePath,
+    });
+    stage("projects-pass-cookie");
+    expect(await hasViewPass(viewer)).toBe(true);
+    stage("projects-pass-page-status");
+    const passed = await openPublic(viewer, pagePath);
+    expect(passed.status()).toBe(200);
+    stage("projects-pass-page-content");
+    expect(await projectPageFacts(viewer, passed)).toEqual(SERVED_PROJECT_PAGE);
+    await expect(projectHeading(viewer)).toBeVisible();
+    stage("projects-pass-list-status");
+    expect((await openPublic(viewer, listPath)).status()).toBe(200);
+    projectSteps.pass = true;
+
+    stage("projects-unpublish-status");
+    expect(
+      await ownerSetPublishState(page, id, {
+        slug,
+        live: false,
+        signInToView: true,
+      }),
+    ).toBe(200);
+    stage("projects-unpublished-page-uniform");
+    await expectUniformNotFound(viewer, pagePath);
+    stage("projects-unpublished-list-uniform");
+    await expectUniformNotFound(viewer, listPath);
+    projectSteps.unpublishedUniform = true;
+
+    stage("projects-republish-status");
+    expect(
+      await ownerSetPublishState(page, id, {
+        slug,
+        live: true,
+        signInToView: false,
+      }),
+    ).toBe(200);
+    stage("projects-republished-page-status");
+    expect((await openPublic(viewer, pagePath)).status()).toBe(200);
+    stage("projects-rename-status");
+    expect(
+      await ownerRenameProject(page, projectID, renamedSlug, content),
+    ).toBe(200);
+    stage("projects-renamed-old-uniform");
+    await expectUniformNotFound(viewer, pagePath);
+    stage("projects-renamed-new-status");
+    const renamed = await openPublic(viewer, `${listPath}/${renamedSlug}`);
+    expect(renamed.status()).toBe(200);
+    stage("projects-renamed-new-content");
+    await expect(projectHeading(viewer)).toBeVisible();
+    projectSteps.renamed = true;
+  } catch (error) {
+    failedStage = currentStage;
+    throw error;
+  } finally {
+    stage("projects-close-contexts");
+    if (viewerContext !== undefined) await viewerContext.close();
+    if (resumeID !== undefined) {
+      await page.close();
+    }
+  }
+
+  stage("projects-final-certificate-errors");
+  expect(counters.certificateErrors).toBe(0);
+  stage("projects-final-console-errors");
+  expect(counters.consoleErrors).toBe(0);
+  stage("projects-final-external-requests");
+  expect(counters.externalRequests).toBe(0);
+  stage("projects-final-page-errors");
+  expect(counters.pageErrors).toBe(0);
+  projectErrors.certificate = counters.certificateErrors;
+  projectErrors.console = counters.consoleErrors;
+  projectErrors.externalRequest = counters.externalRequests;
+  projectErrors.page = counters.pageErrors;
+});
 
 test("proves native HTTPS publish, discovery, and revocation", async ({
   browser,
@@ -981,6 +1318,10 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
     expect(steps).toEqual(
       Object.fromEntries(Object.keys(steps).map((key) => [key, true])),
     );
+    stage("final-project-steps");
+    expect(projectSteps).toEqual(
+      Object.fromEntries(Object.keys(projectSteps).map((key) => [key, true])),
+    );
     stage("final-evidence");
     await writeFile(
       EVIDENCE_PATH,
@@ -998,6 +1339,11 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
         statuses,
         elapsedMs: { revocation: revocationElapsed },
         headers: headerPresence,
+        projects: {
+          errors: projectErrors,
+          steps: projectSteps,
+          counts: projectCounts,
+        },
       })}\n`,
       { flag: "wx", mode: 0o600 },
     );
@@ -1050,7 +1396,11 @@ function classifyConsoleFailure(
                       ? "public-card"
                       : path === `/api/v1/live/${slug}`
                         ? "public-stream"
-                        : "other";
+                        : path.startsWith(`/${slug}/projects`)
+                          ? "project-page"
+                          : path.startsWith("/api/v1/projects")
+                            ? "owner-project"
+                            : "other";
   return `console-${httpFailureStatus(message.text()) ?? "non-http"}-${route}`;
 }
 
@@ -1479,17 +1829,18 @@ async function ownerReadStatus(page: Page, id: string): Promise<number> {
 async function ownerCreate(
   page: Page,
   title: string,
+  fullName: string,
 ): Promise<{ status: number; id: string | undefined }> {
   const token = await freshCSRF(page);
   return page.evaluate(
-    async ({ schemaVersion, title, token }) => {
+    async ({ fullName, schemaVersion, title, token }) => {
       const created = await fetch("/api/v1/resumes", {
         body: JSON.stringify({
           title,
           document: {
             schemaVersion: Number(schemaVersion),
             personalDetails: {
-              fullName: "Deletion proof resume",
+              fullName,
               details: [],
             },
             content: {
@@ -1544,7 +1895,7 @@ async function ownerCreate(
         id: typeof id === "string" ? id : undefined,
       };
     },
-    { schemaVersion: SCHEMA_VERSION, title, token },
+    { fullName, schemaVersion: SCHEMA_VERSION, title, token },
   );
 }
 
@@ -1622,6 +1973,7 @@ test(DELETION_TEST_TITLE, async ({ browser, context, page }) => {
     const created = await ownerCreate(
       page,
       `Deletion proof ${crypto.randomUUID()}`,
+      "Deletion proof resume",
     );
     createdID = resumeID = created.id;
     expect(created.status).toBe(201);

@@ -276,6 +276,31 @@ async function verify(mode, path) {
       unpublishIdempotency: true,
       unpublishSchema: true,
     },
+    // The public project pages test (publish.spec.ts), which runs before the
+    // publish journey writes this file.
+    projects: {
+      errors: { certificate: 0, console: 0, externalRequest: 0, page: 0 },
+      steps: {
+        linked: true,
+        served: true,
+        unknownUniform: true,
+        hiddenUniform: true,
+        gate: true,
+        pass: true,
+        unpublishedUniform: true,
+        renamed: true,
+        cleanup: true,
+      },
+      // Two stylesheets loaded on each of the list and the page, no style
+      // attribute, six reads equal to the unknown resume's 404, and three
+      // addresses that served the gate.
+      counts: {
+        stylesheets: 4,
+        styleAttributes: 0,
+        uniformNotFound: 6,
+        gatedAddresses: 3,
+      },
+    },
   } : mode === 'entry' ? {
     ...common,
     scenario: 'entry-flow',
