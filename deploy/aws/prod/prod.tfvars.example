@@ -1,19 +1,12 @@
-# Copy to prod.tfvars (ignored) and fill in.
 account_id        = ""
 state_kms_key_arn = ""
 media_bucket_name = "aboutme-prod-media-<account id>"
-# Initial images; deploy.sh replaces them by digest on the first deploy.
 image_server = "ghcr.io/dannyota/aboutme-server:unreleased"
 image_web    = "ghcr.io/dannyota/aboutme-web:unreleased"
 image_caddy  = "ghcr.io/dannyota/aboutme-caddy:unreleased"
 alarm_email = ""
-# Set to true after the first healthy deploy.
 site_alarm_enabled = false
 
-# Provider login: "" keeps it off; "google" enables Google sign-in and needs
-# /aboutme/prod/oauth/google-client-id and google-client-secret in SSM;
-# "google,linkedin" also enables LinkedIn and needs
-# /aboutme/prod/oauth/linkedin-client-id and linkedin-client-secret.
 provider_login_enabled = ""
 
 # Same-account IAM user or role ARN behind the owner's `aws login` session,
@@ -21,39 +14,22 @@ provider_login_enabled = ""
 # to assume aboutme-prod-operator.
 operator_principal_arn = ""
 
-# false until a healthy v0.4.2 or later release raises the production
-# minimum-release fence.
 passkey_enrollment_enabled = false
 
-# false until a healthy v0.4.7 or later release raises the production
-# minimum-release fence to numeric 4007.
 totp_enrollment_enabled = false
 preview_card_enabled    = false
 
-# Chooses which of the two totp/key-<slot> SSM parameters is active; the
-# other slot may hold the previous key during rotation. Both must exist in
-# SSM before the first apply that references them; see
-# docs/design/totp-key-management.md, "Rotation".
 totp_active_key_slot   = "a"
 totp_previous_key_slot = ""
 
-# The WAF web ACL only counts matches until the owner switches it to block
-# after a week of counts.
 waf_block = false
 
-# Google Workspace's DNS values, copied from the Admin console or the current
-# zone: the verification CNAME's first label and target, and the whole
-# google._domainkey TXT value as one string.
 google_workspace = {
   verification_label  = ""
   verification_target = ""
   dkim_txt            = ""
 }
 
-# Bizfly Email Transaction DKIM, the whole dkim._domainkey TXT value.
 bizfly_dkim_txt = ""
 
-# The deployment observer (docs/design/deployment-transparency/README.md).
-# Empty until deploy/aws/scripts/observer.sh <tag> has copied the image into
-# ECR; then its digest, which creates the function, schedule, and alarm.
 observer_image_digest = ""

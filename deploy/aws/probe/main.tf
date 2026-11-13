@@ -84,8 +84,6 @@ locals {
   image = "public.ecr.aws/docker/library/alpine:3.22"
 }
 
-# The task role has no permissions. The probe only checks that host-mode
-# containers receive its credentials.
 resource "aws_iam_role" "task" {
   name               = "aboutme-probe-task"
   assume_role_policy = local.ecs_trust
@@ -139,7 +137,6 @@ resource "aws_instance" "probe" {
   tags      = { Name = "aboutme-probe" }
 }
 
-# Check 1 and the listener for check 2.
 resource "aws_ecs_task_definition" "host_server" {
   family                   = "aboutme-probe-host-server"
   network_mode             = "host"
@@ -167,7 +164,6 @@ resource "aws_ecs_task_definition" "host_server" {
   }])
 }
 
-# Checks 2 and 4, and the published port for check 3.
 resource "aws_ecs_task_definition" "bridge" {
   family                   = "aboutme-probe-bridge"
   network_mode             = "bridge"
@@ -201,7 +197,6 @@ resource "aws_ecs_task_definition" "bridge" {
   }])
 }
 
-# Check 3.
 resource "aws_ecs_task_definition" "host_client" {
   family                   = "aboutme-probe-host-client"
   network_mode             = "host"

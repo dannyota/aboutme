@@ -12,8 +12,6 @@ output "certificate_validation_records" {
   ])
 }
 
-# The same records keyed by certificate domain. The origin certificate is
-# never recreated (prevent_destroy), so the keys are known at plan time.
 output "certificate_validation_records_by_domain" {
   value = {
     for o in aws_acm_certificate.origin.domain_validation_options : o.domain_name => {

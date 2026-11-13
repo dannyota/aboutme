@@ -6,8 +6,6 @@ output "name_servers" {
   value = aws_route53_zone.zone.name_servers
 }
 
-# The values the owner enters at the .vn registrar (docs/runbooks/dns.md).
-# Registrars ask for either the DS fields or the DNSKEY fields.
 output "dnssec" {
   value = {
     key_tag     = aws_route53_key_signing_key.ksk.key_tag

@@ -1,5 +1,3 @@
-# Log group, instance role, per-task execution roles and task roles.
-
 locals {
   param = "arn:aws:ssm:ap-southeast-1:${var.account_id}:parameter/aboutme/prod"
   ecs_trust = jsonencode({
@@ -24,8 +22,7 @@ locals {
     db-admin    = ["db/migrator-password", "db/app-password"]
   }
   media_statements = [
-    # HeadObject reports a missing key as 404 only with ListBucket. The
-    # bucket holds only resumes/ objects, so no prefix condition is needed.
+    # HeadObject reports a missing key as 404 only with ListBucket (S3 HeadObject).
     {
       Effect   = "Allow"
       Action   = ["s3:ListBucket"]
@@ -156,9 +153,6 @@ resource "aws_iam_role_policy" "jobs" {
   policy = jsonencode({ Version = "2012-10-17", Statement = local.media_statements })
 }
 
-# The release-snapshot-sweep job lists the instance's snapshots and deletes
-# only the ones deploy.sh tagged, plus the one release snapshot taken before
-# tagging began. It cannot delete automated backups or any other snapshot.
 resource "aws_iam_role_policy" "jobs_release_snapshots" {
   name = "release-snapshots"
   role = aws_iam_role.jobs.id
@@ -188,23 +182,12 @@ resource "aws_iam_role_policy" "jobs_release_snapshots" {
   })
 }
 
-# ---- Minimum-release fence: operator and deploy roles ----
-#
-# docs/design/passkey-release-fence.md fixes this boundary. The AWS-login
-# principal (operator_principal_arn) assumes aboutme-prod-operator, which may
-# only describe and strongly read the fence and assume aboutme-prod-deploy.
-# Only aboutme-prod-deploy may write the fence or perform the bounded
-# deployment mutations. App, web, jobs, maintenance, migration, execution,
-# host and scheduler roles are untouched here and so keep no fence access.
 locals {
   cluster_arn = "arn:aws:ecs:ap-southeast-1:${var.account_id}:cluster/${var.name}"
   service_arns = [
     for svc in ["app", "web", "maintenance"] :
     "arn:aws:ecs:ap-southeast-1:${var.account_id}:service/${var.name}/${var.name}-${svc}"
   ]
-  # totp-reencrypt uses the same execution and task roles as app, so it adds
-  # no pass-role scope; see docs/design/passkey-release-fence.md,
-  # "Authenticator-app key re-encryption".
   run_task_family_arns = [
     for fam in ["migrate", "db-setup", "jobs", "totp-reencrypt"] :
     "arn:aws:ecs:ap-southeast-1:${var.account_id}:task-definition/${var.name}-${fam}:*"
@@ -218,18 +201,11 @@ locals {
   task_stopped_rule_arn = "arn:aws:events:ap-southeast-1:${var.account_id}:rule/${var.name}-task-stopped"
   release_snapshot_arns = "arn:aws:rds:ap-southeast-1:${var.account_id}:snapshot:${var.name}-v*"
   db_arn                = "arn:aws:rds:ap-southeast-1:${var.account_id}:db:${var.name}"
-  # aws_scheduler_schedule.job's target role, in the sibling ops module; hand
-  # built the same way every other cross-resource ARN in this file is, since
-  # ops exports no output for it.
-  scheduler_role_arn = "arn:aws:iam::${var.account_id}:role/${var.name}-scheduler"
+  scheduler_role_arn    = "arn:aws:iam::${var.account_id}:role/${var.name}-scheduler"
   # This partition key is the fence table's only item; LeadingKeys below pins
   # every item-level fence action to it.
   fence_leading_key = { "ForAllValues:StringEquals" = { "dynamodb:LeadingKeys" = ["application"] } }
 
-  # The explicit deny the release-fence contract requires on the operator
-  # role: it denies every action except the fence read and the assumption of
-  # the deploy role, so a future broadening of the operator role's
-  # permissions still cannot bypass the deploy role.
   fence_mutation_deny = [
     {
       Effect    = "Deny"
@@ -325,15 +301,13 @@ resource "aws_iam_role_policy" "deploy_ecs" {
     Version = "2012-10-17"
     Statement = [
       {
-        # ECS does not support resource-level permissions on these read
-        # actions; they return no secret material.
+        # ECS supports no resource-level permissions on these read actions, which return no secret material (ECS IAM actions reference).
         Effect   = "Allow"
         Action   = ["ecs:DescribeClusters", "ecs:DescribeServices", "ecs:DescribeTasks", "ecs:ListTasks", "ecs:DescribeTaskDefinition"]
         Resource = "*"
       },
       {
-        # RegisterTaskDefinition has no resource-level permission either;
-        # iam:PassRole below is the actual boundary on what it can start.
+        # RegisterTaskDefinition has no resource-level permission; iam:PassRole below bounds what it can start (ECS IAM actions reference).
         Effect   = "Allow"
         Action   = "ecs:RegisterTaskDefinition"
         Resource = "*"
@@ -373,14 +347,13 @@ resource "aws_iam_role_policy" "deploy_scheduler" {
         Resource = local.schedule_arns
       },
       {
-        # ListSchedules supports no resource-level scoping.
+        # ListSchedules supports no resource-level scoping (EventBridge Scheduler IAM actions reference).
         Effect   = "Allow"
         Action   = "scheduler:ListSchedules"
         Resource = "*"
       },
       {
-        # UpdateSchedule passes the target role to Scheduler; scope that pass
-        # to exactly the role aws_scheduler_schedule.job already targets.
+        # UpdateSchedule passes the target role to Scheduler, so iam:PassRole is scoped to that role (EventBridge Scheduler).
         Effect    = "Allow"
         Action    = "iam:PassRole"
         Resource  = local.scheduler_role_arn
@@ -422,8 +395,7 @@ resource "aws_iam_role_policy" "deploy_secret_existence" {
     Version = "2012-10-17"
     Statement = [
       {
-        # DescribeParameters returns metadata only, never a parameter value,
-        # and AWS does not support scoping it to a resource ARN.
+        # DescribeParameters returns metadata only and cannot be scoped to a resource ARN (SSM IAM actions reference).
         Effect   = "Allow"
         Action   = "ssm:DescribeParameters"
         Resource = "*"
@@ -444,8 +416,7 @@ resource "aws_iam_role_policy" "deploy_alarm_and_rule_suppression" {
     Version = "2012-10-17"
     Statement = [
       {
-        # DescribeAlarms lists and filters across alarms by name; AWS grants
-        # it no resource-level scoping, unlike the two actions below.
+        # DescribeAlarms has no resource-level scoping, unlike the two actions below (CloudWatch IAM actions reference).
         Effect   = "Allow"
         Action   = "cloudwatch:DescribeAlarms"
         Resource = "*"
@@ -464,11 +435,6 @@ resource "aws_iam_role_policy" "deploy_alarm_and_rule_suppression" {
   })
 }
 
-# observer.sh copies the verified observer image into its one ECR repository
-# and points the observer function at it by digest
-# (docs/design/deployment-transparency/README.md, "Access on AWS"). The read
-# actions let it compare the pushed digest, and Lambda requires the caller
-# that updates an image function to be able to read that image.
 resource "aws_iam_role_policy" "deploy_observer" {
   name = "deployment-observer"
   role = aws_iam_role.deploy.id
@@ -476,7 +442,7 @@ resource "aws_iam_role_policy" "deploy_observer" {
     Version = "2012-10-17"
     Statement = [
       {
-        # GetAuthorizationToken has no resource-level scoping.
+        # GetAuthorizationToken has no resource-level scoping (ECR IAM actions reference).
         Effect   = "Allow"
         Action   = "ecr:GetAuthorizationToken"
         Resource = "*"

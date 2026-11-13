@@ -1,8 +1,3 @@
-# The public Route 53 hosted zone for aboutme.vn (docs/runbooks/dns.md): the
-# CloudFront aliases, the mail and ACM validation records, CAA, and DNSSEC
-# signing. Alias answers let Route 53 pick the CloudFront edge nearest the
-# viewer at the apex, which a flattened CNAME cannot.
-
 terraform {
   required_providers {
     aws = {
@@ -16,14 +11,10 @@ locals {
   zone = "aboutme.vn"
   ttl  = 300
 
-  # Records with fixed values. The mail records are Google Workspace's and
-  # the SES custom MAIL FROM's (docs/runbooks/email.md).
   static_records = {
     caa = {
-      name = local.zone
-      type = "CAA"
-      # Amazon issues the CloudFront certificates; Let's Encrypt issues the
-      # Vietnam host's through Caddy (docs/design/vietnam-production.md).
+      name    = local.zone
+      type    = "CAA"
       records = ["0 issue \"amazon.com\"", "0 issue \"letsencrypt.org\""]
     }
     mx = {
@@ -56,17 +47,12 @@ locals {
       type    = "CNAME"
       records = [var.google_workspace.verification_target]
     }
-    # One TXT string holds at most 255 characters; the provider sends
-    # "a""b" as two strings of one record, which resolvers join.
+    # One TXT string holds at most 255 characters; the provider sends "a""b" as two strings of one record (Route 53 TXT records).
     google_dkim = {
       name    = "google._domainkey.${local.zone}"
       type    = "TXT"
       records = [join("\"\"", regexall(".{1,255}", var.google_workspace.dkim_txt))]
     }
-    # Bizfly Email Transaction signs authentication mail; Google keeps the
-    # mailbox, so the root MX stays Google's and only SPF gains the include.
-    # Bizfly's domain check reads the dkim selector, but its mail is signed
-    # with s=etrans under the same key, so both selectors publish it.
     bizfly_dkim = {
       name    = "dkim._domainkey.${local.zone}"
       type    = "TXT"
@@ -91,8 +77,7 @@ resource "aws_route53_zone" "zone" {
   }
 }
 
-# Route 53 creates the zone's NS record with a two-day TTL. One hour keeps a
-# name server change at the registry quick to take effect or to undo.
+# Route 53 creates the NS record with a two-day TTL; one hour keeps a registry change quick to apply or undo (Route 53 NS records).
 resource "aws_route53_record" "ns" {
   zone_id         = aws_route53_zone.zone.zone_id
   name            = local.zone
@@ -102,12 +87,6 @@ resource "aws_route53_record" "ns" {
   allow_overwrite = true
 }
 
-# Alias A and AAAA answers carry the distribution's addresses for the
-# resolver's (or the client subnet's) location; the HTTPS alias advertises
-# HTTP/2 and HTTP/3 before the connection. Queries for all three are free.
-# At cutover (apex_on_vn_host) the A records answer with the Vietnam host's
-# address instead, in place, and AAAA and HTTPS go: the host has no IPv6, and
-# an HTTPS alias would still send clients to CloudFront.
 resource "aws_route53_record" "edge" {
   for_each = {
     for pair in setproduct([local.zone, "www.${local.zone}"], var.apex_on_vn_host ? ["A"] : ["A", "AAAA", "HTTPS"]) :
@@ -125,7 +104,7 @@ resource "aws_route53_record" "edge" {
     content {
       name    = var.distribution_domain_name
       zone_id = var.distribution_hosted_zone_id
-      # CloudFront aliases do not support target health.
+      # CloudFront aliases do not support target health (Route 53 alias records).
       evaluate_target_health = false
     }
   }
@@ -138,8 +117,6 @@ resource "aws_route53_record" "edge" {
   }
 }
 
-# The Vietnam host's rehearsal names, until the apex itself moves to the host
-# (docs/design/vietnam-production.md).
 resource "aws_route53_record" "vn_rehearsal" {
   for_each = var.vn_host_ipv4 == null || var.apex_on_vn_host ? toset([]) : toset(["vn-rehearsal.${local.zone}", "www.vn-rehearsal.${local.zone}"])
 
@@ -160,8 +137,6 @@ resource "aws_route53_record" "static" {
   records = each.value.records
 }
 
-# The SES identity belongs to the aboutme-email CloudFormation stack; its
-# Easy DKIM tokens are read here so no generated token is committed.
 data "aws_sesv2_email_identity" "domain" {
   email_identity = local.zone
 }
@@ -176,9 +151,6 @@ resource "aws_route53_record" "ses_dkim" {
   records = ["${each.value}.dkim.amazonses.com"]
 }
 
-# ACM DNS validation, keyed by certificate domain. ACM gives the origin and
-# viewer certificates the same records, so these keep both renewing
-# automatically.
 resource "aws_route53_record" "acm_validation" {
   for_each = var.certificate_validation_records
 
@@ -189,10 +161,7 @@ resource "aws_route53_record" "acm_validation" {
   records = [each.value.value]
 }
 
-# ---- DNSSEC signing ----
-
-# The key-signing key's KMS key: asymmetric ECC_NIST_P256 in us-east-1, as
-# Route 53 requires. Route 53 uses it only for the zone below.
+# Route 53 requires the key-signing key's KMS key to be ECC_NIST_P256 in us-east-1 (Route 53 DNSSEC).
 resource "aws_kms_key" "dnssec" {
   provider                 = aws.us_east_1
   description              = "${var.name} Route 53 DNSSEC key-signing key for ${local.zone}"
@@ -227,8 +196,7 @@ resource "aws_kms_key" "dnssec" {
         Principal = { Service = "dnssec-route53.amazonaws.com" }
         Action    = "kms:CreateGrant"
         Resource  = "*"
-        # As in the Route 53 key policy example: only the signing statement
-        # takes the source conditions.
+        # As in the Route 53 key policy example, only the signing statement takes the source conditions (Route 53 DNSSEC key policy).
         Condition = {
           Bool = { "kms:GrantIsForAWSResource" = "true" }
         }
@@ -258,8 +226,6 @@ resource "aws_route53_key_signing_key" "ksk" {
   }
 }
 
-# Signing without a DS record at the registry is safe: resolvers treat the
-# zone as unsigned until the DS exists (docs/runbooks/dns.md, "DNSSEC").
 resource "aws_route53_hosted_zone_dnssec" "zone" {
   hosted_zone_id = aws_route53_key_signing_key.ksk.hosted_zone_id
   signing_status = "SIGNING"
@@ -269,9 +235,7 @@ resource "aws_route53_hosted_zone_dnssec" "zone" {
   }
 }
 
-# Route 53 publishes these metrics once every four hours, in us-east-1 only
-# ("Monitoring hosted zones using Amazon CloudWatch" in the Route 53 guide).
-# Either one means validating resolvers may soon fail the domain.
+# Route 53 publishes these metrics every four hours, in us-east-1 only (Route 53 guide, "Monitoring hosted zones using Amazon CloudWatch").
 resource "aws_cloudwatch_metric_alarm" "dnssec" {
   for_each = {
     internal-failure = "DNSSECInternalFailure"

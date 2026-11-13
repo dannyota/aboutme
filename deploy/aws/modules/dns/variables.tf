@@ -30,8 +30,6 @@ variable "alerts_topic_arn_us_east_1" {
   description = "SNS topic in us-east-1 for the DNSSEC alarms"
 }
 
-# Google Workspace's generated values stay in the ignored prod.tfvars, like
-# every other generated token (docs/runbooks/email.md).
 variable "google_workspace" {
   type = object({
     verification_label  = string
