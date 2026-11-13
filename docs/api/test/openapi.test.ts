@@ -106,7 +106,11 @@ describe("openapi contract", () => {
       pattern: "^projects(/(?=[a-z0-9-]{2,40}$)[a-z0-9]+(-[a-z0-9]+)*)?$",
     });
     const viewPagePattern = new RegExp(authViewPage.schema.pattern);
-    for (const page of ["projects", "projects/ab", `projects/${"a".repeat(40)}`]) {
+    for (const page of [
+      "projects",
+      "projects/ab",
+      `projects/${"a".repeat(40)}`,
+    ]) {
       expect(viewPagePattern.test(page), page).toBe(true);
     }
     for (const page of [
