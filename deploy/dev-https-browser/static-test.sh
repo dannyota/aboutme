@@ -95,7 +95,7 @@ for (const [path, route] of [
 assert.equal(classify(message('secret content', 'https://other.invalid/api/v1/events'), id, slug), 'console-non-http-other');
 assert.equal(classify(message(failed, 'invalid secret'), id, slug), 'console-404-other');
 assert.match(spec, /countedConsoleFailure \?\?= `\$\{classifyConsoleFailure\(message, resumeID, slug\)\}-at-\$\{currentStage\}`/);
-assert.equal(spec.match(/recordCountedConsole\(message, resumeID, slug\);/g)?.length, 4);
+assert.equal(spec.match(/recordCountedConsole\(message, resumeID, slug\);/g)?.length, 5);
 assert.match(spec, /const marker = `fail-\$\{failureStage\}-\$\{reason\}\$\{.*?countedConsoleFailure/s);
 NODE
 # The publish proof's revocation rules: a revoked, deleted, or protected
@@ -262,21 +262,22 @@ assert.equal(count(spec, /deleteRecordedResume\(/g), 1);
 // Record each created resume before waiting for the rest of creation.
 for (const title of [
   'PROJECT_PAGES_TEST_TITLE',
+  'ENTRY_POINTS_TEST_TITLE',
   '"proves native HTTPS publish, discovery, and revocation"',
   '"proves the showcase opt-in, its revocations, and delivery rules"',
   'DELETION_TEST_TITLE',
 ]) {
   assert.match(testBody(title), /createdID = resumeID = (?:accepted\.metadata\.id|created\.id)/, title);
 }
-assert.match(spec, /test\.afterEach\(async \(\{ browser \}, (?:info|testInfo)\) => \{[^]*?setTimeout\([^]*?deleteOutsideCounters\(browser, createdID, createdProjectID\)/);
-assert.match(spec, /for \(const context of browser\.contexts\(\)\) await context\.close\(\);\s*await deleteOutsideCounters\(browser, createdID, createdProjectID\);/);
+assert.match(spec, /test\.afterEach\(async \(\{ browser \}, (?:info|testInfo)\) => \{[^]*?setTimeout\([^]*?deleteOutsideCounters\(browser, createdID, createdProjectIDs\)/);
+assert.match(spec, /for \(const context of browser\.contexts\(\)\) await context\.close\(\);\s*await deleteOutsideCounters\(browser, createdID, createdProjectIDs\);/);
 // The cleanup hook ends where the next hook starts; inside it, deletion comes
 // before the cleanup step and the evidence write.
 const cleanupHook = spec.slice(
   spec.indexOf('test.afterEach(async ({ browser }'),
   spec.indexOf('test.afterEach(async ({}, info)'),
 );
-const deletionAt = cleanupHook.indexOf('await deleteOutsideCounters(browser, createdID, createdProjectID);');
+const deletionAt = cleanupHook.indexOf('await deleteOutsideCounters(browser, createdID, createdProjectIDs);');
 const cleanupStepAt = cleanupHook.indexOf('steps.cleanup = true;');
 const evidenceAt = cleanupHook.indexOf('await writePublishEvidence();');
 assert.ok(deletionAt > 0 && deletionAt < cleanupStepAt && cleanupStepAt < evidenceAt);
@@ -284,9 +285,12 @@ assert.equal(count(spec, /await writePublishEvidence\(\);/g), 1);
 assert.ok(spec.indexOf('test.afterEach(async ({ browser }') < spec.indexOf('test.afterEach(async ({}, info)'));
 assert.equal(count(spec, /deleteOutsideCounters\(browser, /g), 1);
 
-assert.match(cleanup, /await deleteRecordedResume\(cleanupPage, resumeID\);\n\s*if \(projectID !== undefined\) \{\n\s*await deleteRecordedProject\(cleanupPage, projectID\);/);
+assert.match(cleanup, /await deleteRecordedResume\(cleanupPage, resumeID\);\n\s*for \(const projectID of projectIDs\) \{\n\s*await deleteRecordedProject\(cleanupPage, projectID\);/);
 const projects = testBody('PROJECT_PAGES_TEST_TITLE');
-assert.match(projects, /createdProjectID = project\.id;\n\s*expect\(project\.status\)\.toBe\(201\);/);
+assert.match(projects, /if \(project\.id !== undefined\) createdProjectIDs\.push\(project\.id\);\n\s*expect\(project\.status\)\.toBe\(201\);/);
+const entryPoints = testBody('ENTRY_POINTS_TEST_TITLE');
+assert.match(entryPoints, /if \(made\.id !== undefined\) createdProjectIDs\.push\(made\.id\);\n\s*expect\(made\.status\)\.toBe\(201\);/);
+assert.ok(spec.indexOf('test(ENTRY_POINTS_TEST_TITLE') < spec.indexOf('test("proves native HTTPS publish, discovery, and revocation"'));
 assert.match(projects, /notFoundPaths\.add\(path\);\n\s*expect\(await readNotFoundShape\(target, path\)\)\.toEqual\(uniformNotFound\);/);
 assert.equal(count(projects, /await expectUniformNotFound\(viewer, /g), 6);
 assert.match(projects, /!isExpectedNotFoundConsole\(message, notFoundPaths\)/);
@@ -310,6 +314,31 @@ assert.equal(notFound(message(failed(404), `${ALLOWED_ORIGIN}/${slug}/projects/o
 assert.equal(notFound(message(failed(404), `${ALLOWED_ORIGIN}/${slug}/projects?x=1`), asked), false);
 assert.equal(notFound(message(failed(404), `https://other.invalid/${slug}/projects`), asked), false);
 assert.equal(notFound(message('Failed to load resource: net::ERR_FAILED', `${ALLOWED_ORIGIN}/${slug}/projects`), asked), false);
+const entryPointHelpers = await import(pathToFileURL(`${source}/entry-points.ts`));
+const pdfBytes = (text) => Array.from(Buffer.from(text, 'latin1'));
+assert.deepEqual(entryPointHelpers.pdfLinkURIs(pdfBytes([
+  '<</Type /Annot /Subtype /Link /A <</Type /Action /S /URI /URI (https://localhost:20443/a/projects/b)>>>>',
+  '<</A <</S /URI /URI (https://localhost:20443/a\\(x\\)\\\\y\\101)>>>>',
+  '<</A <</S /URI /URI <68747470733A2F2F782F70726F6A65637473 2F63>>>>',
+  '<</A <</S /URI /URI <6>>>>',
+].join('\n'))), [
+  'https://localhost:20443/a/projects/b',
+  'https://localhost:20443/a(x)\\yA',
+  'https://x/projects/c',
+  '`',
+]);
+assert.deepEqual(entryPointHelpers.pdfLinkURIs(pdfBytes('%PDF-1.4 /S /URI /URI << /Base (x) >>')), []);
+assert.equal(entryPointHelpers.isPDF(pdfBytes('%PDF-1.4')), true);
+assert.equal(entryPointHelpers.isPDF(pdfBytes('<html>')), false);
+assert.deepEqual(
+  entryPointHelpers.serverEntryPoints('<main id="public-resume" data-project-links="" data-revision="1"><a data-project-entry="e" href="x">A</a><a class="public-projects" href="y">Projects</a></main>'),
+  { marker: true, titles: 1, bars: 1 },
+);
+assert.deepEqual(
+  entryPointHelpers.serverEntryPoints('<main id="public-resume" data-revision="1"><strong>A</strong></main>'),
+  { marker: false, titles: 0, bars: 0 },
+);
+assert.deepEqual(entryPointHelpers.withoutField({ id: 'e', title: 't', projectId: 'p' }, 'title'), { id: 'e', projectId: 'p' });
 NODE
 grep -Fqx "FROM $BASE" "$SOURCE/base.Containerfile" ||
   fail 'published base has the wrong Playwright base'
@@ -1036,6 +1065,17 @@ const valid = JSON.stringify({
     ].map((name) => [name, true])),
     counts: { stylesheets: 4, styleAttributes: 0, uniformNotFound: 6, gatedAddresses: 3 },
   },
+  entryPoints: {
+    errors: { certificate: 0, console: 0, externalRequest: 0, page: 0 },
+    steps: Object.fromEntries([
+      'firstLink', 'rendered', 'opened', 'publicPDF', 'hidden', 'unlinked',
+      'untitled', 'lastRemoval', 'preview', 'unpublishedPDF', 'cleanup',
+    ].map((name) => [name, true])),
+    counts: {
+      liveStates: 9, renderedTitleLinks: 2, openedPages: 3, publicPDFLinks: 2,
+      unpublishedPDFLinks: 0, previewLinks: 0,
+    },
+  },
 });
 const accepted = (change) => {
   const evidence = JSON.parse(valid);
@@ -1072,6 +1112,21 @@ try {
     ['stylesheets', 2], ['styleAttributes', 1], ['uniformNotFound', 5], ['gatedAddresses', 2],
   ]) {
     assert.equal(accepted((evidence) => { evidence.projects.counts[name] = value; }), false, `project ${name} ${value}`);
+  }
+  assert.equal(accepted((evidence) => { delete evidence.entryPoints; }), false, 'entry points missing');
+  for (const name of Object.keys(JSON.parse(valid).entryPoints.steps)) {
+    assert.equal(accepted((evidence) => { evidence.entryPoints.steps[name] = false; }), false, `entry point step ${name}`);
+  }
+  for (const name of ['certificate', 'console', 'externalRequest', 'page']) {
+    for (const value of [-1, 1]) {
+      assert.equal(accepted((evidence) => { evidence.entryPoints.errors[name] = value; }), false, `entry point ${name} ${value}`);
+    }
+  }
+  for (const [name, value] of [
+    ['liveStates', 8], ['renderedTitleLinks', 3], ['openedPages', 2], ['publicPDFLinks', 3],
+    ['unpublishedPDFLinks', 1], ['unpublishedPDFLinks', -1], ['previewLinks', 1], ['previewLinks', -1],
+  ]) {
+    assert.equal(accepted((evidence) => { evidence.entryPoints.counts[name] = value; }), false, `entry point ${name} ${value}`);
   }
 } finally {
   rmSync(dir, { recursive: true, force: true });
@@ -1327,6 +1382,7 @@ readonly PUBLISH_LIST_OUTPUT=$(ABOUTME_BROWSER_MODE=publish \
   "$SOURCE/node_modules/.bin/playwright" test --list --config "$CONTEXT/playwright.config.ts")
 for listed in \
   'proves the public project pages, their gate, and their revocations' \
+  'proves the project entry points on the resume page and in its PDF' \
   'proves native HTTPS publish, discovery, and revocation' \
   'proves the showcase opt-in, its revocations, and delivery rules' \
   'proves deleting a published resume ends its owner and public reads'; do
@@ -1821,7 +1877,8 @@ JSON
   "statuses": {"publish": 200, "publicPrivate": 200, "publicDiscoverable": 200, "unpublish": 200, "revoked": 404},
   "elapsedMs": {"revocation": 1},
   "headers": {"publishContentType": true, "publishCSRF": true, "publishIfMatch": true, "publishIdempotency": true, "publishSchema": true, "unpublishContentType": true, "unpublishCSRF": true, "unpublishIfMatch": true, "unpublishIdempotency": true, "unpublishSchema": true},
-  "projects": {"errors": {"certificate": 0, "console": 0, "externalRequest": 0, "page": 0}, "steps": {"linked": true, "served": true, "unknownUniform": true, "hiddenUniform": true, "gate": true, "pass": true, "unpublishedUniform": true, "renamed": true, "cleanup": true}, "counts": {"stylesheets": 4, "styleAttributes": 0, "uniformNotFound": 6, "gatedAddresses": 3}}
+  "projects": {"errors": {"certificate": 0, "console": 0, "externalRequest": 0, "page": 0}, "steps": {"linked": true, "served": true, "unknownUniform": true, "hiddenUniform": true, "gate": true, "pass": true, "unpublishedUniform": true, "renamed": true, "cleanup": true}, "counts": {"stylesheets": 4, "styleAttributes": 0, "uniformNotFound": 6, "gatedAddresses": 3}},
+  "entryPoints": {"errors": {"certificate": 0, "console": 0, "externalRequest": 0, "page": 0}, "steps": {"firstLink": true, "rendered": true, "opened": true, "publicPDF": true, "hidden": true, "unlinked": true, "untitled": true, "lastRemoval": true, "preview": true, "unpublishedPDF": true, "cleanup": true}, "counts": {"liveStates": 9, "renderedTitleLinks": 2, "openedPages": 3, "publicPDFLinks": 2, "unpublishedPDFLinks": 0, "previewLinks": 0}}
 }
 JSON
     ;;

@@ -27,12 +27,24 @@ import {
   signInWithGoogle,
   waitForHydration,
   pinEnglish,
+  WAIT_WARM_MS,
 } from "./harness-lib";
 import {
   ALLOWED_ORIGIN,
   httpFailureStatus,
   isExpectedAnonymousMeConsole,
 } from "./network-policy";
+import {
+  entryPointFacts,
+  fetchPDF,
+  isPDF,
+  markPublicRoot,
+  pdfLinkURIs,
+  serverEntryPoints,
+  sortedTitles,
+  withoutField,
+  type EntryPointFacts,
+} from "./entry-points";
 import {
   deleteRecordedProject,
   gateFacts,
@@ -45,6 +57,7 @@ import {
   ownerRenameProject,
   ownerSetEntryHidden,
   ownerSetPublishState,
+  ownerWriteEntry,
   projectDocument,
   projectPageFacts,
   readNotFoundShape,
@@ -122,7 +135,7 @@ let currentStage = "setup";
 let failedStage: string | undefined;
 let countedConsoleFailure: string | undefined;
 let createdID: string | undefined;
-let createdProjectID: string | undefined;
+let createdProjectIDs: string[] = [];
 let writePublishEvidence: (() => Promise<void>) | undefined;
 
 function stage(name: string): void {
@@ -145,9 +158,9 @@ test.afterEach(async ({ browser }, info) => {
   let cleaning = true;
   try {
     for (const context of browser.contexts()) await context.close();
-    await deleteOutsideCounters(browser, createdID, createdProjectID);
+    await deleteOutsideCounters(browser, createdID, createdProjectIDs);
     createdID = undefined;
-    createdProjectID = undefined;
+    createdProjectIDs = [];
     cleaning = false;
     if (info.title === "proves native HTTPS publish, discovery, and revocation") {
       steps.cleanup = true;
@@ -162,6 +175,10 @@ test.afterEach(async ({ browser }, info) => {
     if (info.title === PROJECT_PAGES_TEST_TITLE) {
       projectSteps.cleanup = true;
       stage("projects-cleanup");
+    }
+    if (info.title === ENTRY_POINTS_TEST_TITLE) {
+      entryPointSteps.cleanup = true;
+      stage("entry-points-cleanup");
     }
   } catch (error) {
     if (info.status === info.expectedStatus) {
@@ -193,7 +210,9 @@ test.afterEach(async ({}, info) => {
         ? "deletion"
         : info.title === PROJECT_PAGES_TEST_TITLE
           ? "projects"
-          : "showcase";
+          : info.title === ENTRY_POINTS_TEST_TITLE
+            ? "entry-points"
+            : "showcase";
   await writeFile(
     `/evidence/${journey}-diagnostic.json`,
     `${JSON.stringify({ marker })}\n`,
@@ -310,7 +329,7 @@ async function signInWithPassword(page: Page): Promise<void> {
 async function deleteOutsideCounters(
   browser: Browser,
   resumeID: string,
-  projectID: string | undefined,
+  projectIDs: readonly string[],
 ): Promise<void> {
   const cleanupCounters = newDiagnosticCounters();
   const cleanupContext = await browser.newContext();
@@ -320,7 +339,7 @@ async function deleteOutsideCounters(
     const cleanupPage = await cleanupContext.newPage();
     await signInWithPassword(cleanupPage);
     await deleteRecordedResume(cleanupPage, resumeID);
-    if (projectID !== undefined) {
+    for (const projectID of projectIDs) {
       await deleteRecordedProject(cleanupPage, projectID);
     }
     expect(cleanupCounters.externalRequests).toBe(0);
@@ -446,7 +465,7 @@ test(PROJECT_PAGES_TEST_TITLE, async ({ browser, context, page }) => {
     const id = created.id ?? "";
     stage("projects-create-project-status");
     const project = await ownerCreateProject(page, projectSlug, content);
-    createdProjectID = project.id;
+    if (project.id !== undefined) createdProjectIDs.push(project.id);
     expect(project.status).toBe(201);
     const projectID = project.id ?? "";
     stage("projects-link-status");
@@ -619,6 +638,336 @@ test(PROJECT_PAGES_TEST_TITLE, async ({ browser, context, page }) => {
   projectErrors.console = counters.consoleErrors;
   projectErrors.externalRequest = counters.externalRequests;
   projectErrors.page = counters.pageErrors;
+});
+
+const ENTRY_POINTS_TEST_TITLE =
+  "proves the project entry points on the resume page and in its PDF";
+const ENTRY_POINT_REFETCH_MS = 30_000;
+const entryPointSteps = {
+  firstLink: false,
+  rendered: false,
+  opened: false,
+  publicPDF: false,
+  hidden: false,
+  unlinked: false,
+  untitled: false,
+  lastRemoval: false,
+  preview: false,
+  unpublishedPDF: false,
+  cleanup: false,
+};
+const entryPointCounts = {
+  liveStates: 0,
+  renderedTitleLinks: 0,
+  openedPages: 0,
+  publicPDFLinks: -1,
+  unpublishedPDFLinks: -1,
+  previewLinks: -1,
+};
+const entryPointErrors = {
+  certificate: -1,
+  console: -1,
+  externalRequest: -1,
+  page: -1,
+};
+
+interface Titled {
+  readonly entry: string;
+  readonly slug: string;
+}
+
+test(ENTRY_POINTS_TEST_TITLE, async ({ browser, context, page }) => {
+  test.setTimeout(240_000);
+  stage("entry-points-setup");
+  await pinEnglish(context);
+  const counters = newDiagnosticCounters();
+  const token = crypto.randomUUID().slice(0, 8);
+  const slug = `entry-points-${token}`;
+  const projectsURL = `${ORIGIN}/${slug}/projects`;
+  const projects = [
+    { slug: `atlas-${token}`, name: `Atlas route ${token}` },
+    { slug: `beacon-${token}`, name: `Beacon log ${token}` },
+    { slug: `cinder-${token}`, name: `Cinder notes ${token}` },
+  ];
+  let resumeID: string | undefined;
+  let viewerContext: BrowserContext | undefined;
+  const hooks = {
+    countConsoleError: (message: ConsoleMessage): boolean =>
+      !isExpectedAnonymousMeConsole(message.text(), message.location().url),
+    onCountedConsoleError: (message: ConsoleMessage): void => {
+      recordCountedConsole(message, resumeID, slug);
+    },
+  };
+  await installPublicGuards(context, counters);
+  pageDiagnosticsAttacher(counters, hooks)(page);
+  const expected = (
+    titled: readonly Titled[],
+    bar: boolean,
+    kept: boolean,
+  ): EntryPointFacts => ({
+    titles: sortedTitles(
+      titled.map((link) => ({
+        entry: link.entry,
+        href: `${projectsURL}/${link.slug}`,
+      })),
+    ),
+    bars: bar ? [{ label: "Projects", href: projectsURL }] : [],
+    kept,
+  });
+  const projectURIs = (bytes: readonly number[]): string[] =>
+    pdfLinkURIs(bytes)
+      .filter((uri) => uri.includes("/projects/"))
+      .sort();
+
+  try {
+    stage("entry-points-login");
+    await signInWithPassword(page);
+    stage("entry-points-create-resume-status");
+    const created = await ownerCreate(
+      page,
+      `Entry points proof ${crypto.randomUUID()}`,
+      "Entry points proof resume",
+    );
+    createdID = resumeID = created.id;
+    expect(created.status).toBe(201);
+    const id = created.id ?? "";
+    stage("entry-points-create-projects-status");
+    const projectIDs: string[] = [];
+    for (const project of projects) {
+      const made = await ownerCreateProject(
+        page,
+        project.slug,
+        projectDocument(project.name),
+      );
+      if (made.id !== undefined) createdProjectIDs.push(made.id);
+      expect(made.status).toBe(201);
+      projectIDs.push(made.id ?? "");
+    }
+    stage("entry-points-publish-status");
+    expect(
+      await ownerSetPublishState(page, id, {
+        slug,
+        live: true,
+        signInToView: false,
+        download: true,
+      }),
+    ).toBe(200);
+
+    viewerContext = await browser.newContext();
+    await installPublicGuards(viewerContext, counters);
+    const viewer = await viewerContext.newPage();
+    pageDiagnosticsAttacher(counters, hooks)(viewer);
+    stage("entry-points-open-status");
+    expect((await openPublic(viewer, `/${slug}`)).status()).toBe(200);
+    stage("entry-points-open-hydrated");
+    await waitForHydration(viewer, "public-resume");
+    await markPublicRoot(viewer);
+    const expectLive = async (target: EntryPointFacts): Promise<void> => {
+      await expect
+        .poll(() => entryPointFacts(viewer), {
+          timeout: ENTRY_POINT_REFETCH_MS,
+        })
+        .toEqual(target);
+      entryPointCounts.liveStates += 1;
+    };
+    stage("entry-points-zero-links");
+    await expectLive(expected([], false, true));
+
+    const linkProject = async (index: number, name: string) => {
+      stage(`entry-points-${name}-status`);
+      const linked = await ownerLinkProject(page, id, projectIDs[index] ?? "");
+      expect(linked.status).toBe(200);
+      stage(`entry-points-${name}-entry`);
+      expect(linked.sectionKey).toBeDefined();
+      expect(linked.entry?.id).toEqual(expect.any(String));
+      return {
+        sectionKey: linked.sectionKey ?? "",
+        entry: linked.entry ?? {},
+        titled: {
+          entry: String(linked.entry?.id),
+          slug: projects[index]?.slug ?? "",
+        },
+      };
+    };
+    const atlas = await linkProject(0, "first-link");
+    stage("entry-points-first-link");
+    await expectLive(expected([atlas.titled], true, true));
+    entryPointSteps.firstLink = true;
+
+    const beacon = await linkProject(1, "second-link");
+    stage("entry-points-second-link");
+    await expectLive(expected([atlas.titled, beacon.titled], true, true));
+    const cinder = await linkProject(2, "untitled-link");
+    stage("entry-points-untitled-link");
+    await expectLive(
+      expected([atlas.titled, beacon.titled, cinder.titled], true, true),
+    );
+    stage("entry-points-untitled-title-status");
+    const untitled = withoutField(cinder.entry, "title");
+    expect(
+      await ownerWriteEntry(page, id, cinder.sectionKey, untitled),
+    ).toBe(200);
+    stage("entry-points-untitled-title");
+    await expectLive(expected([atlas.titled, beacon.titled], true, true));
+
+    stage("entry-points-rendered-status");
+    const reader = await viewerContext.newPage();
+    pageDiagnosticsAttacher(counters, hooks)(reader);
+    const rendered = await openPublic(reader, `/${slug}`);
+    expect(rendered.status()).toBe(200);
+    stage("entry-points-rendered-server");
+    expect(serverEntryPoints(await rendered.text())).toEqual({
+      marker: true,
+      titles: 2,
+      bars: 1,
+    });
+    stage("entry-points-rendered-content");
+    await waitForHydration(reader, "public-resume");
+    const renderedFacts = await entryPointFacts(reader);
+    expect(renderedFacts).toEqual(
+      expected([atlas.titled, beacon.titled], true, false),
+    );
+    entryPointCounts.renderedTitleLinks = renderedFacts.titles.length;
+    entryPointSteps.rendered = true;
+
+    for (const [name, href] of [
+      ...renderedFacts.titles.map(({ href }) => ["title", href] as const),
+      ...renderedFacts.bars.map(({ href }) => ["bar", href] as const),
+    ]) {
+      stage(`entry-points-open-${name}-status`);
+      expect((await reader.goto(href))?.status()).toBe(200);
+      stage(`entry-points-open-${name}-content`);
+      await expect(reader.locator("main#public-project")).toHaveCount(1);
+      entryPointCounts.openedPages += 1;
+    }
+    entryPointSteps.opened = true;
+
+    stage("entry-points-public-pdf-status");
+    const publicPDF = await fetchPDF(
+      reader,
+      `/api/v1/public/resumes/${slug}/pdf`,
+      "omit",
+    );
+    expect(publicPDF.status).toBe(200);
+    stage("entry-points-public-pdf-links");
+    expect(publicPDF.contentType).toBe("application/pdf");
+    expect(isPDF(publicPDF.bytes)).toBe(true);
+    const publicLinks = projectURIs(publicPDF.bytes);
+    expect(publicLinks).toEqual(
+      renderedFacts.titles.map(({ href }) => href).sort(),
+    );
+    entryPointCounts.publicPDFLinks = publicLinks.length;
+    entryPointSteps.publicPDF = true;
+
+    stage("entry-points-hide-status");
+    expect(
+      await ownerWriteEntry(page, id, atlas.sectionKey, {
+        ...atlas.entry,
+        isHidden: true,
+      }),
+    ).toBe(200);
+    stage("entry-points-hidden-link");
+    await expectLive(expected([beacon.titled], true, true));
+    entryPointSteps.hidden = true;
+    stage("entry-points-unlink-status");
+    expect(
+      await ownerWriteEntry(
+        page,
+        id,
+        beacon.sectionKey,
+        withoutField(beacon.entry, "projectId"),
+      ),
+    ).toBe(200);
+    stage("entry-points-unlinked-untitled-bar");
+    await expectLive(expected([], true, true));
+    entryPointSteps.unlinked = true;
+    entryPointSteps.untitled = true;
+    stage("entry-points-last-unlink-status");
+    expect(
+      await ownerWriteEntry(
+        page,
+        id,
+        cinder.sectionKey,
+        withoutField(untitled, "projectId"),
+      ),
+    ).toBe(200);
+    stage("entry-points-last-unlinked-bar");
+    await expectLive(expected([], false, true));
+    entryPointSteps.lastRemoval = true;
+    stage("entry-points-show-status");
+    expect(
+      await ownerWriteEntry(page, id, atlas.sectionKey, {
+        ...atlas.entry,
+        isHidden: false,
+      }),
+    ).toBe(200);
+    stage("entry-points-shown-link");
+    await expectLive(expected([atlas.titled], true, true));
+
+    stage("entry-points-preview-open");
+    await page.goto(`${ORIGIN}/app/resumes/${id}`);
+    await waitForHydration(page, "__nuxt", WAIT_WARM_MS);
+    stage("entry-points-preview-content");
+    await expect(
+      page
+        .getByTestId("preview-sheet")
+        .getByText(projects[0]?.name ?? "", { exact: true })
+        .filter({ visible: true })
+        .first(),
+    ).toBeVisible({ timeout: ENTRY_POINT_REFETCH_MS });
+    entryPointCounts.previewLinks = await page
+      .locator("a[data-project-entry]")
+      .count();
+    expect(entryPointCounts.previewLinks).toBe(0);
+    entryPointSteps.preview = true;
+
+    stage("entry-points-close-viewer");
+    await viewerContext.close();
+    viewerContext = undefined;
+    stage("entry-points-unpublish-status");
+    expect(
+      await ownerSetPublishState(page, id, {
+        slug,
+        live: false,
+        signInToView: false,
+      }),
+    ).toBe(200);
+    stage("entry-points-unpublished-pdf-status");
+    const ownerPDF = await fetchPDF(
+      page,
+      `/api/v1/resumes/${id}/pdf`,
+      "include",
+    );
+    expect(ownerPDF.status).toBe(200);
+    stage("entry-points-unpublished-pdf-links");
+    expect(ownerPDF.contentType).toBe("application/pdf");
+    expect(isPDF(ownerPDF.bytes)).toBe(true);
+    entryPointCounts.unpublishedPDFLinks = projectURIs(ownerPDF.bytes).length;
+    expect(entryPointCounts.unpublishedPDFLinks).toBe(0);
+    entryPointSteps.unpublishedPDF = true;
+  } catch (error) {
+    failedStage = currentStage;
+    throw error;
+  } finally {
+    stage("entry-points-close-contexts");
+    if (viewerContext !== undefined) await viewerContext.close();
+    if (resumeID !== undefined) {
+      await page.close();
+    }
+  }
+
+  stage("entry-points-final-certificate-errors");
+  expect(counters.certificateErrors).toBe(0);
+  stage("entry-points-final-console-errors");
+  expect(counters.consoleErrors).toBe(0);
+  stage("entry-points-final-external-requests");
+  expect(counters.externalRequests).toBe(0);
+  stage("entry-points-final-page-errors");
+  expect(counters.pageErrors).toBe(0);
+  entryPointErrors.certificate = counters.certificateErrors;
+  entryPointErrors.console = counters.consoleErrors;
+  entryPointErrors.externalRequest = counters.externalRequests;
+  entryPointErrors.page = counters.pageErrors;
 });
 
 test("proves native HTTPS publish, discovery, and revocation", async ({
@@ -1291,6 +1640,12 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
     expect(projectSteps).toEqual(
       Object.fromEntries(Object.keys(projectSteps).map((key) => [key, true])),
     );
+    stage("final-entry-point-steps");
+    expect(entryPointSteps).toEqual(
+      Object.fromEntries(
+        Object.keys(entryPointSteps).map((key) => [key, true]),
+      ),
+    );
     stage("final-evidence");
     await writeFile(
       EVIDENCE_PATH,
@@ -1312,6 +1667,11 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
           errors: projectErrors,
           steps: projectSteps,
           counts: projectCounts,
+        },
+        entryPoints: {
+          errors: entryPointErrors,
+          steps: entryPointSteps,
+          counts: entryPointCounts,
         },
       })}\n`,
       { flag: "wx", mode: 0o600 },

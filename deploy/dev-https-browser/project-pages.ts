@@ -162,9 +162,18 @@ export async function ownerSetEntryHidden(
   if (linked.sectionKey === undefined || linked.entry === undefined) {
     throw new Error('linked entry is unavailable');
   }
+  return ownerWriteEntry(page, resumeID, linked.sectionKey, { ...linked.entry, isHidden: hidden });
+}
+
+export async function ownerWriteEntry(
+  page: Page,
+  resumeID: string,
+  sectionKey: string,
+  entry: Readonly<Record<string, unknown>>,
+): Promise<number> {
   const token = await freshCSRF(page);
   return page.evaluate(
-    async ({ entry, hidden, resumeID, schemaVersion, sectionKey, token }) => {
+    async ({ entry, resumeID, schemaVersion, sectionKey, token }) => {
       const path = `/api/v1/resumes/${encodeURIComponent(resumeID)}`;
       const read = await fetch(path, {
         cache: 'no-store',
@@ -172,7 +181,7 @@ export async function ownerSetEntryHidden(
         headers: { 'X-Resume-Schema-Version': schemaVersion },
       });
       const written = await fetch(`${path}/entries/${encodeURIComponent(sectionKey)}`, {
-        body: JSON.stringify({ entry: { ...entry, isHidden: hidden } }),
+        body: JSON.stringify({ entry }),
         cache: 'no-store',
         credentials: 'include',
         headers: {
@@ -186,14 +195,7 @@ export async function ownerSetEntryHidden(
       });
       return written.status;
     },
-    {
-      entry: linked.entry,
-      hidden,
-      resumeID,
-      schemaVersion: SCHEMA_VERSION,
-      sectionKey: linked.sectionKey,
-      token,
-    },
+    { entry, resumeID, schemaVersion: SCHEMA_VERSION, sectionKey, token },
   );
 }
 
@@ -201,6 +203,7 @@ export interface PublishState {
   readonly slug: string;
   readonly live: boolean;
   readonly signInToView: boolean;
+  readonly download?: boolean;
 }
 
 export async function ownerSetPublishState(
@@ -221,7 +224,7 @@ export async function ownerSetPublishState(
         body: JSON.stringify({
           slug: state.slug,
           live: state.live,
-          downloadEnabled: false,
+          downloadEnabled: state.download ?? false,
           seoGeoEnabled: false,
           signInToView: state.signInToView,
         }),
