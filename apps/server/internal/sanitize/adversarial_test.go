@@ -146,9 +146,7 @@ func (p blindPolicy) checkNode(node *html.Node) error {
 }
 
 func (p blindPolicy) checkURL(raw string) error {
-	// The URL Standard removes leading/trailing C0 controls and spaces, and
-	// removes ASCII tab/newline/carriage-return characters before parsing.
-	// Apply that browser-facing normalization before deciding the scheme.
+	// The URL Standard strips leading and trailing C0 controls and spaces and removes tab, newline, and carriage return before parsing.
 	normalized := normalizeBrowserURL(raw)
 	parsed, err := url.Parse(normalized)
 	if err != nil {

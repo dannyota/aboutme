@@ -8,9 +8,6 @@ import (
 	"testing"
 )
 
-// TestDecodeInput_RequestInvalidNamesTheFailingPath keeps the closed
-// request_invalid answer and puts the failing path in its message, the one
-// place the error shape has for it.
 func TestDecodeInput_RequestInvalidNamesTheFailingPath(t *testing.T) {
 	t.Parallel()
 

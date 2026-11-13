@@ -21,8 +21,6 @@ func makePrivateDirectory(t *testing.T, path string) {
 	}
 }
 
-// testRepository creates a main checkout with a .git directory and one linked
-// worktree whose .git file points through commondir to the main one.
 func testRepository(t *testing.T) (mainRoot, worktree string) {
 	t.Helper()
 	base := t.TempDir()
@@ -127,9 +125,6 @@ func TestRecoveryRuntimeDepsWireEveryBoundaryWithoutNetwork(t *testing.T) {
 	}
 }
 
-// x509.SystemCertPool honors SSL_CERT_FILE and SSL_CERT_DIR, so a production
-// run must refuse rather than silently trust whatever root those name, for
-// example a local-mode override inherited from the launcher's environment.
 func TestRecoveryProductionRefusesAnInheritedTLSOverride(t *testing.T) {
 	mainRoot, _ := testRepository(t)
 	run, browser := launcherLayout(t, mainRoot, ".dev", "mcp-workflow")
@@ -152,8 +147,6 @@ func TestRecoveryProductionRefusesAnInheritedTLSOverride(t *testing.T) {
 	}
 }
 
-// The same override is the local runner's intended way to trust the exported
-// development root, so it must not trip the production-only refusal.
 func TestRecoveryLocalKeepsAnExplicitTLSOverride(t *testing.T) {
 	mainRoot, _ := testRepository(t)
 	run, browser := launcherLayout(t, mainRoot, ".dev", "mcp-workflow-local")
@@ -207,10 +200,6 @@ func TestRecoveryCanceledRunStillRemovesOwnerContent(t *testing.T) {
 	}
 }
 
-// A failed connect must leave browser-result.json for the launcher's
-// report_failure to read the browser helper's own word; only a successful
-// connect clears the browser-handoff files. See
-// docs/design/mcp-owner-workflow.md#browser-helper-interface.
 func TestRecoveryFinishConnectKeepsBrowserResultOnlyOnFailure(t *testing.T) {
 	for name, test := range map[string]struct {
 		connected   bool

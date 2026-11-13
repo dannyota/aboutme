@@ -22,10 +22,8 @@ import (
 )
 
 type readerStore struct {
-	row   store.Resume
-	links json.RawMessage
-	// projects is the project statements' projects column; projectSlug
-	// records the slug the project page statement was asked for.
+	row         store.Resume
+	links       json.RawMessage
 	projects    json.RawMessage
 	projectSlug string
 	err         error
@@ -456,7 +454,6 @@ func TestProjectRowAndPhotoKeyDigestKeepTheKeyPrivate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ProjectRow() error = %v", err)
 	}
-	// The hex SHA-256 of "private/object-key".
 	const want = "fdfb86ee7abe56a6e1e3425240b4d10ec74c29c288a47f2a7c20a79c8eff50ff"
 	if digest := snapshot.PhotoKeyDigest(); digest != want {
 		t.Fatalf("PhotoKeyDigest() = %q, want %q", digest, want)

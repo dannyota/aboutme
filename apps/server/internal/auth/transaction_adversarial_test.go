@@ -1,5 +1,3 @@
-// These adversarial tests cover replay, expiry, provider mix-up, unknown
-// handles, concurrent consumption, and no-oracle errors.
 package auth_test
 
 import (
@@ -21,31 +19,16 @@ import (
 	"danny.vn/aboutme/apps/server/internal/testutil"
 )
 
-// txTTL mirrors the unexported transaction and cookie lifetime.
 const txTTL = 10 * time.Minute
 
-// ---- row-state assertion helpers --------------------------------------
-//
-// store.Queries exposes no
-// oauth_transactions accessors, so the replay test's "no second-row
-// mutation" assertion goes straight at the table with a dedicated,
-// unshared connection pool rather than inventing a store method.
-
-// rowQuerier is satisfied by *store.Pool (via its embedded
-// *pgxpool.Pool): the minimal surface rowState needs.
 type rowQuerier interface {
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
 
-// handleHash reproduces oauth_transactions.handle_hash from a raw handle
-// string. TransactionStore stores the raw SHA-256 digest, matching the
-// design requirement that transaction handles are hashed at rest like
-// session tokens.
 func handleHash(handle string) [sha256.Size]byte {
 	return sha256.Sum256([]byte(handle))
 }
 
-// rowState returns row count and consumed_at without an ErrNoRows branch.
 func rowState(ctx context.Context, t *testing.T, db rowQuerier, handle string) (consumedAt *time.Time, count int) {
 	t.Helper()
 
@@ -60,8 +43,6 @@ func rowState(ctx context.Context, t *testing.T, db rowQuerier, handle string) (
 	return consumedAt, count
 }
 
-// newRowInspectorPool opens a dedicated pool for direct row assertions. The
-// caller must migrate first through newTestQueries.
 func newRowInspectorPool(t *testing.T) *store.Pool {
 	t.Helper()
 
@@ -77,11 +58,6 @@ func newRowInspectorPool(t *testing.T) *store.Pool {
 	return pool
 }
 
-// ---- misc test helpers -------------------------------------------------
-
-// randomHandle returns a handle shaped exactly like a real one (32 raw
-// bytes, base64url, no padding) that was never passed to Begin, for
-// TestConsume_UnknownHandle.
 func randomHandle(t *testing.T) string {
 	t.Helper()
 	buf := make([]byte, 32)
@@ -91,11 +67,6 @@ func randomHandle(t *testing.T) string {
 	return base64.RawURLEncoding.EncodeToString(buf)
 }
 
-// assertTxEqual compares two auth.Transaction values field-by-field via
-// ==: the struct's fields (two named strings, a uuid.UUID, and four
-// plain strings) are all comparable, so a whole-struct != is sufficient
-// and avoids a fragile field-by-field listing that would drift if
-// Transaction gains fields.
 func assertTxEqual(t *testing.T, got, want auth.Transaction) {
 	t.Helper()
 	if got != want {
@@ -103,10 +74,6 @@ func assertTxEqual(t *testing.T, got, want auth.Transaction) {
 	}
 }
 
-// ---- tests ---------------------------------------------------------
-
-// TestOAuthTxCookieName_MatchesHostPrefixContract pins the prefix that activates
-// the browser's host-only cookie constraints.
 func TestOAuthTxCookieName_MatchesHostPrefixContract(t *testing.T) {
 	const want = "__Host-oauth-tx"
 	if auth.OAuthTxCookieName != want {
@@ -114,9 +81,6 @@ func TestOAuthTxCookieName_MatchesHostPrefixContract(t *testing.T) {
 	}
 }
 
-// TestConsume_RejectsReplay proves a transaction is single-use. The
-// row-state checks catch a second mutation that an error assertion alone
-// cannot observe.
 func TestConsume_RejectsReplay(t *testing.T) {
 	q := newTestQueries(t)
 	ts := auth.NewTransactionStore(q)
@@ -156,11 +120,6 @@ func TestConsume_RejectsReplay(t *testing.T) {
 	}
 }
 
-// TestConsume_RejectsExpired uses an injected clock instead of sleeping.
-// It also proves an expired transaction stays rejected on later attempts.
-//
-// The contract does not specify whether a rejected expired transaction
-// records consumed_at, so this test does not pin that implementation detail.
 func TestConsume_RejectsExpired(t *testing.T) {
 	q := newTestQueries(t)
 	clk := testutil.NewClockAtEpoch()
@@ -179,15 +138,11 @@ func TestConsume_RejectsExpired(t *testing.T) {
 		t.Fatalf("Consume() after TTL error = %v, want ErrTransactionInvalid", err)
 	}
 
-	// Replay-after-expiry: still rejected, not a different outcome.
 	if _, err := ts.Consume(ctx, handle, auth.ProviderGoogle); !errors.Is(err, auth.ErrTransactionInvalid) {
 		t.Errorf("second Consume() after TTL error = %v, want ErrTransactionInvalid", err)
 	}
 }
 
-// TestConsume_RejectsProviderMismatch covers every ordered provider pair. A
-// mismatch burns the single-attempt transaction, so a later correct-provider
-// consume must also fail.
 func TestConsume_RejectsProviderMismatch(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -214,18 +169,10 @@ func TestConsume_RejectsProviderMismatch(t *testing.T) {
 				t.Fatalf("Begin() error: %v", err)
 			}
 
-			// The handle itself is valid and unexpired -- Consume must
-			// still reject it under the wrong provider (RFC 9700 §4.4
-			// mix-up defense). This matters concretely because
-			// __Host-oauth-tx is Path=/ and Lax, so the browser will
-			// attach it to any /api/v1/auth/*/callback request,
-			// including a different provider's.
 			if _, err := ts.Consume(ctx, handle, tt.consumeAs); !errors.Is(err, auth.ErrTransactionInvalid) {
 				t.Fatalf("Consume(as %s) error = %v, want ErrTransactionInvalid", tt.consumeAs, err)
 			}
 
-			// The mismatched attempt already consumed the transaction. A retry
-			// with the correct provider must remain invalid.
 			if _, err := ts.Consume(ctx, handle, tt.begin); !errors.Is(err, auth.ErrTransactionInvalid) {
 				t.Errorf("Consume(as %s, the correct provider) after a mismatched attempt error = %v, want ErrTransactionInvalid (single-attempt fail-closed)", tt.begin, err)
 			}
@@ -233,9 +180,6 @@ func TestConsume_RejectsProviderMismatch(t *testing.T) {
 	}
 }
 
-// TestConsume_UnknownHandle proves a handle shaped like a real one but
-// never begun must
-// fail the same way as every other invalid case.
 func TestConsume_UnknownHandle(t *testing.T) {
 	q := newTestQueries(t)
 	ts := auth.NewTransactionStore(q)
@@ -248,12 +192,9 @@ func TestConsume_UnknownHandle(t *testing.T) {
 	}
 }
 
-// TestConsume_NoOracleAcrossFailureModes requires identical sentinel identity
-// and text across replay, expiry, mismatch, and unknown handles.
 func TestConsume_NoOracleAcrossFailureModes(t *testing.T) {
 	errs := make(map[string]error, 4)
 
-	// replay
 	{
 		q := newTestQueries(t)
 		ts := auth.NewTransactionStore(q)
@@ -270,7 +211,6 @@ func TestConsume_NoOracleAcrossFailureModes(t *testing.T) {
 		errs["replay"] = err
 	}
 
-	// expired
 	{
 		q := newTestQueries(t)
 		clk := testutil.NewClockAtEpoch()
@@ -286,7 +226,6 @@ func TestConsume_NoOracleAcrossFailureModes(t *testing.T) {
 		errs["expired"] = err
 	}
 
-	// provider mismatch
 	{
 		q := newTestQueries(t)
 		ts := auth.NewTransactionStore(q)
@@ -300,7 +239,6 @@ func TestConsume_NoOracleAcrossFailureModes(t *testing.T) {
 		errs["mismatch"] = err
 	}
 
-	// unknown handle
 	{
 		q := newTestQueries(t)
 		ts := auth.NewTransactionStore(q)
@@ -326,9 +264,6 @@ func TestConsume_NoOracleAcrossFailureModes(t *testing.T) {
 	}
 }
 
-// TestConsume_ConcurrentDoubleConsume_ExactlyOneSucceeds races one handle
-// through a shared pool. Exactly one winner proves atomic claim rather than a
-// select-then-update time-of-check/time-of-use sequence.
 func TestConsume_ConcurrentDoubleConsume_ExactlyOneSucceeds(t *testing.T) {
 	q := newTestQueries(t)
 	ts := auth.NewTransactionStore(q)

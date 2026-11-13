@@ -137,7 +137,7 @@ func TestCustomizationDeniedPathsRejectWholeBatch(t *testing.T) {
 		"unknown.leaf", "colors", "layout", "layout.sections", "layout.sections.main",
 		"layout.sections.sidebar.0", "__proto__.polluted", "constructor.prototype", "prototype.x",
 		"colors..accent", ".colors.accent", "colors.accent.", "colors.0", strings.Repeat("a", 257),
-		"colors.аccent", // Cyrillic small a.
+		"colors.аccent",
 	}
 	for _, path := range denied {
 		t.Run(path, func(t *testing.T) {

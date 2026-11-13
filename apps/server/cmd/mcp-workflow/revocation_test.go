@@ -13,8 +13,6 @@ import (
 	"golang.org/x/oauth2"
 )
 
-// scriptedTransport answers a fixed list of responses and records requests.
-// It fails once the script is exhausted, so no test can loop.
 type scriptedTransport struct {
 	requests []*http.Request
 	bodies   []string

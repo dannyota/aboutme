@@ -13,9 +13,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/testutil"
 )
 
-// validEmailCorpus is the canonical-email corpus shared with the migration
-// preflight fixtures: every entry must round-trip through Canonicalize to its
-// own lowercase form.
 var validEmailCorpus = []string{
 	"a@b.co",
 	"user@example.com",
@@ -117,9 +114,6 @@ func TestCanonicalizeInvalid(t *testing.T) {
 	}
 }
 
-// TestCanonicalizeLiveEmails reads every stored email through the exact Go
-// parser. It is skipped unless TEST_DATABASE_URL is set; the corpus above is
-// seeded so the check is non-vacuous even on a cold database.
 func TestCanonicalizeLiveEmails(t *testing.T) {
 	dsn := testutil.RequireMigratedTestDatabaseURL(t)
 	db, err := sql.Open("pgx", dsn)

@@ -1,23 +1,3 @@
-// Constraint-boundary and trigger-behavior tests for the resumes,
-// slug_tombstones, and idempotency_records tables. Every insert here is raw
-// parameterized SQL against a live, goose-migrated database -- no
-// internal/store layer in the path -- because the point is proving the
-// database itself enforces every invariant (even against a writer that
-// bypasses the store entirely), not that a Go-level validation pass happens
-// to agree with it.
-//
-// Every test shares TEST_DATABASE_URL (via
-// internal/testutil.RequireMigratedTestDatabaseURL) with every other
-// DB-backed package's tests, migrated to head first. Each test opens its
-// own pgx transaction and rolls it back in t.Cleanup, so repeated runs
-// against a persistent test database never accumulate rows or collide on
-// a unique constraint (slug, idempotency key, ...). A single test case
-// that must observe more than one write outcome without losing the rest
-// of its assertions (e.g. "reject this, then prove a good row still
-// works") uses a pgx nested transaction (withSavepoint) for the write
-// expected to fail: pgx implements Tx.Begin on an existing Tx as a real
-// SQL SAVEPOINT, so only that inner write rolls back, leaving the outer
-// transaction healthy for whatever comes next in the same test.
 package migrations_test
 
 import (
@@ -37,30 +17,16 @@ import (
 	"danny.vn/aboutme/apps/server/migrations"
 )
 
-// sqlExecer is the minimal pgx surface resumeSchemaTx's raw-SQL helpers
-// need: both *pgxpool.Pool, pgx.Tx, and a savepoint-backed nested pgx.Tx
-// (see withSavepoint) all satisfy it, so the same insert/query helpers
-// work whether called against the outer transaction directly or against a
-// savepoint standing in for one write that's expected to fail.
 type sqlExecer interface {
 	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
 
-// newResumeSchemaTx returns a pgx transaction against TEST_DATABASE_URL
-// (migrated to head) and the context to use with it, with the transaction
-// rolled back and the pool closed in t.Cleanup. This intentionally opens a
-// pgx pool directly (github.com/jackc/pgx/v5/pgxpool), not
-// internal/store.NewPool: this file's whole point is exercising the
-// database directly, with zero dependency on -- or path through --
-// internal/store's generated query layer.
 func newResumeSchemaTx(t *testing.T) (pgx.Tx, context.Context) {
 	t.Helper()
 	return beginSchemaTx(t, testutil.RequireMigratedTestDatabaseURL(t))
 }
 
-// newResumeSchemaTxAt is newResumeSchemaTx on a private database migrated to
-// version, for tests of schema objects that a later migration drops.
 func newResumeSchemaTxAt(t *testing.T, version int64) (pgx.Tx, context.Context) {
 	t.Helper()
 	dsn := newTestDatabase(t)
@@ -85,8 +51,6 @@ func newResumeSchemaTxAt(t *testing.T, version int64) (pgx.Tx, context.Context) 
 	return beginSchemaTx(t, dsn)
 }
 
-// beginSchemaTx opens a pool on dsn and begins the transaction that
-// newResumeSchemaTx and newResumeSchemaTxAt return.
 func beginSchemaTx(t *testing.T, dsn string) (pgx.Tx, context.Context) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -111,15 +75,7 @@ func beginSchemaTx(t *testing.T, dsn string) (pgx.Tx, context.Context) {
 	return tx, ctx
 }
 
-// withSavepoint runs fn against a real Postgres SAVEPOINT nested inside
-// tx (see pgx.Tx.Begin's doc comment: calling Begin on an existing Tx
-// issues SAVEPOINT/RELEASE SAVEPOINT/ROLLBACK TO SAVEPOINT, not a second
-// top-level transaction). fn's error, if any, rolls the savepoint back
-// and is returned; success releases the savepoint and commits nothing
-// beyond it -- either way, tx itself is left usable for whatever the
-// caller does next, which is exactly what a table-driven test over many
-// independent constraint-boundary cases needs: one rejected write must
-// never poison the whole shared transaction for the next case.
+// pgx.Tx.Begin on an existing Tx issues SAVEPOINT, not a second transaction (pgx docs).
 func withSavepoint(ctx context.Context, t *testing.T, tx pgx.Tx, fn func(sp pgx.Tx) error) error {
 	t.Helper()
 
@@ -141,8 +97,6 @@ func withSavepoint(ctx context.Context, t *testing.T, tx pgx.Tx, fn func(sp pgx.
 	return nil
 }
 
-// createTestUser inserts a minimal users row via raw SQL (resumes.user_id and
-// idempotency_records.user_id are FKs into users) and returns its ID.
 func createTestUser(ctx context.Context, t *testing.T, db sqlExecer) uuid.UUID {
 	t.Helper()
 
@@ -157,12 +111,6 @@ func createTestUser(ctx context.Context, t *testing.T, db sqlExecer) uuid.UUID {
 	return id
 }
 
-// requireConstraintViolation fails t unless err is (or wraps) a
-// *pgconn.PgError whose ConstraintName is exactly want -- the same
-// assertion shape internal/user's own store test uses
-// (TestStore_Integration_CreateDuplicateEmailRejected), so a boundary case
-// here names the exact constraint the DDL declares, not just "some error
-// occurred".
 func requireConstraintViolation(t *testing.T, err error, want string) {
 	t.Helper()
 
@@ -178,14 +126,6 @@ func requireConstraintViolation(t *testing.T, err error, want string) {
 	}
 }
 
-// -----------------------------------------------------------------------
-// resumes: constraint boundary matrix.
-// -----------------------------------------------------------------------
-
-// resumeRow is every column of a resumes insert this file needs to vary.
-// personal_details/content/customization are always '{}'::jsonb -- no
-// boundary in this DDL depends on their content, only their
-// NOT NULL-ness, which every row here already satisfies.
 type resumeRow struct {
 	userID        uuid.UUID
 	title         string
@@ -197,15 +137,8 @@ type resumeRow struct {
 	lng           *string
 }
 
-// strPtr is a small helper so table entries can write &s := "..." inline
-// without a local variable at each call site.
 func strPtr(s string) *string { return &s }
 
-// defaultResumeRow returns an otherwise-valid resumes row for userID, with
-// a slug unique to this row (case-qualified, so many defaultResumeRow
-// calls sharing one outer transaction never collide on
-// resumes_slug_key) -- every boundary case below starts from this and
-// overrides exactly the one field it means to test.
 func defaultResumeRow(userID uuid.UUID, slugSeed string) resumeRow {
 	return resumeRow{
 		userID:        userID,
@@ -219,9 +152,6 @@ func defaultResumeRow(userID uuid.UUID, slugSeed string) resumeRow {
 	}
 }
 
-// insertResume inserts row into resumes via db (either the outer
-// transaction directly, or a withSavepoint-nested one for a write expected
-// to fail).
 func insertResume(ctx context.Context, db sqlExecer, row resumeRow) error {
 	_, err := db.Exec(ctx, `
 		INSERT INTO resumes (
@@ -232,9 +162,6 @@ func insertResume(ctx context.Context, db sqlExecer, row resumeRow) error {
 	return err
 }
 
-// insertResumeReturningID is insertResume, additionally returning the new
-// row's id -- needed by the trigger tests, which delete a specific row to
-// prove a freed slot lets a new insert through.
 func insertResumeReturningID(ctx context.Context, db sqlExecer, row resumeRow) (uuid.UUID, error) {
 	var id uuid.UUID
 	err := db.QueryRow(ctx, `
@@ -254,7 +181,7 @@ func TestResumeSchema_ConstraintBoundaries(t *testing.T) {
 	tests := []struct {
 		name           string
 		mutate         func(*resumeRow)
-		wantConstraint string // "" means the insert must succeed
+		wantConstraint string
 	}{
 		{
 			name:           "slug length 3 rejected",
@@ -350,11 +277,6 @@ func TestResumeSchema_ConstraintBoundaries(t *testing.T) {
 
 	for i, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Each case gets its own user: a shared user across every
-			// "accepted" case would itself trip resumes_enforce_cap
-			// after the 3rd successful insert, which is a false
-			// failure of a column-constraint boundary case, not of
-			// the cap trigger under test elsewhere.
 			userID := createTestUser(ctx, t, tx)
 
 			row := defaultResumeRow(userID, fmt.Sprintf("boundary-%02d", i))
@@ -393,22 +315,11 @@ func TestResumeSchema_DuplicateSlugRejected(t *testing.T) {
 	requireConstraintViolation(t, err, "resumes_slug_key")
 }
 
-// -----------------------------------------------------------------------
-// slug_tombstones: format check + duplicate.
-// -----------------------------------------------------------------------
-
 func insertTombstone(ctx context.Context, db sqlExecer, slug string) error {
 	_, err := db.Exec(ctx, `INSERT INTO slug_tombstones (slug) VALUES ($1)`, slug)
 	return err
 }
 
-// TestSlugTombstones_ConstraintBoundaries mirrors
-// TestResumeSchema_ConstraintBoundaries' slug-format coverage in full,
-// rather than a single short-slug case. slug_tombstones_slug_format_check
-// is a textually independent second copy of resumes_slug_format_check's
-// rule (there is no shared constraint, no shared function -- just the same
-// regex and bounds typed twice), so a divergent bound or a mistyped regex
-// in this copy would otherwise sail through with no test ever noticing.
 func TestSlugTombstones_ConstraintBoundaries(t *testing.T) {
 	t.Parallel()
 	tx, ctx := newResumeSchemaTx(t)
@@ -416,7 +327,7 @@ func TestSlugTombstones_ConstraintBoundaries(t *testing.T) {
 	tests := []struct {
 		name           string
 		slug           string
-		wantConstraint string // "" means the insert must succeed
+		wantConstraint string
 	}{
 		{
 			name:           "slug length 3 rejected",
@@ -488,16 +399,6 @@ func TestSlugTombstones_DuplicateSlugRejected(t *testing.T) {
 	requireConstraintViolation(t, err, "slug_tombstones_slug_key")
 }
 
-// -----------------------------------------------------------------------
-// idempotency_records: (user_id, route, idempotency_key) duplicate.
-// -----------------------------------------------------------------------
-
-// idempotencyRecordExpiresAt is a fixed, deterministic expires_at for every
-// idempotency_records insert in this file (repo rule: injected clocks, not
-// the wall clock, in every test -- see the root CLAUDE.md's determinism
-// rule). No assertion here depends on its value, but a fixed literal costs
-// nothing and keeps this file consistent with that rule unconditionally
-// rather than only where a test happens to care.
 var idempotencyRecordExpiresAt = time.Date(2030, 1, 1, 0, 0, 0, 0, time.UTC)
 
 func insertIdempotencyRecord(ctx context.Context, db sqlExecer, userID uuid.UUID, route string, key uuid.UUID) error {
@@ -526,9 +427,6 @@ func TestIdempotencyRecords_DuplicateUserRouteKeyRejected(t *testing.T) {
 	})
 	requireConstraintViolation(t, err, "idempotency_records_user_route_key_key")
 
-	// Changing any single one of the three key columns must not conflict --
-	// the unique constraint is on the (user_id, route, idempotency_key)
-	// triple, not any one column alone.
 	if err := withSavepoint(ctx, t, tx, func(sp pgx.Tx) error {
 		return insertIdempotencyRecord(ctx, sp, userID, "POST /v1/other-route", key)
 	}); err != nil {
@@ -546,10 +444,6 @@ func TestIdempotencyRecords_DuplicateUserRouteKeyRejected(t *testing.T) {
 		t.Errorf("insert with a different user_id conflicted: %v, want success", err)
 	}
 }
-
-// -----------------------------------------------------------------------
-// resumes_enforce_cap trigger: existence + the 3-resume-per-user cap.
-// -----------------------------------------------------------------------
 
 func TestResumeCapTrigger_ExistsOnResumesTable(t *testing.T) {
 	t.Parallel()
@@ -577,17 +471,6 @@ func TestResumeCapTrigger_ExistsOnResumesTable(t *testing.T) {
 	}
 }
 
-// TestResumeCapTrigger_EnforcesThreePerUser is the headline behavioral
-// proof of the per-owner cap: 3 inserts for one user succeed, a 4th raises
-// SQLSTATE 23514 with message resumes_user_cap_exceeded (the per-owner
-// serialization via the trigger's own FOR UPDATE lock on the users row,
-// not this test's transaction discipline, is what makes the count read
-// consistent), deleting one row frees a slot for a new insert, and a
-// second, unrelated user is completely unaffected by the first user's
-// cap. Every step is raw SQL against the goose-migrated database -- this
-// is what "the trigger survives the migration path" means in practice: the
-// trigger is proven against a database built by replaying migrations/, the
-// same path production takes.
 func TestResumeCapTrigger_EnforcesThreePerUser(t *testing.T) {
 	t.Parallel()
 	tx, ctx := newResumeSchemaTx(t)
@@ -605,10 +488,6 @@ func TestResumeCapTrigger_EnforcesThreePerUser(t *testing.T) {
 		}
 	}
 
-	// The 4th insert for the same user must be rejected by the trigger,
-	// not merely produce "some error" -- SQLSTATE 23514 (check_violation,
-	// per the DDL's explicit USING ERRCODE) and the exact RAISE EXCEPTION
-	// message text.
 	err := withSavepoint(ctx, t, tx, func(sp pgx.Tx) error {
 		_, insErr := insertResumeReturningID(ctx, sp, defaultResumeRow(userA, "cap-04"))
 		return insErr
@@ -627,8 +506,6 @@ func TestResumeCapTrigger_EnforcesThreePerUser(t *testing.T) {
 		t.Errorf("4th insert message = %q, want %q", pgErr.Message, "resumes_user_cap_exceeded")
 	}
 
-	// Deleting one row frees a slot: a new insert for the same user must
-	// now succeed.
 	if _, err := tx.Exec(ctx, `DELETE FROM resumes WHERE id = $1`, firstID); err != nil {
 		t.Fatalf("delete freed-slot row: %v", err)
 	}
@@ -636,26 +513,16 @@ func TestResumeCapTrigger_EnforcesThreePerUser(t *testing.T) {
 		t.Errorf("insert after delete failed: %v, want success", err)
 	}
 
-	// A second, unrelated user is unaffected by userA's cap, even though
-	// userA is currently sitting right back at 3 resumes.
 	if _, err := insertResumeReturningID(ctx, tx, defaultResumeRow(userB, "cap-b-01")); err != nil {
 		t.Errorf("insert for unrelated userB failed: %v, want success", err)
 	}
 }
 
-// updateResumeUserID reassigns an existing resume row to a new owner --
-// the trigger's second arm (BEFORE UPDATE OF user_id ON resumes), as
-// opposed to insertResume/insertResumeReturningID which only ever exercise
-// its BEFORE INSERT arm.
 func updateResumeUserID(ctx context.Context, db sqlExecer, resumeID, newUserID uuid.UUID) error {
 	_, err := db.Exec(ctx, `UPDATE resumes SET user_id = $1 WHERE id = $2`, newUserID, resumeID)
 	return err
 }
 
-// TestResumeCapTrigger_AllowsNoOpUpdateOfUserIDAtCap proves that the update
-// arm counts only resumes newly assigned to an owner. Reassigning one of an
-// owner's existing rows to that same owner does not add a resume and must
-// remain valid when the owner already has three.
 func TestResumeCapTrigger_AllowsNoOpUpdateOfUserIDAtCap(t *testing.T) {
 	t.Parallel()
 	tx, ctx := newResumeSchemaTx(t)
@@ -697,13 +564,6 @@ func TestResumeCapTrigger_AllowsNoOpUpdateOfUserIDAtCap(t *testing.T) {
 	}
 }
 
-// TestResumeCapTrigger_EnforcesCapOnUpdateOfUserID proves the trigger's
-// second arm, not just its first: nothing else in this file ever issues an
-// UPDATE that touches user_id, so changing the trigger definition from
-// "BEFORE INSERT OR UPDATE OF user_id ON resumes" to a bare
-// "BEFORE INSERT ON resumes" would leave every other test in this file
-// green. Moving an existing resume to a user already holding 3 must be
-// rejected exactly like a 4th INSERT would be.
 func TestResumeCapTrigger_EnforcesCapOnUpdateOfUserID(t *testing.T) {
 	t.Parallel()
 	tx, ctx := newResumeSchemaTx(t)
@@ -738,13 +598,6 @@ func TestResumeCapTrigger_EnforcesCapOnUpdateOfUserID(t *testing.T) {
 	}
 }
 
-// -----------------------------------------------------------------------
-// Foreign-key cascade / set-null semantics.
-// -----------------------------------------------------------------------
-
-// TestResumes_OwningUserDeletedCascades proves resumes.user_id ON DELETE
-// CASCADE: deleting a user must remove every resume that user owns, not
-// leave an orphaned row or raise a foreign-key violation.
 func TestResumes_OwningUserDeletedCascades(t *testing.T) {
 	t.Parallel()
 	tx, ctx := newResumeSchemaTx(t)
@@ -768,8 +621,6 @@ func TestResumes_OwningUserDeletedCascades(t *testing.T) {
 	}
 }
 
-// TestIdempotencyRecords_OwningUserDeletedCascades proves
-// idempotency_records.user_id ON DELETE CASCADE, the same way as resumes.
 func TestIdempotencyRecords_OwningUserDeletedCascades(t *testing.T) {
 	t.Parallel()
 	tx, ctx := newResumeSchemaTx(t)
@@ -792,12 +643,6 @@ func TestIdempotencyRecords_OwningUserDeletedCascades(t *testing.T) {
 	}
 }
 
-// TestSlugTombstonesCarryNoAccountLinkAndRetentionIndexesExist proves the
-// privacy notice's tombstone rule (docs/design/product.md): a released slug
-// carries no link to any account, so slug_tombstones has no
-// released_by_user_id column. It also proves the retention indexes the
-// session and tombstone sweeps rely on exist, and the created_at-keyed
-// session index they replaced is gone.
 func TestSlugTombstonesCarryNoAccountLinkAndRetentionIndexesExist(t *testing.T) {
 	t.Parallel()
 	tx, ctx := newResumeSchemaTx(t)

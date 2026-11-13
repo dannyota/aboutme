@@ -8,8 +8,6 @@ import (
 	"github.com/rivo/uniseg"
 )
 
-// textCases holds the text-rule cases in testdata/text-cases.json. They are
-// plain data so another implementation of the rules can check against them.
 type textCases struct {
 	Normalize []struct {
 		Name  string `json:"name"`
@@ -94,8 +92,6 @@ func TestLocaleCases(t *testing.T) {
 }
 
 func TestCutNeverSplitsAGraphemeCluster(t *testing.T) {
-	// A Vietnamese letter in decomposed form is one cluster of three code
-	// points; a cut through it would leave a bare combining mark.
 	decomposed := "e\u0302\u0301"
 	input := ""
 	for range 200 {

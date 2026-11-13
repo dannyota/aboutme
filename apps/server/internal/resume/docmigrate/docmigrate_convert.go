@@ -1,9 +1,5 @@
 package docmigrate
 
-// Projector's conversion engine: walking the registered adjacent converters
-// between two document versions, and the wire boundary (AcceptWire,
-// EmitWire) built on it, including EmitWire's semantic round-trip check.
-
 import (
 	"bytes"
 	"encoding/json"
@@ -14,25 +10,10 @@ import (
 	"slices"
 )
 
-// Convert walks the registered adjacent pairs from `from` to `to` in either
-// direction. It validates the source against `from`'s schema and each
-// converter's output against that step's target schema, and fails closed on
-// an unknown version, a missing direction, a converter error, output that is
-// not valid JSON, or output invalid for its target schema.
-//
-// from == to validates the source and returns its exact bytes. Project keeps
-// current-version reads byte-stable through its own short circuit rather than
-// weakening this public conversion interface.
-//
-// Convert is NOT gated on the accepted/emitted declarations -- those gate
-// the wire boundary, not internal conversion.
 func (p *Projector) Convert(doc json.RawMessage, from, to int32) (json.RawMessage, error) {
 	return p.convert(doc, from, to, true)
 }
 
-// convert is Convert's core. validateSource is false only for callers that
-// have already validated the source themselves (AcceptWire/EmitWire), so the
-// same document is never validated twice.
 func (p *Projector) convert(doc json.RawMessage, from, to int32, validateSource bool) (json.RawMessage, error) {
 	if _, err := p.validatorFor(from); err != nil {
 		return nil, err
@@ -75,8 +56,6 @@ func (p *Projector) convert(doc json.RawMessage, from, to int32, validateSource 
 	return current, nil
 }
 
-// converterFor returns the single-step converter from -> to, which must be
-// one adjacent step apart.
 func (p *Projector) converterFor(from, to int32) (ConvertFunc, error) {
 	switch to {
 	case from + 1:
@@ -112,15 +91,6 @@ func (p *Projector) validate(version int32, doc json.RawMessage) error {
 	return nil
 }
 
-// AcceptWire prepares a document arriving in a declared accepted version for
-// the current canonical shape: it validates the input against that version's
-// immutable schema, converts it up or down to CurrentVersion, and validates
-// every intermediate and the final result. It returns the canonical document
-// and the version it is now in.
-//
-// An undeclared version fails closed with ErrUnsupportedVersion even when
-// the converter chain could handle it: what the server accepts is a
-// declaration, not a capability.
 func (p *Projector) AcceptWire(doc json.RawMessage, version int32) (json.RawMessage, int32, error) {
 	if !slices.Contains(p.accepted, version) {
 		return nil, 0, fmt.Errorf("%w: %d is not accepted (accepted: %v)", ErrUnsupportedVersion, version, p.accepted)
@@ -135,12 +105,6 @@ func (p *Projector) AcceptWire(doc json.RawMessage, version int32) (json.RawMess
 	return out, p.current, nil
 }
 
-// EmitWire converts a current-version document to a declared emitted
-// version, validating the source at CurrentVersion and the result against
-// the target version's immutable schema. It then converts that result back
-// to CurrentVersion and compares JSON values semantically. This catches a
-// schema-valid Down converter that drops optional data, without requiring
-// converters to preserve whitespace or object-key order.
 func (p *Projector) EmitWire(doc json.RawMessage, version int32) (json.RawMessage, error) {
 	if !slices.Contains(p.emitted, version) {
 		return nil, fmt.Errorf("%w: %d is not emitted (emitted: %v)", ErrUnsupportedVersion, version, p.emitted)
@@ -174,11 +138,6 @@ func (p *Projector) EmitWire(doc json.RawMessage, version int32) (json.RawMessag
 	return emitted, nil
 }
 
-// jsonSemanticallyEqual compares JSON values without treating whitespace,
-// object-key order, or string escaping as changes. Arrays remain ordered.
-// JSON numbers retain their exact decimal value through UseNumber and are
-// compared as arbitrary-precision rationals, so equivalent spellings match
-// without rounding distinct values through float64.
 func jsonSemanticallyEqual(left, right json.RawMessage) (bool, error) {
 	decode := func(raw json.RawMessage) (any, error) {
 		dec := json.NewDecoder(bytes.NewReader(raw))

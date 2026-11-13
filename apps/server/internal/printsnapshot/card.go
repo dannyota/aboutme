@@ -13,20 +13,12 @@ import (
 )
 
 const (
-	// CardKind is the "kind" value that tells the print renderer to draw a
-	// link-preview card instead of a resume document.
-	CardKind = "card"
-	// MaxCardTextCharacters bounds the card name and headline, the schema
-	// bound of the fields they come from.
+	CardKind              = "card"
 	MaxCardTextCharacters = 160
 )
 
 var cardAccentPattern = regexp.MustCompile(`^#[0-9a-f]{6}$`)
 
-// CardEnvelope is the closed payload redeemed by the print renderer for one
-// link-preview card. It carries no contact, section, or document field, so
-// no email, phone, or address can reach the image
-// (docs/design/link-previews.md, "Preview card").
 type CardEnvelope struct {
 	Version  int         `json:"version"`
 	Kind     string      `json:"kind"`
@@ -34,8 +26,6 @@ type CardEnvelope struct {
 	Card     CardContent `json:"card"`
 }
 
-// CardContent is everything the card shows. Name and Headline are nil when
-// the card leaves them off; Headline is nil whenever Name is.
 type CardContent struct {
 	LayoutVersion int        `json:"layoutVersion"`
 	Lng           string     `json:"lng"`
@@ -46,14 +36,11 @@ type CardContent struct {
 	Accent        string     `json:"accent"`
 }
 
-// CardPhoto is the normalized photo as an inline data URL, and its crop or
-// nil for the whole image.
 type CardPhoto struct {
 	URL  string                        `json:"url"`
 	Crop *publicresume.PublicPhotoCrop `json:"crop"`
 }
 
-// CardInput is the card content before the photo bytes are inlined.
 type CardInput struct {
 	LayoutVersion int
 	Lng           string
@@ -65,13 +52,8 @@ type CardInput struct {
 	Accent        string
 }
 
-// CardLanguage is the canonical card language for a public resume language:
-// the same projection the resume print envelope uses.
 func CardLanguage(lng string) string { return projectLanguage(&lng) }
 
-// NewCardEnvelope builds and validates one card envelope. photo and
-// contentType are the normalized photo when input.HasPhoto is set, and empty
-// otherwise.
 func NewCardEnvelope(resumeID uuid.UUID, input CardInput, photo []byte, contentType string) (CardEnvelope, error) {
 	photoURL, err := inlinePhoto(input.HasPhoto, photo, contentType)
 	if err != nil {
@@ -102,8 +84,6 @@ func NewCardEnvelope(resumeID uuid.UUID, input CardInput, photo []byte, contentT
 	return envelope, nil
 }
 
-// MarshalCard validates and emits the exact frozen JSON bytes digested by
-// the render queue.
 func MarshalCard(source CardEnvelope) ([]byte, error) {
 	card := source.Card
 	if source.Version != 1 || source.Kind != CardKind || !canonicalUUID(source.ResumeID) ||
@@ -128,9 +108,6 @@ func MarshalCard(source CardEnvelope) ([]byte, error) {
 	return encoded, nil
 }
 
-// validCardText accepts nil or normalized text: non-empty, at most
-// MaxCardTextCharacters, with no control characters and no leading or
-// trailing space.
 func validCardText(value *string) bool {
 	if value == nil {
 		return true

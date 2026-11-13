@@ -1,5 +1,3 @@
-// Package auth_test exercises LinkedIn OIDC and its verified-email rule against
-// an in-process provider.
 package auth_test
 
 import (
@@ -18,13 +16,11 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// uniqueLinkedInSubject avoids collisions in the shared test database.
 func uniqueLinkedInSubject(t *testing.T) string {
 	t.Helper()
 	return "li-sub-" + uuid.NewString()
 }
 
-// beginLinkedIn returns the transaction cookie, state, and nonce from /start.
 func beginLinkedIn(t *testing.T, handler http.Handler) (txCookie *http.Cookie, state, nonce string) {
 	t.Helper()
 
@@ -45,7 +41,6 @@ func beginLinkedIn(t *testing.T, handler http.Handler) (txCookie *http.Cookie, s
 	return txCookie, state, nonce
 }
 
-// doLinkedInCallback drives the LinkedIn callback through the shared router.
 func doLinkedInCallback(t *testing.T, handler http.Handler, code, state string, cookies ...*http.Cookie) *http.Response {
 	t.Helper()
 
@@ -53,7 +48,6 @@ func doLinkedInCallback(t *testing.T, handler http.Handler, code, state string, 
 	return doGet(t, handler, path, cookies...) //nolint:bodyclose // doGet (handlers_test.go) closes the body itself before returning.
 }
 
-// assertNoLinkedInIdentity checks the LinkedIn provider key.
 func assertNoLinkedInIdentity(t *testing.T, q *store.Queries, providerUserID string) {
 	t.Helper()
 
@@ -66,17 +60,13 @@ func assertNoLinkedInIdentity(t *testing.T, q *store.Queries, providerUserID str
 	}
 }
 
-// TestLinkedInCallback_RegistrationEmailRule covers verified, unverified,
-// absent-verification, and absent-email registration claims.
-//
-// Each case uses a fresh provider and identifiers to isolate its code and rows.
 func TestLinkedInCallback_RegistrationEmailRule(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
 		name          string
 		withEmail     bool
-		emailVerified *bool // nil = claim absent
+		emailVerified *bool
 		wantCreated   bool
 	}{
 		{"verified email present", true, ptrTrue(), true},
@@ -90,10 +80,6 @@ func TestLinkedInCallback_RegistrationEmailRule(t *testing.T) {
 			t.Parallel()
 
 			p := oidctest.NewProvider(t)
-			// Both issuer overrides point at the same in-process provider:
-			// this test never drives a Google route, so Google's discovery
-			// is never actually triggered -- newTestService's guard just
-			// requires a non-empty value to exist.
 			handler, q := newTestService(t, withGoogleIssuer(p.URL), withLinkedInIssuer(p.URL))
 
 			subject := uniqueLinkedInSubject(t)
@@ -157,9 +143,6 @@ func TestLinkedInCallback_RegistrationEmailRule(t *testing.T) {
 	}
 }
 
-// TestLinkedInStart_AuthorizeURL_RedirectURIMatchesPublicOriginAndCallbackPath
-// is google_test.go's identical assertion, re-run for LinkedIn: the
-// authorize URL's redirect_uri must equal PublicOrigin + LinkedInCallbackPath.
 func TestLinkedInStart_AuthorizeURL_RedirectURIMatchesPublicOriginAndCallbackPath(t *testing.T) {
 	t.Parallel()
 
@@ -181,13 +164,10 @@ func TestLinkedInStart_AuthorizeURL_RedirectURIMatchesPublicOriginAndCallbackPat
 	}
 }
 
-// TestLinkedInCallback_RejectionLogsProviderAttribute catches a wrong provider
-// constant at LinkedIn's shared rejection funnel.
 func TestLinkedInCallback_RejectionLogsProviderAttribute(t *testing.T) {
 	t.Parallel()
 
 	logger, logBuf := newCapturingLogger()
-	// Missing transaction state rejects before either provider endpoint is used.
 	handler, _ := newTestService(t, withGoogleIssuer(auth.UnroutableTestSentinel), withLinkedInIssuer(auth.UnroutableTestSentinel), withLogger(logger))
 
 	resp := doGet(t, handler, auth.LinkedInCallbackPath+"?code=whatever&state=whatever") //nolint:bodyclose // doGet closes the body itself before returning.
@@ -201,12 +181,6 @@ func TestLinkedInCallback_RejectionLogsProviderAttribute(t *testing.T) {
 	}
 }
 
-// ==== Constructing a link or reauthentication transaction directly ====
-
-// beginLinkedInTransaction constructs an OAuth transaction directly via
-// TransactionStore.Begin to keep provider callback tests independent of
-// the start endpoint. It returns the cookie a real start would set and the
-// transaction state and nonce needed by the mock provider.
 func beginLinkedInTransaction(t *testing.T, q *store.Queries, purpose auth.Purpose, linkingUserID uuid.UUID) (txCookie *http.Cookie, tx auth.Transaction) {
 	t.Helper()
 
@@ -218,9 +192,6 @@ func beginLinkedInTransaction(t *testing.T, q *store.Queries, purpose auth.Purpo
 	return requestCookie(auth.OAuthTxCookieName, handle), transaction
 }
 
-// TestLinkedInCallback_EnrolledLogin_PendingNotSession proves a returning
-// LinkedIn identity of an enrolled account receives a pending login and no
-// session.
 func TestLinkedInCallback_EnrolledLogin_PendingNotSession(t *testing.T) {
 	t.Parallel()
 

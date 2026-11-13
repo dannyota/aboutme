@@ -15,9 +15,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/renderjob"
 )
 
-// PreviewCards is the stored preview card boundary
-// (docs/adr/0014-public-page-head-and-link-preview.md); previewcard.Service
-// implements it.
 type PreviewCards interface {
 	Version(publicresume.Snapshot) (string, error)
 	Stored(context.Context, uuid.UUID) (previewcard.StoredCard, bool, error)
@@ -32,8 +29,6 @@ const (
 	cardPathSuffix = ".png"
 )
 
-// cardPathParts splits /api/v1/public/resumes/{slug}/og/{version}.png. It
-// accepts only a valid slug and a version of exactly 16 lowercase hex digits.
 func cardPathParts(path string) (slug, version string, ok bool) {
 	rest, found := strings.CutPrefix(path, cardPathPrefix)
 	if !found {
@@ -50,8 +45,6 @@ func cardPathParts(path string) (slug, version string, ok bool) {
 	return slug, version, true
 }
 
-// cardRequestParts returns the slug and, for the versioned route, the
-// requested version. The alias names no version.
 func cardRequestParts(path string, alias bool) (slug, version string, ok bool) {
 	if alias {
 		return artifactSlug(path, "/og.png"), "", true
@@ -59,11 +52,6 @@ func cardRequestParts(path string, alias bool) (slug, version string, ok bool) {
 	return cardPathParts(path)
 }
 
-// cardHandler serves the current stored card. The versioned route answers
-// only for the current version; the og.png alias always serves the current
-// one. The live-state gate runs before any card read, and a card that is not
-// stored yet is built once: the request joins a pending build or starts one
-// and waits within the render deadline.
 func (s *artifactService) cardHandler(cards PreviewCards, alias bool) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
 		if !validateArtifactRequest(w, request) {
@@ -143,9 +131,6 @@ func (s *artifactService) cardHandler(cards PreviewCards, alias bool) http.Handl
 	})
 }
 
-// buildCard waits within the render deadline for the card of snapshot. A
-// build refused only because the resume changed its card meanwhile still
-// returns the bytes of the version this request admitted.
 func buildCard(ctx context.Context, cards PreviewCards, snapshot publicresume.Snapshot) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, renderjob.MaxJobTimeout)
 	defer cancel()

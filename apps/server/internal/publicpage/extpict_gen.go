@@ -1,8 +1,5 @@
 //go:build ignore
 
-// extpict_gen writes extpict_table.go, the Extended_Pictographic code point
-// ranges the favicon emoji check uses. Regenerate with `go generate` in this
-// package after bumping sourceURL to a newer Unicode version.
 package main
 
 import (

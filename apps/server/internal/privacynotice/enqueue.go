@@ -8,10 +8,8 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// ErrQueueFull reports the fixed notice backlog bound without mutation.
 var ErrQueueFull = errors.New("privacy notice: queue_full")
 
-// Enqueue seals at most 100 live-account payloads under the campaign lock.
 func (s *Service) Enqueue(ctx context.Context) (resultErr error) {
 	if s.outbox == nil {
 		return ErrState

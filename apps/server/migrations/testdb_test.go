@@ -16,25 +16,8 @@ import (
 	"danny.vn/aboutme/apps/server/internal/testutil"
 )
 
-// testDatabaseCounter disambiguates database names created within the same
-// nanosecond (t.Parallel means several harness tests can call
-// newTestDatabase at almost the same instant).
 var testDatabaseCounter atomic.Uint64
 
-// newTestDatabase creates a fresh, uniquely named database on the server
-// pointed to by TEST_DATABASE_URL, ensures the fixed aboutme_migrator/
-// aboutme_app roles and this new database's grants (database ACLs are
-// per-database, so this must run against the new database, not the shared
-// one newTestDatabase connects to create it), and returns a connection URL
-// for it. The database is dropped in t.Cleanup. Every harness test gets
-// its own database, never a shared one, so migration state, advisory
-// locks, and concurrent-runner timing from one test can never leak into
-// another; that isolation is what lets the harness tests run with
-// t.Parallel().
-//
-// Skips the test (not a failure) when TEST_DATABASE_URL is unset, exactly
-// like the existing internal/store integration test, so `go test ./...`
-// stays fully hermetic by default.
 func newTestDatabase(t *testing.T) string {
 	t.Helper()
 
@@ -67,10 +50,7 @@ func newTestDatabase(t *testing.T) string {
 	t.Cleanup(func() {
 		cleanupCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		// WITH (FORCE) (Postgres 13+) disconnects any lingering sessions —
-		// e.g. a test's own *sql.DB pool that hasn't finished closing yet —
-		// instead of DROP DATABASE failing with "database is being accessed
-		// by other users".
+		// DROP DATABASE ... WITH (FORCE) (PostgreSQL 13+) ends lingering sessions instead of failing.
 		if _, err := admin.ExecContext(cleanupCtx, `DROP DATABASE IF EXISTS `+name+` WITH (FORCE)`); err != nil {
 			t.Logf("cleanup: drop database %s: %v", name, err)
 		}
@@ -81,9 +61,6 @@ func newTestDatabase(t *testing.T) string {
 	return dsn
 }
 
-// dsnWithDatabase returns base with its database (URL path) replaced by
-// name, preserving host, port, credentials, and query parameters (e.g.
-// sslmode).
 func dsnWithDatabase(t *testing.T, base, name string) string {
 	t.Helper()
 
@@ -95,11 +72,6 @@ func dsnWithDatabase(t *testing.T, base, name string) string {
 	return u.String()
 }
 
-// openTestDB opens a *sql.DB against dsn and registers a cleanup that
-// closes it. Kept tiny and separate from newTestDatabase so concurrency
-// tests can open several independent connection pools against the same
-// database (simulating separate runner processes), each with its own
-// t.Cleanup-scoped lifetime.
 func openTestDB(t *testing.T, dsn string) *sql.DB {
 	t.Helper()
 

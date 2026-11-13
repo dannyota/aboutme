@@ -13,12 +13,9 @@ func validPublicHTML(source []byte, resume publicresume.PublicResume, origin pub
 	return publicHTMLRejection(source, resume, origin, jsonLD, discoverable) == ""
 }
 
-// publicHTMLRejection returns "" for renderer output that passes every public
-// HTML rule, or the closed name of the first rule it breaks. The name never
-// carries resume content, so it is safe to log.
-// publicHTMLRejection validates a page with no owner page settings.
 func publicHTMLRejection(source []byte, resume publicresume.PublicResume, origin publicresume.PublicOrigin, jsonLD publicformat.JSONLDResult, discoverable bool) string {
-	return publicHTMLRejectionForPage(source, resume, expectedPublicPage(resume, nil, nil), origin, jsonLD, discoverable)
+	page := withEntryPoints(expectedPublicPage(resume, nil, nil), resume.Slug, nil, origin)
+	return publicHTMLRejectionForPage(source, resume, page, origin, jsonLD, discoverable)
 }
 
 func publicHTMLRejectionForPage(source []byte, resume publicresume.PublicResume, page publicPage, origin publicresume.PublicOrigin, jsonLD publicformat.JSONLDResult, discoverable bool) string {
@@ -34,6 +31,7 @@ func publicHTMLRejectionForPage(source []byte, resume publicresume.PublicResume,
 	meta := newHeadMeta(resume, page.Preview, origin)
 	stylesheets := map[string]bool{}
 	contactLinks := derivedContactLinks(resume)
+	entryPoints := newEntryPointCheck(resume, page)
 	rule := ""
 	reject := func(name string) {
 		if rule == "" {
@@ -69,8 +67,12 @@ func publicHTMLRejectionForPage(source []byte, resume publicresume.PublicResume,
 					reject("anchor_href")
 					return
 				}
-				if relHasToken(attribute(node, "class"), creditClass) {
-					// The page credit, once, exactly as the renderer writes it.
+				if entryPoint, name := entryPoints.anchor(node); entryPoint {
+					if name != "" {
+						reject(name)
+						return
+					}
+				} else if relHasToken(attribute(node, "class"), creditClass) {
 					if creditLinks != 0 || !isPublicCredit(node, origin.Resolve("/"), creditText(resume.Lng)) {
 						reject("credit_link")
 						return
@@ -83,15 +85,12 @@ func publicHTMLRejectionForPage(source []byte, resume publicresume.PublicResume,
 					}
 					skipLinks++
 				} else if (strings.HasPrefix(href, "mailto:") || strings.HasPrefix(href, "tel:")) && insideResumeHeader(node) {
-					// Header contact links are exactly the hrefs derived from
-					// visible email and phone details, each once.
 					if contactLinks[href] == 0 {
 						reject("contact_link")
 						return
 					}
 					contactLinks[href]--
 				} else if href == publicPDFPath(resume.Slug) {
-					// The page's own PDF, once, only while download is enabled.
 					if !resume.DownloadEnabled || downloadLinks != 0 {
 						reject("download_link")
 						return
@@ -109,8 +108,6 @@ func publicHTMLRejectionForPage(source []byte, resume publicresume.PublicResume,
 				title = node
 			case "link":
 				if relHasToken(attribute(node, "rel"), "icon") {
-					// Only the owner's emoji favicon: exactly rel and href, once,
-					// with the href derived from the stored emoji.
 					if page.FaviconHref == "" || favicons != 0 || len(node.Attr) != 2 || attributeCount(node, "rel") != 1 ||
 						attribute(node, "rel") != "icon" || attributeCount(node, "href") != 1 || attribute(node, "href") != page.FaviconHref {
 						reject("favicon")
@@ -120,8 +117,6 @@ func publicHTMLRejectionForPage(source []byte, resume publicresume.PublicResume,
 					break
 				}
 				if attribute(node, "rel") == "stylesheet" {
-					// Only the two self-hosted resume stylesheets, once each, with
-					// exactly rel and href; style-src 'self' then loads them.
 					path, ok := resumeStylesheet(attribute(node, "href"))
 					if len(node.Attr) != 2 || attributeCount(node, "rel") != 1 || attributeCount(node, "href") != 1 || !ok || stylesheets[path] {
 						reject("stylesheet")
@@ -149,19 +144,17 @@ func publicHTMLRejectionForPage(source []byte, resume publicresume.PublicResume,
 			case "main":
 				mainCount++
 				if attribute(node, "id") == "public-resume" {
-					wantAttrs := 2
-					if page.JoinInvite != "" {
-						wantAttrs = 3
+					marker, name := entryPoints.root(node)
+					if name != "" {
+						reject(name)
+						return
 					}
+					wantAttrs := 2 + marker + boolToInt(page.JoinInvite != "")
 					if main != nil || len(node.Attr) != wantAttrs || attributeCount(node, "id") != 1 ||
 						attributeCount(node, "data-revision") != 1 || attribute(node, "data-revision") != resume.Revision {
 						reject("main")
 						return
 					}
-					// data-join-invite carries exactly page.JoinInvite for a
-					// sign-in-to-view resume, and is absent for every other
-					// public resume (docs/design/viewer-analytics/
-					// sign-in-to-view.md "Join invite").
 					if attributeCount(node, "data-join-invite") != boolToInt(page.JoinInvite != "") ||
 						(page.JoinInvite != "" && attribute(node, "data-join-invite") != page.JoinInvite) {
 						reject("main")
@@ -203,6 +196,9 @@ func publicHTMLRejectionForPage(source []byte, resume publicresume.PublicResume,
 	if creditLinks != 1 {
 		return "credit_link"
 	}
+	if name := entryPoints.finish(); name != "" {
+		return name
+	}
 	if title == nil || canonical == nil || main == nil || mainCount != 1 || skipLinks != 1 || externalScripts != 1 {
 		return "required_elements"
 	}
@@ -230,8 +226,6 @@ func hasHTMLDoctype(node *html.Node) bool {
 	return false
 }
 
-// boolToInt is the exact-count idiom the validator uses for an attribute
-// that is present exactly once when a condition holds, and absent otherwise.
 func boolToInt(value bool) int {
 	if value {
 		return 1

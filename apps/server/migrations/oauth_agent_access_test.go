@@ -1,10 +1,3 @@
-// Constraint, cascade, and lineage tests for the oauth_clients,
-// oauth_authorization_codes, oauth_grants, and oauth_tokens tables. Like
-// password_auth_test.go, every statement here is raw parameterized SQL
-// against a live goose-migrated database, with no internal/store layer,
-// because the point is proving the database itself enforces every bound,
-// not that a Go pass happens to agree with it. Boundaries are exercised at
-// limit and limit+1.
 package migrations_test
 
 import (
@@ -22,35 +15,19 @@ import (
 	"danny.vn/aboutme/apps/server/migrations"
 )
 
-// oauthNow is the fixed instant every row in this file is created at, so
-// expiry-boundary cases name their offsets instead of racing wall time.
 var oauthNow = time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
 
 const (
-	// oauthCodeTTL is the exact authorization-code lifetime the database
-	// pins with an equality check.
-	oauthCodeTTL = 60 * time.Second
-	// oauthAccessTTL and oauthFamilyTTL are the access-token lifetime and
-	// refresh-family absolute lifetime the database bounds.
-	oauthAccessTTL = time.Hour
-	oauthFamilyTTL = 30 * 24 * time.Hour
-	// oauthScopesBoth is the canonical spelling of the full closed scope set.
-	oauthScopesBoth = "resumes:read resumes:write"
-	// oauthChallenge is a canonical unpadded base64url S256 challenge (43
-	// characters), matching oauthsrv's stored spelling.
-	oauthChallenge = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-	// oauthRedirectURI is a registered loopback redirect URI.
+	oauthCodeTTL     = 60 * time.Second
+	oauthAccessTTL   = time.Hour
+	oauthFamilyTTL   = 30 * 24 * time.Hour
+	oauthScopesBoth  = "resumes:read resumes:write"
+	oauthChallenge   = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
 	oauthRedirectURI = "http://127.0.0.1:20090/callback"
 )
 
-// validOAuthDigest returns a fresh random 32-byte digest. Digests are globally
-// unique in the schema, so a shared constant would collide across the parallel
-// tests that share the one migrated database. It is deliberately NOT derived
-// from any raw code or token spelling: this file never constructs raw material.
 func validOAuthDigest() []byte { return []byte(uuid.NewString() + uuid.NewString())[:32] }
 
-// insertOAuthClient inserts a minimal valid client row and returns its id,
-// which is also the public client_id.
 func insertOAuthClient(ctx context.Context, t *testing.T, db sqlExecer) uuid.UUID {
 	t.Helper()
 	var id uuid.UUID
@@ -64,7 +41,6 @@ func insertOAuthClient(ctx context.Context, t *testing.T, db sqlExecer) uuid.UUI
 	return id
 }
 
-// insertOAuthGrant inserts a live grant and returns its id.
 func insertOAuthGrant(ctx context.Context, t *testing.T, db sqlExecer, userID, clientID uuid.UUID) uuid.UUID {
 	t.Helper()
 	var id uuid.UUID
@@ -78,8 +54,6 @@ func insertOAuthGrant(ctx context.Context, t *testing.T, db sqlExecer, userID, c
 	return id
 }
 
-// oauthTokenRow is a full valid refresh-token row; each constraint case mutates
-// exactly one field before inserting.
 type oauthTokenRow struct {
 	digest          []byte
 	kind            string
@@ -188,17 +162,12 @@ func TestOAuthTransactionReturnPathConstraint(t *testing.T) {
 	}
 }
 
-// oauthAgentAccessTables is the exact table set migration 00009 owns.
 var oauthAgentAccessTables = []string{
 	"oauth_clients",
 	"oauth_authorization_codes",
 	"oauth_grants",
 	"oauth_tokens",
 }
-
-// ---------------------------------------------------------------------------
-// oauth_clients: client-name and redirect-URI bounds.
-// ---------------------------------------------------------------------------
 
 func TestOAuthClientConstraints(t *testing.T) {
 	t.Parallel()
@@ -218,7 +187,7 @@ func TestOAuthClientConstraints(t *testing.T) {
 		clientName     string
 		uris           string
 		lastUsed       time.Time
-		wantConstraint string // "" means the insert must succeed
+		wantConstraint string
 	}{
 		{name: "minimal valid row", clientName: "A", uris: validURIs, lastUsed: oauthNow},
 		{
@@ -231,9 +200,6 @@ func TestOAuthClientConstraints(t *testing.T) {
 			wantConstraint: "oauth_clients_client_name_length_check",
 		},
 		{
-			// 64 four-byte code points is exactly 256 bytes: the widest name
-			// the code-point bound admits, and the reason the byte bound is
-			// 256.
 			name: "name 64 four-byte code points accepted", clientName: strings.Repeat("\U0001F600", 64),
 			uris: validURIs, lastUsed: oauthNow,
 		},
@@ -315,11 +281,6 @@ func TestOAuthClientConstraints(t *testing.T) {
 		})
 	}
 }
-
-// ---------------------------------------------------------------------------
-// oauth_authorization_codes: digest, scope, challenge, redirect, and the
-// exact 60-second expiry.
-// ---------------------------------------------------------------------------
 
 func TestOAuthAuthorizationCodeConstraints(t *testing.T) {
 	t.Parallel()
@@ -485,11 +446,6 @@ func TestOAuthAuthorizationCodeConstraints(t *testing.T) {
 	})
 }
 
-// ---------------------------------------------------------------------------
-// oauth_grants: closed scopes, revocation ordering, and the single live grant
-// per (user, client).
-// ---------------------------------------------------------------------------
-
 func TestOAuthGrantConstraints(t *testing.T) {
 	t.Parallel()
 	tx, ctx := newResumeSchemaTx(t)
@@ -536,7 +492,6 @@ func TestOAuthGrantConstraints(t *testing.T) {
 		if err := insert(tx, userID, clientID, "resumes:read", nil); err != nil {
 			t.Fatalf("live grant after revocation: %v", err)
 		}
-		// Two revoked rows plus a live one must coexist.
 		if _, err := tx.Exec(ctx,
 			`INSERT INTO oauth_grants (user_id, client_id, scopes, created_at, revoked_at)
 			 VALUES ($1,$2,$3,$4,$5)`,
@@ -547,11 +502,6 @@ func TestOAuthGrantConstraints(t *testing.T) {
 	})
 }
 
-// TestOAuthGrantSingleLiveRowUnderConcurrentInserts proves the partial unique
-// index — not application code — arbitrates two consent approvals racing for
-// the same (user, client). Both transactions are real, independent, and
-// overlap: the second blocks on the first's uncommitted index entry and fails
-// only once the first commits.
 func TestOAuthGrantSingleLiveRowUnderConcurrentInserts(t *testing.T) {
 	t.Parallel()
 	dsn := newTestDatabase(t)
@@ -615,8 +565,6 @@ func TestOAuthGrantSingleLiveRowUnderConcurrentInserts(t *testing.T) {
 		t.Fatalf("A insert: %v", err)
 	}
 
-	// B's insert must block on A's uncommitted unique index entry, so it is
-	// started in a goroutine and its outcome is only read after A commits.
 	errB := make(chan error, 1)
 	go func() { errB <- insert(txB, "resumes:read") }()
 
@@ -643,8 +591,6 @@ func TestOAuthGrantSingleLiveRowUnderConcurrentInserts(t *testing.T) {
 	}
 }
 
-// rollbackOAuthTx rolls a test transaction back, tolerating an already-closed
-// transaction (the race test commits one of its two).
 func rollbackOAuthTx(t *testing.T, tx pgx.Tx) {
 	t.Helper()
 	if err := tx.Rollback(context.Background()); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
@@ -652,9 +598,6 @@ func rollbackOAuthTx(t *testing.T, tx pgx.Tx) {
 	}
 }
 
-// waitForBlockedOAuthBackend polls until PostgreSQL reports pid waiting on
-// another backend's lock. It observes real server state, so the race test
-// proves contention instead of guessing at it with a sleep.
 func waitForBlockedOAuthBackend(ctx context.Context, t *testing.T, pool *pgxpool.Pool, pid int32) {
 	t.Helper()
 	deadline := time.NewTimer(10 * time.Second)
@@ -676,10 +619,6 @@ func waitForBlockedOAuthBackend(ctx context.Context, t *testing.T, pool *pgxpool
 		}
 	}
 }
-
-// ---------------------------------------------------------------------------
-// oauth_tokens: digest, closed kind, lifetimes, and rotation lineage.
-// ---------------------------------------------------------------------------
 
 func TestOAuthTokenConstraints(t *testing.T) {
 	t.Parallel()
@@ -826,10 +765,6 @@ func TestOAuthTokenConstraints(t *testing.T) {
 	})
 }
 
-// ---------------------------------------------------------------------------
-// Cascade matrix.
-// ---------------------------------------------------------------------------
-
 func TestOAuthAgentAccessCascades(t *testing.T) {
 	t.Parallel()
 
@@ -872,7 +807,6 @@ func TestOAuthAgentAccessCascades(t *testing.T) {
 				t.Errorf("%s after account deletion = %d, want 0 (cascade)", label, n)
 			}
 		}
-		// The client survives its user: another account may still use it.
 		if n := countRows(ctx, t, tx, `SELECT count(*) FROM oauth_clients WHERE id = $1`, clientID); n != 1 {
 			t.Errorf("client rows after account deletion = %d, want 1", n)
 		}
@@ -908,7 +842,6 @@ func TestOAuthAgentAccessCascades(t *testing.T) {
 				t.Errorf("%s after client deletion = %d, want 0 (cascade)", label, n)
 			}
 		}
-		// The account survives its clients.
 		if n := countRows(ctx, t, tx, `SELECT count(*) FROM users WHERE id = $1`, userID); n != 1 {
 			t.Errorf("user rows after client deletion = %d, want 1", n)
 		}
@@ -958,16 +891,6 @@ func TestOAuthAgentAccessCascades(t *testing.T) {
 	})
 }
 
-// ---------------------------------------------------------------------------
-// No raw token or code material is representable in, or present in, the schema.
-// ---------------------------------------------------------------------------
-
-// TestOAuthAgentAccessStoresNoRawMaterial proves the adversarial rule two ways:
-// the baseline migration and sql/queries.sql never mention the raw
-// access/refresh token prefixes at all, and a full fixture set leaves no text
-// column holding a value with those prefixes. Digests are bytea and
-// length-checked, so a 43-plus character raw spelling cannot be stored in a
-// digest column either.
 func TestOAuthAgentAccessStoresNoRawMaterial(t *testing.T) {
 	t.Parallel()
 
@@ -1006,9 +929,6 @@ func TestOAuthAgentAccessStoresNoRawMaterial(t *testing.T) {
 		t.Fatalf("insert code: %v", err)
 	}
 
-	// Every text-typed column in the four tables, scanned for the raw
-	// prefixes. The catalog drives the list so a column added later is
-	// covered without editing this test.
 	rows, err := tx.Query(ctx, `
 		SELECT table_name, column_name
 		FROM information_schema.columns

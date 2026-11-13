@@ -142,9 +142,6 @@ func TestRatePolicies_FailedGrantBudgetClearsOnlyOnSuccess(t *testing.T) {
 		t.Fatalf("failed grant limit+1 = (%t,%d), want (false,900)", limitAllowed, retry)
 	}
 
-	// Once the bounded store is full, new grant IDs share one overflow
-	// bucket. A success for one overflow grant must not clear every other
-	// overflow grant's debt.
 	overflowA := uuid.MustParse("018f5b6a-9a3e-7c21-8b1e-000000000031")
 	overflowB := uuid.MustParse("018f5b6a-9a3e-7c21-8b1e-000000000032")
 	for i := 1; i <= 9; i++ {
@@ -254,8 +251,6 @@ func TestHandleToken_FailedGrantBudgetIsClearedBySuccess(t *testing.T) {
 	assertSameTokenResponse(t, ordinary, limited)
 }
 
-// testEgressRange is a published client egress range used only by these
-// tests; production takes its list from OAUTH_REGISTER_EGRESS_CIDRS.
 var testEgressRange = netip.MustParsePrefix("160.79.104.0/21")
 
 func testEgressRatePolicies(t *testing.T) *RatePolicies {
@@ -269,8 +264,6 @@ func testEgressRatePolicies(t *testing.T) *RatePolicies {
 	return policies
 }
 
-// peerRequest is a registration request straight from an untrusted socket
-// peer, so its own address is the client address.
 func peerRequest(remoteAddr string) *http.Request {
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "https://aboutme.example/oauth/register", strings.NewReader(`{}`))
 	req.RemoteAddr = remoteAddr
@@ -307,8 +300,6 @@ func TestNewRatePolicies_RejectsInvalidRegisterRangeAndGlobalBudgets(t *testing.
 	}
 }
 
-// A header naming an address inside a configured range is honored only
-// through the trust boundary: from a trusted proxy, as exactly one X-Real-IP.
 func TestRatePolicies_RegisterRangeCannotBeSpoofedByHeaders(t *testing.T) {
 	now := time.Date(2026, 9, 27, 10, 0, 0, 0, time.UTC)
 
@@ -326,7 +317,6 @@ func TestRatePolicies_RegisterRangeCannotBeSpoofedByHeaders(t *testing.T) {
 				t.Fatalf("spoofing request 6 = (%t,%d), want the per-address refusal", allowed, retry)
 			}
 		}
-		// The range bucket was never touched by the spoofing peer.
 		for i := 1; i <= 120; i++ {
 			if allowed, _ := registerFrom(policies, now, "160.79.104.10"); !allowed {
 				t.Fatalf("range registration %d denied after a spoofing peer", i)
@@ -382,7 +372,6 @@ func TestRatePolicies_RegisterRangeSharesOneBucketAndRefills(t *testing.T) {
 		}
 	}
 
-	// Neighbors just outside the range keep the per-address five an hour.
 	for _, ip := range []string{"160.79.112.0", "160.79.103.255"} {
 		for i := 1; i <= 6; i++ {
 			allowed, retry := registerFrom(policies, now, ip)
@@ -395,8 +384,6 @@ func TestRatePolicies_RegisterRangeSharesOneBucketAndRefills(t *testing.T) {
 		}
 	}
 
-	// The bucket refills continuously; one window plus a second is past any
-	// rounding of the refill rate.
 	later := now.Add(time.Hour + time.Second)
 	for i := 1; i <= 120; i++ {
 		if allowed, _ := registerFrom(policies, later, "160.79.105.1"); !allowed {
@@ -504,8 +491,6 @@ func TestRatePolicies_RegisterGlobalCeiling(t *testing.T) {
 func TestRatePolicies_RegisterKeysIPv6OnItsSlash64(t *testing.T) {
 	now := time.Date(2026, 9, 27, 14, 0, 0, 0, time.UTC)
 	policies := testEgressRatePolicies(t)
-	// One host usually controls a whole /64, so distinct addresses inside it
-	// share one per-address budget and cannot drain the global ceiling.
 	addr := netip.MustParseAddr("2001:db8:1:2::1")
 	for i := 1; i <= 5; i++ {
 		if allowed, _ := registerFrom(policies, now, addr.String()); !allowed {
@@ -519,7 +504,6 @@ func TestRatePolicies_RegisterKeysIPv6OnItsSlash64(t *testing.T) {
 	if allowed, _ := registerFrom(policies, now, "2001:db8:1:3::1"); !allowed {
 		t.Fatal("a neighboring /64 shared the exhausted bucket")
 	}
-	// IPv4 keeps its per-address key.
 	for i := 1; i <= 5; i++ {
 		if allowed, _ := registerFrom(policies, now, "198.51.100.8"); !allowed {
 			t.Fatalf("IPv4 registration %d denied", i)

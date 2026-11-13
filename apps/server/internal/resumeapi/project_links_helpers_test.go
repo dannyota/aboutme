@@ -45,8 +45,6 @@ func createOtherAccount(t *testing.T, h *resumeAPITestHarness) uuid.UUID {
 
 func formatRevision(revision int64) string { return strconv.FormatInt(revision, 10) }
 
-// withProjectSection adds a project section with entries at the end of the
-// main column.
 func withProjectSection(doc schema.Resume, key string, entries ...schema.ProjectEntry) schema.Resume {
 	if doc.Content == nil {
 		doc.Content = map[string]schema.Section{}
@@ -64,7 +62,6 @@ func linkedEntry(projectID uuid.UUID, title string) schema.ProjectEntry {
 	return entry
 }
 
-// storedLinks returns each stored project entry's link by entry id.
 func storedLinks(t *testing.T, h *resumeAPITestHarness, resumeID uuid.UUID) map[string]string {
 	t.Helper()
 	stored, err := h.resumes.Get(h.ctx, h.userID, resumeID)
@@ -95,8 +92,6 @@ func errorCodeOf(t *testing.T, body []byte) string {
 	return envelope.Error.Code
 }
 
-// linkRouteRequest sends a cookie mutation whose method may be POST and
-// still carries If-Match.
 func linkRouteRequest(t *testing.T, h *resumeAPITestHarness, method, path, body string, revision int64, version string) testHTTPResponse {
 	t.Helper()
 	var reader io.Reader

@@ -216,12 +216,6 @@ func TestPublicStreamOmitsOwnerMetadataAndClosesBeforeRevocationCompletes(t *tes
 	}
 }
 
-// TestPublicStreamRevisionQueuedBeforeRevocationEndsAtEOF checks that a
-// public stream holding a revision queued before revocation still ends at
-// EOF once the drain completes: Transition.Close cancels every lease and
-// waits for each stream to release it, and servePublic releases its lease
-// only after stream returns, so the queued frame may or may not reach the
-// client before EOF but the stream must never remain open.
 func TestPublicStreamRevisionQueuedBeforeRevocationEndsAtEOF(t *testing.T) {
 	service, hub, _, coordinator := streamFixture(t)
 	response, reader := openStream(t, service.PublicHandler(), "/api/v1/live/test-resume")
@@ -328,11 +322,6 @@ func TestPublicStreamRejectsHostilePathsAndMissingLiveState(t *testing.T) {
 	}
 }
 
-// TestPublicStreamRequiresPassForSignInToView proves a sign-in-to-view
-// resume's live stream needs a pass, that a missing or wrong pass is the
-// uniform public 404, and that a valid pass is admitted
-// (docs/design/viewer-analytics/sign-in-to-view.md "Gated routes";
-// AC-VIEW-003).
 func TestPublicStreamRequiresPassForSignInToView(t *testing.T) {
 	hub, err := realtime.NewHub(realtime.Config{AdmitFD: func() bool { return true }})
 	if err != nil {
@@ -369,9 +358,6 @@ func TestPublicStreamRequiresPassForSignInToView(t *testing.T) {
 		t.Fatalf("old-epoch pass status = %d, want 404", wrongEpochResp.Code)
 	}
 
-	// The handshake needs a real streaming connection (it flushes headers
-	// before writing a body), so it is driven through openStreamWithCookies
-	// rather than an httptest.ResponseRecorder.
 	resp, _ := openStreamWithCookies(t, service.PublicHandler(), "/api/v1/live/test-resume", //nolint:bodyclose // openStreamWithCookies registers Body.Close in t.Cleanup.
 		&http.Cookie{Name: viewpass.CookieName, Value: viewpass.Seal(key, data.row.ID, 1, time.Now().Add(time.Hour))})
 	if resp.StatusCode != http.StatusOK {
@@ -606,11 +592,7 @@ func TestRealtimeRoutesDeliverCommittedDatabaseChangesThroughRealSessionMiddlewa
 		t.Fatalf("revoked database session received bytes or remained open: %v", err)
 	}
 
-	// The listener publishes notifications in commit order, and Hub.Publish
-	// delivers synchronously, so once this probe observes revision 4, a
-	// public stream opened afterward cannot receive it: waiting here rules
-	// out the race where the async NOTIFY for this commit reaches the hub
-	// after the public stream below has already subscribed.
+	// PostgreSQL delivers NOTIFY messages in commit order.
 	probe, probeErr := hub.Subscribe(realtime.Scope{ResumeID: ownerResumeID, IP: "127.0.0.1"})
 	if probeErr != nil {
 		t.Fatal(probeErr)

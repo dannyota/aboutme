@@ -1,10 +1,5 @@
 package auth_test
 
-// With email-and-password sign-up turned off, POST /auth/password/register is
-// not registered and returns the uniform not-found response without any work,
-// while pending registrations still verify and the other password routes are
-// unchanged.
-
 import (
 	"context"
 	"net/http"
@@ -36,7 +31,6 @@ func TestPasswordRegister_DisabledIsUniformNotFoundWithoutWork(t *testing.T) {
 	}
 	assertErrorCode(t, body, "not_found")
 	assertErrorCode(t, unknownBody, "not_found")
-	// No handler ran: nothing was stored and no mail was queued.
 	assertNoRegistrationForEmail(t, e.pool, email)
 	var jobs int
 	if err := e.pool.QueryRow(context.Background(),

@@ -1,8 +1,5 @@
 package resumeapi
 
-// Resume create, metadata update, and delete: their request/prepared
-// input types and mutationOperation and HTTP handler implementations.
-
 import (
 	"bytes"
 	"context"
@@ -50,7 +47,6 @@ type resumeMetadataPrepared struct {
 }
 type resumeMetadataMutation struct{ service *Service }
 
-// Run implements mutationOperation for metadata replacement.
 func (op resumeMetadataMutation) Run(ctx context.Context, qtx *store.Queries, mutation mutationContext,
 	prepared preparedInput,
 ) (mutationRunResult, error) {
@@ -140,8 +136,6 @@ func (s *Service) handleCreateResume(w http.ResponseWriter, r *http.Request) {
 	s.executeMutation(w, r, spec)
 }
 
-// inspectionWireVersion returns the version already bound into the request
-// fingerprint. Prepare does not otherwise receive mutation headers.
 func inspectionWireVersion(_ idempotencyInspection, r *http.Request, accepted []int32) int32 {
 	version, err := resolveWireVersion(r.Header, accepted)
 	if err != nil {

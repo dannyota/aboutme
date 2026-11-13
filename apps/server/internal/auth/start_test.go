@@ -1,12 +1,5 @@
 package auth_test
 
-// start_test.go covers the /api/v1/auth/{provider}/start surface:
-//
-//   - Link and reauthentication starts are CSRF-protected POST requests
-//     that return the authorize URL. Login remains a GET.
-//   - Auth-route rate limits use composite account and IP keys. Starts also
-//     reap expired oauth_transactions and log each rejection.
-
 import (
 	"context"
 	"encoding/json"
@@ -24,15 +17,12 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// startEnvelopeBody decodes POST /start's success envelope.
 type startEnvelopeBody struct {
 	Data struct {
 		AuthorizeURL string `json:"authorizeUrl"`
 	} `json:"data"`
 }
 
-// decodeStartEnvelope decodes resp's body as POST /start's success
-// envelope, failing the test if it does not carry an authorize URL.
 func decodeStartEnvelope(t *testing.T, resp *http.Response) string {
 	t.Helper()
 
@@ -46,19 +36,11 @@ func decodeStartEnvelope(t *testing.T, resp *http.Response) string {
 	return body.Data.AuthorizeURL
 }
 
-// doStartPOST issues the POST /start request a legitimate settings-page
-// client would: exact Origin, the session's own CSRF token, no body.
 func doStartPOST(t *testing.T, handler http.Handler, path string, sess store.Session, raw string) *http.Response {
 	t.Helper()
 	return doJSON(t, handler, http.MethodPost, path, testPublicOrigin, csrfTokenFor(sess), "", sessionRequestCookie(raw)) //nolint:bodyclose // doJSON closes the body itself before returning.
 }
 
-// Link and reauthentication starts are CSRF-protected POST requests.
-
-// TestStartPOST_Link_ReturnsAuthorizeURL proves an
-// authenticated, CSRF-validated POST creates the link transaction and
-// hands the caller the authorize URL to navigate to, instead of
-// redirecting the browser itself.
 func TestStartPOST_Link_ReturnsAuthorizeURL(t *testing.T) {
 	t.Parallel()
 
@@ -67,7 +49,7 @@ func TestStartPOST_Link_ReturnsAuthorizeURL(t *testing.T) {
 	pool := newRowInspectorPool(t)
 
 	userID := createTestUser(t, q)
-	raw, sess := issueTestSession(t, q, userID) // Issue sets reauthenticated_at = now, so the link gate passes.
+	raw, sess := issueTestSession(t, q, userID)
 
 	resp := doStartPOST(t, handler, auth.GoogleStartPath+"?purpose=link", sess, raw) //nolint:bodyclose // doStartPOST -> doJSON closes the body itself before returning.
 	if resp.StatusCode != http.StatusOK {
@@ -92,10 +74,6 @@ func TestStartPOST_Link_ReturnsAuthorizeURL(t *testing.T) {
 	}
 }
 
-// TestStartPOST_Reauth_NeedsNoRecentReauth proves purpose=reauth is still
-// reachable from a session whose own reauth window has lapsed -- its
-// entire point is to re-establish recency, so gating it on recency would
-// be circular. The CSRF chain protects the POST.
 func TestStartPOST_Reauth_NeedsNoRecentReauth(t *testing.T) {
 	t.Parallel()
 
@@ -104,7 +82,7 @@ func TestStartPOST_Reauth_NeedsNoRecentReauth(t *testing.T) {
 
 	userID := createTestUser(t, q)
 	raw, sess := issueTestSession(t, q, userID)
-	forceReauthenticatedAtStale(t, sess.ID) // sessions_handlers_test.go: reauthenticated_at -> now-20m.
+	forceReauthenticatedAtStale(t, sess.ID)
 
 	resp := doStartPOST(t, handler, auth.GoogleStartPath+"?purpose=reauth", sess, raw) //nolint:bodyclose // doStartPOST -> doJSON closes the body itself before returning.
 	if resp.StatusCode != http.StatusOK {
@@ -113,9 +91,6 @@ func TestStartPOST_Reauth_NeedsNoRecentReauth(t *testing.T) {
 	decodeStartEnvelope(t, resp)
 }
 
-// TestStartPOST_Link_RejectsStaleReauth pins the recent-reauth gate at
-// /start so a stale caller never creates a transaction row. The API returns
-// 403 reauth_required because the settings page makes a fetch request.
 func TestStartPOST_Link_RejectsStaleReauth(t *testing.T) {
 	t.Parallel()
 
@@ -125,7 +100,7 @@ func TestStartPOST_Link_RejectsStaleReauth(t *testing.T) {
 
 	userID := createTestUser(t, q)
 	raw, sess := issueTestSession(t, q, userID)
-	forceReauthenticatedAtStale(t, sess.ID) // sessions_handlers_test.go: reauthenticated_at -> now-20m.
+	forceReauthenticatedAtStale(t, sess.ID)
 
 	resp := doStartPOST(t, handler, auth.GoogleStartPath+"?purpose=link", sess, raw) //nolint:bodyclose // doStartPOST -> doJSON closes the body itself before returning.
 	if resp.StatusCode != http.StatusForbidden {
@@ -139,8 +114,6 @@ func TestStartPOST_Link_RejectsStaleReauth(t *testing.T) {
 	}
 }
 
-// TestStartPOST_RejectsWithoutCSRFOrSession covers missing or mismatched CSRF,
-// foreign Origin, and missing session through the shared middleware chain.
 func TestStartPOST_RejectsWithoutCSRFOrSession(t *testing.T) {
 	t.Parallel()
 
@@ -192,11 +165,6 @@ func TestStartPOST_RejectsWithoutCSRFOrSession(t *testing.T) {
 	}
 }
 
-// TestStartPOST_RejectsUnsupportedPurpose pins the POST route's own closed
-// purpose vocabulary: it exists for link and reauth, and nothing else. A
-// login start is the GET's job, and silently treating an unrecognized
-// value as one would return a login authorize URL to a caller that asked
-// to link.
 func TestStartPOST_RejectsUnsupportedPurpose(t *testing.T) {
 	t.Parallel()
 
@@ -222,10 +190,6 @@ func TestStartPOST_RejectsUnsupportedPurpose(t *testing.T) {
 	}
 }
 
-// TestStartGET_LinkAndReauthPurposesUnavailable proves the GET no longer
-// serves link or reauthentication for any caller, regardless of same-site
-// headers. This prevents a cross-site chain of forced reauthentication
-// followed by forced linking from being assembled from GET requests.
 func TestStartGET_LinkAndReauthPurposesUnavailable(t *testing.T) {
 	t.Parallel()
 
@@ -270,10 +234,6 @@ func TestStartGET_LinkAndReauthPurposesUnavailable(t *testing.T) {
 	}
 }
 
-// TestStartGET_LoginUnaffected proves the public login start remains a bare
-// GET, reachable from
-// anywhere (a bookmark, an email, another site's "continue with aboutme"
-// button), with no session, CSRF, or same-site requirement of any kind.
 func TestStartGET_LoginUnaffected(t *testing.T) {
 	t.Parallel()
 
@@ -298,10 +258,6 @@ func TestStartGET_LoginUnaffected(t *testing.T) {
 	}
 }
 
-// TestStartGET_LoginNextValidation proves hostile or oversized destinations
-// are replaced before the provider transaction is stored. It consumes the
-// transaction through the real store so the assertion covers the exact value
-// a later callback would use.
 func TestStartGET_LoginNextValidation(t *testing.T) {
 	t.Parallel()
 
@@ -349,10 +305,6 @@ func TestStartGET_LoginNextValidation(t *testing.T) {
 	}
 }
 
-// Rate limiting, expired-transaction reaping, and rejection logging.
-
-// TestStart_RateLimited proves the start routes carry their OWN limit,
-// because each unauthenticated start request writes a database row.
 func TestStart_RateLimited(t *testing.T) {
 	t.Parallel()
 
@@ -379,10 +331,6 @@ func TestStart_RateLimited(t *testing.T) {
 	}
 }
 
-// TestStart_RateLimitKeyedOnAccountAndIP proves the limit is composite,
-// not per-IP alone: two different accounts posting from the same address
-// hold separate budgets, so one account exhausting its own can never lock
-// another user out of linking.
 func TestStart_RateLimitKeyedOnAccountAndIP(t *testing.T) {
 	t.Parallel()
 
@@ -407,8 +355,6 @@ func TestStart_RateLimitKeyedOnAccountAndIP(t *testing.T) {
 	}
 }
 
-// TestStart_ReapsExpiredOAuthTransactions proves the request-path reaper:
-// the route clears its own expired rows without relying on a scheduled job.
 func TestStart_ReapsExpiredOAuthTransactions(t *testing.T) {
 	t.Parallel()
 
@@ -417,9 +363,6 @@ func TestStart_ReapsExpiredOAuthTransactions(t *testing.T) {
 	pool := newRowInspectorPool(t)
 	ctx := context.Background()
 
-	// One long-expired transaction and one still well inside its TTL,
-	// both created through the real TransactionStore with an injected
-	// clock so they are exactly the rows /start itself would have left.
 	expiredStore := auth.NewTransactionStoreForTest(q, func() time.Time { return time.Now().Add(-24 * time.Hour) })
 	expiredHandle, _, err := expiredStore.Begin(ctx, auth.ProviderGoogle, auth.PurposeLogin, uuid.Nil, testPublicOrigin+auth.GoogleCallbackPath)
 	if err != nil {
@@ -429,9 +372,6 @@ func TestStart_ReapsExpiredOAuthTransactions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Begin() live transaction error = %v", err)
 	}
-
-	// Another parallel start may reap the expired row first. The final absence
-	// assertion remains valid either way.
 
 	resp := doGet(t, handler, auth.GoogleStartPath) //nolint:bodyclose // doGet closes the body itself before returning.
 	if resp.StatusCode != http.StatusFound {
@@ -446,8 +386,6 @@ func TestStart_ReapsExpiredOAuthTransactions(t *testing.T) {
 	}
 }
 
-// TestStart_RejectionsAreLogged proves every /start rejection records the
-// provider and a typed reason from reason.go's closed vocabulary.
 func TestStart_RejectionsAreLogged(t *testing.T) {
 	t.Parallel()
 
@@ -479,7 +417,7 @@ func TestStart_RejectionsAreLogged(t *testing.T) {
 			exercise: func(t *testing.T, handler http.Handler, q *store.Queries) {
 				t.Helper()
 				raw, sess := issueTestSession(t, q, createTestUser(t, q))
-				forceReauthenticatedAtStale(t, sess.ID)                                  // sessions_handlers_test.go: reauthenticated_at -> now-20m.
+				forceReauthenticatedAtStale(t, sess.ID)
 				doStartPOST(t, handler, auth.GoogleStartPath+"?purpose=link", sess, raw) //nolint:bodyclose // doStartPOST -> doJSON closes the body itself before returning.
 			},
 		},
@@ -523,10 +461,6 @@ func TestStart_RejectionsAreLogged(t *testing.T) {
 	}
 }
 
-// TestStart_RateLimitRejectionIsLogged is the same obligation for the
-// limiter's own rejection: a burst of starts against one key is exactly
-// the signal an operator needs, and it must not be the one rejection
-// class that stays silent.
 func TestStart_RateLimitRejectionIsLogged(t *testing.T) {
 	t.Parallel()
 
@@ -545,10 +479,6 @@ func TestStart_RateLimitRejectionIsLogged(t *testing.T) {
 	}
 }
 
-// TestStartPOST_Link_EnrolledAccountNeedsFactorProof proves a link start for
-// an enrolled account requires a recent factor proof as well as a recent
-// primary proof, and creates no transaction without it. A reauthentication
-// start stays open because it produces that proof.
 func TestStartPOST_Link_EnrolledAccountNeedsFactorProof(t *testing.T) {
 	t.Parallel()
 

@@ -1,9 +1,5 @@
 package viewapi
 
-// Sign-in-to-view gating and the signedIn field on the public start route
-// (docs/design/viewer-analytics/sign-in-to-view.md "Gated routes", "Join
-// invite"; AC-VIEW-003).
-
 import (
 	"bytes"
 	"encoding/json"
@@ -78,10 +74,6 @@ func TestPublicStart_SignInToView_RequiresPass(t *testing.T) {
 	}
 }
 
-// TestPublicStart_SignedInField_FalseWithNoSession proves the response
-// carries signedIn=false for an anonymous request. A live true case needs a
-// database-backed session (SessionManager.Authenticate), so it is covered by
-// the auth package's session tests, not here.
 func TestPublicStart_SignedInField_FalseWithNoSession(t *testing.T) {
 	f := newRouteFixture(t)
 	w := f.request(http.MethodPost, startPath, "{}", nil)
@@ -99,11 +91,6 @@ func TestPublicStart_SignedInField_FalseWithNoSession(t *testing.T) {
 	}
 }
 
-// TestPublicStart_StatusesAndCounting pins the start route's statuses for each
-// state its live read can return, and counts a view only when the start
-// succeeded. Each start costs exactly one live read, so the counter makes no
-// second lookup. An unpublished slug has no live row, the same as an unknown
-// one; the live filter itself is the query's.
 func TestPublicStart_StatusesAndCounting(t *testing.T) {
 	key := bytes.Repeat([]byte{0x44}, 32)
 	tests := []struct {
@@ -156,8 +143,6 @@ func TestPublicStart_StatusesAndCounting(t *testing.T) {
 	}
 }
 
-// TestOwnerQueriesReadNoWholeResume keeps the view routes off the full resume
-// row, documents included: no method of their query subset returns one.
 func TestOwnerQueriesReadNoWholeResume(t *testing.T) {
 	queries := reflect.TypeFor[OwnerQueries]()
 	whole := reflect.TypeFor[store.Resume]()

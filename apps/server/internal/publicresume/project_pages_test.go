@@ -16,10 +16,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// projectPagesRow stores a main project section with two linked entries
-// around an unlinked one and a hidden linked entry, a sidebar project
-// section with one linked entry, and a linked entry in a section outside the
-// layout. The first entry carries its own link.
 func projectPagesRow(t *testing.T, slug string, ids map[string]string) store.Resume {
 	t.Helper()
 	row := validReaderRow(t, slug)
@@ -55,8 +51,6 @@ func projectPagesIDs() map[string]string {
 	return ids
 }
 
-// projectColumn is a projects column: entry id, project slug and a document
-// named after the slug, for each pair.
 func projectColumn(t *testing.T, pairs ...string) json.RawMessage {
 	t.Helper()
 	rows := []map[string]any{}
@@ -81,8 +75,6 @@ func projectNames(pages ProjectPages) []string {
 
 func TestReaderReadProjects_ListFollowsLayoutAndOmitsWhatTheProjectionOmits(t *testing.T) {
 	ids := projectPagesIDs()
-	// The statement returns rows in no particular order and, as a guard,
-	// rows for a hidden entry and an entry outside the layout.
 	readStore := &readerStore{row: projectPagesRow(t, "ada", ids), projects: projectColumn(t,
 		ids["aside"], "side-tool", ids["outside"], "outside-tool", ids["second"], "second-tool", ids["hidden"], "hidden-tool", ids["first"], "first-tool")}
 	snapshot, pages := readProjectPages(t, newTestReader(t, readStore), "")
@@ -117,9 +109,6 @@ func TestReaderReadProjects_PageReadsOnlyTheRequestedProject(t *testing.T) {
 	}
 }
 
-// TestReaderReadProjects_UnknownResumeIsNotFound proves an unknown or
-// non-live resume, and a project slug outside the grammar, answer exactly as
-// an unknown resume: ErrNotFound and no lease.
 func TestReaderReadProjects_UnknownResumeIsNotFound(t *testing.T) {
 	ids := projectPagesIDs()
 	row := projectPagesRow(t, "ada", ids)
@@ -148,10 +137,6 @@ func TestReaderReadProjects_UnknownResumeIsNotFound(t *testing.T) {
 	}
 }
 
-// TestReaderReadProjects_UnavailablePageKeepsTheAdmission proves a live
-// resume with nothing to show on the requested page is still admitted: the
-// snapshot and lease come back with pages that are not Shown, so the caller
-// applies sign in to view before it answers as an unknown resume.
 func TestReaderReadProjects_UnavailablePageKeepsTheAdmission(t *testing.T) {
 	ids := projectPagesIDs()
 	row := projectPagesRow(t, "ada", ids)
@@ -181,10 +166,6 @@ func TestReaderReadProjects_UnavailablePageKeepsTheAdmission(t *testing.T) {
 	}
 }
 
-// TestReaderReadProjects_ColumnsDecodeOnlyWhenPagesAreBuilt proves admission
-// decodes no project column or document: a malformed one still admits the
-// resume, and only building the pages, which the caller does after its pass
-// check, meets the failure.
 func TestReaderReadProjects_ColumnsDecodeOnlyWhenPagesAreBuilt(t *testing.T) {
 	ids := projectPagesIDs()
 	row := projectPagesRow(t, "ada", ids)
@@ -211,7 +192,6 @@ func TestReaderReadProjects_ColumnsDecodeOnlyWhenPagesAreBuilt(t *testing.T) {
 	}
 }
 
-// readProjectPages admits a project read of "ada" and builds its pages.
 func readProjectPages(t *testing.T, reader *Reader, projectSlug string) (Snapshot, ProjectPages) {
 	t.Helper()
 	snapshot, read, lease, err := reader.ReadProjects(context.Background(), "ada", projectSlug)

@@ -10,9 +10,6 @@ func TestReservedAPI(t *testing.T) {
 	}
 }
 
-// wantRoutes is the v11 registry in authority order. It is written by hand so
-// a regenerated generated.go that silently drops, reorders, or reclassifies a
-// root fails here instead of shipping.
 var wantRoutes = []Route{
 	{Root: ".well-known", Dispatch: DispatchGo},
 	{Root: "admin", Dispatch: DispatchReserved},
@@ -72,9 +69,6 @@ func TestReservedCoversEveryRegisteredRoot(t *testing.T) {
 	}
 }
 
-// TestAgentRootsDoNotOverlap proves the four agent-access roots are distinct top-level
-// segments: no root is a prefix path segment of another, so `/authorize` (the
-// Nuxt consent page) can never shadow `/oauth/authorize` (the Go endpoint).
 func TestAgentRootsDoNotOverlap(t *testing.T) {
 	t.Parallel()
 
@@ -95,8 +89,6 @@ func TestAgentRootsDoNotOverlap(t *testing.T) {
 	}
 }
 
-// TestLegalPageRootsAreNuxtAndUnclaimable proves the Nuxt privacy and terms
-// pages own their roots, so neither can be claimed as a resume slug.
 func TestLegalPageRootsAreNuxtAndUnclaimable(t *testing.T) {
 	t.Parallel()
 
@@ -124,8 +116,6 @@ func TestLegalPageRootsAreNuxtAndUnclaimable(t *testing.T) {
 	}
 }
 
-// TestTemplatesRootIsNuxtAndUnclaimable proves the Nuxt template gallery owns
-// its root, so "templates" cannot be claimed as a resume slug.
 func TestTemplatesRootIsNuxtAndUnclaimable(t *testing.T) {
 	t.Parallel()
 
@@ -151,9 +141,6 @@ func TestTemplatesRootIsNuxtAndUnclaimable(t *testing.T) {
 	}
 }
 
-// TestVerifyRootIsNuxtAndUnclaimable proves the Nuxt deployment verify page
-// owns its root, so "verify" cannot be claimed as a resume slug, while the
-// separate verify-email root and longer slugs stay distinct.
 func TestVerifyRootIsNuxtAndUnclaimable(t *testing.T) {
 	t.Parallel()
 
@@ -179,9 +166,6 @@ func TestVerifyRootIsNuxtAndUnclaimable(t *testing.T) {
 	}
 }
 
-// TestGuideRootIsNuxtAndUnclaimable proves the Nuxt MCP guide page owns the
-// "guide" root, so it cannot be claimed as a resume slug, while "mcp" itself
-// stays a distinct Go root the guide can never shadow.
 func TestGuideRootIsNuxtAndUnclaimable(t *testing.T) {
 	t.Parallel()
 
@@ -221,8 +205,6 @@ func TestGuideRootIsNuxtAndUnclaimable(t *testing.T) {
 	}
 }
 
-// TestShowcaseRootIsNuxtAndUnclaimable proves the Nuxt community showcase page
-// owns the "showcase" root, so it cannot be claimed as a resume slug.
 func TestShowcaseRootIsNuxtAndUnclaimable(t *testing.T) {
 	t.Parallel()
 

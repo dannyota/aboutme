@@ -13,8 +13,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/publicresume"
 )
 
-// Values come from the resume renderer's clampAgainst in
-// apps/web/app/components/resume/clampContrast.ts against white at 3:1.
 func TestAccentClampsLikeTheResumeRenderer(t *testing.T) {
 	t.Parallel()
 	for source, want := range map[string]string{
@@ -86,8 +84,6 @@ func TestPathAndVersionForm(t *testing.T) {
 	}
 }
 
-// Sentinels sit in every contact type and in hidden content. The card
-// inputs and the envelope Go sends must contain none of them.
 func TestCardEnvelopeCarriesNoContactData(t *testing.T) {
 	t.Parallel()
 	contacts := []schema.PersonalDetail{

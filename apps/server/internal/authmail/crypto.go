@@ -8,32 +8,19 @@ import (
 	"github.com/google/uuid"
 )
 
-// aadPrefix is the authenticated-data domain separator.
 const aadPrefix = "aboutme.auth-email.v2"
 
-// maxPlaintextBytes caps the serialized closed JSON payload at 4,096 bytes.
 const maxPlaintextBytes = 4096
 
-// maxCiphertextBytes is maxPlaintextBytes plus the AES-256-GCM tag (16 bytes).
 const maxCiphertextBytes = 4096 + 16
 
-// JobScope binds the job's nullable account and token authority columns.
-// Nil values represent SQL NULL and differ from present zero values.
 type JobScope struct {
-	// UserID identifies the account for user-scoped mail.
-	UserID *uuid.UUID
-	// RegistrationID identifies the pending registration for verification mail.
+	UserID         *uuid.UUID
 	RegistrationID *uuid.UUID
-	// ResetTokenID identifies the reset token for reset mail.
-	ResetTokenID *uuid.UUID
-	// TokenDigest is the stored verify/reset token digest, or nil for user mail.
-	TokenDigest []byte
+	ResetTokenID   *uuid.UUID
+	TokenDigest    []byte
 }
 
-// aad encodes the domain, job ID, kind, key ID, user ID, registration ID,
-// reset token ID, and token digest in that order. UUIDs use 16 raw bytes;
-// variable-width values have an eight-byte big-endian byte length. Nullable
-// values start with 0 for absent or 1 followed by the encoded value for present.
 func aad(jobID uuid.UUID, kind Kind, keyID string, scope JobScope) []byte {
 	b := make([]byte, 0, 192)
 	b = append(b, aadPrefix...)
@@ -61,9 +48,6 @@ func aad(jobID uuid.UUID, kind Kind, keyID string, scope JobScope) []byte {
 	return b
 }
 
-// sealAEAD encrypts and authenticates plaintext with AES-256-GCM, returning
-// the nonce-prepended-and-tagged ciphertext. It never returns a raw AEAD
-// error: key construction failures here are unreachable for a [32]byte key.
 func sealAEAD(key [32]byte, nonce, plaintext, aadBytes []byte) ([]byte, error) {
 	block, err := aes.NewCipher(key[:])
 	if err != nil {
@@ -76,9 +60,6 @@ func sealAEAD(key [32]byte, nonce, plaintext, aadBytes []byte) ([]byte, error) {
 	return gcm.Seal(nil, nonce, plaintext, aadBytes), nil
 }
 
-// openAEAD decrypts and authenticates ciphertext. Any authentication failure,
-// including tampered ciphertext/nonce/AAD, truncated tag, or wrong key, collapses to
-// the closed ErrAuthentication sentinel; the raw AEAD error never escapes.
 func openAEAD(key [32]byte, nonce, ciphertext, aadBytes []byte) ([]byte, error) {
 	block, err := aes.NewCipher(key[:])
 	if err != nil {

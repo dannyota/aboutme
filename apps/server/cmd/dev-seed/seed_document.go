@@ -7,20 +7,12 @@ import (
 	"strings"
 )
 
-// splitResumeDoc pulls the three jsonb columns out of the embedded current
-// document and confirms the schema version.
 func splitResumeDoc(raw []byte) (personalDetails, content, customization []byte, err error) {
 	var doc struct {
-		// SchemaVersion is the fixture's document schema version; only 5 is
-		// accepted.
-		SchemaVersion int `json:"schemaVersion"`
-		// PersonalDetails is the personal details object, seeded without its
-		// photo member.
+		SchemaVersion   int             `json:"schemaVersion"`
 		PersonalDetails json.RawMessage `json:"personalDetails"`
-		// Content is the content object, seeded unchanged.
-		Content json.RawMessage `json:"content"`
-		// Customization is the customization object, seeded unchanged.
-		Customization json.RawMessage `json:"customization"`
+		Content         json.RawMessage `json:"content"`
+		Customization   json.RawMessage `json:"customization"`
 	}
 	if unmarshalErr := json.Unmarshal(raw, &doc); unmarshalErr != nil {
 		return nil, nil, nil, fmt.Errorf("decode full.json: %w", unmarshalErr)
@@ -35,10 +27,6 @@ func splitResumeDoc(raw []byte) (personalDetails, content, customization []byte,
 	return personalDetails, doc.Content, doc.Customization, nil
 }
 
-// withoutPhoto drops the fixture's photo reference: the seed has no media
-// backend, and a key without bytes fails the owner photo read. It removes the
-// top-level member directly from the original JSON so all remaining bytes and
-// key order stay unchanged.
 func withoutPhoto(raw json.RawMessage) (json.RawMessage, error) {
 	if !json.Valid(raw) {
 		return nil, errors.New("decode personalDetails: invalid JSON")

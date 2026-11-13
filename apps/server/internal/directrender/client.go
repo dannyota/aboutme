@@ -1,4 +1,3 @@
-// Package directrender calls the local renderer for a public resume response.
 package directrender
 
 import (
@@ -13,7 +12,7 @@ import (
 )
 
 const (
-	publicRenderRequestMaxBytes  int64 = 532_480
+	publicRenderRequestMaxBytes  int64 = 557_056
 	publicRenderResponseMaxBytes int64 = 2_097_152
 	publicRenderDeadline               = 5 * time.Second
 )
@@ -38,32 +37,22 @@ type renderOutcome struct {
 	err      error
 }
 
-// Render returns a bounded, validated HTML representation for request.
 func (c *Client) Render(ctx context.Context, request PublicRenderRequest) (Result, error) {
 	return c.render(ctx, request)
 }
 
-// RenderGate returns a bounded, validated HTML representation of the
-// sign-in-to-view gate, through the same internal render endpoint as an
-// ordinary resume (docs/design/viewer-analytics/sign-in-to-view.md "Gate").
 func (c *Client) RenderGate(ctx context.Context, request GateRenderRequest) (Result, error) {
 	return c.render(ctx, request)
 }
 
-// RenderProjectList returns a bounded, validated HTML representation of a
-// resume's project list (docs/design/projects-contract.md "Render envelope").
 func (c *Client) RenderProjectList(ctx context.Context, request ProjectListRenderRequest) (Result, error) {
 	return c.render(ctx, request)
 }
 
-// RenderProject returns a bounded, validated HTML representation of one
-// project page (docs/design/projects-contract.md "Render envelope").
 func (c *Client) RenderProject(ctx context.Context, request ProjectRenderRequest) (Result, error) {
 	return c.render(ctx, request)
 }
 
-// render encodes and posts any request shape to the internal render
-// endpoint and validates the response.
 func (c *Client) render(ctx context.Context, request any) (Result, error) {
 	if c == nil || c.http == nil || c.origin.value == "" {
 		return Result{}, renderUnavailable(errors.New("direct render client is not configured"))
@@ -90,8 +79,6 @@ func (c *Client) render(ctx context.Context, request any) (Result, error) {
 	select {
 	case outcome = <-done:
 	case <-renderCtx.Done():
-		// The direct call owns no work after this function returns: wait for the
-		// transport to observe cancellation, then close a late response.
 		outcome = <-done
 		return Result{}, renderUnavailable(errors.Join(renderCtx.Err(), closeResponse(outcome.response)))
 	}

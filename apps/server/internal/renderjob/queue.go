@@ -1,4 +1,3 @@
-// Package renderjob runs bounded, capability-gated browser renders.
 package renderjob
 
 import (
@@ -13,36 +12,19 @@ import (
 )
 
 const (
-	// PDF is the document export format.
-	PDF Format = "pdf"
-	// PNG is the fixed 1200 by 630 share-image format.
-	PNG Format = "png"
-	// Card is the 1200 by 630 link-preview card, captured like PNG from a
-	// card envelope (docs/design/link-previews.md, "Preview card").
+	PDF  Format = "pdf"
+	PNG  Format = "png"
 	Card Format = "card"
 
-	// MaxConcurrentRenders is the fixed v1 browser concurrency limit.
-	MaxConcurrentRenders = 1
-	// MaxQueueDepth is the fixed v1 waiting-job limit.
-	MaxQueueDepth = 8
-	// MaxAdmittedJobs includes the running render and waiting queue.
-	MaxAdmittedJobs = MaxConcurrentRenders + MaxQueueDepth
-	// MaxJobTimeout sets the cancellation deadline from admission; joined cleanup may finish later.
-	MaxJobTimeout = 20 * time.Second
-	// MaxCapabilityTTL bounds an unused print capability.
-	MaxCapabilityTTL = 60 * time.Second
-	// MaxSnapshotBytes bounds one frozen render snapshot.
-	MaxSnapshotBytes = 3_407_872
-	// PDFMaxBytes bounds one completed PDF artifact.
-	PDFMaxBytes = 16_777_216
-	// PNGMaxBytes bounds one completed share-image artifact.
-	PNGMaxBytes = 4_194_304
-	// CardMaxBytes bounds one completed preview card, under WhatsApp's
-	// 600 KB image limit.
-	CardMaxBytes = 524_288
-	// LowPriorityMaxWaiting is how many queue places may be taken when a
-	// low-priority render enters. The places above it stay free for owner
-	// exports, and low-priority work alone can never saturate readiness.
+	MaxConcurrentRenders  = 1
+	MaxQueueDepth         = 8
+	MaxAdmittedJobs       = MaxConcurrentRenders + MaxQueueDepth
+	MaxJobTimeout         = 20 * time.Second
+	MaxCapabilityTTL      = 60 * time.Second
+	MaxSnapshotBytes      = 3_407_872
+	PDFMaxBytes           = 16_777_216
+	PNGMaxBytes           = 4_194_304
+	CardMaxBytes          = 524_288
 	LowPriorityMaxWaiting = 2
 
 	capabilityBytes = 32
@@ -50,54 +32,35 @@ const (
 )
 
 var (
-	// ErrSaturated reports that all render admission slots are reserved.
-	ErrSaturated = errors.New("renderjob: saturated")
-	// ErrNotActive is the uniform rejection for invalid or inactive authority.
-	ErrNotActive = errors.New("renderjob: not active")
-	// ErrClosed reports that the queue has begun permanent shutdown.
-	ErrClosed = errors.New("renderjob: closed")
-	// ErrInvalidRequest reports invalid format, snapshot, or configuration input.
-	ErrInvalidRequest = errors.New("renderjob: invalid request")
-	// ErrPreparation reports a sanitized snapshot preparation failure.
-	ErrPreparation = errors.New("renderjob: preparation failed")
-	// ErrRendering reports a sanitized renderer failure.
-	ErrRendering = errors.New("renderjob: render failed")
-	// ErrGenerationChanged reports a public result discarded after validation.
+	ErrSaturated         = errors.New("renderjob: saturated")
+	ErrNotActive         = errors.New("renderjob: not active")
+	ErrClosed            = errors.New("renderjob: closed")
+	ErrInvalidRequest    = errors.New("renderjob: invalid request")
+	ErrPreparation       = errors.New("renderjob: preparation failed")
+	ErrRendering         = errors.New("renderjob: render failed")
 	ErrGenerationChanged = errors.New("renderjob: public generation changed")
-	// ErrOutputTooLarge reports a terminal artifact size violation.
-	ErrOutputTooLarge = errors.New("renderjob: output too large")
-	// ErrAuthoritySource reports a sanitized entropy or UUID source failure.
-	ErrAuthoritySource = errors.New("renderjob: authority source failed")
+	ErrOutputTooLarge    = errors.New("renderjob: output too large")
+	ErrAuthoritySource   = errors.New("renderjob: authority source failed")
 )
 
-// Format identifies one fixed render output contract.
 type Format string
 
-// Priority orders admission between owner work and background work.
 type Priority uint8
 
 const (
-	// PriorityNormal admits a render while any queue place is free.
 	PriorityNormal Priority = iota
-	// PriorityLow admits a background render only while at most
-	// LowPriorityMaxWaiting places behind the running render are taken.
 	PriorityLow
 )
 
-// Snapshot is the frozen, already-authorized renderer input.
 type Snapshot struct {
 	ResumeID         uuid.UUID
 	Revision         int64
 	SchemaVersion    int
 	PublicGeneration int64
 	Payload          []byte
-	// RevisionTime is when the rendered revision was saved. A PDF carries it
-	// as its creation and modification date, so the same revision always
-	// renders the same bytes. The zero time writes the Unix epoch.
-	RevisionTime time.Time
+	RevisionTime     time.Time
 }
 
-// Request supplies a frozen snapshot and optional public generation validator.
 type Request struct {
 	Format             Format
 	Priority           Priority
@@ -105,7 +68,6 @@ type Request struct {
 	ValidateGeneration func(context.Context, Snapshot) error
 }
 
-// Navigation is the renderer's complete authority for one controlled navigation.
 type Navigation struct {
 	ResumeID     uuid.UUID
 	JobID        uuid.UUID
@@ -114,12 +76,10 @@ type Navigation struct {
 	RevisionTime time.Time
 }
 
-// Renderer performs one controlled browser navigation and capture.
 type Renderer interface {
 	Render(context.Context, Navigation) ([]byte, error)
 }
 
-// Redemption is the private print route's presented authority.
 type Redemption struct {
 	ResumeID   uuid.UUID
 	JobID      uuid.UUID
@@ -127,19 +87,16 @@ type Redemption struct {
 	Capability string
 }
 
-// Result is one accepted artifact and its server-computed digest.
 type Result struct {
 	Bytes    []byte
 	Digest   [32]byte
 	Revision int64
 }
 
-// Timer is the stoppable part of a real or deterministic callback timer.
 type Timer interface {
 	Stop() bool
 }
 
-// Config supplies dependencies and optionally lowers fixed production bounds.
 type Config struct {
 	Renderer  Renderer
 	Entropy   io.Reader
@@ -209,7 +166,6 @@ func (callback *trackedCallback) stopAndWait() {
 	<-callback.done
 }
 
-// Queue owns bounded admission and ephemeral authority state.
 type Queue struct {
 	mu       sync.Mutex
 	sourceMu sync.Mutex
@@ -234,7 +190,6 @@ type Queue struct {
 	closeDone     chan struct{}
 }
 
-// New constructs a bounded render queue.
 func New(config Config) (*Queue, error) {
 	if config.Renderer == nil {
 		return nil, ErrInvalidRequest

@@ -7,8 +7,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// RevokeRoutingFixture exposes the database fixture to external-package tests
-// that import the MCP resource server without creating an import cycle.
 type RevokeRoutingFixture struct {
 	Service    *Service
 	Pool       *store.Pool

@@ -1,0 +1,294 @@
+{
+  "cases": [
+    {
+      "origin": "https://aboutme.vn",
+      "environment": "production",
+      "accept": true
+    },
+    {
+      "origin": "https://resume.example",
+      "environment": "production",
+      "accept": true
+    },
+    {
+      "origin": "https://staging.example:8443",
+      "environment": "staging",
+      "accept": true
+    },
+    {
+      "origin": "https://my-resume.example",
+      "environment": "production",
+      "accept": true
+    },
+    {
+      "origin": "https://xn--bcher-kva.example",
+      "environment": "production",
+      "accept": true
+    },
+    {
+      "origin": "https://resume.example.",
+      "environment": "production",
+      "accept": true
+    },
+    {
+      "origin": "https://resume.example:65535",
+      "environment": "production",
+      "accept": true
+    },
+    {
+      "origin": "https://resume.example:1",
+      "environment": "production",
+      "accept": true
+    },
+    {
+      "origin": "https://192.0.2.1",
+      "environment": "production",
+      "accept": true
+    },
+    {
+      "origin": "https://[2001:db8::1]",
+      "environment": "production",
+      "accept": true
+    },
+    {
+      "origin": "https://localhost:20443",
+      "environment": "development",
+      "accept": true
+    },
+    {
+      "origin": "http://localhost:20080",
+      "environment": "development",
+      "accept": true
+    },
+    {
+      "origin": "http://127.0.0.1:20080",
+      "environment": "development",
+      "accept": true
+    },
+    {
+      "origin": "http://[::1]:20080",
+      "environment": "development",
+      "accept": true
+    },
+    {
+      "origin": "http://localhost:20080",
+      "environment": "test",
+      "accept": true
+    },
+    {
+      "origin": "HTTPS://RESUME.EXAMPLE",
+      "environment": "production",
+      "accept": false
+    },
+    {
+      "origin": "https://Resume.example",
+      "environment": "production",
+      "accept": false
+    },
+    {
+      "origin": "https://resume.example:443",
+      "environment": "production",
+      "accept": false
+    },
+    {
+      "origin": "http://localhost:80",
+      "environment": "development",
+      "accept": false
+    },
+    {
+      "origin": "https://resume.example:0443",
+      "environment": "production",
+      "accept": false
+    },
+    {
+      "origin": "https://resume.example:08443",
+      "environment": "production",
+      "accept": false
+    },
+    {
+      "origin": "https://resume.example:65536",
+      "environment": "production",
+      "accept": false
+    },
+    {
+      "origin": "https://resume.example:0",
+      "environment": "production",
+      "accept": false
+    },
+    {
+      "origin": "https://resume.example:",
+      "environment": "production",
+      "accept": false
+    },
+    {
+      "origin": "https://resume.example:+8443",
+      "environment": "production",
+      "accept": false
+    },
+    {
+      "origin": "https://u:p@resume.example",
+      "environment": "production",
+      "accept": false
+    },
+    {
+      "origin": "https://resume.example/x",
+      "environment": "production",
+      "accept": false
+    },
+    {
+      "origin": "https://resume.example/",
+      "environment": "production",
+      "accept": false
+    },
+    {
+      "origin": "https://resume.example?q=x",
+      "environment": "production",
+      "accept": false
+    },
+    {
+      "origin": "https://resume.example#x",
+      "environment": "production",
+      "accept": false
+    },
+    {
+      "origin": "http://resume.example",
+      "environment": "production",
+      "accept": false
+    },
+    {
+      "origin": "http://resume.example",
+      "environment": "development",
+      "accept": false
+    },
+    {
+      "origin": "http://localhost:20080",
+      "environment": "production",
+      "accept": false
+    },
+    {
+      "origin": "ftp://resume.example",
+      "environment": "production",
+      "accept": false
+    },
+    {
+      "origin": "https:/resume.example",
+      "environment": "production",
+      "accept": false
+    },
+    {
+      "origin": "resume.example",
+      "environment": "production",
+      "accept": false
+    },
+    {
+      "origin": "https://",
+      "environment": "production",
+      "accept": false
+    },
+    {
+      "origin": "https://[2001:DB8::1]",
+      "environment": "production",
+      "accept": false
+    },
+    {
+      "origin": "https://[2001:0db8::0001]",
+      "environment": "production",
+      "accept": false
+    },
+    {
+      "origin": "https://[2001:db8:0:0:0:0:0:1]",
+      "environment": "production",
+      "accept": false
+    },
+    {
+      "origin": "http://[0:0::1]:20080",
+      "environment": "development",
+      "accept": false
+    },
+    {
+      "origin": "https://[::ffff:1.2.3.4]",
+      "environment": "production",
+      "accept": false
+    },
+    {
+      "origin": "http://[::1%25lo0]:20080",
+      "environment": "development",
+      "accept": false
+    },
+    {
+      "origin": "https://[::1",
+      "environment": "production",
+      "accept": false
+    },
+    {
+      "origin": "https://[::1]x",
+      "environment": "production",
+      "accept": false
+    },
+    {
+      "origin": "https://127.1",
+      "environment": "production",
+      "accept": false
+    },
+    {
+      "origin": "https://0x7f.0.0.1",
+      "environment": "production",
+      "accept": false
+    },
+    {
+      "origin": "https://1.2.3",
+      "environment": "production",
+      "accept": false
+    },
+    {
+      "origin": "https://010.0.0.1",
+      "environment": "production",
+      "accept": false
+    },
+    {
+      "origin": "https://example.123",
+      "environment": "production",
+      "accept": false
+    },
+    {
+      "origin": "https://b%C3%BCcher.example",
+      "environment": "production",
+      "accept": false
+    },
+    {
+      "origin": "https://%61.example",
+      "environment": "production",
+      "accept": false
+    },
+    {
+      "origin": "https://a<b.example",
+      "environment": "production",
+      "accept": false
+    },
+    {
+      "origin": "https://a_b.example",
+      "environment": "production",
+      "accept": false
+    },
+    {
+      "origin": "https://a..b.example",
+      "environment": "production",
+      "accept": false
+    },
+    {
+      "origin": "https://.example",
+      "environment": "production",
+      "accept": false
+    },
+    {
+      "origin": "https://bücher.example",
+      "environment": "production",
+      "accept": false
+    },
+    {
+      "origin": "https://a b.example",
+      "environment": "production",
+      "accept": false
+    }
+  ]
+}

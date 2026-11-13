@@ -1,4 +1,3 @@
-// Package mcpapi exposes the bearer-authenticated Model Context Protocol boundary.
 package mcpapi
 
 import (
@@ -17,7 +16,6 @@ import (
 
 const lastUsedWindow = time.Minute
 
-// Principal is the validated bearer authority passed to MCP tools.
 type Principal struct {
 	UserID  uuid.UUID
 	GrantID uuid.UUID
@@ -25,21 +23,18 @@ type Principal struct {
 	Scopes  oauthsrv.Scopes
 }
 
-// BearerDependencies are the fixed resource-server dependencies.
 type BearerDependencies struct {
 	Queries      store.OAuthQueries
 	Clock        func() time.Time
 	PublicOrigin string
 }
 
-// Bearer validates OAuth access tokens for the MCP bearer-only boundary.
 type Bearer struct {
 	queries      store.OAuthQueries
 	clock        func() time.Time
 	publicOrigin string
 }
 
-// NewBearer builds a bearer boundary from the configured canonical origin.
 func NewBearer(dependencies BearerDependencies) (*Bearer, error) {
 	if isNil(dependencies.Queries) || dependencies.Clock == nil || !oauthsrv.IsCanonicalOrigin(dependencies.PublicOrigin) {
 		return nil, errors.New("mcp bearer: invalid dependencies")
@@ -47,8 +42,6 @@ func NewBearer(dependencies BearerDependencies) (*Bearer, error) {
 	return &Bearer{queries: dependencies.Queries, clock: dependencies.Clock, publicOrigin: dependencies.PublicOrigin}, nil
 }
 
-// Authenticate validates one exact Bearer access-token header. It never reads
-// cookies or another browser credential.
 func (b *Bearer) Authenticate(r *http.Request) (Principal, error) {
 	values := r.Header.Values("Authorization")
 	if len(values) != 1 || !strings.HasPrefix(values[0], "Bearer ") {
@@ -69,11 +62,6 @@ func (b *Bearer) Authenticate(r *http.Request) (Principal, error) {
 	now := b.clock()
 	token := authority.OAuthToken
 	grant := authority.OAuthGrant
-	// The grant's authentication epoch must still match the account's
-	// current one: a factor change that advanced the epoch revokes live
-	// grants, but a stale-epoch row observed before that revocation commits
-	// must still authenticate nothing. See
-	// docs/design/second-factor-authentication.md.
 	if token.Kind != string(oauthsrv.TokenKindAccess) || token.RevokedAt != nil || token.SupersededAt != nil || grant.RevokedAt != nil ||
 		!token.ExpiresAt.After(now) || !token.FamilyExpiresAt.After(now) ||
 		token.UserID != authority.User.ID || token.UserID != grant.UserID || token.ClientID != grant.ClientID || token.GrantID != grant.ID ||
@@ -96,7 +84,6 @@ func (b *Bearer) unauthorized() error {
 	return &mcpError{status: http.StatusUnauthorized, code: "unauthorized", challenge: b.publicOrigin}
 }
 
-// RequireScope checks the closed grant scope set before a tool touches state.
 func RequireScope(principal Principal, scope oauthsrv.Scope) error {
 	if !principal.Scopes.Has(scope) {
 		return errScopeDenied

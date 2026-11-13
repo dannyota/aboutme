@@ -15,7 +15,6 @@ import (
 	"github.com/chromedp/chromedp"
 )
 
-// streamSession is a cdp.Session that answers IO.read with one result.
 type streamSession struct{ result string }
 
 func (s streamSession) Call(_ context.Context, method string, _, result any) error {
@@ -78,8 +77,7 @@ exit 7
 			profiles = append(profiles, profile)
 		}
 	}
-	// chromedp scans for and kills processes by numeric PID after the browser
-	// exits only when it creates the profile itself, named chromedp-runner.
+	// chromedp kills leftover processes by numeric PID only when it creates the profile itself, named chromedp-runner.
 	if len(profiles) != 1 || !strings.HasPrefix(filepath.Base(profiles[0]), browserProfilePrefix) {
 		t.Fatalf("browser profiles = %q, want one renderer-owned profile", profiles)
 	}

@@ -2,9 +2,6 @@ package publicapi
 
 import "testing"
 
-// whatwgLinkVerdicts is, for each link, whether the renderer's decoder
-// (project-decode.ts externalLink, through the WHATWG URL parser) accepts
-// it, as Node 24's URL reported it.
 var whatwgLinkVerdicts = map[string]bool{
 	"https://example.org": true, "https://example.org/": true, "https://example.org:443/x": true,
 	"https://example.org:65535/x": true, "https://example.org:65536/x": false, "https://example.org:70000": false,
@@ -24,8 +21,6 @@ var whatwgLinkVerdicts = map[string]bool{
 	"https://example.org\\x": true,
 }
 
-// TestRendererLink_AgreesWithWHATWG proves rendererLink accepts exactly the
-// links the renderer's decoder accepts.
 func TestRendererLink_AgreesWithWHATWG(t *testing.T) {
 	for link, want := range whatwgLinkVerdicts {
 		if got := rendererLink(link); got != want {
@@ -34,8 +29,6 @@ func TestRendererLink_AgreesWithWHATWG(t *testing.T) {
 	}
 }
 
-// whatwgOriginVerdicts is, for each value, whether envelope-fields.ts
-// normalizedOrigin accepts it, as Node 24's URL reported it.
 var whatwgOriginVerdicts = map[string]bool{
 	"https://aboutme.example": true, "http://127.0.0.1:20030": true, "https://aboutme.example/": false,
 	"https://Aboutme.example": false, "https://aboutme.example:443": false, "http://aboutme.example:80": false,
@@ -44,9 +37,6 @@ var whatwgOriginVerdicts = map[string]bool{
 	"https://bücher.example": false, "http://localhost:20080": true, "https://[::1]": true, "https://1.2.3.256": false,
 }
 
-// TestDecoderNormalizedOrigin_AgreesWithWHATWG proves the decoder copy's
-// origin check accepts exactly the origins the renderer's decoder accepts,
-// and only a string.
 func TestDecoderNormalizedOrigin_AgreesWithWHATWG(t *testing.T) {
 	for origin, want := range whatwgOriginVerdicts {
 		if got := decoderNormalizedOrigin(origin); got != want {

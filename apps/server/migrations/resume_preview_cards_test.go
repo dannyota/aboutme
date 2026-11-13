@@ -12,7 +12,6 @@ import (
 	"danny.vn/aboutme/apps/server/migrations"
 )
 
-// uniqueCardSlug returns a valid slug that no parallel test shares.
 func uniqueCardSlug() string {
 	return "card-" + strings.ReplaceAll(uuid.NewString(), "-", "")[:12]
 }
@@ -75,9 +74,6 @@ func TestResumePreviewCardConstraints(t *testing.T) {
 	}
 }
 
-// Unpublish and rename delete the stored card in the same transaction that
-// changes the public state; resume delete removes it by cascade. Updates
-// that keep the resume live under the same slug keep the card (ADR 0014).
 func TestResumePreviewCardRevocation(t *testing.T) {
 	t.Parallel()
 	tx, ctx := newResumeSchemaTx(t)

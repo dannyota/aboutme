@@ -71,8 +71,6 @@ func (h *workflowHarness) run() (workflowResult, error) {
 	return runWorkflow(context.Background(), h.config, h.deps())
 }
 
-// writeCandidate stands in for the manager: it reads source.json, applies the
-// translation, and writes the digest-bound review.
 func (h *workflowHarness) writeCandidate(_ context.Context, run privateArtifacts) error {
 	source, err := run.read(sourceName)
 	if err != nil {
@@ -112,8 +110,6 @@ func translateFixture(document map[string]any) {
 	entryAt(asMap(content["profile"]), 0)["text"] = "<p>Kỹ sư và nhà toán học tập trung vào máy phân tích.</p>"
 }
 
-// asMap and entryAt return an empty value on a shape mismatch, which the
-// preservation check then rejects.
 func asMap(value any) map[string]any {
 	typed, ok := value.(map[string]any)
 	if !ok {
@@ -477,8 +473,6 @@ func TestRevocationWithoutReauthorizationProofSettlesButFails(t *testing.T) {
 
 func TestRevocationUncertaintyRetainsJournalAndRestartIsRevocationOnly(t *testing.T) {
 	h := newWorkflowHarness(t, modeProduction, false)
-	// A lost revoke: the grant stays live, so the SDK call succeeds and the
-	// probe sees 200 before the access cutoff.
 	h.fake.ignoreRevoke = true
 	if _, runErr := h.run(); !errors.Is(runErr, errRevocation) {
 		t.Fatalf("runErr = %v", runErr)
@@ -523,10 +517,6 @@ func TestSourceExistingVietnameseTargetBlocksFreshProductionRun(t *testing.T) {
 	}
 }
 
-// A failure after captureGrant but before complete leaves no revocation
-// journal, so nothing else would ever revoke the grant; the best-effort
-// revoke in runOwnerWorkflow's defer is what closes it. See
-// docs/design/mcp-owner-workflow.md#privacy-revocation-and-evidence.
 func TestFailureAfterGrantCaptureRevokesBestEffort(t *testing.T) {
 	h := newWorkflowHarness(t, modeProduction, false)
 	h.fake.addOther("fr")

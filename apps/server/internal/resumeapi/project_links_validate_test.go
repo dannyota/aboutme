@@ -25,8 +25,6 @@ func loadFullDocument(t *testing.T) schema.Resume {
 	return doc
 }
 
-// linkWriter performs one write that names projectID and reports the status
-// and body the caller saw.
 type linkWriter func(t *testing.T, h *resumeAPITestHarness, projectID uuid.UUID) (int, []byte)
 
 func restCreateWriter(t *testing.T, h *resumeAPITestHarness, projectID uuid.UUID) (int, []byte) {
@@ -36,8 +34,6 @@ func restCreateWriter(t *testing.T, h *resumeAPITestHarness, projectID uuid.UUID
 	return response.status, response.body
 }
 
-// importWriter creates a complete imported document, with its language, in
-// one request, as every importer does.
 func importWriter(t *testing.T, h *resumeAPITestHarness, projectID uuid.UUID) (int, []byte) {
 	doc := loadFullDocument(t)
 	doc.PersonalDetails.Photo = nil

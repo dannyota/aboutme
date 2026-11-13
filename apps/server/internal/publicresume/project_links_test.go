@@ -15,9 +15,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// linkedReaderRow stores a main project section with two linked entries
-// around an unlinked one, a hidden linked entry, and a sidebar project
-// section with one linked entry.
 func linkedReaderRow(t *testing.T, slug string, ids map[string]string) store.Resume {
 	t.Helper()
 	row := validReaderRow(t, slug)
@@ -67,9 +64,7 @@ func linkColumn(t *testing.T, pairs ...string) json.RawMessage {
 
 func TestReaderReadResume_ProjectLinksFollowLayoutAndEntryOrder(t *testing.T) {
 	ids := linkIDs()
-	// The statement returns links in no particular order and, as a guard,
-	// one for an entry the projection does not show.
-	readStore := &readerStore{row: linkedReaderRow(t, "ada", ids), links: linkColumn(t,
+	readStore := &readerStore{row: linkedReaderRow(t, "ada", ids), links: projectColumn(t,
 		ids["aside"], "side-tool", ids["second"], "second-tool", ids["hidden"], "hidden-tool", ids["first"], "first-tool")}
 	snapshot, lease, err := newTestReader(t, readStore).ReadResume(context.Background(), "ada", publicstate.RepresentationJSON)
 	if err != nil {
@@ -102,9 +97,12 @@ func TestReaderReadResume_MalformedLinkContextIsUnavailable(t *testing.T) {
 	for name, column := range map[string]json.RawMessage{
 		"not an array":   json.RawMessage(`{}`),
 		"null":           json.RawMessage(`null`),
-		"invalid slug":   linkColumn(t, ids["first"], "Not A Slug"),
-		"path in slug":   linkColumn(t, ids["first"], "../x"),
-		"empty entry id": linkColumn(t, "", "first-tool"),
+		"invalid slug":   projectColumn(t, ids["first"], "Not A Slug"),
+		"path in slug":   projectColumn(t, ids["first"], "../x"),
+		"empty entry id": projectColumn(t, "", "first-tool"),
+		"no document":    linkColumn(t, ids["first"], "first-tool"),
+		"null document":  json.RawMessage(`[{"entryId":"` + ids["first"] + `","projectSlug":"first-tool","document":null}]`),
+		"document type":  json.RawMessage(`[{"entryId":"` + ids["first"] + `","projectSlug":"first-tool","document":"text"}]`),
 	} {
 		t.Run(name, func(t *testing.T) {
 			readStore := &readerStore{row: linkedReaderRow(t, "ada", ids), links: column}
@@ -117,5 +115,55 @@ func TestReaderReadResume_MalformedLinkContextIsUnavailable(t *testing.T) {
 				t.Fatalf("ReadResume() error = %v, want ErrUnavailable", err)
 			}
 		})
+	}
+}
+
+func TestReaderReadResume_LinksOnlyProjectsWithANameThePageCanShow(t *testing.T) {
+	ids := linkIDs()
+	row := linkedReaderRow(t, "ada", ids)
+	blank := [3]string{ids["first"], "first-tool", string(rune(0xfeff))}
+	named := [3]string{ids["second"], "second-tool", "Second"}
+	snapshot, lease, err := newTestReader(t, &readerStore{row: row, links: namedColumn(t, blank, named)}).ReadResume(context.Background(), "ada", publicstate.RepresentationJSON)
+	if err != nil {
+		t.Fatalf("ReadResume() error = %v", err)
+	}
+	lease.Release()
+	want := []ProjectLink{{EntryID: ids["second"], ProjectSlug: "second-tool", URL: "https://resume.example/ada/projects/second-tool"}}
+	if !reflect.DeepEqual(snapshot.ProjectLinks, want) {
+		t.Fatalf("ProjectLinks = %+v, want only the named project %+v", snapshot.ProjectLinks, want)
+	}
+
+	snapshot, lease, err = newTestReader(t, &readerStore{row: row, links: namedColumn(t, blank)}).ReadResume(context.Background(), "ada", publicstate.RepresentationJSON)
+	if err != nil {
+		t.Fatalf("ReadResume() error = %v; a blank name is unavailable, not a failure", err)
+	}
+	lease.Release()
+	if snapshot.ProjectLinks == nil || len(snapshot.ProjectLinks) != 0 {
+		t.Fatalf("ProjectLinks = %#v, want an empty, non-nil list", snapshot.ProjectLinks)
+	}
+}
+
+func TestReaderReadResume_LinkNameFollowsTheProjectPageLanguage(t *testing.T) {
+	ids := linkIDs()
+	row := linkedReaderRow(t, "ada", ids)
+	lng := "vi-VN"
+	row.Lng = &lng
+	column, err := json.Marshal([]map[string]any{
+		{"entryId": ids["first"], "projectSlug": "first-tool", "document": map[string]any{"defaultLanguage": "en", "text": map[string]any{
+			"en": map[string]string{"name": "First"}, "vi": map[string]string{"name": " "}}}},
+		{"entryId": ids["second"], "projectSlug": "second-tool", "document": map[string]any{"defaultLanguage": "vi", "text": map[string]any{
+			"en": map[string]string{"name": "Second"}, "vi": map[string]string{"name": "\u3000"}}}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot, lease, err := newTestReader(t, &readerStore{row: row, links: column}).ReadResume(context.Background(), "ada", publicstate.RepresentationJSON)
+	if err != nil {
+		t.Fatalf("ReadResume() error = %v", err)
+	}
+	lease.Release()
+	want := []ProjectLink{{EntryID: ids["first"], ProjectSlug: "first-tool", URL: "https://resume.example/ada/projects/first-tool"}}
+	if !reflect.DeepEqual(snapshot.ProjectLinks, want) {
+		t.Fatalf("ProjectLinks = %+v, want the project whose page falls back to a named default %+v", snapshot.ProjectLinks, want)
 	}
 }

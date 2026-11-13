@@ -22,8 +22,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// linkedPublicService serves one discoverable resume whose project entry
-// links a library project, with the statement's link context for it.
 func linkedPublicService(t *testing.T) (svc *Service, reader *publicresume.Reader, slug, entryID, projectID string) {
 	t.Helper()
 	slug, lng, name, title := "ada-lovelace", "en", "Ada", "Atlas"
@@ -51,7 +49,7 @@ func linkedPublicService(t *testing.T) (svc *Service, reader *publicresume.Reade
 	backing := &publicServiceStore{
 		row: store.Resume{ID: uuid.New(), Slug: &slug, Live: true, SEOGeoEnabled: true, Revision: 1, Lng: &lng, SchemaVersion: int32(schema.CurrentVersion),
 			PersonalDetails: personal, Content: content, Customization: customization},
-		links: json.RawMessage(`[{"entryId":"` + entryID + `","projectSlug":"atlas-tool"}]`),
+		links: json.RawMessage(`[{"entryId":"` + entryID + `","projectSlug":"atlas-tool","document":{"defaultLanguage":"en","text":{"en":{"name":"Atlas"}}}}]`),
 	}
 	reader, err = publicresume.NewReader(publicresume.ReaderDependencies{Store: backing, Projector: docmigrate.NewIdentityProjector(), Coordinator: coordinator, Origin: mustPublicOrigin(t)})
 	if err != nil {

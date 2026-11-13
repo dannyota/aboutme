@@ -8,16 +8,11 @@ import (
 	"testing"
 )
 
-// RFC 7636 Appendix B ("Example for the S256 code_challenge_method"): the
-// verifier octets encode to rfc7636Verifier and their SHA-256 digest encodes
-// to rfc7636Challenge.
 const (
 	rfc7636Verifier  = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
 	rfc7636Challenge = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
 )
 
-// pkceChallengeFor returns the S256 challenge string for verifier, computed
-// independently of the implementation under test.
 func pkceChallengeFor(verifier string) string {
 	sum := sha256.Sum256([]byte(verifier))
 	return base64.RawURLEncoding.EncodeToString(sum[:])
@@ -63,8 +58,6 @@ func TestVerifyS256VerifierLengthBounds(t *testing.T) {
 func TestVerifyS256VerifierAlphabet(t *testing.T) {
 	t.Parallel()
 
-	// Every case carries the challenge that matches its own verifier, so a
-	// false result can only come from the RFC 7636 alphabet rule.
 	cases := []struct {
 		name     string
 		verifier string
@@ -107,8 +100,6 @@ func TestVerifyS256ChallengeShape(t *testing.T) {
 		{"padded", rfc7636Challenge[:42] + "="},
 		{"standard base64 plus", "+" + rfc7636Challenge[1:]},
 		{"standard base64 slash", "/" + rfc7636Challenge[1:]},
-		// 'M' and 'N' differ only in the two bits past the 256th; a
-		// non-strict decoder would accept both spellings of one digest.
 		{"non-canonical trailing bits", rfc7636Challenge[:42] + "N"},
 		{"verifier-shaped text", strings.Repeat("a", 43)},
 		{"outside the base64url alphabet", strings.Repeat("a", 42) + "~"},
@@ -133,9 +124,6 @@ func TestVerifyS256RejectsMismatchAtEitherEnd(t *testing.T) {
 	if !VerifyS256(challenge, verifier) {
 		t.Fatal("VerifyS256 rejected a self-consistent pair")
 	}
-	// Flip the first and the last decoded byte in turn; neither may pass.
-	// Both replacement characters keep the spelling canonical, so rejection
-	// comes from the digest mismatch alone.
 	flipFirst := "B" + challenge[1:]
 	lastChar := "Q"
 	if strings.HasSuffix(challenge, lastChar) {
@@ -156,9 +144,6 @@ func TestVerifyS256RejectsMismatchAtEitherEnd(t *testing.T) {
 func TestVerifyS256UsesConstantTimeCompare(t *testing.T) {
 	t.Parallel()
 
-	// The PKCE digest comparison must be constant time. Assert the
-	// comparator in the source so a later edit cannot silently swap it for
-	// bytes.Equal or ==.
 	src, err := os.ReadFile("pkce.go")
 	if err != nil {
 		t.Fatalf("read pkce.go: %v", err)

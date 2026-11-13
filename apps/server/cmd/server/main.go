@@ -1,7 +1,3 @@
-// Command server runs the aboutme Go API server. This file is wiring only:
-// load config, build the store and router, run the HTTP server, and shut
-// down gracefully on SIGINT/SIGTERM. Construction lives in internal/app and
-// all behavior in internal/.
 package main
 
 import (
@@ -49,7 +45,6 @@ func main() {
 	}
 }
 
-// dispatch handles operator commands before the default server and privacy jobs.
 func dispatch(args []string) error {
 	if len(args) > 0 && args[0] == privacyNoticeCommandName {
 		return runPrivacyNotice(args[1:])
@@ -80,9 +75,6 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// NewPool does not dial eagerly. The durable public-state read below is the
-	// intentional startup gate: the server must not admit public traffic with a
-	// guessed discovery generation.
 	pool, err := store.NewPool(ctx, cfg.DatabaseURL)
 	if err != nil {
 		return fmt.Errorf("create database pool: %w", err)
@@ -119,9 +111,6 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("create showcase service: %w", err)
 	}
-	// Showcase rows follow the current scrub rules, presets, and card layout
-	// from the first request on (docs/design/showcase.md "Derived values and
-	// reports").
 	recomputed, skipped, err := showcaseService.RecomputeAll(ctx)
 	if err != nil {
 		return fmt.Errorf("recompute showcase rows: %w", err)
@@ -195,7 +184,7 @@ func run() error {
 	})
 	resumeService := app.NewResumes(app.ResumeDependencies{
 		Config: cfg, Pool: pool, Projector: projector, Media: blobs, Logger: logger,
-		Sessions: sessionManager, Coordinator: coordinator, PrintQueue: printQueue, Showcase: showcaseService,
+		Sessions: sessionManager, Coordinator: coordinator, PrintQueue: printQueue, Showcase: showcaseService, Origin: runtime.PublicOrigin,
 	})
 	projectService := app.NewProjects(app.ProjectDependencies{
 		Config: cfg, Pool: pool, Sessions: sessionManager, Resumes: resumeService,
@@ -237,8 +226,6 @@ func run() error {
 		}
 	}()
 
-	// The mail worker runs for the life of the server: SIGINT/SIGTERM cancels
-	// workerCtx (via ctx), and Run joins its in-flight sends before returning.
 	workerCtx, cancelWorker := context.WithCancel(ctx)
 	defer cancelWorker()
 	workerDone := make(chan struct{})
@@ -252,20 +239,13 @@ func run() error {
 	go func() {
 		defer close(workerDone)
 		if runErr := passwordAuth.Worker.Run(workerCtx); runErr != nil {
-			// Run returns nil on cancellation; a non-nil return is unexpected.
 			logger.Error("authmail worker stopped unexpectedly", "err", "worker stopped")
 		}
 	}()
-	// A startup query failure only means the bounded three-ID key-ring read
-	// itself could not run; it is not one of the closed totp_unavailable
-	// reasons, so it is logged and never fails startup
-	// (docs/design/totp-key-management.md "Key failures").
 	if healthErr := secondFactor.TOTPHealth.Check(ctx); healthErr != nil {
 		logger.Error("totp key health check failed at startup", "err", "query failed")
 	}
 	cardsDone := cards.Run(workerCtx, logger)
-	// The view flusher outlives the signal so counts from requests that
-	// finish while the server drains still reach the database.
 	viewsCtx, stopViews := context.WithCancel(context.WithoutCancel(ctx))
 	defer stopViews()
 	viewsDone := views.Run(viewsCtx)

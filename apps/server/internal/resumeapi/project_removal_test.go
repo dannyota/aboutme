@@ -18,8 +18,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// removalIdempotency runs before before every Execute, and with lostAck
-// reports a committed Execute as an unknown commit.
 type removalIdempotency struct {
 	idempotencyBoundary
 	before   func(attempt int)

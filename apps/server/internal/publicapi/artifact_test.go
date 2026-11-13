@@ -55,7 +55,7 @@ func newArtifactHarnessWithCache(t *testing.T, queue RenderQueue, cacheEntries i
 	if err != nil {
 		t.Fatal(err)
 	}
-	handlers, err := newArtifactHandlers(ArtifactDependencies{
+	handlers, err := newArtifactHandlers(ArtifactDependencies{PublicOrigin: mustPublicOrigin(t),
 		Reader: reader, Cache: cache, Queue: queue, AppDigest: "sha256:app", RendererDigest: "sha256:renderer", Clock: now,
 	})
 	if err != nil {
@@ -64,10 +64,6 @@ func newArtifactHarnessWithCache(t *testing.T, queue RenderQueue, cacheEntries i
 	return handlers, backing, coordinator, cache
 }
 
-// newArtifactHarnessWithCoordinatorClock is like newArtifactHarnessWithCache
-// but also injects the coordinator's clock, so a test can detect exactly
-// when a revocation transition finishes canceling leases (the only
-// production call to that clock; see publicstate.Transition.Close).
 func newArtifactHarnessWithCoordinatorClock(
 	t *testing.T, queue RenderQueue, cacheEntries int, cacheNow, coordinatorNow func() time.Time,
 ) (*artifactHandlers, *publicServiceStore, *publicstate.Coordinator, *publiccache.Cache) {
@@ -81,7 +77,7 @@ func newArtifactHarnessWithCoordinatorClock(
 	if err != nil {
 		t.Fatal(err)
 	}
-	handlers, err := newArtifactHandlers(ArtifactDependencies{
+	handlers, err := newArtifactHandlers(ArtifactDependencies{PublicOrigin: mustPublicOrigin(t),
 		Reader: reader, Cache: cache, Queue: queue, AppDigest: "sha256:app", RendererDigest: "sha256:renderer", Clock: cacheNow,
 	})
 	if err != nil {
@@ -346,7 +342,7 @@ func TestPublicArtifactPrepareReadsNormalizedPhotoUnderLease(t *testing.T) {
 		}
 		return renderjob.Result{Bytes: []byte("png"), Revision: snapshot.Revision}, nil
 	})
-	handlers, err := newArtifactHandlers(ArtifactDependencies{
+	handlers, err := newArtifactHandlers(ArtifactDependencies{PublicOrigin: mustPublicOrigin(t),
 		Reader: reader, Cache: cache, Queue: queue, AppDigest: "sha256:app", RendererDigest: "sha256:renderer", Clock: time.Now,
 	})
 	if err != nil {
@@ -696,13 +692,6 @@ func TestCanceledPublicArtifactCacheHitReturns503WithoutCachedBytes(t *testing.T
 		}
 		return fixedNow
 	}
-	// leaseCanceled fires from the coordinator's clock, which
-	// publicstate.Transition.Close reads only once, right after it has
-	// called cancelLease on every lease in the closing generation
-	// (including the handler's) and before it arms the drain timer. That
-	// is the one deterministic proof that the handler's lease is already
-	// canceled; waiting instead for AcquireResume to observe admission
-	// closed races the same cancellation loop and made this test flaky.
 	leaseCanceled := make(chan struct{})
 	var leaseCanceledOnce sync.Once
 	coordinatorNow := func() time.Time {
@@ -1092,8 +1081,6 @@ func TestPublicArtifactRealHTTPSlowAndAbortedViewersReleaseLease(t *testing.T) {
 	}
 }
 
-// A cached PDF is keyed by resume and revision, so the download name comes
-// from the served revision's full name, never from the cached headers.
 func TestPublicPDFCacheHitNamesTheFileAfterTheServedName(t *testing.T) {
 	now := func() time.Time { return time.Date(2026, 9, 6, 0, 0, 0, 0, time.UTC) }
 	queue := artifactQueueFunc(func(context.Context, renderjob.Request) (renderjob.Result, error) {
@@ -1126,12 +1113,6 @@ func TestPublicPDFCacheHitNamesTheFileAfterTheServedName(t *testing.T) {
 	}
 }
 
-// TestPublicPDFRequiresPassAndFallbackOgPNGIsGated proves the PDF
-// representation of a sign-in-to-view resume needs a pass, that a cached PDF
-// is never served without one, that a valid pass reaches it with a private
-// Cache-Control, and that the fallback og.png (preview cards off), which is
-// the resume itself, is gated the same way (docs/design/viewer-analytics/
-// sign-in-to-view.md "Gated routes"; AC-VIEW-003).
 func TestPublicPDFRequiresPassAndFallbackOgPNGIsGated(t *testing.T) {
 	now := func() time.Time { return time.Date(2026, 9, 6, 0, 0, 0, 0, time.UTC) }
 	key := bytes.Repeat([]byte{0x22}, 32)
@@ -1154,7 +1135,7 @@ func TestPublicPDFRequiresPassAndFallbackOgPNGIsGated(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handlers, err := newArtifactHandlers(ArtifactDependencies{
+	handlers, err := newArtifactHandlers(ArtifactDependencies{PublicOrigin: mustPublicOrigin(t),
 		Reader: reader, Cache: cache, Queue: queue, AppDigest: "sha256:app", RendererDigest: "sha256:renderer",
 		Clock: now, ViewPassKey: key,
 	})
@@ -1200,8 +1181,6 @@ func TestPublicPDFRequiresPassAndFallbackOgPNGIsGated(t *testing.T) {
 		t.Fatalf("PDF with another resume's pass = %d, want 404", wrongResume.Code)
 	}
 
-	// With preview cards off, og.png renders the resume itself, so it needs
-	// a pass exactly as the PDF does.
 	getPNG := func(cookie *http.Cookie) *httptest.ResponseRecorder {
 		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/public/resumes/ada-lovelace/og.png", nil)
 		request.RemoteAddr = "192.0.2.21:1234"
@@ -1227,8 +1206,6 @@ func TestPublicPDFRequiresPassAndFallbackOgPNGIsGated(t *testing.T) {
 	}
 }
 
-// TestFallbackOgPNGStaysPublicForPublicResume proves the pass check never
-// applies to a resume that is not sign-in-to-view (AC-VIEW-003).
 func TestFallbackOgPNGStaysPublicForPublicResume(t *testing.T) {
 	now := func() time.Time { return time.Date(2026, 9, 6, 0, 0, 0, 0, time.UTC) }
 	queue := artifactQueueFunc(func(ctx context.Context, request renderjob.Request) (renderjob.Result, error) {
@@ -1244,7 +1221,7 @@ func TestFallbackOgPNGStaysPublicForPublicResume(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handlers, err := newArtifactHandlers(ArtifactDependencies{
+	handlers, err := newArtifactHandlers(ArtifactDependencies{PublicOrigin: mustPublicOrigin(t),
 		Reader: reader, Cache: cache, Queue: queue, AppDigest: "sha256:app", RendererDigest: "sha256:renderer",
 		Clock: now, ViewPassKey: bytes.Repeat([]byte{0x22}, 32),
 	})

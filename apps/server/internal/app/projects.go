@@ -9,21 +9,13 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// ProjectDependencies supplies private library persistence and shared admission.
 type ProjectDependencies struct {
-	// Config supplies the exact public origin for CSRF.
-	Config config.Config
-	// Pool backs project rows and transactional replay records.
-	Pool *store.Pool
-	// Sessions authenticates owner requests.
+	Config   config.Config
+	Pool     *store.Pool
 	Sessions *auth.SessionManager
-	// Resumes owns the read, write and slug claim budgets the library shares,
-	// and the resume links a project deletion removes.
-	Resumes *resumeapi.Service
+	Resumes  *resumeapi.Service
 }
 
-// NewProjects returns the private library's session-authenticated API. Its
-// reads, writes and slug claims spend the resume service's budgets.
 func NewProjects(deps ProjectDependencies) *projectapi.Service {
 	return projectapi.New(deps.Pool, resume.NewIdempotencyStore(deps.Pool), projectapi.Options{
 		Sessions: deps.Sessions, PublicOrigin: deps.Config.PublicOrigin,

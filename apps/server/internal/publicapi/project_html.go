@@ -1,9 +1,5 @@
 package publicapi
 
-// The project list and project page handlers
-// (docs/design/projects-contract.md "Routes and dispatch", "Render
-// envelope"; docs/design/ui/project-pages.md).
-
 import (
 	"context"
 	"errors"
@@ -15,26 +11,16 @@ import (
 	"danny.vn/aboutme/apps/server/internal/publicstate"
 )
 
-// projectFormatVersion names the cached project page format. It rises
-// whenever either page's request or validation changes, so no cached page
-// of an older format is served.
 const projectFormatVersion = 2
 
-// projectPageCSP is the resume page's policy with style-src 'self' alone:
-// the project pages load their CSS only from versioned stylesheets and carry
-// none inline. The gate for a project address keeps publicformat.BaseCSP.
 const projectPageCSP = "default-src 'none'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'none'; " +
 	"script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; manifest-src 'self'; " +
 	"media-src 'none'; worker-src 'none'"
 
-// NewProjectListHandler creates the handler for /{slug}/projects. It shares
-// the resume page's dependencies.
 func NewProjectListHandler(dependencies HTMLDependencies) (http.Handler, error) {
 	return newProjectHandler(dependencies, false)
 }
 
-// NewProjectHandler creates the handler for /{slug}/projects/{project-slug}.
-// It shares the resume page's dependencies.
 func NewProjectHandler(dependencies HTMLDependencies) (http.Handler, error) {
 	return newProjectHandler(dependencies, true)
 }
@@ -66,12 +52,6 @@ func newProjectHandler(dependencies HTMLDependencies, page bool) (http.Handler, 
 			return
 		}
 		defer releaseAfterFlush(w, lease)
-		// No view is observed on a project page (ADR 0022). The pass check
-		// runs after admission and before the pages are built, the
-		// availability decision and any public cache lookup: without a pass
-		// every address of a gated resume serves the same gate after the same
-		// work, so no one can probe which projects exist, and cached project
-		// bytes are never served without a pass.
 		if snapshot.SignInToView && !hasValidPass(request, dependencies.ViewPassKey, snapshot.ResumeID, snapshot.ViewPassEpoch, dependencies.Clock) {
 			gatePage := "projects"
 			if page {
@@ -128,9 +108,6 @@ func newProjectHandler(dependencies HTMLDependencies, page bool) (http.Handler, 
 	}), nil
 }
 
-// renderProjectPage builds, renders and validates one project page. On
-// failure it returns the closed reason and, for rejected HTML, the rule, so
-// the caller logs no slug or text.
 func renderProjectPage(ctx context.Context, dependencies HTMLDependencies, input projectPageInput, page bool) (body []byte, reason, rule string) {
 	if dependencies.Cards != nil {
 		version, err := dependencies.Cards.Version(input.snapshot)
@@ -167,11 +144,6 @@ func renderProjectPage(ctx context.Context, dependencies HTMLDependencies, input
 	return result.HTML, "", ""
 }
 
-// publicHTMLVariant separates the cached HTML of a sign-in-to-view resume
-// from a discoverable and a nondiscoverable one. Only pass holders receive
-// the sign-in variant, and the resume page's carries the join-invite marker
-// (docs/design/viewer-analytics/sign-in-to-view.md "Join invite"), so it is
-// never shared with an ordinary resume's entry.
 func publicHTMLVariant(snapshot publicresume.Snapshot) publiccache.Variant {
 	switch {
 	case snapshot.SignInToView:

@@ -1,10 +1,5 @@
 package auth_test
 
-// These tests prove the user-lock fence between session issuance/rotation and
-// password reset's RevokeAllSessions. A reset locks the user row before revoking
-// every session, and every session issuer and rotation successor serializes on
-// that same lock, so a session can never be inserted across a committed reset.
-
 import (
 	"context"
 	"errors"
@@ -19,9 +14,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/testutil"
 )
 
-// resetAllSessions models password reset's session revocation under the user
-// lock (lock order user, then sessions, per
-// docs/design/second-factor-authentication.md).
 func resetAllSessions(ctx context.Context, t *testing.T, pool *store.Pool, q *store.Queries, userID uuid.UUID) error {
 	t.Helper()
 	return pgx.BeginFunc(ctx, pool, func(tx pgx.Tx) error {
@@ -35,9 +27,6 @@ func resetAllSessions(ctx context.Context, t *testing.T, pool *store.Pool, q *st
 	})
 }
 
-// TestProviderIssueResetRace covers both orderings. Issue-first ends with a
-// pre-reset session that reset revokes; reset-first ends with a post-reset
-// session created after the reset fence.
 func TestProviderIssueResetRace(t *testing.T) {
 	t.Run("issue first, reset revokes", func(t *testing.T) {
 		pool := newTestPool(t)
@@ -104,7 +93,6 @@ func TestProviderIssueResetRace(t *testing.T) {
 			t.Fatalf("pre Issue() error = %v", err)
 		}
 
-		// Hold the user lock in a reset transaction.
 		tx, err := pool.Begin(ctx)
 		if err != nil {
 			t.Fatalf("begin reset tx: %v", err)
@@ -149,10 +137,6 @@ func TestProviderIssueResetRace(t *testing.T) {
 	})
 }
 
-// TestSessionRotation_ResetFence covers both rotation/reset orderings: a
-// successor inserted before reset is revoked by it, and a reset committed before
-// the successor transaction makes the predecessor recheck fail so no successor
-// is minted past the fence.
 func TestSessionRotation_ResetFence(t *testing.T) {
 	t.Run("rotation insert before reset is revoked", func(t *testing.T) {
 		pool := newTestPool(t)
@@ -219,7 +203,7 @@ func TestSessionRotation_ResetFence(t *testing.T) {
 			authDone <- rotated
 		}()
 
-		<-admitted // the admission update committed; the successor tx has not started.
+		<-admitted
 
 		if err := resetAllSessions(ctx, t, pool, q, userID); err != nil {
 			t.Fatalf("reset error = %v", err)

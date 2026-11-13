@@ -9,9 +9,6 @@ import (
 	"time"
 )
 
-// Config defines the local Google client and its exact OAuth boundary, and
-// optionally the LinkedIn client. LinkedIn's issuer sits beside Google's on
-// path /linkedin and its callback is the server's LinkedIn callback.
 type Config struct {
 	IssuerURL    string
 	PublicOrigin string
@@ -19,7 +16,6 @@ type Config struct {
 	ClientID     string
 	ClientSecret string
 
-	// Both empty turns LinkedIn off; both set turns it on.
 	LinkedInClientID     string
 	LinkedInClientSecret string
 

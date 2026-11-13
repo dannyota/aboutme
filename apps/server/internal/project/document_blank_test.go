@@ -5,9 +5,6 @@ import (
 	"testing"
 )
 
-// TestPrepare_NameIsBlankAsTheRendererTrims proves the default-language name
-// must be non-blank as the renderer's String.prototype.trim reads it: a name
-// of only U+FEFF is blank there and refused, one of only U+0085 is kept.
 func TestPrepare_NameIsBlankAsTheRendererTrims(t *testing.T) {
 	for name, test := range map[string]struct {
 		value string

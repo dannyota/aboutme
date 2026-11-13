@@ -76,7 +76,6 @@ func newTestShowcaseHandler(listing ShowcaseListing, clock func() time.Time) htt
 	return newShowcaseHandler(listing, nil, clock)
 }
 
-// AC-SHOW-014: the listing is never stored, never indexed, and sets no cookie.
 func TestShowcaseResponseHeadersAndBody(t *testing.T) {
 	t.Parallel()
 	role, template := "backend", "ats-plain"
@@ -123,8 +122,6 @@ func TestShowcaseEmptyListingEncodesEmptyItems(t *testing.T) {
 	}
 }
 
-// AC-SHOW-014: every parameter is optional, each at most once; anything else
-// is request_invalid and never reaches the listing.
 func TestShowcaseQueryParsing(t *testing.T) {
 	t.Parallel()
 	valid := map[string]showcase.Filter{
@@ -204,7 +201,6 @@ func TestShowcaseRejectsOtherMethodsBodiesAndEncodings(t *testing.T) {
 	}
 }
 
-// AC-SHOW-014: the route has its own limit of 60 a minute per IP.
 func TestShowcaseRateLimit(t *testing.T) {
 	t.Parallel()
 	clock := testutil.NewClockAtEpoch()
@@ -277,8 +273,6 @@ func TestShowcaseRouteDispatch(t *testing.T) {
 	}
 }
 
-// contactSentinels holds a value of every contact type, visible and hidden, so
-// a leak of any one of them shows in a response.
 var contactSentinels = map[schema.Type]string{
 	schema.Email:      "sentinel-mail@example.test",
 	schema.Phone:      "+84 900 000 111",
@@ -290,8 +284,6 @@ var contactSentinels = map[schema.Type]string{
 	schema.TypeCustom: "sentinel-custom-value",
 }
 
-// AC-SHOW-002: no contact value of any type, and nothing from the resume body,
-// reaches the listing response.
 func TestShowcaseResponseNeverCarriesContactValues(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	t.Cleanup(cancel)

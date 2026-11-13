@@ -34,7 +34,6 @@ const (
 	exportPNGMaxEdge        = 1024
 )
 
-// RegisterRoutes publishes the standalone portable account export route.
 func (s *Service) RegisterRoutes(mux *http.ServeMux) {
 	protected := auth.RequireSession(s.sessions)(
 		api.RateLimit(api.RateLimiterConfig{
@@ -119,103 +118,53 @@ func exportRequestInvalid(r *http.Request) bool {
 	return false
 }
 
-// exportEnvelope is the top-level object of the export attachment.
 type exportEnvelope struct {
-	// Data is the complete export bundle.
 	Data exportData `json:"data"`
 }
 
-// exportData is one account's portable export bundle.
 type exportData struct {
-	// ExportVersion is the bundle format version, always 2.
-	ExportVersion int `json:"exportVersion"`
-	// ExportedAt is when the bundle was built, in UTC.
-	ExportedAt time.Time `json:"exportedAt"`
-	// Account is the account profile.
-	Account exportProfile `json:"account"`
-	// Resumes lists the account's resumes, at most three.
-	Resumes []exportResume `json:"resumes"`
-	// Projects lists the private library in creation order.
-	Projects []project.Project `json:"projects"`
+	ExportVersion int               `json:"exportVersion"`
+	ExportedAt    time.Time         `json:"exportedAt"`
+	Account       exportProfile     `json:"account"`
+	Resumes       []exportResume    `json:"resumes"`
+	Projects      []project.Project `json:"projects"`
 }
 
-// exportProfile is the account profile in an export bundle.
 type exportProfile struct {
-	// ID is the account's user ID.
-	ID uuid.UUID `json:"id"`
-	// Email is the account email address.
-	Email string `json:"email"`
-	// Name is the account display name.
-	Name string `json:"name"`
-	// CreatedAt is when the account was created.
-	CreatedAt time.Time `json:"createdAt"`
-	// UpdatedAt is when the account profile last changed.
-	UpdatedAt time.Time `json:"updatedAt"`
-	// LinkedProviders lists the distinct linked sign-in providers (google,
-	// github, or linkedin), at most three; provider subjects never appear.
-	LinkedProviders []string `json:"linkedProviders"`
+	ID              uuid.UUID `json:"id"`
+	Email           string    `json:"email"`
+	Name            string    `json:"name"`
+	CreatedAt       time.Time `json:"createdAt"`
+	UpdatedAt       time.Time `json:"updatedAt"`
+	LinkedProviders []string  `json:"linkedProviders"`
 }
 
-// exportResume is one resume in an export bundle, with its portable document
-// and photo.
 type exportResume struct {
-	// ID is the resume ID.
-	ID uuid.UUID `json:"id"`
-	// Title is the owner-visible title.
-	Title string `json:"title"`
-	// Slug is the public slug, null until the resume is first published.
-	Slug *string `json:"slug"`
-	// Live reports whether the resume is published.
-	Live bool `json:"live"`
-	// DownloadEnabled reports whether public download representations are
-	// enabled.
-	DownloadEnabled bool `json:"downloadEnabled"`
-	// SEOGeoEnabled reports whether the live resume participates in
-	// discovery.
-	SEOGeoEnabled bool `json:"seoGeoEnabled"`
-	// PublicTitle is the public page's browser-tab title, null for the
-	// default.
-	PublicTitle *string `json:"publicTitle"`
-	// FaviconEmoji is the public page's icon emoji, null for none.
-	FaviconEmoji *string `json:"faviconEmoji"`
-	// SignInToView is the publish switch, carried with the other publish
-	// settings; the pass epoch never leaves the server
-	// (docs/design/viewer-analytics/sign-in-to-view.md "Setting").
-	SignInToView bool `json:"signInToView"`
-	// Showcase is the community-showcase state, null without an opt-in
-	// (docs/design/showcase.md "Privacy and abuse"): the state, the role, and
-	// the request time.
-	Showcase *exportShowcase `json:"showcase"`
-	// Revision is the stored revision as a decimal string.
-	Revision string `json:"revision"`
-	// SchemaVersion is the current document version the document is
-	// projected to.
-	SchemaVersion int32 `json:"schemaVersion"`
-	// Lng is the canonical BCP 47 language tag, "und" when the stored value
-	// is absent, empty, invalid, or overlong.
-	Lng string `json:"lng"`
-	// CreatedAt is when the resume was created.
-	CreatedAt time.Time `json:"createdAt"`
-	// UpdatedAt is when the resume last changed.
-	UpdatedAt time.Time `json:"updatedAt"`
-	// Document is the projected owner document without
-	// personalDetails.photo.
-	Document json.RawMessage `json:"document"`
-	// Photo is the portable photo, null when the document has none.
-	Photo *exportPhoto `json:"photo"`
+	ID              uuid.UUID       `json:"id"`
+	Title           string          `json:"title"`
+	Slug            *string         `json:"slug"`
+	Live            bool            `json:"live"`
+	DownloadEnabled bool            `json:"downloadEnabled"`
+	SEOGeoEnabled   bool            `json:"seoGeoEnabled"`
+	PublicTitle     *string         `json:"publicTitle"`
+	FaviconEmoji    *string         `json:"faviconEmoji"`
+	SignInToView    bool            `json:"signInToView"`
+	Showcase        *exportShowcase `json:"showcase"`
+	Revision        string          `json:"revision"`
+	SchemaVersion   int32           `json:"schemaVersion"`
+	Lng             string          `json:"lng"`
+	CreatedAt       time.Time       `json:"createdAt"`
+	UpdatedAt       time.Time       `json:"updatedAt"`
+	Document        json.RawMessage `json:"document"`
+	Photo           *exportPhoto    `json:"photo"`
 }
 
-// exportShowcase is a resume's showcase opt-in in an export bundle.
 type exportShowcase struct {
-	// State is the showcase state, always "listed".
-	State string `json:"state"`
-	// Role is the role picked for the listing, or null.
-	Role *string `json:"role"`
-	// RequestedAt is when the opt-in was requested.
+	State       string    `json:"state"`
+	Role        *string   `json:"role"`
 	RequestedAt time.Time `json:"requestedAt"`
 }
 
-// exportShowcaseOf reads the opt-in off an export row, nil without one.
 func exportShowcaseOf(row store.ListAccountExportResumesRow) *exportShowcase {
 	if row.ShowcaseRequestedAt == nil {
 		return nil
@@ -227,15 +176,10 @@ func exportShowcaseOf(row store.ListAccountExportResumesRow) *exportShowcase {
 	}
 }
 
-// exportPhoto is a resume's portable photo in an export bundle, with no
-// object key.
 type exportPhoto struct {
-	// MediaType is image/jpeg or image/png, matching the stored key.
-	MediaType string `json:"mediaType"`
-	// Data is the stored photo bytes in standard base64.
-	Data string `json:"data"`
-	// Crop is the stored crop JSON, or JSON null without one.
-	Crop json.RawMessage `json:"crop"`
+	MediaType string          `json:"mediaType"`
+	Data      string          `json:"data"`
+	Crop      json.RawMessage `json:"crop"`
 }
 
 func (s *Service) exportAttachment(ctx context.Context, userID uuid.UUID) ([]byte, error) {
@@ -337,8 +281,6 @@ func (s *Service) rollbackExportSnapshot(ctx context.Context, tx pgx.Tx) {
 	}
 }
 
-// marshalExportPayload encodes without HTML escaping: the bundle is a
-// downloaded attachment, never HTML, and escaping can grow text sixfold.
 func marshalExportPayload(data exportData) ([]byte, error) {
 	var out bytes.Buffer
 	encoder := json.NewEncoder(&out)

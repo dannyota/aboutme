@@ -1,20 +1,3 @@
-// This pure suite covers `TestWireConverters_BothDirectionsFailClosed`:
-// synthetic v1<->v2(<->v3) conversion in both directions, old-client
-// preparation, down-emission, source/target validation, and every
-// missing-path arm. The live-database rows live in the sibling package's
-// docmigrate_adversarial_suiteb_test.go.
-//
-// Synthetic version family used throughout. The tests own it so they can cover
-// paths beyond production's released versions without depending on the font
-// converter:
-//
-//	vN  ==  {"schemaVersion": N, "personalDetails": {...}, "content": {...},
-//	         "customization": {...}}
-//	v1  has NO personalDetails.headline key.
-//	vN (N>=2) has personalDetails.headline == "vN".
-//
-// so Up(N->N+1) stamps the headline and Down(N+1->N) removes or rewrites it --
-// an adjacent pair that actually changes the document, not a relabelling.
 package docmigrate_test
 
 import (
@@ -30,11 +13,8 @@ import (
 	"danny.vn/aboutme/apps/server/internal/resume/docmigrate"
 )
 
-// suiteBHeadline is the marker synthetic version v (>= 2) carries at
-// personalDetails.headline.
 func suiteBHeadline(v int32) string { return fmt.Sprintf("v%d", v) }
 
-// suiteBDecodeDoc decodes a whole synthetic document into a generic map.
 func suiteBDecodeDoc(doc json.RawMessage) (map[string]any, error) {
 	var m map[string]any
 	if err := json.Unmarshal(doc, &m); err != nil {
@@ -43,7 +23,6 @@ func suiteBDecodeDoc(doc json.RawMessage) (map[string]any, error) {
 	return m, nil
 }
 
-// suiteBPersonalDetailsOf returns the document's personalDetails object.
 func suiteBPersonalDetailsOf(m map[string]any) (map[string]any, error) {
 	raw, ok := m["personalDetails"]
 	if !ok {
@@ -56,9 +35,6 @@ func suiteBPersonalDetailsOf(m map[string]any) (map[string]any, error) {
 	return pd, nil
 }
 
-// suiteBValidatorFor builds a ValidateFunc for one synthetic version. calls,
-// when non-nil, counts every invocation so tests can prove which public
-// boundaries validate their inputs.
 func suiteBValidatorFor(version int32, calls *atomic.Int64) docmigrate.ValidateFunc {
 	return func(doc json.RawMessage) error {
 		if calls != nil {
@@ -97,7 +73,6 @@ func suiteBValidatorFor(version int32, calls *atomic.Int64) docmigrate.ValidateF
 	}
 }
 
-// suiteBUpTo returns the N-1 -> N converter for the synthetic family.
 func suiteBUpTo(target int32) docmigrate.ConvertFunc {
 	return func(doc json.RawMessage) (json.RawMessage, error) {
 		m, err := suiteBDecodeDoc(doc)
@@ -114,7 +89,6 @@ func suiteBUpTo(target int32) docmigrate.ConvertFunc {
 	}
 }
 
-// suiteBDownTo returns the N+1 -> N converter for the synthetic family.
 func suiteBDownTo(target int32) docmigrate.ConvertFunc {
 	return func(doc json.RawMessage) (json.RawMessage, error) {
 		m, err := suiteBDecodeDoc(doc)
@@ -135,12 +109,10 @@ func suiteBDownTo(target int32) docmigrate.ConvertFunc {
 	}
 }
 
-// suiteBPair is the adjacent pair keyed by its lower version.
 func suiteBPair(lower int32) docmigrate.AdjacentConverters {
 	return docmigrate.AdjacentConverters{Up: suiteBUpTo(lower + 1), Down: suiteBDownTo(lower)}
 }
 
-// suiteBDocAt builds a valid synthetic document at version v.
 func suiteBDocAt(t *testing.T, v int32) json.RawMessage {
 	t.Helper()
 	pd := map[string]any{"fullName": "Ada Lovelace", "details": []any{}}
@@ -160,8 +132,6 @@ func suiteBDocAt(t *testing.T, v int32) json.RawMessage {
 	return raw
 }
 
-// suiteBSplit decomposes a whole document into the three stored jsonb parts,
-// dropping schemaVersion as the stored columns require.
 func suiteBSplit(t *testing.T, doc json.RawMessage) (pd, c, cu json.RawMessage) {
 	t.Helper()
 	m, err := suiteBDecodeDoc(doc)
@@ -178,8 +148,6 @@ func suiteBSplit(t *testing.T, doc json.RawMessage) (pd, c, cu json.RawMessage) 
 	return part("personalDetails"), part("content"), part("customization")
 }
 
-// suiteBNormalize re-marshals JSON through a generic map so two documents that
-// differ only in key order or whitespace compare equal.
 func suiteBNormalize(t *testing.T, doc json.RawMessage) string {
 	t.Helper()
 	m, err := suiteBDecodeDoc(doc)
@@ -193,7 +161,6 @@ func suiteBNormalize(t *testing.T, doc json.RawMessage) string {
 	return string(raw)
 }
 
-// suiteBValidators builds validators for versions 1..highest.
 func suiteBValidators(highest int32, calls *atomic.Int64) map[int32]docmigrate.ValidateFunc {
 	out := make(map[int32]docmigrate.ValidateFunc, highest)
 	for v := int32(1); v <= highest; v++ {
@@ -202,7 +169,6 @@ func suiteBValidators(highest int32, calls *atomic.Int64) map[int32]docmigrate.V
 	return out
 }
 
-// suiteBNewProjector builds a synthetic projector or fails the test.
 func suiteBNewProjector(t *testing.T, pairs map[int32]docmigrate.AdjacentConverters,
 	validators map[int32]docmigrate.ValidateFunc, accepted, emitted []int32, current int32,
 ) *docmigrate.Projector {
@@ -214,11 +180,6 @@ func suiteBNewProjector(t *testing.T, pairs map[int32]docmigrate.AdjacentConvert
 	return p
 }
 
-// TestSuiteB_NewProjector_FailsClosedOnIncoherentConfig covers every
-// constructor arm: a pair missing Up or Down, a pair or
-// declared version with no validator, an empty or duplicated declared set, a
-// version below 1, or a current version that is not itself both accepted and
-// emitted.
 func TestSuiteB_NewProjector_FailsClosedOnIncoherentConfig(t *testing.T) {
 	full := func() map[int32]docmigrate.AdjacentConverters {
 		return map[int32]docmigrate.AdjacentConverters{1: suiteBPair(1)}
@@ -343,11 +304,6 @@ func TestSuiteB_NewProjector_FailsClosedOnIncoherentConfig(t *testing.T) {
 	}
 }
 
-// TestSuiteB_NewProjector_CopiesConfiguration proves the documented "All
-// fields are copied at construction, so a projector cannot be reconfigured
-// after startup by mutating what was handed to NewProjector". A shared
-// production projector that aliased its caller's maps would be a live
-// reconfiguration hole.
 func TestSuiteB_NewProjector_CopiesConfiguration(t *testing.T) {
 	pairs := map[int32]docmigrate.AdjacentConverters{1: suiteBPair(1)}
 	validators := suiteBValidators(2, nil)
@@ -356,7 +312,6 @@ func TestSuiteB_NewProjector_CopiesConfiguration(t *testing.T) {
 
 	p := suiteBNewProjector(t, pairs, validators, accepted, emitted, 2)
 
-	// Rip the configuration out from under the constructed projector.
 	delete(pairs, 1)
 	delete(validators, 1)
 	delete(validators, 2)
@@ -375,9 +330,6 @@ func TestSuiteB_NewProjector_CopiesConfiguration(t *testing.T) {
 	}
 }
 
-// TestSuiteB_Convert_WalksBothDirections proves each
-// adjacent pair is exercised Up and Down, single-step and multi-step, and
-// every step validates its source and its output.
 func TestSuiteB_Convert_WalksBothDirections(t *testing.T) {
 	var calls atomic.Int64
 	p := suiteBNewProjector(t,
@@ -407,9 +359,6 @@ func TestSuiteB_Convert_WalksBothDirections(t *testing.T) {
 			if invalid := suiteBValidatorFor(tc.to, nil)(got); invalid != nil {
 				t.Fatalf("Convert(%d -> %d) output is not valid at v%d: %v", tc.from, tc.to, tc.to, invalid)
 			}
-			// Source plus one validation per step proves every step validates
-			// both its source and its output. A walk that validated only
-			// the endpoints would let a broken middle converter through.
 			steps := tc.to - tc.from
 			if steps < 0 {
 				steps = -steps
@@ -418,7 +367,6 @@ func TestSuiteB_Convert_WalksBothDirections(t *testing.T) {
 				t.Errorf("Convert(%d -> %d) ran %d validations, want at least %d (source plus each step's target)",
 					tc.from, tc.to, calls.Load(), want)
 			}
-			// Round-tripping back must restore the original document.
 			back, err := p.Convert(got, tc.to, tc.from)
 			if err != nil {
 				t.Fatalf("Convert back (%d -> %d): %v", tc.to, tc.from, err)
@@ -431,9 +379,6 @@ func TestSuiteB_Convert_WalksBothDirections(t *testing.T) {
 	}
 }
 
-// TestSuiteB_Convert_IdentityValidatesAndPreservesBytes pins the public
-// Convert contract independently from Project's current-version read short
-// circuit.
 func TestSuiteB_Convert_IdentityValidatesAndPreservesBytes(t *testing.T) {
 	var calls atomic.Int64
 	p := suiteBNewProjector(t,
@@ -459,10 +404,6 @@ func TestSuiteB_Convert_IdentityValidatesAndPreservesBytes(t *testing.T) {
 	}
 }
 
-// TestSuiteB_Convert_FailsClosed covers every missing-path arm: unknown
-// version, missing adjacent converter, invalid source, converter error,
-// converter output that is not JSON, and converter output invalid for its
-// target schema.
 func TestSuiteB_Convert_FailsClosed(t *testing.T) {
 	t.Run("unknown source version", func(t *testing.T) {
 		p := suiteBNewProjector(t,
@@ -483,8 +424,6 @@ func TestSuiteB_Convert_FailsClosed(t *testing.T) {
 	})
 
 	t.Run("no adjacent converter for a registered version", func(t *testing.T) {
-		// Versions 1..3 all have schemas, but only the 1<->2 pair exists, so
-		// the 2 -> 3 step has nothing to walk.
 		p := suiteBNewProjector(t,
 			map[int32]docmigrate.AdjacentConverters{1: suiteBPair(1)},
 			suiteBValidators(3, nil), []int32{1, 2, 3}, []int32{1, 2, 3}, 2)
@@ -500,7 +439,6 @@ func TestSuiteB_Convert_FailsClosed(t *testing.T) {
 		p := suiteBNewProjector(t,
 			map[int32]docmigrate.AdjacentConverters{1: suiteBPair(1)},
 			suiteBValidators(2, nil), []int32{1, 2}, []int32{1, 2}, 2)
-		// A v2-shaped document announced as v1: invalid at the source schema.
 		if _, err := p.Convert(suiteBDocAt(t, 2), 1, 2); !errors.Is(err, docmigrate.ErrInvalidDocument) {
 			t.Errorf("Convert with an invalid source: got %v, want ErrInvalidDocument", err)
 		}
@@ -544,7 +482,6 @@ func TestSuiteB_Convert_FailsClosed(t *testing.T) {
 
 	t.Run("converter output invalid for its target schema", func(t *testing.T) {
 		pairs := map[int32]docmigrate.AdjacentConverters{1: {
-			// Bumps the version but forgets the v2 headline the target schema requires.
 			Up: func(doc json.RawMessage) (json.RawMessage, error) {
 				m, err := suiteBDecodeDoc(doc)
 				if err != nil {
@@ -562,13 +499,7 @@ func TestSuiteB_Convert_FailsClosed(t *testing.T) {
 	})
 }
 
-// TestSuiteB_AcceptWire_And_EmitWire_FailClosed is the transport-agnostic
-// boundary an HTTP layer consumes: old-client preparation, down-emission, and
-// the declaration gate. "What the server accepts is a declaration, not a
-// capability" -- an undeclared version must fail even when the chain could
-// convert it.
 func TestSuiteB_AcceptWire_And_EmitWire_FailClosed(t *testing.T) {
-	// Versions 1..3 are all convertible; only 1 and 2 are declared.
 	newProjector := func(t *testing.T, calls *atomic.Int64) *docmigrate.Projector {
 		t.Helper()
 		return suiteBNewProjector(t,
@@ -619,8 +550,6 @@ func TestSuiteB_AcceptWire_And_EmitWire_FailClosed(t *testing.T) {
 	})
 
 	t.Run("validates unconditionally at the current version", func(t *testing.T) {
-		// The wire boundary validates even when no conversion is needed because
-		// those bytes came from, or will go to, a client.
 		var calls atomic.Int64
 		p := newProjector(t, &calls)
 		junk := json.RawMessage(`{"schemaVersion":2,"not":"a document"}`)
@@ -665,9 +594,6 @@ func TestSuiteB_AcceptWire_And_EmitWire_FailClosed(t *testing.T) {
 	})
 }
 
-// TestSuiteB_WireDeclarationsAreIndependent uses different accepted and
-// emitted sets. It proves each boundary consults its own declaration rather
-// than a shared union or the converter capability.
 func TestSuiteB_WireDeclarationsAreIndependent(t *testing.T) {
 	p := suiteBNewProjector(t,
 		map[int32]docmigrate.AdjacentConverters{1: suiteBPair(1)},
@@ -690,10 +616,6 @@ func TestSuiteB_WireDeclarationsAreIndependent(t *testing.T) {
 	}
 }
 
-// TestSuiteB_EmitWire_LossyDownConversionFailsClosed proves target-schema
-// validation cannot hide loss of an optional old-version field. The sentinel
-// is valid but not required at both versions, so only a semantic round trip
-// detects a Down converter that drops it.
 func TestSuiteB_EmitWire_LossyDownConversionFailsClosed(t *testing.T) {
 	const sentinelKey = "legacyOptionalSentinel"
 	old := suiteBDocAt(t, 1)
@@ -788,9 +710,6 @@ func TestSuiteB_EmitWire_LossyDownConversionFailsClosed(t *testing.T) {
 	})
 }
 
-// TestSuiteB_WireRoundTripPreservesV1Fields proves round-trip preservation of
-// all v1 fields: an old client's document, accepted at v1 and
-// emitted back at v1, comes back unchanged.
 func TestSuiteB_WireRoundTripPreservesV1Fields(t *testing.T) {
 	p := suiteBNewProjector(t,
 		map[int32]docmigrate.AdjacentConverters{1: suiteBPair(1)},
@@ -814,9 +733,6 @@ func TestSuiteB_WireRoundTripPreservesV1Fields(t *testing.T) {
 	}
 }
 
-// TestSuiteB_DeclaredVersionSlicesAreCopies pins "Callers receive copies so
-// they cannot mutate the production declaration" for the two package-level
-// declarations. Production accepts and emits every immutable version.
 func TestSuiteB_DeclaredVersionSlicesAreCopies(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -856,8 +772,6 @@ func TestSuiteB_DeclaredVersionSlicesAreCopies(t *testing.T) {
 	}
 }
 
-// TestSuiteB_IdentityProjector_ProductionDeclarations pins the production
-// configuration: current rows pass through and unknown versions fail closed.
 func TestSuiteB_IdentityProjector_ProductionDeclarations(t *testing.T) {
 	p := docmigrate.NewIdentityProjector()
 	if got := p.CurrentVersion(); got != docmigrate.CurrentVersion {
@@ -894,9 +808,6 @@ func TestSuiteB_IdentityProjector_ProductionDeclarations(t *testing.T) {
 	}
 }
 
-// TestSuiteB_Project_IsPureAndDeterministic pins purity at the
-// function level: same input, same output, every time, with no mutation of the
-// caller's byte slices and no schemaVersion key leaking into the parts.
 func TestSuiteB_Project_IsPureAndDeterministic(t *testing.T) {
 	var calls atomic.Int64
 	p := suiteBNewProjector(t,
@@ -904,9 +815,6 @@ func TestSuiteB_Project_IsPureAndDeterministic(t *testing.T) {
 		suiteBValidators(2, &calls),
 		[]int32{1, 2}, []int32{1, 2}, 1)
 
-	// A row stored at synthetic v2 under a current-v1 projector: the
-	// schema_version >= 1 CHECK constraint forces synthetic old versions to
-	// sit above the current one, so "old" here means "numerically higher".
 	stored := suiteBDocAt(t, 2)
 	pd, c, cu := suiteBSplit(t, stored)
 	pdCopy := append(json.RawMessage(nil), pd...)
@@ -928,7 +836,6 @@ func TestSuiteB_Project_IsPureAndDeterministic(t *testing.T) {
 		t.Error("Project mutated its caller's input slices")
 	}
 
-	// The projection actually happened: v2's headline marker is gone.
 	var projected map[string]any
 	if err := json.Unmarshal(firstPD, &projected); err != nil {
 		t.Fatalf("decode projected personalDetails: %v", err)
@@ -942,7 +849,7 @@ func TestSuiteB_Project_IsPureAndDeterministic(t *testing.T) {
 	}{{"personalDetails", firstPD}, {"content", firstC}, {"customization", firstCU}} {
 		var m map[string]any
 		if err := json.Unmarshal(part.raw, &m); err != nil {
-			continue // content/customization need not be objects for this check
+			continue
 		}
 		if _, present := m["schemaVersion"]; present {
 			t.Errorf("Project leaked schemaVersion into the %s part: %s", part.name, part.raw)
@@ -950,9 +857,6 @@ func TestSuiteB_Project_IsPureAndDeterministic(t *testing.T) {
 	}
 }
 
-// TestSuiteB_Project_FailsClosedOnUnknownStoredVersion is the projection half
-// of the fail-closed rule: a stored version with no converter path must error,
-// never yield a silently un-projected document.
 func TestSuiteB_Project_FailsClosedOnUnknownStoredVersion(t *testing.T) {
 	p := suiteBNewProjector(t,
 		map[int32]docmigrate.AdjacentConverters{1: suiteBPair(1)},
@@ -975,8 +879,6 @@ func TestSuiteB_Project_FailsClosedOnUnknownStoredVersion(t *testing.T) {
 	})
 
 	t.Run("schema exists but no converter path", func(t *testing.T) {
-		// Valid at its own stored version, so the walk gets past source
-		// validation and fails on the missing 2 <-> 3 pair, not on the doc.
 		pd3, c3, cu3 := suiteBSplit(t, suiteBDocAt(t, 3))
 		gapped := suiteBNewProjector(t,
 			map[int32]docmigrate.AdjacentConverters{1: suiteBPair(1)},

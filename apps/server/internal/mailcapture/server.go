@@ -17,37 +17,23 @@ import (
 	"danny.vn/aboutme/apps/server/internal/authmail"
 )
 
-// Fixed loopback-only addresses.
 const (
-	// NativeAddr is the default loopback listen address for native development.
 	NativeAddr = "127.0.0.1:20091"
-	// HTTPSAddr is the loopback listen address for the HTTPS development stack.
-	HTTPSAddr = "127.0.0.1:20444"
+	HTTPSAddr  = "127.0.0.1:20444"
 )
 
 const (
-	// bearerPrefix is the only accepted Authorization scheme.
-	bearerPrefix = "Bearer "
-	// viewerLimit caps the rendered HTML page so a full 256 KiB store stays
-	// bounded and readable.
-	viewerLimit = MaxMessages
-	// bodyReadLimit is one byte above the per-message cap so a 413 can be
-	// returned without buffering unbounded input.
+	bearerPrefix  = "Bearer "
+	viewerLimit   = MaxMessages
 	bodyReadLimit = MaxMessageBytes + 1
 )
 
-// Server is the authenticated loopback capture server. It binds loopback only
-// (callers listen on NativeAddr or HTTPSAddr), requires a 32-byte bearer secret
-// on every route, escapes every value in its human viewer, and never logs the
-// secret.
 type Server struct {
 	store  *Store
 	secret [32]byte
 	logger *slog.Logger
 }
 
-// NewServer validates the 32-byte secret and logger and returns a Server with a
-// fresh in-memory store (a restart resets capture state).
 func NewServer(secret []byte, logger *slog.Logger) (*Server, error) {
 	if len(secret) != 32 {
 		return nil, ErrSecret
@@ -60,12 +46,6 @@ func NewServer(secret []byte, logger *slog.Logger) (*Server, error) {
 	return s, nil
 }
 
-// Handler returns the fully-authenticated route mux.
-//
-//	POST   /capture        accept one message
-//	GET    /api/messages   closed JSON snapshot (newest first)
-//	DELETE /api/messages   reset the store
-//	GET    /               human HTML viewer (all values escaped)
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/capture", s.handleCapture)
@@ -192,8 +172,6 @@ func (s *Server) handleViewer(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// requireSecretAndLoopback rejects every request that is not loopback-origin or
-// does not carry the exact 32-byte bearer secret (constant-time comparison).
 func (s *Server) requireSecretAndLoopback(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !isLoopback(r.RemoteAddr) {

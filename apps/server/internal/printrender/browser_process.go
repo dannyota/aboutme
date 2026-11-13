@@ -78,16 +78,14 @@ func allocatorOptions(executable, proxyURL, profile string, configure func(*exec
 	options := []chromedp.ExecAllocatorOption{
 		chromedp.ExecPath(browserEnvironmentExecutable),
 		chromedp.ModifyCmdFunc(configure),
-		// Read the DevTools address from the browser output within the timeout
-		// below; the pipe transport has no startup limit of its own.
+		// chromedp's pipe transport has no startup limit, so read the DevTools URL over a WebSocket with a timeout.
 		remote.WebSocket,
 		chromedp.WSURLReadTimeout(5 * time.Second),
 	}
 	for _, name := range names {
 		options = append(options, chromedp.Flag(name, flags[name]))
 	}
-	// Given a profile, the allocator neither creates nor removes one, and never
-	// scans for leftover profile users to kill by numeric PID.
+	// Given a profile, chromedp's allocator neither creates nor removes it and never kills leftover users by PID.
 	return append(options, chromedp.UserDataDir(profile))
 }
 
@@ -101,10 +99,8 @@ func controlledBrowserArguments(executable string, arguments ...string) []string
 }
 
 type supervisorCommand struct {
-	path   string
-	prefix []string
-	// removeProfile removes the browser profile after joined teardown. Nil
-	// means os.RemoveAll; tests inject removal failures.
+	path          string
+	prefix        []string
 	removeProfile func(string) error
 }
 
@@ -246,9 +242,6 @@ func withBrowser(ctx context.Context, executable, proxyURL string, supervisor su
 		allocatorCancel()
 		proof.completeIfNotStarted()
 		proof.wait()
-		// The proof completes only after every browser process is terminal, so
-		// no browser process can still write to the profile. A profile left
-		// behind fails the attempt unless an earlier error already does.
 		if removeErr := removeProfile(profile); removeErr != nil && resultErr == nil {
 			failure := initializationFailure(ErrRenderFailed, "profile-cleanup", initializationReason(removeErr))
 			failure.elapsed = time.Since(started)

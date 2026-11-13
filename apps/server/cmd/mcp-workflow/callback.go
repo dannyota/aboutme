@@ -103,8 +103,6 @@ func (c *callbackReceiver) wait(ctx context.Context) (*auth.AuthorizationResult,
 	}
 }
 
-// close shuts the callback server down. Shutdown keeps its own bound even
-// when the caller's context is already canceled.
 func (c *callbackReceiver) close(ctx context.Context) error {
 	c.closeOnce.Do(func() {
 		shutdownContext, cancel := context.WithTimeout(context.WithoutCancel(ctx), callbackShutdownTimeout)

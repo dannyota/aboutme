@@ -16,8 +16,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// mutationRecovery proves only the two durable outcomes of an indeterminate
-// idempotency commit. It always uses the recovery pool, never Execute's tx.
 type mutationRecovery struct {
 	pool     *store.Pool
 	identity mutationIdentity
@@ -42,7 +40,6 @@ type publishRecoveryProof struct {
 	ReleasedAt time.Time
 }
 
-// Resolve proves the mutation result after an indeterminate transaction outcome.
 func (r *mutationRecovery) Resolve(ctx context.Context) (publicstate.RecoveryProof, error) {
 	if r.pool == nil {
 		return publicstate.RecoveryProof{}, errors.New("resumeapi: recovery pool is unavailable")
@@ -156,10 +153,6 @@ func (r mutationRecovery) exactStoredPublishResponse(record store.IdempotencyRec
 
 func (r mutationRecovery) proveCommittedDelete(ctx context.Context) error {
 	if r.delete.Slug != nil {
-		// The tombstone carries no account link, but the slug is unique and an
-		// unexpired tombstone blocks any other claim, so the slug this
-		// transaction released plus its exact release time identifies this
-		// request's own tombstone.
 		tombstone, err := store.New(r.pool).GetSlugTombstoneForUpdate(ctx, *r.delete.Slug)
 		if err != nil {
 			return fmt.Errorf("resumeapi: prove delete tombstone: %w", err)
@@ -202,8 +195,6 @@ func (r mutationRecovery) proveCommittedPublish(ctx context.Context, q *store.Qu
 		}
 	}
 	if r.publish.OldSlug != nil {
-		// See proveCommittedDelete: slug plus exact release time is proof
-		// enough that this is the request's own tombstone.
 		tombstone, tombstoneErr := q.GetSlugTombstoneForUpdate(ctx, *r.publish.OldSlug)
 		if tombstoneErr != nil || !tombstone.ReleasedAt.Equal(r.publish.ReleasedAt) {
 			return errors.New("resumeapi: publish recovery tombstone does not match intended state")

@@ -42,7 +42,6 @@ func TestWorker_RejectsChangedJobIdentity(t *testing.T) {
 		t.Run(tc.column, func(t *testing.T) {
 			ctx, pool, q := newWorkerPool(t)
 			clock := testutil.NewClockAtEpoch()
-			// Identical key material isolates key-ID authentication from key lookup.
 			ring := mustRing(t, "k-active", map[string][32]byte{
 				"k-active": fixedKey(), "k-other": fixedKey(),
 			}, fixedNonce())

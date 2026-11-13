@@ -12,9 +12,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/publicstate"
 )
 
-// TestServeLeasedSelected_FailsClosedWithTheRouteError proves a cancel hook
-// that cannot register leaves exactly the route's own 503: none of the
-// selected response's headers or bytes are written.
 func TestServeLeasedSelected_FailsClosedWithTheRouteError(t *testing.T) {
 	response, err := NewSelectedResponse(http.StatusOK, "text/plain; charset=utf-8", "no-cache, must-revalidate", []byte("resume bytes\n"),
 		http.Header{"X-Robots-Tag": {"noindex, noarchive"}})
@@ -39,9 +36,6 @@ func TestServeLeasedSelected_FailsClosedWithTheRouteError(t *testing.T) {
 	}
 }
 
-// TestServeGate_FailsClosedWhenTheHookCannotRegister proves the gate writes
-// only the HTML 503, with none of the gate's headers, when its cancel hook
-// cannot register, and logs the closed reason.
 func TestServeGate_FailsClosedWhenTheHookCannotRegister(t *testing.T) {
 	dependencies, _ := leaseTestGateDependencies(t)
 	logger, logs := newGateCapturingLogger()

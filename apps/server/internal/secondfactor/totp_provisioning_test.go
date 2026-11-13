@@ -6,9 +6,6 @@ import (
 	"testing"
 )
 
-// TestBuildTOTPProvisioningURI_ContractExample reproduces the exact
-// provisioning URI docs/design/totp-second-factor-contract.md "Provisioning
-// data" shows for issuer "aboutme.vn" and email "user@example.com".
 func TestBuildTOTPProvisioningURI_ContractExample(t *testing.T) {
 	secret := docExampleTOTPSecret(t)
 	const want = "otpauth://totp/aboutme.vn:user%40example.com?secret=ABCDEFGHIJKLMNOPQRSTUVWXYZ234567&issuer=aboutme.vn&algorithm=SHA1&digits=6&period=30"
@@ -24,8 +21,6 @@ func TestBuildTOTPProvisioningURI_ContractExample(t *testing.T) {
 	}
 }
 
-// TestBuildTOTPProvisioningURI_Localhost proves the bare single-label
-// "localhost" issuer local HTTPS uses is accepted.
 func TestBuildTOTPProvisioningURI_Localhost(t *testing.T) {
 	secret := docExampleTOTPSecret(t)
 	got, err := BuildTOTPProvisioningURI("localhost", "someone@example.com", secret)
@@ -37,8 +32,6 @@ func TestBuildTOTPProvisioningURI_Localhost(t *testing.T) {
 	}
 }
 
-// TestBuildTOTPProvisioningURI_SpaceEncoding proves a space in the email
-// encodes as %20, never as +.
 func TestBuildTOTPProvisioningURI_SpaceEncoding(t *testing.T) {
 	secret := docExampleTOTPSecret(t)
 	got, err := BuildTOTPProvisioningURI("aboutme.vn", "a b@example.com", secret)
@@ -53,26 +46,19 @@ func TestBuildTOTPProvisioningURI_SpaceEncoding(t *testing.T) {
 	}
 }
 
-// TestBuildTOTPProvisioningURI_TooLong proves an oversized escaped email
-// makes the built URI exceed 2,048 bytes and fail closed instead of
-// silently truncating.
 func TestBuildTOTPProvisioningURI_TooLong(t *testing.T) {
 	secret := docExampleTOTPSecret(t)
-	longEmail := strings.Repeat("@", 800) // each '@' escapes to the 3-byte "%40"
+	longEmail := strings.Repeat("@", 800)
 	_, err := BuildTOTPProvisioningURI("aboutme.vn", longEmail, secret)
 	if !errors.Is(err, ErrTOTPProvisioningURITooLong) {
 		t.Fatalf("BuildTOTPProvisioningURI: err = %v, want ErrTOTPProvisioningURITooLong", err)
 	}
 }
 
-// TestValidateTOTPIssuer_Hostile proves every non-canonical issuer shape is
-// rejected: empty, over-length, uppercase, an IPv4 literal, an IPv6
-// literal, a non-ASCII host, a trailing dot, a leading hyphen, and an
-// over-length label.
 func TestValidateTOTPIssuer_Hostile(t *testing.T) {
-	longLabel := strings.Repeat("a", 64) // one label over the 63-byte bound
+	longLabel := strings.Repeat("a", 64)
 	label63 := strings.Repeat("a", 63)
-	fourLabels := label63 + "." + label63 + "." + label63 + "." + label63 // 255 bytes total, each label within bound
+	fourLabels := label63 + "." + label63 + "." + label63 + "." + label63
 
 	cases := map[string]string{
 		"empty":           "",
@@ -95,8 +81,6 @@ func TestValidateTOTPIssuer_Hostile(t *testing.T) {
 	}
 }
 
-// TestValidateTOTPIssuer_Valid proves ordinary lowercase hostnames and the
-// bare "localhost" label are accepted.
 func TestValidateTOTPIssuer_Valid(t *testing.T) {
 	for _, issuer := range []string{"aboutme.vn", "localhost", "a.b.c", "a-b.example.com"} {
 		if err := ValidateTOTPIssuer(issuer); err != nil {

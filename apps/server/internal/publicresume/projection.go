@@ -13,8 +13,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/sanitize"
 )
 
-// Project creates the only data shape allowed to cross from an owner resume
-// into a public representation.
 func Project(source resume.Resume, origin PublicOrigin) (PublicResume, error) {
 	if source.Slug == nil || *source.Slug == "" {
 		return PublicResume{}, errors.New("public resume is missing slug")
@@ -31,9 +29,6 @@ func Project(source resume.Resume, origin PublicOrigin) (PublicResume, error) {
 	}, nil
 }
 
-// ProjectDocument creates the only document shape allowed to cross from an
-// owner resume into a public or internal print representation. photoURL is the
-// already-authorized render URL; an empty value removes private photo metadata.
 func ProjectDocument(source schema.Resume, photoURL string) PublicResumeDocument {
 	personal := projectPersonal(source.PersonalDetails, photoURL)
 	content := make(PublicContent, len(source.Content))

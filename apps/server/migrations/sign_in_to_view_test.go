@@ -1,6 +1,3 @@
-// Sign in to view (docs/design/viewer-analytics/sign-in-to-view.md; ADR
-// 0022; AC-VIEW-001, AC-VIEW-007): the resumes switch and pass epoch, and
-// the oauth_transactions "view" purpose bound to a resume.
 package migrations_test
 
 import (
@@ -32,7 +29,6 @@ func TestSignInToViewOAuthTransactionConstraints(t *testing.T) {
 	resumeID := insertLiveCardResume(ctx, t, tx, userID, uniqueCardSlug())
 	otherUserID := createTestUser(ctx, t, tx)
 
-	// AC-VIEW-007: resume_id is required exactly when purpose is view.
 	err := withSavepoint(ctx, t, tx, func(sp pgx.Tx) error {
 		return insertViewTransaction(ctx, sp, "view", nil, nil)
 	})
@@ -43,13 +39,11 @@ func TestSignInToViewOAuthTransactionConstraints(t *testing.T) {
 	})
 	requireConstraintViolation(t, err, "oauth_transactions_view_resume_check")
 
-	// linking_user_id must be null for purpose view.
 	err = withSavepoint(ctx, t, tx, func(sp pgx.Tx) error {
 		return insertViewTransaction(ctx, sp, "view", &resumeID, &otherUserID)
 	})
 	requireConstraintViolation(t, err, "oauth_transactions_link_needs_user")
 
-	// A well-formed view transaction succeeds and cascades with its resume.
 	if err := insertViewTransaction(ctx, tx, "view", &resumeID, nil); err != nil {
 		t.Fatalf("insert well-formed view transaction: %v", err)
 	}

@@ -8,10 +8,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// Document v6 adds projectId on project entries (docs/design/projects.md
-// "Selection"). A v1 to v5 client cannot express it, so its writes keep the
-// stored link of every surviving entry, matched by entry id.
-
 func TestWireVersion_V5ClientKeepsStoredProjectLinks(t *testing.T) {
 	h := newResumeAPITestHarness(t)
 	owned := createLinkProject(t, h, h.userID, "atlas", linkProjectDocument("Atlas"))

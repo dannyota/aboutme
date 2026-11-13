@@ -1,9 +1,5 @@
 package resumeapi
 
-// Project deletion over linking resumes: every resume that links the
-// project, live or not, is unlinked and saved at its next revision under the
-// planned-set pattern in project_plan.go.
-
 import (
 	"context"
 	"errors"
@@ -16,29 +12,16 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// ProjectRemoval deletes one library project and unlinks it from every
-// resume of its owner in one idempotent transaction.
 type ProjectRemoval struct {
-	// UserID is the owner of the project and the resumes.
-	UserID uuid.UUID
-	// ProjectID is the project every link to which is removed.
-	ProjectID uuid.UUID
-	// Operation is the hex operation digest keying the idempotency record.
-	Operation string
-	// Key is the request's Idempotency-Key.
-	Key uuid.UUID
-	// RequestHash is the request fingerprint stored with the record.
+	UserID      uuid.UUID
+	ProjectID   uuid.UUID
+	Operation   string
+	Key         uuid.UUID
 	RequestHash [32]byte
-	// Authorize runs first in the owner-locked transaction: it rechecks the
-	// caller and the project precondition.
-	Authorize func(context.Context, *store.Queries) error
-	// Remove runs last in the transaction, after every linking resume is
-	// saved: it deletes the project and returns the response to store.
-	Remove func(context.Context, *store.Queries, []ChangedResume) (resume.StoredResponse, error)
+	Authorize   func(context.Context, *store.Queries) error
+	Remove      func(context.Context, *store.Queries, []ChangedResume) (resume.StoredResponse, error)
 }
 
-// RemoveProject runs a project deletion under the public-state fences of
-// every resume that links the project, live or not.
 func (s *Service) RemoveProject(ctx context.Context, removal ProjectRemoval) (resume.ExecuteResult, error) {
 	notAttempted := resume.ExecuteResult{Outcome: resume.CommitNotAttempted}
 	reader, readable := s.resumes.(resumePoolReader)
@@ -65,8 +48,6 @@ func (s *Service) RemoveProject(ctx context.Context, removal ProjectRemoval) (re
 	})
 }
 
-// removeProjectTx requires the planned set at the planned revisions under the
-// owner lock, then unlinks and saves each resume at its next revision.
 func (s *Service) removeProjectTx(ctx context.Context, qtx *store.Queries, lister resumeTxLister, removal ProjectRemoval,
 	planned []resume.Resume,
 ) (resume.StoredResponse, publicstate.CommittedState, error) {
@@ -109,8 +90,6 @@ func (s *Service) removeProjectTx(ctx context.Context, qtx *store.Queries, liste
 	return response, state, nil
 }
 
-// linkingFencePlan revokes a live resume, whose project page stops, and
-// fences a draft without draining it.
 func linkingFencePlan(planned []resume.Resume) publicstate.Plan {
 	targets := make([]publicstate.ResumeTarget, len(planned))
 	for i, item := range planned {
@@ -123,9 +102,6 @@ func linkingFencePlan(planned []resume.Resume) publicstate.Plan {
 	return publicstate.Plan{Resumes: targets}
 }
 
-// LinkedResumeIDs returns, for each project the owner's resumes link, the
-// ids of those resumes in resume list order. q may be a pool or a
-// transaction.
 func (s *Service) LinkedResumeIDs(ctx context.Context, q *store.Queries, owner uuid.UUID) (map[uuid.UUID][]uuid.UUID, error) {
 	lister, ok := s.resumes.(resumeTxLister)
 	if !ok {

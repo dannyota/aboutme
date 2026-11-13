@@ -133,7 +133,7 @@ func newRevokeFixture(t *testing.T, mode string) revokeFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var epoch int64 // the fixture's new user is at epoch 0
+	var epoch int64
 	if _, err = f.q.CreateOAuthAuthorizationCode(t.Context(), store.CreateOAuthAuthorizationCodeParams{
 		CodeDigest: codeDigest[:], ClientID: f.clientID, UserID: f.userID, GrantID: f.grantID, AuthEpoch: epoch,
 		Scopes: "resumes:read", CodeChallenge: base64.RawURLEncoding.EncodeToString(sum[:]),
@@ -338,7 +338,6 @@ func TestRevokeResponsesMatchAcrossTokenStatesAndAmbientCredentials(t *testing.T
 							{"Cookie": {cookie.Name + "=" + cookie.Value}},
 							{"Authorization": {"Basic c3ludGhldGljOnN5bnRoZXRpYw=="}}, {"Authorization": {"Bearer synthetic-unrelated"}},
 						} {
-							// Reset only revocation marks; retained terminal state is intentional.
 							if _, err := f.pool.Exec(t.Context(), "UPDATE oauth_grants SET revoked_at=NULL WHERE id=$1", f.grantID); err != nil {
 								t.Fatal(err)
 							}

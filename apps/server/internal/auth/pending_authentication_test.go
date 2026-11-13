@@ -99,7 +99,6 @@ func TestPendingAuthentication_CreateConsumesOnlyPreviousBrowserPending(t *testi
 	}
 }
 
-// pendingConsumed reports whether the pending row id has been consumed.
 func pendingConsumed(ctx context.Context, t *testing.T, pool *store.Pool, id uuid.UUID) bool {
 	t.Helper()
 	var consumed bool
@@ -109,9 +108,6 @@ func pendingConsumed(ctx context.Context, t *testing.T, pool *store.Pool, id uui
 	return consumed
 }
 
-// TestPendingAuthentication_PreviousTokenCannotCrossUser keeps another
-// account's pending row live: consuming it would write that account's authority
-// without its user lock.
 func TestPendingAuthentication_PreviousTokenCannotCrossUser(t *testing.T) {
 	ctx := context.Background()
 	pool := newTestPool(t)
@@ -134,9 +130,6 @@ func TestPendingAuthentication_PreviousTokenCannotCrossUser(t *testing.T) {
 	}
 }
 
-// TestPendingAuthentication_PreviousTokenConsumedAcrossPurposeAndBinding
-// consumes the browser's previous pending row for the same account whatever its
-// purpose or bound session.
 func TestPendingAuthentication_PreviousTokenConsumedAcrossPurposeAndBinding(t *testing.T) {
 	ctx := context.Background()
 	pool := newTestPool(t)
@@ -196,11 +189,6 @@ func TestPendingAuthentication_CallbackRollbackPreservesAuthority(t *testing.T) 
 	}
 }
 
-// TestPendingAuthentication_CreateSerializesWithCompletionAndFailure races a
-// replacing Create against a completion or a recorded failure on the same
-// previous row. Exactly one of them acts on that row, and the end state
-// matches the winner: the previous row is consumed once, a recorded failure
-// appears only when the completion side won, and one live row remains.
 func TestPendingAuthentication_CreateSerializesWithCompletionAndFailure(t *testing.T) {
 	const rounds = 4
 	verifyErr := errors.New("verification failed")
@@ -323,9 +311,6 @@ func TestPendingAuthentication_WrongReauthBindingAuthenticatesNothing(t *testing
 	}
 }
 
-// TestPendingAuthentication_LoginRowIgnoresPresentedSession lets a browser that
-// still holds a session cookie complete a login row. The login row binds
-// nothing and exposes no session to the completion callback.
 func TestPendingAuthentication_LoginRowIgnoresPresentedSession(t *testing.T) {
 	ctx := context.Background()
 	pool := newTestPool(t)
@@ -352,9 +337,6 @@ func TestPendingAuthentication_LoginRowIgnoresPresentedSession(t *testing.T) {
 	}
 }
 
-// TestPendingAuthentication_CreateRejectsLoginSessionBinding keeps login rows
-// unbound: a caller that supplies a session ID for login gets an error and no
-// row is written.
 func TestPendingAuthentication_CreateRejectsLoginSessionBinding(t *testing.T) {
 	ctx := context.Background()
 	pool := newTestPool(t)
@@ -377,8 +359,6 @@ func TestPendingAuthentication_CreateRejectsLoginSessionBinding(t *testing.T) {
 	}
 }
 
-// TestPendingAuthentication_ExpiredRowAuthenticatesNothing ages a row past its
-// five-minute lifetime and proves neither status nor completion accepts it.
 func TestPendingAuthentication_ExpiredRowAuthenticatesNothing(t *testing.T) {
 	ctx := context.Background()
 	pool := newTestPool(t)
@@ -471,8 +451,6 @@ func TestPendingAuthentication_FifthFailureConsumesPending(t *testing.T) {
 	}
 }
 
-// pendingFailureFixture creates a login pending row and returns what the
-// verification-failure tests need.
 func pendingFailureFixture(t *testing.T) (context.Context, *store.Pool, *auth.PendingAuthenticationManager, uuid.UUID, auth.PendingAuthenticationIssue) {
 	t.Helper()
 	ctx := context.Background()
@@ -486,8 +464,6 @@ func pendingFailureFixture(t *testing.T) (context.Context, *store.Pool, *auth.Pe
 	return ctx, pool, m, userID, issued
 }
 
-// insertSecurityEvent stands in for a completion write such as a counter
-// security event or an exhaustion outbox insert.
 func insertSecurityEvent(ctx context.Context, qtx *store.Queries, userID uuid.UUID) error {
 	_, err := qtx.InsertPasskeyCounterSecurityEvent(ctx, store.InsertPasskeyCounterSecurityEventParams{
 		UserID: userID, PasskeyID: uuid.New(), StoredCounter: 7, ReceivedCounter: 7, OccurredAt: time.Now().UTC(),
@@ -495,8 +471,6 @@ func insertSecurityEvent(ctx context.Context, qtx *store.Queries, userID uuid.UU
 	return err
 }
 
-// pendingFailureState reads the row's attempt count and consumption and the
-// user's security event count.
 func pendingFailureState(ctx context.Context, t *testing.T, pool *store.Pool, pendingID, userID uuid.UUID) (attempts int32, consumed bool, events int) {
 	t.Helper()
 	if err := pool.QueryRow(ctx, "SELECT failed_attempts, consumed_at IS NOT NULL FROM pending_authentications WHERE id = $1", pendingID).Scan(&attempts, &consumed); err != nil {
@@ -508,8 +482,6 @@ func pendingFailureState(ctx context.Context, t *testing.T, pool *store.Pool, pe
 	return attempts, consumed, events
 }
 
-// failPending runs one completion whose callback writes an event and then
-// reports a verification failure with the given exhaustion hook.
 func failPending(ctx context.Context, m *auth.PendingAuthenticationManager, raw string, userID uuid.UUID, verifyErr error, hook auth.PendingExhaustedHook) (auth.PendingAuthenticationLocked, error) {
 	return m.WithLivePending(ctx, raw, nil, nil, func(ctx context.Context, qtx *store.Queries, _ auth.PendingAuthenticationLocked) error {
 		if insertErr := insertSecurityEvent(ctx, qtx, userID); insertErr != nil {
@@ -519,8 +491,6 @@ func failPending(ctx context.Context, m *auth.PendingAuthenticationManager, raw 
 	})
 }
 
-// TestPendingAuthentication_FailureCommitsCallbackWrites proves a verification
-// failure commits the callback's writes together with the counted attempt.
 func TestPendingAuthentication_FailureCommitsCallbackWrites(t *testing.T) {
 	ctx, pool, m, userID, issued := pendingFailureFixture(t)
 	verifyErr := errors.New("counter did not increase")
@@ -538,9 +508,6 @@ func TestPendingAuthentication_FailureCommitsCallbackWrites(t *testing.T) {
 	}
 }
 
-// TestPendingAuthentication_FifthFailureRunsExhaustionHookAtomically proves the
-// fifth failure, its consumption, and the exhaustion hook's insert commit in one
-// transaction, and the hook runs only on that attempt.
 func TestPendingAuthentication_FifthFailureRunsExhaustionHookAtomically(t *testing.T) {
 	ctx, pool, m, userID, issued := pendingFailureFixture(t)
 	verifyErr := errors.New("assertion did not verify")
@@ -571,9 +538,6 @@ func TestPendingAuthentication_FifthFailureRunsExhaustionHookAtomically(t *testi
 	}
 }
 
-// TestPendingAuthentication_ExhaustionHookFailureRollsBackAttempt proves a
-// failed exhaustion insert aborts the terminal attempt and the callback's
-// writes, leaving the row live at four attempts.
 func TestPendingAuthentication_ExhaustionHookFailureRollsBackAttempt(t *testing.T) {
 	ctx, pool, m, userID, issued := pendingFailureFixture(t)
 	verifyErr := errors.New("assertion did not verify")
@@ -603,9 +567,6 @@ func TestPendingAuthentication_ExhaustionHookFailureRollsBackAttempt(t *testing.
 	}
 }
 
-// TestPendingAuthentication_InternalErrorRollsBackEverything proves a callback
-// error that is not a verification failure counts no attempt and keeps none of
-// the callback's writes.
 func TestPendingAuthentication_InternalErrorRollsBackEverything(t *testing.T) {
 	ctx, pool, m, userID, issued := pendingFailureFixture(t)
 	internalErr := errors.New("credential store unavailable")

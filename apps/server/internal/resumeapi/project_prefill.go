@@ -10,10 +10,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/resume"
 )
 
-// projectTextFor picks the project text for a resume language: the text
-// whose key equals the language's primary subtag, otherwise the default
-// language. An unset or und resume language uses the default language
-// (docs/design/projects.md "Language").
 func projectTextFor(library project.Project, lng *string) project.Text {
 	if lng != nil {
 		primary, _, _ := strings.Cut(strings.ToLower(*lng), "-")
@@ -26,9 +22,6 @@ func projectTextFor(library project.Project, lng *string) project.Text {
 	return library.Text[library.DefaultLanguage]
 }
 
-// prefillProjectEntry overwrites the five prefilled fields of entry from the
-// library project and leaves every other field as it is. A field the
-// library leaves empty is removed, so a refresh equals a fresh link.
 func prefillProjectEntry(entry *schema.ProjectEntry, library project.Project, lng *string) {
 	text := projectTextFor(library, lng)
 	entry.Title = prefillValue(text.Name)
@@ -46,9 +39,6 @@ func prefillProjectEntry(entry *schema.ProjectEntry, library project.Project, ln
 	}
 }
 
-// prefillLink lowercases the scheme of a library link and leaves the
-// entry link out when the result still fails the entry link contract, which
-// a project saved before the library applied that contract can hold.
 func prefillLink(raw string) *string {
 	link, ok := project.NormalizeLink(raw)
 	if !ok || link == "" || !resume.ValidEntryLink(link) {

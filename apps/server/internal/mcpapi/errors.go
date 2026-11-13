@@ -22,7 +22,6 @@ var (
 	errInternal               = &mcpError{status: http.StatusInternalServerError, code: "internal_error"}
 )
 
-// writeMCPError writes a closed HTTP-boundary error before any JSON-RPC work.
 func writeMCPError(w http.ResponseWriter, err error) {
 	var mcpErr *mcpError
 	if !errors.As(err, &mcpErr) {

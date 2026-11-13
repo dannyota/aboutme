@@ -12,13 +12,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// sendJob authorizes and delivers one claimed job. It opens one transaction,
-// locks the scoped registration/reset token/user first and the exact leased job
-// second, decrypts and confirms current authority and lease ownership, then
-// holds both locks through the at-most-ten-second sender call and finalizes
-// sent/terminal/requeue state before commit. A stale or unauthorized job
-// becomes terminal without any send. Cancellation rolls the transaction back
-// and leaves the job leased for the requeue query to recover.
 func (w *Worker) sendJob(ctx context.Context, job store.AuthEmailJob) error {
 	if w.hooks.beforeAuth != nil {
 		w.hooks.beforeAuth(job.ID)
@@ -39,10 +32,6 @@ func (w *Worker) sendJob(ctx context.Context, job store.AuthEmailJob) error {
 	qtx := w.queries.WithTx(tx)
 	now := w.clock()
 
-	// Lock the scope row first (scope-before-job order). A missing scope
-	// means the owning registration/reset token/user was replaced or deleted;
-	// the job may have been deleted by cascade, so terminate it if it still
-	// exists and otherwise commit a no-op.
 	scope, err := w.lockScope(ctx, qtx, job)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -57,9 +46,6 @@ func (w *Worker) sendJob(ctx context.Context, job store.AuthEmailJob) error {
 		return err
 	}
 
-	// Re-lock the exact leased job by this worker. ErrNoRows means the lease was
-	// reassigned to another worker or the job is gone: do not send and do not
-	// finalize.
 	leased, err := qtx.GetLeasedAuthEmailJobForUpdate(ctx, store.GetLeasedAuthEmailJobForUpdateParams{
 		ID:         job.ID,
 		LeaseOwner: w.id.String(),
@@ -85,10 +71,6 @@ func (w *Worker) sendJob(ctx context.Context, job store.AuthEmailJob) error {
 		return failAuthentication()
 	}
 
-	// Current authority: the job must not be expired, and the stored token
-	// digest must match the scope row. An expired or stale job becomes terminal,
-	// and that terminal state is committed here: the deferred rollback must not
-	// undo it.
 	if !leased.ExpiresAt.After(now) {
 		if terminalErr := w.markTerminal(ctx, qtx, leased.ID, now); terminalErr != nil {
 			return terminalErr
@@ -102,14 +84,11 @@ func (w *Worker) sendJob(ctx context.Context, job store.AuthEmailJob) error {
 		return tx.Commit(ctx)
 	}
 
-	// Authenticate the leased row's identity, scope, and token authority before
-	// sending. A failed open commits terminal state without exposing plaintext.
 	payload, err := w.ring.Open(leased.ID, Kind(leased.Kind), scopeFromJob(leased), sealedFromJob(leased))
 	if err != nil {
 		return failAuthentication()
 	}
 
-	// Send under a ten-second deadline while both locks are held.
 	if w.hooks.beforeSend != nil {
 		w.hooks.beforeSend(leased.ID)
 	}
@@ -120,12 +99,9 @@ func (w *Worker) sendJob(ctx context.Context, job store.AuthEmailJob) error {
 		w.hooks.afterSend(leased.ID, result.Outcome)
 	}
 	if sendErr != nil {
-		// An unexpected sender error is ambiguous and therefore temporary; a
-		// duplicate delivery is harmless under token single use.
 		result.Outcome = SendTemporaryFailure
 	}
 
-	// Finalize within the same transaction.
 	switch result.Outcome {
 	case SendAccepted:
 		_, err = qtx.MarkAuthEmailJobSent(ctx, store.MarkAuthEmailJobSentParams{SentAt: now, ID: leased.ID})
@@ -142,15 +118,11 @@ func (w *Worker) sendJob(ctx context.Context, job store.AuthEmailJob) error {
 	return tx.Commit(ctx)
 }
 
-// markTerminal records the exact terminal state in the current transaction.
 func (w *Worker) markTerminal(ctx context.Context, qtx *store.Queries, jobID uuid.UUID, now time.Time) error {
 	_, err := qtx.MarkAuthEmailJobTerminal(ctx, store.MarkAuthEmailJobTerminalParams{TerminalAt: now, ID: jobID})
 	return err
 }
 
-// requeueOrTerminal applies the temporary-failure policy: failed attempt 8
-// or a next attempt at/after expiry marks terminal; otherwise the job returns
-// to pending with a full-jitter backoff capped at min(30s*2^(attempt-1), 1h).
 func (w *Worker) requeueOrTerminal(ctx context.Context, qtx *store.Queries, job store.AuthEmailJob, now time.Time) error {
 	if job.Attempts >= maxAttempts {
 		return w.markTerminal(ctx, qtx, job.ID, now)
@@ -163,10 +135,6 @@ func (w *Worker) requeueOrTerminal(ctx context.Context, qtx *store.Queries, job 
 	return err
 }
 
-// lockScope locks the single scope row named by the job's kind in the current
-// transaction and returns the authority state (the scope row's token digest for
-// verify/reset, nil for password_changed). A missing row surfaces as
-// pgx.ErrNoRows.
 func (w *Worker) lockScope(ctx context.Context, qtx *store.Queries, job store.AuthEmailJob) (*scopeState, error) {
 	switch Kind(job.Kind) {
 	case KindVerify:
@@ -203,14 +171,10 @@ func (w *Worker) lockScope(ctx context.Context, qtx *store.Queries, job store.Au
 	}
 }
 
-// scopeState is the authority the send handoff checks against the job.
 type scopeState struct {
 	tokenDigest []byte
 }
 
-// tokenMatches reports whether the job's stored digest is still the scope
-// row's current digest. User-scoped jobs have no token authority, so any digest
-// (including nil) matches.
 func (s *scopeState) tokenMatches(jobDigest []byte) bool {
 	if s.tokenDigest == nil {
 		return true
@@ -218,7 +182,6 @@ func (s *scopeState) tokenMatches(jobDigest []byte) bool {
 	return bytes.Equal(s.tokenDigest, jobDigest)
 }
 
-// sealedFromJob converts the stored job columns into a Sealed blob.
 func sealedFromJob(job store.AuthEmailJob) Sealed {
 	var nonce [12]byte
 	copy(nonce[:], job.Nonce)
@@ -234,8 +197,6 @@ func scopeFromJob(job store.AuthEmailJob) JobScope {
 		ResetTokenID: job.ResetTokenID, TokenDigest: job.TokenDigest}
 }
 
-// sameClaimedAuthority ties the route and scope locks to the authenticated row.
-// Nullable authority columns must match by presence and value.
 func sameClaimedAuthority(claimed, locked store.AuthEmailJob) bool {
 	if claimed.Kind != locked.Kind || (claimed.TokenDigest == nil) != (locked.TokenDigest == nil) ||
 		!bytes.Equal(claimed.TokenDigest, locked.TokenDigest) {

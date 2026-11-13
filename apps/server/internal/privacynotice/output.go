@@ -39,7 +39,6 @@ func sumMatches(want int64, values ...int64) bool {
 	return sum == want
 }
 
-// JSON returns only the closed aggregate wire object, never the store row.
 func (r Report) JSON(activation bool) ([]byte, error) {
 	c, t := r.Campaign, r.Totals
 	if !validCampaign(c) || c.ExpectedCount < 0 || c.ActivationCount < 0 || !sumMatches(t.Actual, t.Unqueued, t.Queued, t.Accepted, t.Deleted, t.Failed, t.Cancelled) || !sumMatches(t.Failed, t.Expired, t.AttemptsExhausted, t.ProviderRejected, t.PayloadInvalid, t.JobMissing, t.DeliveryFailed) || !sumMatches(c.RecoveryCount, c.RecoveryExpiredCount, c.RecoveryAttemptsExhaustedCount, c.RecoveryProviderRejectedCount, c.RecoveryPayloadInvalidCount, c.RecoveryJobMissingCount, c.RecoveryDeliveryFailedCount) { //nolint:misspell // Generated store member follows the fixed database spelling.

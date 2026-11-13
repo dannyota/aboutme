@@ -20,11 +20,6 @@ import (
 
 var registerTestNow = time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
 
-// TestNativeLoopbackRedirect needs no database: nativeLoopbackRedirect is a
-// pure function. The general redirect grammar already admits "localhost" for
-// a client that omits application_type, so native accepts it too; see
-// docs/design/mcp-client-compatibility.md rule 3. A lookalike host such as
-// "localhost.evil.example" is a different hostname and never matches.
 func TestNativeLoopbackRedirect(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -52,8 +47,6 @@ func TestNativeLoopbackRedirect(t *testing.T) {
 	}
 }
 
-// TestValidGrantTypesSet pins the registration grant_types rule: a non-empty,
-// duplicate-free subset of authorization_code and refresh_token.
 func TestValidGrantTypesSet(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
@@ -194,15 +187,8 @@ func TestRegister_ApplicationTypeCompatibility(t *testing.T) {
 	const legacy = `{"client_name":"Agent","redirect_uris":["https://agent.example/callback"],"token_endpoint_auth_method":"none"}`
 	const native = `{"client_name":"aboutme MCP owner workflow","redirect_uris":["http://127.0.0.1:20090/callback"],"token_endpoint_auth_method":"none","application_type":"native"}`
 	const nativeIPv6 = `{"client_name":"Agent","redirect_uris":["http://[::1]:20090/callback"],"application_type":"native"}`
-	// Claude Code registers a loopback redirect naming "localhost", not an IP
-	// literal; the general grammar already admits it, so native does too. See
-	// docs/design/mcp-client-compatibility.md rule 3.
 	const nativeLocalhost = `{"client_name":"Agent","redirect_uris":["http://localhost:33418/callback"],"application_type":"native"}`
-	// Unknown registration members are ignored, never stored or echoed. See
-	// docs/design/mcp-client-compatibility.md rule 2.
 	const nativeWithUnknownMembers = `{"client_name":"Agent","redirect_uris":["http://127.0.0.1/callback"],"application_type":"native","client_uri":"https://agent.example"}`
-	// Claude on the web derives application_type web for its https redirect;
-	// see docs/design/mcp-client-compatibility.md rule 2.
 	const web = `{"client_name":"Claude","redirect_uris":["https://claude.ai/api/mcp/auth_callback"],"application_type":"web"}`
 
 	for _, tc := range []struct {
@@ -260,10 +246,6 @@ func TestRegister_ApplicationTypeCompatibility(t *testing.T) {
 	}
 }
 
-// TestRegister_TypeScriptSDKDefaultShapeIgnoresUnknownMembers registers with
-// the shape the official TypeScript SDK sends: the four known optional
-// members plus several members the SDK also sends that this server does not
-// define. See docs/design/mcp-client-compatibility.md rule 2.
 func TestRegister_TypeScriptSDKDefaultShapeIgnoresUnknownMembers(t *testing.T) {
 	q := &registrationQueries{id: uuid.New()}
 	s := newRegistrationService(t, q, &registrationAdmissionFake{allowed: true})
@@ -294,8 +276,6 @@ func TestRegister_TypeScriptSDKDefaultShapeIgnoresUnknownMembers(t *testing.T) {
 	}
 }
 
-// TestRegister_GrantTypesResponseTypesAndScope covers rule 2's three
-// remaining known members and their rejected neighbors.
 func TestRegister_GrantTypesResponseTypesAndScope(t *testing.T) {
 	const base = `{"client_name":"Agent","redirect_uris":["https://agent.example/callback"]`
 
@@ -358,9 +338,6 @@ func TestRegister_GrantTypesResponseTypesAndScope(t *testing.T) {
 	}
 }
 
-// TestRegister_DuplicateUnknownMemberRejects confirms the duplicate-member
-// check still applies to a member outside the closed set, even though a
-// single occurrence of it is ignored.
 func TestRegister_DuplicateUnknownMemberRejects(t *testing.T) {
 	q := &registrationQueries{id: uuid.New()}
 	s := newRegistrationService(t, q, &registrationAdmissionFake{allowed: true})
@@ -372,9 +349,6 @@ func TestRegister_DuplicateUnknownMemberRejects(t *testing.T) {
 	}
 }
 
-// TestRegister_OverLimitBodyWithUnknownMembersRejects confirms the
-// 4,096-byte cap is enforced before unknown members are ignored, so padding
-// a body with unknown metadata cannot bypass it.
 func TestRegister_OverLimitBodyWithUnknownMembersRejects(t *testing.T) {
 	valid := `{"client_name":"Agent","redirect_uris":["https://agent.example/callback"],"client_uri":"https://agent.example"}`
 	overLimit := valid[:len(valid)-1] + strings.Repeat(" ", 4096-len(valid)+2) + valid[len(valid)-1:]
@@ -388,11 +362,6 @@ func TestRegister_OverLimitBodyWithUnknownMembersRejects(t *testing.T) {
 	}
 }
 
-// TestRegisteredRedirect_LocalhostMatchesOnlyItsExactRegisteredValue confirms
-// that admitting "localhost" for native clients does not widen what a
-// registered client may authorize to: registeredRedirect still requires a
-// byte-for-byte match, port included. See
-// docs/design/mcp-client-compatibility.md rule 3.
 func TestRegisteredRedirect_LocalhostMatchesOnlyItsExactRegisteredValue(t *testing.T) {
 	client := store.OAuthClient{RedirectURIs: []byte(`["http://localhost:33418/callback"]`)}
 	for _, tc := range []struct {
@@ -414,10 +383,6 @@ func TestRegisteredRedirect_LocalhostMatchesOnlyItsExactRegisteredValue(t *testi
 	}
 }
 
-// TestValidateRedirectURI_RejectsLocalhostLookalikes confirms that widening
-// native registration to "localhost" does not touch the general redirect
-// grammar's userinfo and hostname rules: a client cannot register a redirect
-// that only resembles "localhost".
 func TestValidateRedirectURI_RejectsLocalhostLookalikes(t *testing.T) {
 	for _, raw := range []string{
 		"http://localhost.evil.example/cb",

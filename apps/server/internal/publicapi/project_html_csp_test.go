@@ -8,10 +8,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/publicformat"
 )
 
-// TestProjectPages_SendTheProjectCSP proves both project modes answer, fresh,
-// cached and to HEAD, with the resume page's directives but style-src 'self'
-// alone, since the pages carry no inline CSS, while the gate for a project
-// address keeps the gate's own CSP.
 func TestProjectPages_SendTheProjectCSP(t *testing.T) {
 	want := strings.Replace(publicformat.BaseCSP, "style-src 'self' 'unsafe-inline'", "style-src 'self'", 1)
 	if want == publicformat.BaseCSP || strings.Contains(want, "unsafe-inline") || projectPageCSP != want {

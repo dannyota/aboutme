@@ -26,7 +26,6 @@ const cardVersion = "0123456789abcdef"
 
 var cardPNG = []byte("\x89PNG\r\n\x1a\ncurrent-card")
 
-// fakeCards is a PreviewCards whose current version is fixed.
 type fakeCards struct {
 	mu          sync.Mutex
 	version     string
@@ -70,7 +69,7 @@ func newCardHarness(t *testing.T, cards *fakeCards) (*artifactHandlers, *publicS
 		t.Fatal("the share-image render queue ran while stored cards are on")
 		return renderjob.Result{}, nil
 	})
-	handlers, err := newArtifactHandlers(ArtifactDependencies{
+	handlers, err := newArtifactHandlers(ArtifactDependencies{PublicOrigin: mustPublicOrigin(t),
 		Reader: reader, Cache: cache, Queue: queue, AppDigest: "sha256:app", RendererDigest: "sha256:renderer",
 		Clock: time.Now, Cards: cards,
 	})
@@ -116,8 +115,6 @@ func TestCardPathAcceptsOnlyAValidSlugAndVersion(t *testing.T) {
 	}
 }
 
-// With stored cards off, the versioned route is the public 404 and og.png
-// keeps the share image, so the server can deploy before the web renderer.
 func TestCardRouteIsOffWithoutCards(t *testing.T) {
 	t.Parallel()
 	handlers, _, _ := newArtifactHarness(t, artifactQueueFunc(func(context.Context, renderjob.Request) (renderjob.Result, error) {
@@ -163,9 +160,6 @@ func TestStoredCurrentCardIsServedAfterTheLiveGate(t *testing.T) {
 	}
 }
 
-// Only the current version answers; an old version and an unknown one are
-// the ordinary public 404, and a stored row of an old version is never
-// served.
 func TestOnlyTheCurrentVersionAnswers(t *testing.T) {
 	t.Parallel()
 	cards := &fakeCards{version: cardVersion, stored: &previewcard.StoredCard{Version: "fedcba9876543210", PNG: []byte("\x89PNGstale")}}
@@ -252,8 +246,6 @@ func TestCardBuildsShareTheRenderMissLimit(t *testing.T) {
 	}
 }
 
-// A revocation while the card builds cancels the response: no card bytes
-// reach the client.
 func TestRevocationDuringABuildServesNoCard(t *testing.T) {
 	t.Parallel()
 	started := make(chan struct{})

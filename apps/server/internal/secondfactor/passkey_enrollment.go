@@ -1,9 +1,5 @@
 package secondfactor
 
-// Passkey enrollment: the registration ceremony start, its completion under
-// the user, session, and policy locks, and persistence of the verified
-// credential with the first factor's policy and recovery codes.
-
 import (
 	"context"
 	"errors"
@@ -20,9 +16,6 @@ import (
 
 var errDuplicateCredential = errors.New("secondfactor: credential already registered")
 
-// StartPasskeyRegistration creates a registration ceremony for the current
-// session. Before a policy exists it proposes a new random user handle and
-// stores it in the ceremony; afterwards it reuses the stored handle.
 func (s *Service) StartPasskeyRegistration(ctx context.Context, current store.Session) (auth.SecondFactorOptions, error) {
 	if !s.enabled {
 		return auth.SecondFactorOptions{}, auth.ErrSecondFactorEnrollmentDisabled
@@ -72,12 +65,6 @@ func (s *Service) StartPasskeyRegistration(ctx context.Context, current store.Se
 	return options, nil
 }
 
-// CompletePasskeyRegistration verifies and stores a passkey. It claims the
-// ceremony under the user, session, and policy locks. First versus later
-// enrollment follows policy existence: first creates the policy with the
-// ceremony's proposed handle, the credential, and recovery codes; later reuses
-// the stored handle. A claimed ceremony stays consumed when the completion is
-// rejected, including while enrollment is disabled.
 func (s *Service) CompletePasskeyRegistration(ctx context.Context, current store.Session, credential auth.SecondFactorCredential) (auth.SecondFactorRegistration, error) {
 	reg, ok := credential.(*passkeyRegistration)
 	if !ok {
@@ -128,13 +115,9 @@ func (s *Service) CompletePasskeyRegistration(ctx context.Context, current store
 		}
 		verified, verifyErr := s.rp.verifyRegistration(reg, ceremony.ChallengeDigest, handle, user.Email, user.Name)
 		if verifyErr != nil {
-			// Commit the ceremony consumption and report the failure through
-			// outcome, so a rejected registration cannot be retried.
 			outcome = verifyErr
 			return nil //nolint:nilerr // the failure is returned through outcome after commit
 		}
-		// The writes run in a savepoint so a duplicate credential ID rolls
-		// back only them and the ceremony stays consumed.
 		writeErr := pgx.BeginFunc(ctx, tx, func(sp pgx.Tx) error {
 			var storeErr error
 			result, storeErr = s.storePasskey(ctx, s.q.WithTx(sp), user, sess, handle, first, verified, values, display, now)
@@ -155,9 +138,6 @@ func (s *Service) CompletePasskeyRegistration(ctx context.Context, current store
 	return result, nil
 }
 
-// storePasskey writes a verified credential and commits the factor change.
-// First enrollment sets the replacement session's factor proof to now; later
-// enrollment copies the prior proof.
 func (s *Service) storePasskey(ctx context.Context, qtx *store.Queries, user store.User, sess store.Session, handle []byte, first bool, verified verifiedPasskey, values []recoveryValue, display []string, now time.Time) (auth.SecondFactorRegistration, error) {
 	if first {
 		if _, err := qtx.CreateSecondFactorPolicy(ctx, store.CreateSecondFactorPolicyParams{UserID: user.ID, WebauthnUserHandle: handle, EnabledAt: now}); err != nil {

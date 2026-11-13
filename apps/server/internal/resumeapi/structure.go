@@ -1,8 +1,5 @@
 package resumeapi
 
-// Resume structure route: decoding the structure command list, its canonical
-// targets, and the prepared aggregate mutation that applies the commands.
-
 import (
 	"bytes"
 	"context"
@@ -26,11 +23,8 @@ func structureRoutes() []routeSpec {
 	}
 }
 
-// structureMutationInput is a decoded structure request.
 type structureMutationInput struct {
-	// ResumeID is the resume the commands change, from the request path.
 	ResumeID uuid.UUID
-	// Commands holds 1 to 100 decoded commands in request order.
 	Commands []structureCommand
 }
 
@@ -40,8 +34,6 @@ func decodeStructureMutation(r *http.Request) (boundedInput, error) {
 		return boundedInput{}, requestInvalid("resume id is not a UUID")
 	}
 	var body struct {
-		// Commands holds the raw commands, decoded one by one in request
-		// order.
 		Commands []json.RawMessage `json:"commands"`
 	}
 	input, err := decodeJSONBody(r, &body)
@@ -63,8 +55,6 @@ func decodeStructureMutation(r *http.Request) (boundedInput, error) {
 	return input, nil
 }
 
-// decodeStructureCommand decodes the command at position. Its exact "op"
-// member selects the strict shape; a case variant of "op" selects nothing.
 func decodeStructureCommand(raw json.RawMessage, position int) (structureCommand, error) {
 	var members map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &members); err != nil || members == nil {
@@ -81,23 +71,13 @@ func decodeStructureCommand(raw json.RawMessage, position int) (structureCommand
 	switch op {
 	case "createSection":
 		var command struct {
-			// Op is createSection.
-			Op string `json:"op"`
-			// Key is the required key of the new section.
-			Key *string `json:"key"`
-			// SectionType is the required type of the new section.
-			SectionType *string `json:"sectionType"`
-			// DisplayName is the optional display name, kept raw so a null
-			// value is rejected.
+			Op          string          `json:"op"`
+			Key         *string         `json:"key"`
+			SectionType *string         `json:"sectionType"`
 			DisplayName json.RawMessage `json:"displayName"`
-			// IconKey is the optional icon key, kept raw so an omitted member
-			// stays distinct from a present one.
-			IconKey json.RawMessage `json:"iconKey"`
-			// Column is the required target layout column.
-			Column *string `json:"column"`
-			// Index is the required zero-based target position, kept raw for
-			// decodeStructureIndex.
-			Index json.RawMessage `json:"index"`
+			IconKey     json.RawMessage `json:"iconKey"`
+			Column      *string         `json:"column"`
+			Index       json.RawMessage `json:"index"`
 		}
 		if err := strictDecodeCommand(raw, position, &command); err != nil {
 			return structureCommand{}, err
@@ -130,9 +110,7 @@ func decodeStructureCommand(raw json.RawMessage, position int) (structureCommand
 		return result, nil
 	case "deleteSection":
 		var command struct {
-			// Op is deleteSection.
-			Op string `json:"op"`
-			// Key is the required key of the section to delete.
+			Op  string  `json:"op"`
 			Key *string `json:"key"`
 		}
 		if err := strictDecodeCommand(raw, position, &command); err != nil {
@@ -144,15 +122,10 @@ func decodeStructureCommand(raw json.RawMessage, position int) (structureCommand
 		return structureCommand{Op: op, Key: *command.Key}, nil
 	case "moveSection":
 		var command struct {
-			// Op is moveSection.
-			Op string `json:"op"`
-			// Key is the required key of the section to move.
-			Key *string `json:"key"`
-			// Column is the required target layout column.
-			Column *string `json:"column"`
-			// Index is the required zero-based target position, kept raw for
-			// decodeStructureIndex.
-			Index json.RawMessage `json:"index"`
+			Op     string          `json:"op"`
+			Key    *string         `json:"key"`
+			Column *string         `json:"column"`
+			Index  json.RawMessage `json:"index"`
 		}
 		if err := strictDecodeCommand(raw, position, &command); err != nil {
 			return structureCommand{}, err
@@ -167,12 +140,9 @@ func decodeStructureCommand(raw json.RawMessage, position int) (structureCommand
 		return structureCommand{Op: op, Key: *command.Key, Column: *command.Column, Index: index, HasIndex: true, IndexOutside: outside}, nil
 	case "reorderColumn":
 		var command struct {
-			// Op is reorderColumn.
-			Op string `json:"op"`
-			// Column is the required layout column to reorder.
-			Column *string `json:"column"`
-			// Keys is the required section order for Column.
-			Keys *[]string `json:"keys"`
+			Op     string    `json:"op"`
+			Column *string   `json:"column"`
+			Keys   *[]string `json:"keys"`
 		}
 		if err := strictDecodeCommand(raw, position, &command); err != nil {
 			return structureCommand{}, err
@@ -203,9 +173,6 @@ func decodeStructureIndex(raw json.RawMessage) (int, bool, error) {
 	return 0, true, nil
 }
 
-// strictDecodeCommand decodes the command at position into target after
-// checking its property names exactly, answering request_invalid with the
-// failing path.
 func strictDecodeCommand(raw json.RawMessage, position int, target any) error {
 	if err := api.CheckJSONBinding(raw, target); err != nil {
 		var pathErr *api.JSONPathError
@@ -223,8 +190,6 @@ func strictDecodeCommand(raw json.RawMessage, position int, target any) error {
 	return nil
 }
 
-// commandInvalid answers request_invalid naming path inside the command at
-// position.
 func commandInvalid(position int, path, problem string) error {
 	failure := &api.JSONPathError{Path: path, Problem: problem}
 	return requestInvalid(failure.Under(fmt.Sprintf("commands[%d]", position)).Error())
@@ -252,33 +217,17 @@ func (s *Service) prepareStructureMutation(_ context.Context, input boundedInput
 	}}, nil
 }
 
-// structureCommand is one decoded structure command. Fields other than Op
-// are set only for the commands that take them.
 type structureCommand struct {
-	// Op is the command name: createSection, deleteSection, moveSection, or
-	// reorderColumn.
-	Op string
-	// Key is the section key a create, delete, or move command names.
-	Key string
-	// SectionType is the type of the section createSection adds.
-	SectionType string
-	// DisplayName is createSection's optional display name.
-	DisplayName optionalString
-	// IconKey is createSection's optional icon key.
-	IconKey optionalString
-	// Column is the layout column name for createSection, moveSection, and
-	// reorderColumn.
-	Column string
-	// Index is the zero-based position in Column for createSection and
-	// moveSection.
-	Index int
-	// HasIndex reports whether the command carried an index.
-	HasIndex bool
-	// IndexOutside reports that the index is an integer outside the int
-	// range.
+	Op           string
+	Key          string
+	SectionType  string
+	DisplayName  optionalString
+	IconKey      optionalString
+	Column       string
+	Index        int
+	HasIndex     bool
 	IndexOutside bool
-	// Keys is reorderColumn's requested column order.
-	Keys []string
+	Keys         []string
 }
 
 func (s *Service) handleUpdateResumeStructure(w http.ResponseWriter, r *http.Request) {

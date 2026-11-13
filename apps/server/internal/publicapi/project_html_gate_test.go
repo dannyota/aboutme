@@ -1,8 +1,5 @@
 package publicapi
 
-// Sign in to view on the project pages: one gate for every address without a
-// pass, carrying the page asked for.
-
 import (
 	"encoding/json"
 	"net/http"
@@ -27,10 +24,6 @@ func projectPass(t *testing.T, epoch int32) *http.Cookie {
 	return &http.Cookie{Name: viewpass.CookieName, Value: viewpass.Seal(gateTestKey, id, epoch, time.Now().Add(time.Hour))}
 }
 
-// TestProjectPages_GatedResumeServesOneGateWithoutAPass proves that,
-// without a pass, every project address of a gated resume serves the same
-// gate, available or not, so no one can probe which project slugs exist.
-// Only page in the provider links differs, and Content-Length with it.
 func TestProjectPages_GatedResumeServesOneGateWithoutAPass(t *testing.T) {
 	gatedHandlers := func(t *testing.T, hideNoteG bool) projectHandlers {
 		t.Helper()
@@ -118,16 +111,11 @@ func TestProjectPages_SignInToViewServesTheGateWithThePage(t *testing.T) {
 		page.Header().Get("Cache-Control") != "private, no-cache, must-revalidate" || page.Header().Get("X-Robots-Tag") != "noindex, noarchive" {
 		t.Fatalf("valid pass = %d %#v; log %s", page.Code, page.Header(), handlers.logs.String())
 	}
-	// A cached page is not reached before the pass check.
 	if gate := handlers.serve(http.MethodGet, "/ada/projects/note-g", projectPass(t, 0)); !strings.Contains(gate.Body.String(), `id="public-gate"`) {
 		t.Fatalf("old pass after a cached page = %d %q, want the gate", gate.Code, gate.Body.String())
 	}
 }
 
-// TestProjectPages_GateDoesNotBuildTheProjectPages proves no project document
-// is decoded or sanitized before the pass check: with a stored document that
-// cannot be decoded, a gated resume still serves, without a pass, the same
-// gate as for an unknown slug, and only a pass holder meets the failure.
 func TestProjectPages_GateDoesNotBuildTheProjectPages(t *testing.T) {
 	readStore := projectPageFixture(t)
 	readStore.row.SignInToView, readStore.row.ViewPassEpoch = true, 1

@@ -6,11 +6,6 @@ import (
 	"fmt"
 )
 
-// Document v3 adds optional personalDetails.details[].display and
-// customization.font.textAlign (docs/adr/0013-resume-header-and-contacts.md).
-// Lifting v2 changes only the version; lowering drops both fields, which is
-// the declared v2 emission loss.
-
 func convertV2ToV3(doc json.RawMessage) (json.RawMessage, error) {
 	value, err := decodeDocumentValue(doc)
 	if err != nil {
@@ -40,7 +35,6 @@ func encodeConverted(value map[string]any) (json.RawMessage, error) {
 	return out, nil
 }
 
-// removeV3Fields deletes every field v2 cannot represent, in place.
 func removeV3Fields(value map[string]any) error {
 	font, err := fontObject(value)
 	if err != nil {
@@ -69,11 +63,6 @@ func removeV3Fields(value map[string]any) error {
 	return nil
 }
 
-// productionEmissionLossPolicy permits exactly the declared losses of an
-// older emission: v6's project links for any older target, v5's colorScheme
-// for v4 and older, v4's photoPosition and project subtitles for v3 and
-// older, v3's display and textAlign for v2 and v1, plus the v1 font fallback
-// for v1. Everything else must survive unchanged.
 func productionEmissionLossPolicy(current, emitted, restored json.RawMessage, target int32) error {
 	if target < 1 || target > 5 {
 		return fmt.Errorf("no declared loss for target version %d", target)

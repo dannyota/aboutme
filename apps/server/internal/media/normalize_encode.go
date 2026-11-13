@@ -123,10 +123,7 @@ func resizePhoto(source image.Image, maxEdge int) *image.NRGBA {
 	return tiledCatmullRomScale(source, newWidth, newHeight)
 }
 
-// tiledCatmullRomScale separates the two axis passes into narrow tiles. The
-// x/image Scale implementation otherwise allocates a float64 temporary of
-// destination-width times source-height, which exceeds the intake RSS budget
-// at the accepted 4096-square boundary.
+// x/image/draw's Scale allocates a float64 buffer of destination width times source height, over the intake RSS budget.
 func tiledCatmullRomScale(source image.Image, newWidth, newHeight int) *image.NRGBA {
 	const tile = 32
 	sourceBounds := source.Bounds()

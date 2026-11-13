@@ -1,7 +1,3 @@
-// Package mediatest provides the standalone test-S3 harness gate for suites
-// that run against the local S3-compatible service. It mirrors
-// testutil's skip-or-fail-closed shape and, like testutil, is imported only
-// by _test.go files, never by production code.
 package mediatest
 
 import (
@@ -11,21 +7,11 @@ import (
 	"danny.vn/aboutme/apps/server/internal/media"
 )
 
-// RequireTestS3 returns the media.S3Config described by the TEST_S3_*
-// variables that `make test-media-s3-up` writes to .dev/test-s3.env. It skips the
-// calling test when TEST_S3_ENDPOINT is unset. With REQUIRE_TEST_S3=1, a
-// missing endpoint fails the test so a gate cannot pass with all S3 tests
-// skipped. Tests never fall back to deployment MEDIA_* credentials.
 func RequireTestS3(t testing.TB) media.S3Config {
 	t.Helper()
 	return requireTestS3(t, os.Getenv)
 }
 
-// requireTestS3 is RequireTestS3 with an injectable environment lookup so
-// the fail-closed arm is provable without mutating process state. Every
-// Skip/Fatal call is immediately followed by a return: the real testing.T
-// never comes back from them, and the recording fake used to prove the
-// fail-closed arm does.
 func requireTestS3(t testing.TB, getenv func(string) string) media.S3Config {
 	t.Helper()
 	endpoint := getenv("TEST_S3_ENDPOINT")
@@ -51,8 +37,6 @@ func requireTestS3(t testing.TB, getenv func(string) string) media.S3Config {
 	for _, v := range required {
 		*v.field = getenv(v.name)
 		if *v.field == "" {
-			// Names only, never values: a partially configured harness is
-			// broken, and it must fail rather than skip.
 			t.Fatalf("mediatest: TEST_S3_ENDPOINT is set but %s is missing; run 'make test-media-s3-up' and load .dev/test-s3.env", v.name)
 			return media.S3Config{}
 		}

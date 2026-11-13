@@ -1,7 +1,3 @@
-// These tests drive the real view-purpose start and callback handlers
-// against a live resume fixture, proving sign in to view never touches an
-// account, session, or CSRF token (docs/design/viewer-analytics/
-// sign-in-to-view.md "Sign-in flow"; AC-VIEW-004, AC-VIEW-005, AC-VIEW-006).
 package auth_test
 
 import (
@@ -20,8 +16,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/viewpass"
 )
 
-// viewFixture is one live resume with a fresh owner, for the view purpose's
-// start and callback tests.
 type viewFixture struct {
 	ownerID uuid.UUID
 	id      uuid.UUID
@@ -29,8 +23,6 @@ type viewFixture struct {
 	rev     int64
 }
 
-// newViewFixture creates a fresh user and a live resume with sign in to
-// view set to signInToView.
 func newViewFixture(t *testing.T, q *store.Queries, signInToView bool) viewFixture {
 	t.Helper()
 	ctx := context.Background()
@@ -57,9 +49,6 @@ func newViewFixture(t *testing.T, q *store.Queries, signInToView bool) viewFixtu
 	return viewFixture{ownerID: owner.ID, id: published.ID, slug: slug, rev: published.Revision}
 }
 
-// republish re-applies PublishResumeCAS against the fixture's current
-// revision, so a test can change live or signInToView mid-flow and continue
-// using the same fixture value.
 func (f *viewFixture) republish(t *testing.T, q *store.Queries, live, signInToView bool) {
 	t.Helper()
 	slug := f.slug
@@ -77,7 +66,6 @@ func viewStartPath(base, slug string) string {
 	return base + "?purpose=view&slug=" + url.QueryEscape(slug)
 }
 
-// TestViewStart_MalformedSlug_BadRequest covers Google and LinkedIn.
 func TestViewStart_MalformedSlug_BadRequest(t *testing.T) {
 	t.Parallel()
 	p := oidctest.NewProvider(t)
@@ -98,8 +86,6 @@ func TestViewStart_MalformedSlug_BadRequest(t *testing.T) {
 	}
 }
 
-// TestViewStart_GitHub_BadRequest proves GitHub, which the gate never
-// offers, refuses purpose=view instead of falling back to login.
 func TestViewStart_GitHub_BadRequest(t *testing.T) {
 	t.Parallel()
 	handler, _ := newTestService(t, withGitHubEndpoint("http://127.0.0.1:1"), withViewPassKey())
@@ -114,9 +100,6 @@ func TestViewStart_GitHub_BadRequest(t *testing.T) {
 	}
 }
 
-// TestViewStart_NotLiveOrSwitchOff_RedirectsWithNoTransaction covers a
-// missing slug, a live resume with the switch off, and an unpublished resume
-// with the switch on.
 func TestViewStart_NotLiveOrSwitchOff_RedirectsWithNoTransaction(t *testing.T) {
 	t.Parallel()
 	p := oidctest.NewProvider(t)
@@ -151,8 +134,6 @@ func TestViewStart_NotLiveOrSwitchOff_RedirectsWithNoTransaction(t *testing.T) {
 	}
 }
 
-// TestViewStart_ScopeIsOpenIDOnly proves both providers request exactly
-// scope=openid for the view purpose (AC-VIEW-004).
 func TestViewStart_ScopeIsOpenIDOnly(t *testing.T) {
 	t.Parallel()
 	p := oidctest.NewProvider(t)
@@ -177,15 +158,12 @@ func TestViewStart_ScopeIsOpenIDOnly(t *testing.T) {
 	}
 }
 
-// doViewCallback drives the Google or LinkedIn callback for a view-purpose
-// transaction.
 func doViewCallback(t *testing.T, handler http.Handler, callbackPath, code, state string, cookies ...*http.Cookie) *http.Response {
 	t.Helper()
 	path := callbackPath + "?code=" + url.QueryEscape(code) + "&state=" + url.QueryEscape(state)
 	return doGet(t, handler, path, cookies...) //nolint:bodyclose // doGet closes the body itself before returning.
 }
 
-// assertNoPassCookie fails if resp set a __Host-view-pass cookie.
 func assertNoPassCookie(t *testing.T, resp *http.Response) {
 	t.Helper()
 	if c := extractCookie(resp, viewpass.CookieName); c != nil {
@@ -193,8 +171,6 @@ func assertNoPassCookie(t *testing.T, resp *http.Response) {
 	}
 }
 
-// assertValidPassCookie fails unless resp carries a pass valid for
-// resumeID at epoch.
 func assertValidPassCookie(t *testing.T, resp *http.Response, key []byte, resumeID uuid.UUID, epoch int32) {
 	t.Helper()
 	c := extractCookie(resp, viewpass.CookieName)
@@ -209,7 +185,6 @@ func assertValidPassCookie(t *testing.T, resp *http.Response, key []byte, resume
 	}
 }
 
-// viewPassKeyBytes decodes the fixed test VIEW_PASS_KEY.
 func viewPassKeyBytes(t *testing.T) []byte {
 	t.Helper()
 	key, err := base64.RawURLEncoding.Strict().DecodeString(testViewPassKey)
@@ -219,8 +194,6 @@ func viewPassKeyBytes(t *testing.T) []byte {
 	return key
 }
 
-// TestGoogleViewCallback_LiveSwitchOn_SetsPassAndNeverTouchesAccounts is the
-// core no-account, no-session proof for a subject with no existing account.
 func TestGoogleViewCallback_LiveSwitchOn_SetsPassAndNeverTouchesAccounts(t *testing.T) {
 	t.Parallel()
 	p := oidctest.NewProvider(t)
@@ -257,9 +230,6 @@ func TestGoogleViewCallback_LiveSwitchOn_SetsPassAndNeverTouchesAccounts(t *test
 	assertNoIdentity(t, q, subject)
 }
 
-// TestLinkedInViewCallback_NoNonce_SetsPassAndNeverTouchesAccounts proves the
-// view purpose accepts LinkedIn's nonce-less token exactly like login, but
-// still never resolves an account (AC-VIEW-004, AC-VIEW-005).
 func TestLinkedInViewCallback_NoNonce_SetsPassAndNeverTouchesAccounts(t *testing.T) {
 	t.Parallel()
 	p := oidctest.NewProvider(t)
@@ -271,7 +241,7 @@ func TestLinkedInViewCallback_NoNonce_SetsPassAndNeverTouchesAccounts(t *testing
 	state := mustQueryParam(t, start.Header.Get("Location"), "state")
 
 	subject := uniqueLinkedInSubject(t)
-	p.RegisterCode("code-view-li", oidctest.Claims{Subject: subject}) // no Nonce: LinkedIn's observed shape.
+	p.RegisterCode("code-view-li", oidctest.Claims{Subject: subject})
 
 	resp := doViewCallback(t, handler, auth.LinkedInCallbackPath, "code-view-li", state, txCookie) //nolint:bodyclose // doViewCallback -> doGet closes the body itself before returning.
 	if resp.StatusCode != http.StatusFound {
@@ -285,16 +255,12 @@ func TestLinkedInViewCallback_NoNonce_SetsPassAndNeverTouchesAccounts(t *testing
 	assertNoLinkedInIdentity(t, q, subject)
 }
 
-// TestGoogleViewCallback_SubjectAlreadyHasAccount_StillNoAccountAccess
-// proves a subject that already owns an account still gets no session and
-// causes no read of that account (AC-VIEW-006).
 func TestGoogleViewCallback_SubjectAlreadyHasAccount_StillNoAccountAccess(t *testing.T) {
 	t.Parallel()
 	p := oidctest.NewProvider(t)
 	handler, q := newTestService(t, withGoogleIssuer(p.URL), withViewPassKey())
 	f := newViewFixture(t, q, true)
 
-	// An existing account under a distinct provider identity.
 	subject := uniqueSubject(t)
 	email := uniqueEmail(t)
 	existingUser, err := q.CreateUser(context.Background(), store.CreateUserParams{Email: email, Name: "Existing"})
@@ -339,8 +305,6 @@ func TestGoogleViewCallback_SubjectAlreadyHasAccount_StillNoAccountAccess(t *tes
 	}
 }
 
-// TestGoogleViewCallback_SwitchWentOff_RedirectsWithNoPass covers the switch
-// turning off between start and callback.
 func TestGoogleViewCallback_SwitchWentOff_RedirectsWithNoPass(t *testing.T) {
 	t.Parallel()
 	p := oidctest.NewProvider(t)
@@ -352,7 +316,7 @@ func TestGoogleViewCallback_SwitchWentOff_RedirectsWithNoPass(t *testing.T) {
 	state := mustQueryParam(t, start.Header.Get("Location"), "state")
 	nonce := mustQueryParam(t, start.Header.Get("Location"), "nonce")
 
-	f.republish(t, q, true, false) // still live, switch off.
+	f.republish(t, q, true, false)
 
 	p.RegisterCode("code-switch-off", oidctest.Claims{Subject: uniqueSubject(t), Nonce: nonce})
 	resp := doViewCallback(t, handler, auth.GoogleCallbackPath, "code-switch-off", state, txCookie) //nolint:bodyclose // doViewCallback -> doGet closes the body itself before returning.
@@ -363,8 +327,6 @@ func TestGoogleViewCallback_SwitchWentOff_RedirectsWithNoPass(t *testing.T) {
 	assertNoPassCookie(t, resp)
 }
 
-// TestGoogleViewCallback_Unpublished_RedirectsHome covers the resume going
-// not-live between start and callback.
 func TestGoogleViewCallback_Unpublished_RedirectsHome(t *testing.T) {
 	t.Parallel()
 	p := oidctest.NewProvider(t)
@@ -376,7 +338,7 @@ func TestGoogleViewCallback_Unpublished_RedirectsHome(t *testing.T) {
 	state := mustQueryParam(t, start.Header.Get("Location"), "state")
 	nonce := mustQueryParam(t, start.Header.Get("Location"), "nonce")
 
-	f.republish(t, q, false, true) // unpublished.
+	f.republish(t, q, false, true)
 
 	p.RegisterCode("code-unpublished", oidctest.Claims{Subject: uniqueSubject(t), Nonce: nonce})
 	resp := doViewCallback(t, handler, auth.GoogleCallbackPath, "code-unpublished", state, txCookie) //nolint:bodyclose // doViewCallback -> doGet closes the body itself before returning.
@@ -387,9 +349,6 @@ func TestGoogleViewCallback_Unpublished_RedirectsHome(t *testing.T) {
 	assertNoPassCookie(t, resp)
 }
 
-// TestGoogleViewCallback_SlugChanged_RedirectsToCurrentSlug proves the
-// callback redirects to the resume's current slug, not the one requested at
-// start, and still sets a pass (a pass names the resume ID, not the slug).
 func TestGoogleViewCallback_SlugChanged_RedirectsToCurrentSlug(t *testing.T) {
 	t.Parallel()
 	p := oidctest.NewProvider(t)
@@ -414,9 +373,6 @@ func TestGoogleViewCallback_SlugChanged_RedirectsToCurrentSlug(t *testing.T) {
 	assertValidPassCookie(t, resp, viewPassKeyBytes(t), f.id, 1)
 }
 
-// TestGoogleViewCallback_StateMismatch_RedirectsToGateFailed proves a
-// failure once the transaction is read redirects to the gate, not the login
-// page (AC-VIEW-005; design "Sign-in flow").
 func TestGoogleViewCallback_StateMismatch_RedirectsToGateFailed(t *testing.T) {
 	t.Parallel()
 	p := oidctest.NewProvider(t)
@@ -443,8 +399,6 @@ func TestGoogleViewCallback_StateMismatch_RedirectsToGateFailed(t *testing.T) {
 	assertNoPassCookie(t, resp)
 }
 
-// TestGoogleViewCallback_ConsentDenied_RedirectsToGateCancelled covers the
-// cancel outcome's distinct signin value.
 func TestGoogleViewCallback_ConsentDenied_RedirectsToGateCancelled(t *testing.T) {
 	t.Parallel()
 	p := oidctest.NewProvider(t)
@@ -469,14 +423,11 @@ func TestGoogleViewCallback_ConsentDenied_RedirectsToGateCancelled(t *testing.T)
 	}
 }
 
-// TestViewCallback_MissingTransactionCookie_GoesToLoginPage proves a
-// failure before the transaction is read names no resume and behaves like
-// any other purpose's missing-cookie failure.
 func TestViewCallback_MissingTransactionCookie_GoesToLoginPage(t *testing.T) {
 	t.Parallel()
 	p := oidctest.NewProvider(t)
 	handler, _ := newTestService(t, withGoogleIssuer(p.URL), withViewPassKey())
 
 	resp := doGet(t, handler, auth.GoogleCallbackPath+"?code=x&state=y") //nolint:bodyclose // doGet closes the body itself before returning.
-	assertRejected(t, resp)                                              // asserts the /login redirect path.
+	assertRejected(t, resp)
 }

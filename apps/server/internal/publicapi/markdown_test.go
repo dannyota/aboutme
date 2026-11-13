@@ -22,7 +22,6 @@ import (
 )
 
 func TestMarkdownHandlerRejectsClosedAdmission(t *testing.T) {
-	// This fails if a pre-revocation cache value can bypass the live-state lease.
 	slug, reader, coordinator := formatTestReader(t, true)
 	cache, err := publiccache.New(4, time.Minute, time.Now)
 	if err != nil {
@@ -82,7 +81,6 @@ func TestMarkdownHandlerClassifiesReaderAbsenceAndFailure(t *testing.T) {
 }
 
 func TestMarkdownHandlerRequiresDiscovery(t *testing.T) {
-	// This fails if a live noindex resume can receive Markdown.
 	slug, reader, _ := formatTestReader(t, false)
 	cache, err := publiccache.New(4, time.Minute, time.Now)
 	if err != nil {
@@ -100,7 +98,6 @@ func TestMarkdownHandlerRequiresDiscovery(t *testing.T) {
 }
 
 func TestMarkdownHandlerHoldsLeaseThroughResponseWrite(t *testing.T) {
-	// This fails if revocation can finish while an admitted Markdown body is still writing.
 	slug, reader, coordinator := formatTestReader(t, true)
 	cache, err := publiccache.New(4, time.Minute, time.Now)
 	if err != nil {

@@ -21,9 +21,6 @@ func TestPublicStateSeedIsSingletonAndPositive(t *testing.T) {
 	if !singleton {
 		t.Fatal("public_state.singleton = false, want true")
 	}
-	// The exact seed value (1) only holds for a freshly migrated database;
-	// against the shared database the generation has legitimately advanced,
-	// so assert only positivity here.
 	if generation < 1 {
 		t.Fatalf("public_state.discovery_generation = %d, want positive", generation)
 	}

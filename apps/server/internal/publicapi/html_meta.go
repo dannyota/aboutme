@@ -10,12 +10,9 @@ import (
 	"danny.vn/aboutme/apps/server/internal/publicresume"
 )
 
-// formatDetectionContent stops Safari from auto-linking digit runs, such as
-// date ranges, into tel: links.
+// format-detection stops Safari auto-linking digit runs, such as date ranges, into tel: links.
 const formatDetectionContent = "telephone=no, date=no, address=no, email=no"
 
-// publicRenderRequest is the closed render input for one admitted public
-// resume and the head its page must carry.
 func publicRenderRequest(resume publicresume.PublicResume, discoverable bool, page publicPage, origin publicresume.PublicOrigin) directrender.PublicRenderRequest {
 	return directrender.PublicRenderRequest{
 		PublicResume:     resume,
@@ -26,15 +23,13 @@ func publicRenderRequest(resume publicresume.PublicResume, discoverable bool, pa
 		FaviconHref:      page.FaviconHref,
 		Preview:          page.Preview,
 		JoinInvite:       page.JoinInvite,
+		ProjectLinks:     page.ProjectLinks,
+		ProjectsURL:      page.ProjectsURL,
 	}
 }
 
-// metaKey names one head meta element by its naming attribute ("name" or
-// "property") and that attribute's value.
 type metaKey struct{ attribute, name string }
 
-// previewMetaKeys is every preview meta element a live resume page may carry,
-// in the order of docs/design/link-previews.md, "Page head".
 var previewMetaKeys = []metaKey{
 	{"name", "description"},
 	{"property", "og:type"},
@@ -53,8 +48,6 @@ var previewMetaKeys = []metaKey{
 	{"name", "twitter:image:alt"},
 }
 
-// expectedPreviewMeta is the exact content of each preview meta element the
-// page must carry once. og:locale is absent when the language maps to none.
 func expectedPreviewMeta(resume publicresume.PublicResume, preview previewmeta.Meta, origin publicresume.PublicOrigin) map[metaKey]string {
 	imageURL := preview.ImageURL
 	if imageURL == "" {
@@ -82,13 +75,8 @@ func expectedPreviewMeta(resume publicresume.PublicResume, preview previewmeta.M
 	return expected
 }
 
-// headMeta checks every meta element of a page: the charset, the viewport, at
-// most one format-detection element, and each expected preview element
-// exactly once with the exact value Go computed.
 type headMeta struct {
-	expected map[metaKey]string
-	// optional names expected elements a page may omit; finish does not
-	// report them missing.
+	expected                           map[metaKey]string
 	optional                           map[metaKey]bool
 	seen                               map[metaKey]int
 	charset, viewport, formatDetection int
@@ -98,7 +86,6 @@ func newHeadMeta(resume publicresume.PublicResume, preview previewmeta.Meta, ori
 	return &headMeta{expected: expectedPreviewMeta(resume, preview, origin), seen: map[metaKey]int{}}
 }
 
-// visit returns the closed rule a meta element breaks, or "".
 func (m *headMeta) visit(node *html.Node) string {
 	if len(node.Attr) == 1 && attributeCount(node, "charset") == 1 && attribute(node, "charset") == "utf-8" {
 		m.charset++
@@ -125,7 +112,6 @@ func (m *headMeta) visit(node *html.Node) string {
 		m.viewport++
 		return ""
 	case metaKey{"name", "format-detection"}:
-		// At most one; zero keeps HTML from a renderer without the tag valid.
 		if content != formatDetectionContent {
 			return "meta_format_detection"
 		}
@@ -149,8 +135,6 @@ func (m *headMeta) visit(node *html.Node) string {
 	return ""
 }
 
-// finish returns the closed rule the page's meta elements break as a whole,
-// or "".
 func (m *headMeta) finish() string {
 	if m.formatDetection > 1 {
 		return "meta_format_detection"
@@ -179,8 +163,6 @@ func knownPreviewMeta(key metaKey) bool {
 	return false
 }
 
-// metaRule names the rule for one preview meta element. Its name comes from
-// the closed previewMetaKeys list, so the rule never carries resume content.
 func metaRule(key metaKey) string {
 	return "meta_" + strings.NewReplacer(":", "_").Replace(key.name)
 }

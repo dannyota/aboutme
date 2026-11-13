@@ -6,15 +6,22 @@ import type { components } from '../../api/generated/openapi';
 import LayoutColumns from '../resume/LayoutColumns.vue';
 import ResumeHeader from '../resume/ResumeHeader.vue';
 import { ResumeLngKey } from '../resume/formatDate';
+import {
+  NO_PROJECT_LINKS,
+  type ProjectLinkMap,
+  ProjectLinksKey,
+} from '../resume/projectLinks';
 import { resolveRenderModel } from '../resume/resolveRenderModel';
+import PublicDownloadLink from './PublicDownloadLink.vue';
 import PublicMark from './PublicMark.vue';
 
 type PublicResume = components['schemas']['PublicResume'];
 
 const props = defineProps<{
   publicResume: PublicResume;
-  /** The canonical home page, `<origin>/`, which the page credit links. */
   homeHref: string;
+  projectsUrl?: string;
+  projectLinks?: ProjectLinkMap;
 }>();
 
 const document = computed(() => {
@@ -63,13 +70,17 @@ const model = computed(() => resolveRenderModel(document.value, {
     : { photoUrl: props.publicResume.document.personalDetails.photo.url }),
 }));
 provide(ResumeLngKey, computed(() => model.value.lng));
+const projectLinks = computed(() => props.projectLinks ?? NO_PROJECT_LINKS);
+provide(ProjectLinksKey, projectLinks);
 
-// The page chrome follows the resume's language, like the resume itself.
 const vietnamese = computed(() =>
   props.publicResume.lng.split('-')[0]?.toLowerCase() === 'vi');
 const downloadLabel = computed(() =>
   vietnamese.value ? 'Tải PDF' : 'Download PDF');
-// The server's public HTML validator requires exactly this credit anchor.
+const projectsLabel = computed(() =>
+  vietnamese.value ? 'Dự án' : 'Projects');
+const showProjects = computed(() =>
+  props.projectsUrl !== undefined && projectLinks.value.size > 0);
 const creditLabel = computed(() =>
   vietnamese.value ? 'Tạo bằng aboutme.vn' : 'Built with aboutme.vn');
 const downloadHref = computed(() =>
@@ -102,25 +113,25 @@ const rootStyle = computed(() => ({
             :href="homeHref"
           >{{ creditLabel }}</a>
         </span>
-        <a
-          v-if="publicResume.downloadEnabled"
-          class="public-download"
+        <span
+          v-if="showProjects"
+          class="public-actions"
+        >
+          <a
+            class="public-projects"
+            :href="projectsUrl"
+          >{{ projectsLabel }}</a>
+          <PublicDownloadLink
+            v-if="publicResume.downloadEnabled"
+            :href="downloadHref"
+            :label="downloadLabel"
+          />
+        </span>
+        <PublicDownloadLink
+          v-else-if="publicResume.downloadEnabled"
           :href="downloadHref"
-        ><svg
-          aria-hidden="true"
-          fill="none"
-          focusable="false"
-          height="16"
-          stroke="currentColor"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          stroke-width="2"
-          viewBox="0 0 24 24"
-          width="16"
-          xmlns="http://www.w3.org/2000/svg"
-        ><path d="M12 15V3" /><path
-          d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"
-        /><path d="m7 10 5 5 5-5" /></svg><span>{{ downloadLabel }}</span></a>
+          :label="downloadLabel"
+        />
       </div>
     </div>
     <div class="public-measure">

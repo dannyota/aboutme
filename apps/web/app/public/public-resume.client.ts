@@ -64,12 +64,30 @@ function canonicalHomeHref(): string {
   }
 }
 
-function publicResumeRoot(publicResume: ShallowRef<PublicResume>) {
+function projectEntryPoints(resume: PublicResume, homeHref: string) {
+  const projectsUrl = `${homeHref}${resume.slug}/projects`;
+  return {
+    projectsUrl,
+    projectLinks: new Map((resume.projectLinks ?? []).flatMap((link) =>
+      link.url === `${projectsUrl}/${link.projectSlug}`
+        ? [[link.entryId, link.url] as const]
+        : [])),
+  };
+}
+
+function publicResumeRoot(
+  publicResume: ShallowRef<PublicResume>,
+  root: HTMLElement,
+) {
   const homeHref = canonicalHomeHref();
+  const entryPoints = root.hasAttribute('data-project-links');
   return {
     render: () => h(PublicResumeApp, {
       publicResume: publicResume.value,
       homeHref,
+      ...(entryPoints
+        ? projectEntryPoints(publicResume.value, homeHref)
+        : {}),
     }),
   };
 }
@@ -77,7 +95,7 @@ function publicResumeRoot(publicResume: ShallowRef<PublicResume>) {
 const vueMounter: PublicResumeMounter = {
   hydrate: async (value, root) => {
     const publicResume = shallowRef(value);
-    createSSRApp(publicResumeRoot(publicResume)).mount(root);
+    createSSRApp(publicResumeRoot(publicResume, root)).mount(root);
     mountedRoots.set(root, publicResume);
     await nextTick();
   },
@@ -89,7 +107,7 @@ const vueMounter: PublicResumeMounter = {
       return;
     }
     const publicResume = shallowRef(value);
-    createApp(publicResumeRoot(publicResume)).mount(root);
+    createApp(publicResumeRoot(publicResume, root)).mount(root);
     mountedRoots.set(root, publicResume);
     await nextTick();
   },

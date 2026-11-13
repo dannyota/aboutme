@@ -1,10 +1,5 @@
 package resumeapi
 
-// Project replacement over linking resumes: when the stored slug or document
-// changes, every live resume that links the project advances its revision,
-// without a document change, under the planned-set pattern in
-// project_plan.go. Drafts serve no public page, so they never advance here.
-
 import (
 	"context"
 	"errors"
@@ -17,39 +12,21 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// ProjectReplacement replaces one library project in one idempotent
-// transaction.
 type ProjectReplacement struct {
-	// UserID is the owner of the project and the resumes.
-	UserID uuid.UUID
-	// ProjectID is the replaced project.
-	ProjectID uuid.UUID
-	// Operation is the hex operation digest keying the idempotency record.
-	Operation string
-	// Key is the request's Idempotency-Key.
-	Key uuid.UUID
-	// RequestHash is the request fingerprint stored with the record.
+	UserID      uuid.UUID
+	ProjectID   uuid.UUID
+	Operation   string
+	Key         uuid.UUID
 	RequestHash [32]byte
-	// Change compares the stored project with the replacement. It runs on
-	// the pool to plan, and again in the transaction after Authorize to
-	// recheck the plan.
-	Change func(context.Context, *store.Queries) (project.Change, error)
-	// Authorize runs first in the owner-locked transaction: it rechecks the
-	// caller, the project precondition and, for a slug change, recent
-	// reauthentication.
-	Authorize func(context.Context, *store.Queries) error
-	// Replace runs last in the transaction, after every linking live resume
-	// advanced: it writes the project and returns the response to store.
-	Replace func(context.Context, *store.Queries, []ChangedResume) (resume.StoredResponse, error)
+	Change      func(context.Context, *store.Queries) (project.Change, error)
+	Authorize   func(context.Context, *store.Queries) error
+	Replace     func(context.Context, *store.Queries, []ChangedResume) (resume.StoredResponse, error)
 }
 
 type resumeRevisionAdvancer interface {
 	AdvanceRevisionTx(context.Context, *store.Queries, uuid.UUID, uuid.UUID, int64) (resume.Resume, error)
 }
 
-// ReplaceProject runs a project replacement. A slug change revokes the
-// public requests of each linking live resume, a document-only change fences
-// them without draining, and an unchanged replacement advances no resume.
 func (s *Service) ReplaceProject(ctx context.Context, replacement ProjectReplacement) (resume.ExecuteResult, error) {
 	notAttempted := resume.ExecuteResult{Outcome: resume.CommitNotAttempted}
 	reader, readable := s.resumes.(resumePoolReader)
@@ -78,10 +55,6 @@ func (s *Service) ReplaceProject(ctx context.Context, replacement ProjectReplace
 	})
 }
 
-// preflightChange compares the project on the pool to plan the fences. A
-// preflight that cannot compare, such as for a stale revision, plans no
-// change: the transaction then gives the authoritative answer, a replay or
-// the error, and replans if its own comparison finds resumes to advance.
 func (s *Service) preflightChange(ctx context.Context, replacement ProjectReplacement) project.Change {
 	change, err := replacement.Change(ctx, store.New(s.recoveryPool))
 	if err != nil {
@@ -90,9 +63,6 @@ func (s *Service) preflightChange(ctx context.Context, replacement ProjectReplac
 	return change
 }
 
-// replaceProjectTx recomputes the change and its set under the owner lock,
-// requires the planned set with the planned fences, advances each resume's
-// revision by one, and then writes the project.
 func (s *Service) replaceProjectTx(ctx context.Context, qtx *store.Queries, lister resumeTxLister, advancer resumeRevisionAdvancer,
 	replacement ProjectReplacement, planned plannedSet,
 ) (resume.StoredResponse, publicstate.CommittedState, error) {
@@ -139,9 +109,6 @@ func (s *Service) replaceProjectTx(ctx context.Context, qtx *store.Queries, list
 	return response, state, nil
 }
 
-// replacementSet plans the live resumes that link projectID, in id order:
-// a slug change revokes their public requests, and a document change fences
-// them without draining.
 func replacementSet(owned []resume.Resume, projectID uuid.UUID, change project.Change) (plannedSet, error) {
 	linking, err := linkingResumes(owned, projectID)
 	if err != nil {
@@ -162,8 +129,6 @@ func replacementSet(owned []resume.Resume, projectID uuid.UUID, change project.C
 	return set, nil
 }
 
-// sameFence reports whether two plans fence the same resumes at the same
-// revisions with the same class.
 func sameFence(current, planned publicstate.Plan) bool {
 	if current.DiscoveryGeneration != nil || planned.DiscoveryGeneration != nil || len(current.Resumes) != len(planned.Resumes) {
 		return false

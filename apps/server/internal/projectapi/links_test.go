@@ -27,8 +27,6 @@ func minimalResumeDocument(t *testing.T) schema.Resume {
 	return doc
 }
 
-// seedLinkedResume stores a resume whose project section names projectID,
-// beside one unlinked entry, and makes it live when slug is not empty.
 func seedLinkedResume(t *testing.T, h *harness, projectID uuid.UUID, slug string) resume.Resume {
 	t.Helper()
 	title := "Atlas, my words"
@@ -73,7 +71,6 @@ func reauthenticate(t *testing.T, h *harness) {
 	}
 }
 
-// createOther adds a second library project with its own slug.
 func createOther(t *testing.T, h *harness) string {
 	t.Helper()
 	r := h.request(t, http.MethodPost, "/api/v1/projects", `{"slug":"other","defaultLanguage":"en","text":{"en":{"name":"Other"}}}`, uuid.NewString(), "")

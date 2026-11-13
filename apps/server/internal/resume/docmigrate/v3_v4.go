@@ -6,12 +6,6 @@ import (
 	"fmt"
 )
 
-// Document v4 adds optional customization.header.photoPosition and an
-// optional subtitle on project entries
-// (docs/adr/0013-resume-header-and-contacts.md). Lifting v3
-// changes only the version; lowering drops both fields, which is the declared
-// v3 emission loss.
-
 func convertV3ToV4(doc json.RawMessage) (json.RawMessage, error) {
 	value, err := decodeDocumentValue(doc)
 	if err != nil {
@@ -33,8 +27,6 @@ func convertV4ToV3(doc json.RawMessage) (json.RawMessage, error) {
 	return encodeConverted(value)
 }
 
-// removeV4Fields deletes every field v3 cannot represent, in place. The
-// header is optional, so a document without one has no position to drop.
 func removeV4Fields(value map[string]any) error {
 	customization, ok := value["customization"].(map[string]any)
 	if !ok {

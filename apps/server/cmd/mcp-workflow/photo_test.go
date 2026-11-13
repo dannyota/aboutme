@@ -90,8 +90,6 @@ func encodeJPEG(t *testing.T, value image.Image) []byte {
 	return encoded.Bytes()
 }
 
-// countDecodes replaces the pixel decoders for one test and reports how many
-// full decodes ran.
 func countDecodes(t *testing.T) *int {
 	t.Helper()
 	count := 0

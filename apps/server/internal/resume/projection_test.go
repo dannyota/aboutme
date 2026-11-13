@@ -1,9 +1,3 @@
-// projection_test.go proves against a live database that reads project without
-// writing, strict decode is load-bearing, and List fails atomically when one
-// row cannot be projected or decoded.
-//
-// Every identifier here is prefixed `pj` so this file never collides with
-// the sibling suites that share package resume_test.
 package resume_test
 
 import (
@@ -28,10 +22,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 	"danny.vn/aboutme/apps/server/internal/testutil"
 )
-
-// --- synthetic two-version projector (see docmigrate_test.go for the
-// rationale: v7 is the immutable v6 schema retargeted, so a projected
-// document still strict-decodes into the CURRENT Go types) ---
 
 const pjNextPrefix = "v7! "
 
@@ -128,9 +118,6 @@ func pjHeadlineConverter(t *testing.T, target int32, add bool) docmigrate.Conver
 	}
 }
 
-// pjSyntheticProjector makes every ordinary current-v2 row old under a
-// synthetic current-v3 projector. It isolates projection behavior from the
-// production v1-to-v2 font converter.
 func pjSyntheticProjector(t *testing.T) *docmigrate.Projector {
 	t.Helper()
 	p, err := docmigrate.NewProjector(
@@ -149,9 +136,6 @@ func pjSyntheticProjector(t *testing.T) *docmigrate.Projector {
 	return p
 }
 
-// pjStore builds a resume.Store backed by proj against the live test
-// database, returning the raw pool too so a test can observe and corrupt
-// rows without going through the store's own checks.
 func pjStore(t *testing.T, proj *docmigrate.Projector) (*resume.Store, *store.Queries, *store.Pool, context.Context) {
 	t.Helper()
 	dsn := testutil.RequireMigratedTestDatabaseURL(t)
@@ -168,9 +152,6 @@ func pjStore(t *testing.T, proj *docmigrate.Projector) (*resume.Store, *store.Qu
 	return resume.NewStore(pool, proj), store.New(pool), pool, ctx
 }
 
-// pjRowSnapshot is every byte of a resumes row a read must leave alone: the
-// three stored jsonb parts rendered as text, the row's own schema_version,
-// its revision, and updated_at.
 type pjRowSnapshot struct {
 	PersonalDetails string
 	Content         string
@@ -223,8 +204,6 @@ func pjHeadline(t *testing.T, doc schema.Resume) string {
 	return *doc.PersonalDetails.Headline
 }
 
-// --- Reads project and never write ---
-
 func TestStore_Integration_Get_ProjectsOldVersionRow_WithoutWriting(t *testing.T) {
 	t.Parallel()
 	s, q, pool, ctx := pjStore(t, pjSyntheticProjector(t))
@@ -258,9 +237,6 @@ func TestStore_Integration_Get_ProjectsOldVersionRow_WithoutWriting(t *testing.T
 
 	pjAssertRowUntouched(t, before, pjSnapshot(ctx, t, pool, created.ID), "after Get")
 
-	// The same must hold under concurrency: a read is pure, so no number of
-	// simultaneous readers may produce a write, a revision bump, or a
-	// changed updated_at.
 	const readers = 16
 	var wg sync.WaitGroup
 	errs := make([]error, readers)
@@ -286,7 +262,6 @@ func TestStore_Integration_Get_ProjectsOldVersionRow_WithoutWriting(t *testing.T
 	}
 	pjAssertRowUntouched(t, before, pjSnapshot(ctx, t, pool, created.ID), "after 16 concurrent Gets")
 
-	// List projects the same way and is equally pure.
 	list, err := s.List(ctx, userID)
 	if err != nil {
 		t.Fatalf("List() error: %v", err)
@@ -300,9 +275,6 @@ func TestStore_Integration_Get_ProjectsOldVersionRow_WithoutWriting(t *testing.T
 	pjAssertRowUntouched(t, before, pjSnapshot(ctx, t, pool, created.ID), "after List")
 }
 
-// TestStore_Integration_Get_UnknownStoredVersion_FailsClosed: a row claiming
-// a version no converter chain reaches must fail the read, never be served
-// as if it were current.
 func TestStore_Integration_Get_UnknownStoredVersion_FailsClosed(t *testing.T) {
 	t.Parallel()
 	s, q, pool, ctx := pjStore(t, docmigrate.NewIdentityProjector())
@@ -321,13 +293,6 @@ func TestStore_Integration_Get_UnknownStoredVersion_FailsClosed(t *testing.T) {
 	}
 }
 
-// --- The strict decode on the read path is load-bearing ---
-
-// TestStore_Integration_Get_UnknownFieldInStoredPart_FailsClosed is the
-// DISCRIMINATING test for resume.DecodeParts on the read path. Swap
-// projectRow's DecodeParts for a plain json.Unmarshal and this is the test
-// that fails: the injected field is silently dropped on read, and the next
-// SaveDocument would then persist the truncated document.
 func TestStore_Integration_Get_UnknownFieldInStoredPart_FailsClosed(t *testing.T) {
 	t.Parallel()
 	s, q, pool, ctx := pjStore(t, docmigrate.NewIdentityProjector())
@@ -352,11 +317,6 @@ func TestStore_Integration_Get_UnknownFieldInStoredPart_FailsClosed(t *testing.T
 	}
 }
 
-// --- List is fail-closed and atomic ---
-
-// TestStore_Integration_List_OneCorruptRow_FailsWholeList: a partial list
-// would make corruption look like the user deleting a resume, so one
-// undecodable row fails the whole call with no partial result.
 func TestStore_Integration_List_OneCorruptRow_FailsWholeList(t *testing.T) {
 	t.Parallel()
 	s, q, pool, ctx := pjStore(t, docmigrate.NewIdentityProjector())
@@ -379,7 +339,6 @@ func TestStore_Integration_List_OneCorruptRow_FailsWholeList(t *testing.T) {
 		t.Fatalf("List() before corruption returned %d rows, want 3", len(list))
 	}
 
-	// Corrupt exactly the middle row.
 	if _, execErr := pool.Exec(ctx,
 		`UPDATE resumes SET content = content || '{"__corrupt": {"sectionType": "nope"}}'::jsonb WHERE id = $1`,
 		ids[1]); execErr != nil {
@@ -395,9 +354,6 @@ func TestStore_Integration_List_OneCorruptRow_FailsWholeList(t *testing.T) {
 	}
 }
 
-// pjFixturesDirExists keeps this file honest about the fixture corpus it
-// leans on through validDocForTest: a missing fixtures directory must fail
-// loudly here rather than as a confusing decode error inside a live test.
 func TestProjection_FixtureCorpusPresent(t *testing.T) {
 	t.Parallel()
 	dir, err := filepath.Abs(filepath.Join("..", "..", "..", "..", "packages", "schema", "fixtures"))

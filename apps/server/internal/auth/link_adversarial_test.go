@@ -1,6 +1,3 @@
-// These adversarial tests cover email-merge rejection, link ownership,
-// idempotency, recent reauthentication, and reauthentication isolation. See
-// docs/design/security.md.
 package auth_test
 
 import (
@@ -24,12 +21,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/testutil"
 )
 
-// ============================================================================
-// Shared per-provider login-attempt helpers
-// ============================================================================
-
-// googleLoginAttempt drives a fresh Google login and returns its subject and
-// response.
 func googleLoginAttempt(t *testing.T, handler http.Handler, p *oidctest.Provider, email string) (subject string, resp *http.Response) {
 	t.Helper()
 
@@ -46,8 +37,6 @@ func googleLoginAttempt(t *testing.T, handler http.Handler, p *oidctest.Provider
 	return subject, resp
 }
 
-// linkedInLoginAttempt uses a verified email so LinkedIn's registration rule
-// cannot confound collision assertions.
 func linkedInLoginAttempt(t *testing.T, handler http.Handler, p *oidctest.Provider, email string) (subject string, resp *http.Response) {
 	t.Helper()
 
@@ -64,16 +53,12 @@ func linkedInLoginAttempt(t *testing.T, handler http.Handler, p *oidctest.Provid
 	return subject, resp
 }
 
-// githubIdentity is a single-use account because gitHubStub fixes its code,
-// user, and emails at construction.
 type githubIdentity struct {
 	stub    *gitHubStub
 	code    string
-	subject string // strconv.FormatInt(userID, 10) -- identities.provider_user_id's stored shape (github.go).
+	subject string
 }
 
-// newGitHubIdentity builds a fresh, single-use GitHub account fixture
-// whose one verified primary email is exactly email.
 func newGitHubIdentity(t *testing.T, email string) *githubIdentity {
 	t.Helper()
 
@@ -88,8 +73,6 @@ func newGitHubIdentity(t *testing.T, email string) *githubIdentity {
 	return &githubIdentity{stub: stub, code: code, subject: strconv.FormatInt(userID, 10)}
 }
 
-// githubAttempt requires handler to be constructed with gi.stub because the
-// endpoint override is immutable.
 func githubAttempt(t *testing.T, handler http.Handler, gi *githubIdentity) (subject string, resp *http.Response) {
 	t.Helper()
 
@@ -98,9 +81,6 @@ func githubAttempt(t *testing.T, handler http.Handler, gi *githubIdentity) (subj
 	return gi.subject, resp
 }
 
-// loginVia dispatches to the right provider-specific login-attempt
-// helper. gh is nil unless provider == auth.ProviderGitHub, in which case
-// it must be the fixture already wired into handler's Service.
 func loginVia(t *testing.T, handler http.Handler, p *oidctest.Provider, gh *githubIdentity, provider auth.Provider, email string) (subject string, resp *http.Response) {
 	t.Helper()
 
@@ -120,7 +100,6 @@ func loginVia(t *testing.T, handler http.Handler, p *oidctest.Provider, gh *gith
 	}
 }
 
-// assertNoIdentityForProvider proves rejection created no provider identity.
 func assertNoIdentityForProvider(t *testing.T, q *store.Queries, provider auth.Provider, providerUserID string) {
 	t.Helper()
 
@@ -133,25 +112,14 @@ func assertNoIdentityForProvider(t *testing.T, q *store.Queries, provider auth.P
 	}
 }
 
-// ==== email-merge rejection matrix ====
-
-// matrixCase describes one existing-account and login-attempt pairing.
 type matrixCase struct {
 	name             string
 	existingProvider auth.Provider
 	attemptProvider  auth.Provider
-	// sameEmail: true for every collision row (six cross-provider pairs
-	// plus the same-provider row); false only for the one explicit
-	// non-merge row (different email must succeed as an ordinary NewUser).
-	sameEmail bool
-	// wantCollision is separate from sameEmail so the table states its
-	// expected outcome rather than deriving it in the assertion.
-	wantCollision bool
+	sameEmail        bool
+	wantCollision    bool
 }
 
-// assertEmailCollisionRejected checks the browser redirect, cookie effects,
-// and no-oracle rule: it may name the attempted provider but never the provider
-// already attached to the victim.
 func assertEmailCollisionRejected(t *testing.T, resp *http.Response, attemptProvider, existingProvider auth.Provider) {
 	t.Helper()
 
@@ -162,7 +130,7 @@ func assertEmailCollisionRejected(t *testing.T, resp *http.Response, attemptProv
 	if got := mustQueryParam(t, loc, "error"); got != "email_already_registered" {
 		t.Errorf("error param = %q, want %q", got, "email_already_registered")
 	}
-	assertRedirectPath(t, loc, "/login") // Every rejection targets /login, never "/".
+	assertRedirectPath(t, loc, "/login")
 
 	if sc := extractCookie(resp, auth.SessionCookieName); sc != nil {
 		t.Errorf("response set a %s cookie on a rejected email-collision callback (value=%q), want none -- the attacker must never be authenticated as the victim", auth.SessionCookieName, sc.Value)
@@ -176,18 +144,11 @@ func assertEmailCollisionRejected(t *testing.T, resp *http.Response, attemptProv
 		t.Errorf("redirect Location %q names the EXISTING provider %q -- design spec §3 forbids this (it hands an attacker a targeted-phishing hint about which provider the victim's account is actually linked to)", loc, existingProvider)
 	}
 
-	// The provider parameter names the attempted provider, which the callback
-	// URL already disclosed, never the provider attached to the existing user.
 	if got := mustQueryParam(t, loc, "provider"); got != string(attemptProvider) {
 		t.Errorf("provider param = %q, want %q (the provider this /callback belongs to, per the brief's literal wire shape)", got, attemptProvider)
 	}
 }
 
-// runMatrixCase drives one matrixCase end to end against its own,
-// isolated Service/database-pool pair (newTestService's own convention --
-// every test in this package opens its own connection against the same
-// shared TEST_DATABASE_URL, relying on unique row identifiers rather than
-// a fresh/reset database per test).
 func runMatrixCase(t *testing.T, c matrixCase) {
 	t.Helper()
 
@@ -199,8 +160,6 @@ func runMatrixCase(t *testing.T, c matrixCase) {
 		attemptEmail = uniqueEmail(t)
 	}
 
-	// Build the GitHub fixture before the Service because its endpoint override
-	// is immutable. At most one role uses GitHub in each case.
 	var githubExisting, githubAttemptIdentity *githubIdentity
 	if c.existingProvider == auth.ProviderGitHub {
 		githubExisting = newGitHubIdentity(t, existingEmail)
@@ -219,7 +178,6 @@ func runMatrixCase(t *testing.T, c matrixCase) {
 	handler, q := newTestService(t, opts...)
 	ctx := context.Background()
 
-	// ---- establish the existing account -----------------------------
 	_, existingResp := loginVia(t, handler, p, githubExisting, c.existingProvider, existingEmail) //nolint:bodyclose // loginVia -> doCallback/doGet closes the body itself before returning.
 	if existingResp.StatusCode != http.StatusFound {
 		t.Fatalf("%s: existing-account login via %s status = %d, want %d -- setup is broken, not the code under test", c.name, c.existingProvider, existingResp.StatusCode, http.StatusFound)
@@ -237,19 +195,13 @@ func runMatrixCase(t *testing.T, c matrixCase) {
 		t.Fatalf("%s: ListIdentitiesByUserID(existing) error = %v", c.name, err)
 	}
 
-	// ---- the attack / non-attack attempt ------------------------------
 	attemptSubject, attemptResp := loginVia(t, handler, p, githubAttemptIdentity, c.attemptProvider, attemptEmail) //nolint:bodyclose // loginVia -> doCallback/doGet closes the body itself before returning.
 
 	if c.wantCollision {
 		assertEmailCollisionRejected(t, attemptResp, c.attemptProvider, c.existingProvider)
 
-		// "zero new rows in users/identities" -- scoped, not a global
-		// table COUNT(*) (this package's established convention for a
-		// shared, never-reset TEST_DATABASE_URL under parallel tests):
-		// the attacker's own (provider, sub) must not exist at all ...
 		assertNoIdentityForProvider(t, q, c.attemptProvider, attemptSubject)
 
-		// ... and the victim's account row is byte-identical, not merely present.
 		afterUser, getErr := q.GetUserByEmail(ctx, existingEmail)
 		if getErr != nil {
 			t.Fatalf("%s: GetUserByEmail(existing) after the attempt error = %v, want the row still present, unchanged", c.name, getErr)
@@ -267,11 +219,10 @@ func runMatrixCase(t *testing.T, c matrixCase) {
 		return
 	}
 
-	// A different email must not trigger the collision defense.
 	if attemptResp.StatusCode != http.StatusFound {
 		t.Fatalf("%s: attempt login status = %d, want %d (a different-email NewUser login must succeed, never be treated as a collision)", c.name, attemptResp.StatusCode, http.StatusFound)
 	}
-	assertRedirectPath(t, attemptResp.Header.Get("Location"), "/app/resumes") // success path, not /login.
+	assertRedirectPath(t, attemptResp.Header.Get("Location"), "/app/resumes")
 	if extractCookie(attemptResp, auth.SessionCookieName) == nil {
 		t.Fatalf("%s: attempt login did not authenticate, want a real NewUser session", c.name)
 	}
@@ -295,9 +246,6 @@ func runMatrixCase(t *testing.T, c matrixCase) {
 	}
 }
 
-// TestCallback_EmailMergeRejectionMatrix covers all six cross-provider
-// directions, a different-email success, and a same-provider collision with a
-// different subject. Automatic email merge would permit account takeover.
 func TestCallback_EmailMergeRejectionMatrix(t *testing.T) {
 	t.Parallel()
 
@@ -352,16 +300,8 @@ func TestCallback_EmailMergeRejectionMatrix(t *testing.T) {
 	}
 }
 
-// ==== link and reauthentication matrix ====
-
-// wantSettingsSessionsPath mirrors the unexported production constant. Every
-// link or reauthentication callback redirects here on success or rejection.
 const wantSettingsSessionsPath = "/app/settings/sessions"
 
-// oauthTransactionCountForLinkingUser scopes a row-count assertion to
-// exactly the rows a link/reauth Begin for userID would have created --
-// safe under this package's shared, parallel, never-reset
-// TEST_DATABASE_URL, unlike a bare global COUNT(*).
 func oauthTransactionCountForLinkingUser(ctx context.Context, t *testing.T, db rowQuerier, userID uuid.UUID) int {
 	t.Helper()
 	var count int
@@ -371,8 +311,6 @@ func oauthTransactionCountForLinkingUser(ctx context.Context, t *testing.T, db r
 	return count
 }
 
-// identityCountForProviderSubject proves an idempotent link does not insert a
-// duplicate row, rather than inferring that property from the HTTP response.
 func identityCountForProviderSubject(ctx context.Context, t *testing.T, db rowQuerier, provider, providerUserID string) int {
 	t.Helper()
 	var count int
@@ -382,8 +320,6 @@ func identityCountForProviderSubject(ctx context.Context, t *testing.T, db rowQu
 	return count
 }
 
-// beginGoogleTransaction creates a provider-bound transaction and matching
-// request cookie for callback tests that do not exercise the start endpoint.
 func beginGoogleTransaction(t *testing.T, q *store.Queries, purpose auth.Purpose, linkingUserID uuid.UUID) (txCookie *http.Cookie, tx auth.Transaction) {
 	t.Helper()
 
@@ -395,9 +331,6 @@ func beginGoogleTransaction(t *testing.T, q *store.Queries, purpose auth.Purpose
 	return requestCookie(auth.OAuthTxCookieName, handle), transaction
 }
 
-// sessionRowReauthenticatedAt reads sessions.reauthenticated_at for id
-// directly, mirroring session_adversarial_test.go's sessionRowLastSeenAt/
-// sessionRowAbsoluteExpiresAt convention.
 func sessionRowReauthenticatedAt(ctx context.Context, t *testing.T, db rowQuerier, id uuid.UUID) time.Time {
 	t.Helper()
 	var ts time.Time
@@ -407,13 +340,6 @@ func sessionRowReauthenticatedAt(ctx context.Context, t *testing.T, db rowQuerie
 	return ts
 }
 
-// TestLink_RejectsWithoutRecentReauth proves a stale session is rejected
-// before TransactionStore.Begin. A stale caller must never receive a live,
-// single-use transaction handle.
-//
-// The link start is a same-origin, CSRF-protected POST. The response is a JSON
-// 403 with reauth_required, and the row assertions prove no transaction was
-// persisted before the gate failed.
 func TestLink_RejectsWithoutRecentReauth(t *testing.T) {
 	t.Parallel()
 
@@ -423,7 +349,7 @@ func TestLink_RejectsWithoutRecentReauth(t *testing.T) {
 
 	userID := createTestUser(t, q)
 	raw, sess := issueTestSession(t, q, userID)
-	forceReauthenticatedAtStale(t, sess.ID) // sessions_handlers_test.go: reauthenticated_at -> now-20m.
+	forceReauthenticatedAtStale(t, sess.ID)
 
 	resp := doJSON(t, handler, http.MethodPost, auth.GoogleStartPath+"?purpose=link", testPublicOrigin, csrfTokenFor(sess), "", sessionRequestCookie(raw)) //nolint:bodyclose // doJSON closes the body itself before returning.
 	if resp.StatusCode != http.StatusForbidden {
@@ -440,9 +366,6 @@ func TestLink_RejectsWithoutRecentReauth(t *testing.T) {
 	}
 }
 
-// TestLink_RejectsIdentityAlreadyClaimedByAnotherUser proves user B cannot
-// claim user A's provider identity. Direct transaction setup isolates callback
-// ownership checks from the start endpoint.
 func TestLink_RejectsIdentityAlreadyClaimedByAnotherUser(t *testing.T) {
 	t.Parallel()
 
@@ -450,7 +373,6 @@ func TestLink_RejectsIdentityAlreadyClaimedByAnotherUser(t *testing.T) {
 	handler, q := newTestService(t, withGoogleIssuer(p.URL))
 	ctx := context.Background()
 
-	// User A already owns a Google identity (an ordinary prior login).
 	victimEmail := uniqueEmail(t)
 	victimSubject, victimResp := googleLoginAttempt(t, handler, p, victimEmail) //nolint:bodyclose // googleLoginAttempt -> doCallback/doGet closes the body itself before returning.
 	if victimResp.StatusCode != http.StatusFound || extractCookie(victimResp, auth.SessionCookieName) == nil {
@@ -467,19 +389,14 @@ func TestLink_RejectsIdentityAlreadyClaimedByAnotherUser(t *testing.T) {
 		t.Fatalf("GetIdentityByProviderSubject(victim) error = %v", err)
 	}
 
-	// User B (the attacker/confused deputy) is a completely separate
-	// account, starts a link transaction naming itself as LinkingUserID, and
-	// presents its own session so callback authentication reaches the ownership
-	// check under test.
 	attackerUserID := createTestUser(t, q)
 	attackerRaw, _ := issueTestSession(t, q, attackerUserID)
 	txCookie, tx := beginGoogleTransaction(t, q, auth.PurposeLink, attackerUserID)
 
-	// Present the victim's subject while authenticated as the attacker.
 	code := "code-link-hijack-" + uuid.NewString()
 	p.RegisterCode(code, oidctest.Claims{
 		Subject:       victimSubject,
-		Email:         uniqueEmail(t), // Linking deliberately ignores this unrelated email.
+		Email:         uniqueEmail(t),
 		EmailVerified: ptrTrue(),
 		Nonce:         tx.Nonce,
 	})
@@ -492,15 +409,12 @@ func TestLink_RejectsIdentityAlreadyClaimedByAnotherUser(t *testing.T) {
 	if got := mustQueryParam(t, loc, "error"); got != "identity_already_linked" {
 		t.Errorf("error param = %q, want %q", got, "identity_already_linked")
 	}
-	assertRedirectPath(t, loc, wantSettingsSessionsPath) // Link outcomes target settings, never "/login".
+	assertRedirectPath(t, loc, wantSettingsSessionsPath)
 
-	// Rejection must never authenticate the attacker as the victim.
 	if sc := extractCookie(resp, auth.SessionCookieName); sc != nil {
 		t.Errorf("response set a %s cookie on a rejected link-hijack attempt (value=%q), want none", auth.SessionCookieName, sc.Value)
 	}
 
-	// "No row mutated": the victim's identity must still point at the
-	// victim, byte-identical to before the attack.
 	victimIdentityAfter, err := q.GetIdentityByProviderSubject(ctx, store.GetIdentityByProviderSubjectParams{
 		Provider: string(auth.ProviderGoogle), ProviderUserID: victimSubject,
 	})
@@ -518,8 +432,6 @@ func TestLink_RejectsIdentityAlreadyClaimedByAnotherUser(t *testing.T) {
 	}
 }
 
-// TestLink_IdempotentWhenAlreadyLinkedToSelf proves a repeated link is a no-op,
-// not a duplicate insert. Each direct callback carries the user's live session.
 func TestLink_IdempotentWhenAlreadyLinkedToSelf(t *testing.T) {
 	t.Parallel()
 
@@ -549,7 +461,7 @@ func TestLink_IdempotentWhenAlreadyLinkedToSelf(t *testing.T) {
 	if firstResp.StatusCode != http.StatusFound {
 		t.Fatalf("first link attempt status = %d, want %d", firstResp.StatusCode, http.StatusFound)
 	}
-	assertRedirectPath(t, firstResp.Header.Get("Location"), wantSettingsSessionsPath) // Link success returns to settings.
+	assertRedirectPath(t, firstResp.Header.Get("Location"), wantSettingsSessionsPath)
 	if sc := extractCookie(firstResp, auth.SessionCookieName); sc != nil {
 		t.Errorf("first link response set a %s cookie (value=%q) on a link success, want none -- the caller already has one", auth.SessionCookieName, sc.Value)
 	}
@@ -564,13 +476,11 @@ func TestLink_IdempotentWhenAlreadyLinkedToSelf(t *testing.T) {
 		t.Fatalf("first-link identity.UserID = %v, want %v", firstIdentity.UserID, userID)
 	}
 
-	// The second link presents a different email to prove linking keys only on
-	// provider subject and does not apply the login email rule.
 	secondResp := linkOnce(uniqueEmail(t)) //nolint:bodyclose // linkOnce -> doCallback/doGet closes the body itself before returning.
 	if secondResp.StatusCode != http.StatusFound {
 		t.Fatalf("second (idempotent) link attempt status = %d, want %d -- must succeed as a no-op, never 500", secondResp.StatusCode, http.StatusFound)
 	}
-	assertRedirectPath(t, secondResp.Header.Get("Location"), wantSettingsSessionsPath) // Link success returns to settings.
+	assertRedirectPath(t, secondResp.Header.Get("Location"), wantSettingsSessionsPath)
 	if sc := extractCookie(secondResp, auth.SessionCookieName); sc != nil {
 		t.Errorf("second (idempotent) link response set a %s cookie (value=%q), want none -- the idempotent no-op branch never issues or touches a session", auth.SessionCookieName, sc.Value)
 	}
@@ -589,9 +499,6 @@ func TestLink_IdempotentWhenAlreadyLinkedToSelf(t *testing.T) {
 	}
 }
 
-// TestPurposeReauth_RefreshesReauthenticatedAt_ButDoesNotCreateIdentity uses an
-// injected clock to prove reauthentication refreshes the matching session
-// without mutating identities.
 func TestPurposeReauth_RefreshesReauthenticatedAt_ButDoesNotCreateIdentity(t *testing.T) {
 	t.Parallel()
 
@@ -616,12 +523,10 @@ func TestPurposeReauth_RefreshesReauthenticatedAt_ButDoesNotCreateIdentity(t *te
 	auth.SetSessionManagerForTest(svc, sm)
 	handler := api.New(testLogger(), noopPinger{}, api.Options{}, nil, svc.RegisterRoutes)
 
-	// Create the existing link through a real login against this handler.
 	subject, priorResp := googleLoginAttempt(t, handler, p, uniqueEmail(t)) //nolint:bodyclose // googleLoginAttempt -> doCallback/doGet closes the body itself before returning.
 	if priorResp.StatusCode != http.StatusFound {
 		t.Fatalf("prior google login status = %d, want %d -- setup is broken, not the code under test", priorResp.StatusCode, http.StatusFound)
 	}
-	// Both success and rejection use 302, so require the session cookie too.
 	if extractCookie(priorResp, auth.SessionCookieName) == nil {
 		t.Fatalf("prior google login set no session cookie (Location=%q) -- setup is broken (a REJECTED login is also a 302; this must be an actual success)", priorResp.Header.Get("Location"))
 	}
@@ -637,7 +542,6 @@ func TestPurposeReauth_RefreshesReauthenticatedAt_ButDoesNotCreateIdentity(t *te
 		t.Fatalf("ListIdentitiesByUserID(before) error = %v", err)
 	}
 
-	// The reauthenticated session must belong to the linked user.
 	raw, sess, err := sm.Issue(ctx, linkedUserID, "test-agent/1.0", "203.0.113.77")
 	if err != nil {
 		t.Fatalf("Issue() error = %v", err)
@@ -647,12 +551,12 @@ func TestPurposeReauth_RefreshesReauthenticatedAt_ButDoesNotCreateIdentity(t *te
 	if !before.Equal(clk.Now()) {
 		t.Fatalf("session reauthenticated_at at Issue = %v, want exactly the clock's start time %v -- setup assumption broken", before, clk.Now())
 	}
-	clk.Advance(20 * time.Minute) // simulate real elapsed time between login and this reauth round trip.
+	clk.Advance(20 * time.Minute)
 
 	txCookie, tx := beginGoogleTransaction(t, q, auth.PurposeReauth, linkedUserID)
 	code := "code-reauth-refresh-" + uuid.NewString()
 	p.RegisterCode(code, oidctest.Claims{
-		Subject:       subject, // the SAME already-linked identity.
+		Subject:       subject,
 		Email:         uniqueEmail(t),
 		EmailVerified: ptrTrue(),
 		Nonce:         tx.Nonce,
@@ -662,7 +566,7 @@ func TestPurposeReauth_RefreshesReauthenticatedAt_ButDoesNotCreateIdentity(t *te
 	if resp.StatusCode != http.StatusFound {
 		t.Fatalf("reauth round trip status = %d, want %d", resp.StatusCode, http.StatusFound)
 	}
-	assertRedirectPath(t, resp.Header.Get("Location"), wantSettingsSessionsPath) // Reauthentication returns to settings.
+	assertRedirectPath(t, resp.Header.Get("Location"), wantSettingsSessionsPath)
 	if sc := extractCookie(resp, auth.SessionCookieName); sc != nil && sc.Value != raw {
 		t.Errorf("reauth response set a NEW %s cookie (value=%q) distinct from the caller's own, want none or the SAME rotated value only", auth.SessionCookieName, sc.Value)
 	}

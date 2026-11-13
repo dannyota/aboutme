@@ -14,10 +14,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/project"
 )
 
-// TestProjectPages_BlankNamedProjectIsUnavailable proves a linked, visible
-// project whose renderable name is blank by the renderer's rule never fails
-// a page: its own page and a list with nothing else answer exactly as an
-// unknown resume, and a list with other projects leaves it out.
 func TestProjectPages_BlankNamedProjectIsUnavailable(t *testing.T) {
 	blankName := project.Document{DefaultLanguage: "en", Text: map[string]project.Text{"en": {Name: string(rune(0xfeff))}}}
 	withBlank := func(t *testing.T, base func(*testing.T) *projectPagesStore, section string) *projectPagesStore {
@@ -82,10 +78,6 @@ func TestProjectPages_BlankNamedProjectIsUnavailable(t *testing.T) {
 	requireCorpusEnvelope(t, renderer.envelope(directrender.ProjectListRenderMode), "list-vi-two-projects")
 }
 
-// TestProjectPages_NoFooterLinkBesideOnlyABlankNamedProject proves a project
-// page whose only other linked project has a blank name sends
-// otherProjects false, so the page has no link to a list that would show
-// nothing else.
 func TestProjectPages_NoFooterLinkBesideOnlyABlankNamedProject(t *testing.T) {
 	readStore := projectPageFixture(t)
 	var content map[string]schema.Section

@@ -8,8 +8,6 @@ import (
 	"danny.vn/aboutme/apps/server/migrations"
 )
 
-// unindexedForeignKeys names each foreign key that no index leads, with the
-// reason a scan of the referencing table is acceptable.
 var unindexedForeignKeys = map[string]string{
 	"oauth_authorization_codes_grant_id_user_client_fkey": "grants are deleted only by the user or client cascade, " +
 		"which also removes these codes through their indexed user_id and client_id keys; " +
@@ -24,10 +22,6 @@ var unindexedForeignKeys = map[string]string{
 		"rows expire 5 minutes after creation and are swept before each new pending sign-in or ceremony",
 }
 
-// uncoveredForeignKeysQuery lists foreign keys in public whose referencing
-// columns, in any order, are not the leading key columns of a valid index. A
-// partial index counts only when its predicate is "column IS NOT NULL" on a
-// single-column key, because a cascade or lookup never matches a NULL.
 const uncoveredForeignKeysQuery = `
 SELECT c.conname, c.conrelid::regclass::text
 FROM pg_constraint AS c
@@ -54,13 +48,8 @@ WHERE c.contype = 'f'
   )
 ORDER BY c.conname`
 
-// TestForeignKeys_LeadingIndexCoversReferencingColumns fails for a foreign key
-// that no index leads and that has no exemption: ON DELETE CASCADE, SET NULL,
-// and lookups by its referencing columns would scan the whole child table.
 func TestForeignKeys_LeadingIndexCoversReferencingColumns(t *testing.T) {
 	t.Parallel()
-	// A fresh database migrated from the embedded files, so the check sees
-	// exactly this tree's schema, not whatever a shared database holds.
 	db := openTestDB(t, newTestDatabase(t))
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()

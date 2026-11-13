@@ -16,10 +16,6 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
-// withCatalogLock runs fn in a transaction that first takes the shared
-// LockID advisory lock, so a test's own database or role writes serialize
-// with concurrent Ensure and SetLoginVerifiers calls on the same database
-// instead of racing them (ADR 0005).
 func withCatalogLock(ctx context.Context, db *sql.DB, fn func(*sql.Tx) error) error {
 	tx, beginErr := db.BeginTx(ctx, nil)
 	if beginErr != nil {
@@ -104,7 +100,6 @@ func TestSetLoginVerifiersWritesOnlyFixedRoles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Roll back so the shared cluster's role passwords never change.
 	defer func() {
 		if rollbackErr := tx.Rollback(); rollbackErr != nil {
 			t.Error(rollbackErr)
@@ -185,8 +180,6 @@ func TestScramVerifierAuthenticatesRealLogin(t *testing.T) {
 	if _, err = admin.ExecContext(ctx, `CREATE ROLE `+role+` LOGIN PASSWORD '`+verifier+`'`); err != nil {
 		t.Fatal(err)
 	}
-	// Registered immediately after CREATE ROLE succeeds, so a failure in
-	// any later step still drops the role instead of leaking it.
 	defer func() {
 		revokeErr := withCatalogLock(context.Background(), admin, func(tx *sql.Tx) error {
 			_, execErr := tx.ExecContext(context.Background(), `REVOKE ALL ON DATABASE `+quoteIdentifier(dbName)+` FROM `+role)
@@ -199,9 +192,6 @@ func TestScramVerifierAuthenticatesRealLogin(t *testing.T) {
 			t.Error(dropErr)
 		}
 	}()
-	// db-setup revokes CONNECT from PUBLIC, so the test role needs its own
-	// grant. Both this grant and its cleanup revoke go through the LockID
-	// lock because they rewrite the same pg_database ACL row Ensure writes.
 	if err = withCatalogLock(ctx, admin, func(tx *sql.Tx) error {
 		_, execErr := tx.ExecContext(ctx, `GRANT CONNECT ON DATABASE `+quoteIdentifier(dbName)+` TO `+role)
 		return execErr

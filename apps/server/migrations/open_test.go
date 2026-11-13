@@ -9,8 +9,6 @@ import (
 	"danny.vn/aboutme/apps/server/migrations"
 )
 
-// TestOpen_SessionDefaults checks the session settings migrations run
-// under, and that a value the URL sets is kept.
 func TestOpen_SessionDefaults(t *testing.T) {
 	t.Parallel()
 

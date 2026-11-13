@@ -26,9 +26,6 @@ func TestSeededUUID_DifferentSeedsYieldDifferentIDs(t *testing.T) {
 	}
 }
 
-// TestSeededUUID_LooksLikeAUUID checks the well-known shape
-// (8-4-4-4-12 hex groups, version 4, RFC 4122 variant) so callers can rely
-// on the output being accepted anywhere a real UUID string is expected.
 func TestSeededUUID_LooksLikeAUUID(t *testing.T) {
 	t.Parallel()
 

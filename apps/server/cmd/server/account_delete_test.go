@@ -24,7 +24,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/testutil"
 )
 
-// Sentinel values that must never reach the command's output or log.
 const (
 	reportedEmailLocal = "sentinel-owner"
 	reportedName       = "Sentinel Owner Name"
@@ -310,7 +309,6 @@ func TestAccountDeleteConfirmDeletesTheAccount(t *testing.T) {
 		t.Fatalf("other account changed: %v", getErr)
 	}
 
-	// The slugs now count as tombstoned: a second run finds nothing.
 	_, _, err = a.run(t, accountDeleteArgs{confirm: true, slug: a.slugs[0], userID: a.userID})
 	assertExit(t, err, accountDeleteNotFoundExitCode)
 }

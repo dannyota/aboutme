@@ -1,10 +1,5 @@
 package auth_test
 
-// These tests prove the provider account-creation race rules: an owned email blocks a
-// new subject, a subject-collision rolls the whole attempted user back (no
-// orphan), and concurrent same-subject first logins converge to one user, one
-// identity, and two sessions.
-
 import (
 	"context"
 	"errors"
@@ -70,8 +65,6 @@ func TestCreateProviderAccountTx_UsesCanonicalEmailLock(t *testing.T) {
 	}
 }
 
-// TestCreateProviderAccountTx_EmailCollisionReturnsClosedError proves a new
-// subject cannot create an account against an email another user already owns.
 func TestCreateProviderAccountTx_EmailCollisionReturnsClosedError(t *testing.T) {
 	pool := newTestPool(t)
 	q := store.New(pool)
@@ -98,7 +91,6 @@ func TestCreateProviderAccountTx_EmailCollisionReturnsClosedError(t *testing.T) 
 		t.Fatalf("createProviderAccountTx() error = %v, want the closed email-already-registered outcome", err)
 	}
 
-	// The attempted new user and identity must not exist.
 	if _, getErr := q.GetIdentityByProviderSubject(ctx, store.GetIdentityByProviderSubjectParams{
 		Provider:       string(auth.ProviderGoogle),
 		ProviderUserID: subject.Subject,
@@ -107,9 +99,6 @@ func TestCreateProviderAccountTx_EmailCollisionReturnsClosedError(t *testing.T) 
 	}
 }
 
-// TestCreateProviderAccountTx_SubjectCollisionRollsBackUser proves a
-// same-subject collision rolls the whole attempted user transaction back, so a
-// failed identity insert cannot orphan a user.
 func TestCreateProviderAccountTx_SubjectCollisionRollsBackUser(t *testing.T) {
 	pool := newTestPool(t)
 	q := store.New(pool)
@@ -119,7 +108,6 @@ func TestCreateProviderAccountTx_SubjectCollisionRollsBackUser(t *testing.T) {
 	}
 	ctx := context.Background()
 
-	// The winner owns the subject under a different email.
 	winner, err := q.CreateUser(ctx, store.CreateUserParams{Email: uniqueEmail(t), Name: "Winner"})
 	if err != nil {
 		t.Fatalf("CreateUser(winner) error = %v", err)
@@ -133,7 +121,6 @@ func TestCreateProviderAccountTx_SubjectCollisionRollsBackUser(t *testing.T) {
 		t.Fatalf("CreateIdentity(winner) error = %v", createErr)
 	}
 
-	// The loser tries the same subject under a different email.
 	loserEmail := uniqueEmail(t)
 	account := auth.NewProviderAccount{
 		Subject:       auth.ProviderSubject{Provider: auth.ProviderGoogle, Subject: subject},
@@ -154,8 +141,6 @@ func TestCreateProviderAccountTx_SubjectCollisionRollsBackUser(t *testing.T) {
 		t.Fatalf("createProviderAccountTx() error = %v, want a unique-violation-shaped error (code 23505)", err)
 	}
 
-	// The loser's user must have rolled back: no orphan user, and the subject
-	// still belongs to the winner.
 	if _, getErr := q.GetUserByEmail(ctx, loserEmail); !errors.Is(getErr, pgx.ErrNoRows) {
 		t.Errorf("loser's user row survived the rollback (email %q), want no orphan user", loserEmail)
 	}
@@ -171,10 +156,6 @@ func TestCreateProviderAccountTx_SubjectCollisionRollsBackUser(t *testing.T) {
 	}
 }
 
-// TestProviderConcurrentFirstLogin_ReReadsSubject fires two same-subject,
-// same-email first logins concurrently. Both must succeed and converge to one
-// user, one identity, and two independently issued sessions -- a login-only
-// race never surfaces the authenticated-link conflict.
 func TestProviderConcurrentFirstLogin_ReReadsSubject(t *testing.T) {
 	p := oidctest.NewProvider(t)
 	handler, q := newTestService(t, withGoogleIssuer(p.URL))
@@ -183,7 +164,6 @@ func TestProviderConcurrentFirstLogin_ReReadsSubject(t *testing.T) {
 	subject := uniqueSubject(t)
 	email := uniqueEmail(t)
 
-	// Register two distinct codes that both resolve the same subject + email.
 	txCookies := make([]struct {
 		cookie *http.Cookie
 		state  string

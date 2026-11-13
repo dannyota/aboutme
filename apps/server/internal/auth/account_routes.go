@@ -6,8 +6,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/api"
 )
 
-// SetAccountDeleteHandler installs the account service's protected deletion
-// handler before RegisterRoutes publishes /api/v1/me.
 func (s *Service) SetAccountDeleteHandler(handler http.Handler) {
 	s.accountDeleteHandler = handler
 }

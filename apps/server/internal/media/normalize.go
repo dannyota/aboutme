@@ -20,61 +20,39 @@ const (
 	jpegQuality     = 85
 )
 
-// ErrUnsupportedMediaType reports bytes that are not JPEG, PNG, or WebP.
 var ErrUnsupportedMediaType = errors.New("media: unsupported photo type")
 
-// PhotoNormalizer serializes normalization while the process memory limit is changed.
-// Share one instance among all photo normalization callers in a process.
 type PhotoNormalizer struct {
 	mu sync.Mutex
 }
 
-// NewPhotoNormalizer creates a photo normalizer.
 func NewPhotoNormalizer() *PhotoNormalizer { return &PhotoNormalizer{} }
 
-// PhotoInvalidReason is the closed client-safe normalization failure reason.
 type PhotoInvalidReason string
 
-// Closed client-safe media_invalid reasons.
 const (
-	// ReasonMalformed reports a container that does not parse.
-	ReasonMalformed PhotoInvalidReason = "malformed"
-	// ReasonAnimated reports an animated image.
-	ReasonAnimated PhotoInvalidReason = "animated"
-	// ReasonDimensions reports conflicting or out-of-bounds dimensions.
-	ReasonDimensions PhotoInvalidReason = "dimensions"
-	// ReasonOrientation reports unreadable or repeated orientation metadata.
-	ReasonOrientation PhotoInvalidReason = "orientation"
-	// ReasonTrailingData reports bytes after the image's declared end.
-	ReasonTrailingData PhotoInvalidReason = "trailing_data"
-	// ReasonNormalizationFailed reports a decode or encode failure during
-	// normalization.
+	ReasonMalformed           PhotoInvalidReason = "malformed"
+	ReasonAnimated            PhotoInvalidReason = "animated"
+	ReasonDimensions          PhotoInvalidReason = "dimensions"
+	ReasonOrientation         PhotoInvalidReason = "orientation"
+	ReasonTrailingData        PhotoInvalidReason = "trailing_data"
 	ReasonNormalizationFailed PhotoInvalidReason = "normalization_failed"
 )
 
-// PhotoInvalidError exposes only the closed photo-invalid reason vocabulary.
 type PhotoInvalidError struct {
-	// Reason is the closed client-safe failure reason.
 	Reason PhotoInvalidReason
 }
 
-// Error returns a message that names only the reason.
 func (e *PhotoInvalidError) Error() string {
 	return "media: invalid photo (" + string(e.Reason) + ")"
 }
 
-// NormalizedPhoto is a canonical bounded JPEG or PNG and its metadata.
 type NormalizedPhoto struct {
-	// Bytes is the normalized encoded image.
-	Bytes []byte
-	// ContentType is image/jpeg or image/png.
+	Bytes       []byte
 	ContentType string
-	// Extension is jpg or png, matching ContentType.
-	Extension string
-	// Width is the normalized width in pixels.
-	Width int
-	// Height is the normalized height in pixels.
-	Height int
+	Extension   string
+	Width       int
+	Height      int
 }
 
 type photoContainer uint8
@@ -96,8 +74,6 @@ func invalidPhoto(reason PhotoInvalidReason) error {
 	return &PhotoInvalidError{Reason: reason}
 }
 
-// NormalizePhoto validates and fully decodes one JPEG, PNG, or WebP before
-// emitting metadata-free canonical JPEG or PNG bytes.
 func (n *PhotoNormalizer) NormalizePhoto(source []byte) (NormalizedPhoto, error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()

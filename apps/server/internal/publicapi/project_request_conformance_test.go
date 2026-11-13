@@ -12,18 +12,13 @@ import (
 	"danny.vn/aboutme/apps/server/internal/publicresume"
 )
 
-// Library-limit text: each rune is four bytes, so byte bounds meet their
-// worst case.
 func wideText(runes int) string { return strings.Repeat("😀", runes) }
 
-// longestLink is an https link of exactly 2048 code points.
 func longestLink(path string) string {
 	prefix := "https://ada.example/" + path + "/"
 	return prefix + strings.Repeat("a", 2048-len(prefix))
 }
 
-// longestPublicTitle is a public title at both of its limits: 56 graphemes
-// of ten code points, 560 code points and 1,960 bytes.
 func longestPublicTitle() string {
 	return strings.Repeat("👩🏽‍❤️‍💋‍👨🏻", 56)
 }
@@ -43,9 +38,6 @@ func limitProject(slug string, technologies int, dates *schema.DateRange) public
 	}}
 }
 
-// TestProjectRequests_MeetTheRendererDecoder builds both envelopes from
-// fixtures at the library's limits and edge cases, and requires each to pass
-// every rule of the web renderer's strict decoder.
 func TestProjectRequests_MeetTheRendererDecoder(t *testing.T) {
 	completed := &schema.DateRange{Start: schema.YearMonth{Y: 1900, M: monthOf(1)}, End: &schema.YearMonth{Y: 2100, M: monthOf(12)}}
 	present := &schema.DateRange{Start: schema.YearMonth{Y: 2020}, Present: true}
@@ -111,9 +103,6 @@ func TestProjectRequests_MeetTheRendererDecoder(t *testing.T) {
 	}
 }
 
-// TestProjectDecoderRules_CatchEachViolation proves the Go mirror of the
-// decoder catches the violations it names, so its passing result is
-// evidence.
 func TestProjectDecoderRules_CatchEachViolation(t *testing.T) {
 	input := projectTestInput(t, projectTestSnapshot("en", "Ada", nil, schema.MmYyyy, false), 2, limitProject("differs", 6, nil))
 	page, err := buildProjectRequest(input)

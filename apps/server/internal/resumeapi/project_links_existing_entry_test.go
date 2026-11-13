@@ -24,14 +24,8 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// fullFixtureProjectEntryID names the full schema fixture's own project
-// entry.
 const fullFixtureProjectEntryID = "12949dfe-d9dc-4292-a17b-faeda92081e4"
 
-// existingLinkFixture is a resume created through the REST create, so its
-// stored text has passed the write sanitizer. Its project section holds an
-// entry linking linked, the unlinked target, and the fixture's own entry;
-// no entry links atlas.
 type existingLinkFixture struct {
 	resumeID      uuid.UUID
 	revision      int64
@@ -84,8 +78,6 @@ func storedResume(t *testing.T, h *resumeAPITestHarness, id uuid.UUID) resume.Re
 	return stored
 }
 
-// requireUnchanged fails unless the stored resume still has before's
-// revision and document bytes.
 func requireUnchanged(t *testing.T, h *resumeAPITestHarness, name string, before resume.Resume) {
 	t.Helper()
 	after := storedResume(t, h, before.ID)
@@ -158,8 +150,6 @@ func TestProjectLinks_ExistingEntryGainsOnlyTheLink(t *testing.T) {
 	}
 }
 
-// Every refusal answers the same at version 5 as at the current version, so
-// an older client cannot attach a link the current version refuses.
 func TestProjectLinks_ExistingEntryRefusalsWriteNothing(t *testing.T) {
 	h := newResumeAPITestHarness(t)
 	fixture := newExistingLinkFixture(t, h)
@@ -211,8 +201,6 @@ func TestProjectLinks_ExistingEntryRefusalsWriteNothing(t *testing.T) {
 	}
 }
 
-// An omitted entryId inserts an entry, so an explicit null is refused before
-// any write rather than read as an insert.
 func TestProjectLinks_NullEntryIDWritesNothing(t *testing.T) {
 	h := newResumeAPITestHarness(t)
 	fixture := newExistingLinkFixture(t, h)
@@ -234,9 +222,6 @@ func TestProjectLinks_NullEntryIDWritesNothing(t *testing.T) {
 	}
 }
 
-// Two links of one project to two entries at one revision: the save's
-// revision check lets one commit, and the loser's retry meets the link the
-// winner made.
 func TestProjectLinks_ExistingEntryConcurrentLinksOfOneProject(t *testing.T) {
 	h := newResumeAPITestHarness(t)
 	fixture := newExistingLinkFixture(t, h)
@@ -316,8 +301,6 @@ func TestProjectLinks_ExistingEntryOnALiveResumeGainsItsPublicLink(t *testing.T)
 	owned := createLinkProject(t, h, h.userID, "atlas", linkProjectDocument("Atlas"))
 	current := storedResume(t, h, env.id)
 	target := linkedEntry(uuid.Nil, "Atlas")
-	// Seed before publishing: a store write after publish would leave the
-	// public fence at the published revision.
 	var err error
 	if env.revision, err = h.resumes.SaveDocument(h.ctx, h.userID, env.id,
 		withProjectSection(current.Doc, "projects", target), current.Revision); err != nil {
@@ -345,8 +328,6 @@ func TestProjectLinks_ExistingEntryOnALiveResumeGainsItsPublicLink(t *testing.T)
 	}
 }
 
-// newAgentBearerForTest stores an access token of a resumes:read and
-// resumes:write grant for h's user and returns its raw value.
 func newAgentBearerForTest(t *testing.T, h *resumeAPITestHarness) string {
 	t.Helper()
 	now := time.Now().UTC()
@@ -376,9 +357,6 @@ func newAgentBearerForTest(t *testing.T, h *resumeAPITestHarness) string {
 	return raw
 }
 
-// The link route admits only a cookie session, and a bearer write that adds
-// a link needs a scope no grant holds, so neither bearer path links an
-// existing entry (docs/design/projects-contract.md "Agents").
 func TestProjectLinks_ExistingEntryRefusesBearerCallers(t *testing.T) {
 	h := newResumeAPITestHarness(t)
 	fixture := newExistingLinkFixture(t, h)

@@ -173,8 +173,6 @@ func TestSecondFactorStore_FifthPendingFailureHasOneWinner(t *testing.T) {
 			t.Errorf("cleanup user: %v", err)
 		}
 	})
-	// Wall-clock time: internal/auth tests share this database and purge
-	// pending authentications and ceremonies that expired before now.
 	now := time.Now().UTC()
 	pending := createSecondFactorPending(ctx, t, seed, userID, now)
 	locked, err := seed.GetPendingAuthenticationByTokenDigestForUpdate(ctx, pending.TokenDigest)
@@ -248,8 +246,6 @@ func TestSecondFactorStore_FifthPendingFailureHasOneWinner(t *testing.T) {
 func TestSecondFactorStore_ConsumesOldestLivePendingAuthentication(t *testing.T) {
 	ctx, _, _, q := newOAuthStoreTx(t)
 	userID := newOAuthStoreUser(ctx, t, q)
-	// Wall-clock time: internal/auth tests share this database and purge
-	// pending authentications and ceremonies that expired before now.
 	now := time.Now().UTC()
 	oldest := createSecondFactorPending(ctx, t, q, userID, now.Add(-4*time.Second))
 	for i := 1; i < 4; i++ {
@@ -281,8 +277,6 @@ func TestSecondFactorStore_ConsumesOldestLivePendingAuthentication(t *testing.T)
 func TestSecondFactorStore_ConsumesPriorCeremonyForBinding(t *testing.T) {
 	ctx, _, _, q := newOAuthStoreTx(t)
 	userID := newOAuthStoreUser(ctx, t, q)
-	// Wall-clock time: internal/auth tests share this database and purge
-	// pending authentications and ceremonies that expired before now.
 	now := time.Now().UTC()
 	pending := createSecondFactorPending(ctx, t, q, userID, now)
 	pendingID := pending.ID
@@ -311,8 +305,6 @@ func TestSecondFactorStore_CeremonyClaimHasOneConcurrentWinner(t *testing.T) {
 	ctx, pool, _, _ := newOAuthStoreTx(t)
 	seed := store.New(pool)
 	userID := newOAuthStoreUser(ctx, t, seed)
-	// Wall-clock time: internal/auth tests share this database and purge
-	// pending authentications and ceremonies that expired before now.
 	now := time.Now().UTC()
 	pending := createSecondFactorPending(ctx, t, seed, userID, now)
 	pendingID := pending.ID

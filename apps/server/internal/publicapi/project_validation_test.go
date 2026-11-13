@@ -9,7 +9,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/directrender"
 )
 
-// projectCorpusList and projectCorpusPage decode one corpus case's envelope.
 func projectCorpusList(t *testing.T, tc projectCorpusCase) directrender.ProjectListRenderRequest {
 	t.Helper()
 	var request directrender.ProjectListRenderRequest
@@ -32,8 +31,6 @@ func projectCorpusPage(t *testing.T, tc projectCorpusCase) directrender.ProjectR
 	return request
 }
 
-// TestProjectHTMLRejection_AcceptsTheCorpus proves both validators accept the
-// renderer HTML of the shared corpus.
 func TestProjectHTMLRejection_AcceptsTheCorpus(t *testing.T) {
 	origin := mustPublicOrigin(t)
 	for name, tc := range readProjectCorpus(t) {
@@ -62,8 +59,6 @@ func (m projectMutation) apply(source string) string {
 	return replaceOnce(source, m.old, m.replacement)
 }
 
-// TestProjectHTMLRejection_ProjectPageRules applies one mutation per rule to
-// the every-field page and expects that rule's name.
 func TestProjectHTMLRejection_ProjectPageRules(t *testing.T) {
 	origin := mustPublicOrigin(t)
 	tc := readProjectCorpus(t)["project-en-every-field"]
@@ -123,8 +118,6 @@ func TestProjectHTMLRejection_ProjectPageRules(t *testing.T) {
 	}
 }
 
-// TestProjectHTMLRejection_PageWithoutDescription proves a description region
-// or description meta on a project with no description is rejected.
 func TestProjectHTMLRejection_PageWithoutDescription(t *testing.T) {
 	origin := mustPublicOrigin(t)
 	tc := readProjectCorpus(t)["project-en-name-only"]
@@ -144,9 +137,6 @@ func TestProjectHTMLRejection_PageWithoutDescription(t *testing.T) {
 	}
 }
 
-// TestProjectHTMLRejection_DescriptionTreeIgnoresComments proves the
-// description is compared as a parsed tree with comments ignored, not as
-// bytes.
 func TestProjectHTMLRejection_DescriptionTreeIgnoresComments(t *testing.T) {
 	origin := mustPublicOrigin(t)
 	tc := readProjectCorpus(t)["project-en-every-field"]
@@ -170,7 +160,6 @@ func TestProjectHTMLRejection_DescriptionTreeIgnoresComments(t *testing.T) {
 	}
 }
 
-// TestProjectListHTMLRejection_ListRules applies list-only mutations.
 func TestProjectListHTMLRejection_ListRules(t *testing.T) {
 	origin := mustPublicOrigin(t)
 	tc := readProjectCorpus(t)["list-vi-two-projects"]
@@ -194,8 +183,6 @@ func TestProjectListHTMLRejection_ListRules(t *testing.T) {
 	}
 }
 
-// TestProjectHTMLRejection_ImageFallsBackToTheResumeShareImage proves a page
-// with stored cards off names the resume's og.png, as the resume page does.
 func TestProjectHTMLRejection_ImageFallsBackToTheResumeShareImage(t *testing.T) {
 	origin := mustPublicOrigin(t)
 	tc := readProjectCorpus(t)["project-en-name-only"]

@@ -1,11 +1,5 @@
 package uatmock
 
-// The LinkedIn mode follows LinkedIn's documented confidential web flow so the
-// native HTTPS proof exercises the same requests production sends: no PKCE,
-// client credentials only in the token request form body, optional email
-// claims, no nonce claim in the ID token, pairwise-looking subjects, and
-// LinkedIn's two cancel errors. See docs/design/linkedin-sign-in.md.
-
 import (
 	"crypto/subtle"
 	"encoding/json"
@@ -30,8 +24,6 @@ const (
 	linkedinSigningKeyID  = "uat-linkedin-key"
 )
 
-// linkedinAccount is one local LinkedIn member. A nil EmailVerified omits the
-// claim; an empty Email omits both email claims, as LinkedIn may.
 type linkedinAccount struct {
 	Subject       string
 	Name          string
@@ -39,7 +31,6 @@ type linkedinAccount struct {
 	EmailVerified *bool
 }
 
-// Label is the text beside the account's radio button.
 func (a linkedinAccount) Label() string {
 	if a.Email == "" {
 		return a.Name + " (no email)"
@@ -49,9 +40,6 @@ func (a linkedinAccount) Label() string {
 
 func verified(v bool) *bool { return &v }
 
-// linkedinAccounts are the local members, the default first. They cover a new
-// member, both missing-verification shapes, an email a password account holds,
-// and a member for linking.
 var linkedinAccounts = []linkedinAccount{
 	{Subject: "lnkd-Q7x2mP4tVa", Name: "LinkedIn Verified", Email: "li-verified@example.invalid", EmailVerified: verified(true)},
 	{Subject: "lnkd-N3v8cR1sKe", Name: "LinkedIn No Email"},
@@ -69,26 +57,19 @@ func linkedinAccountBySubject(subject string) (linkedinAccount, bool) {
 	return linkedinAccount{}, false
 }
 
-// linkedinCancelErrors maps the form's cancel actions to LinkedIn's callback
-// error values and descriptions.
 var linkedinCancelErrors = map[string][2]string{
 	"cancel_login":     {"user_cancelled_login", "The user cancelled LinkedIn login"},        //nolint:misspell // LinkedIn's exact wire values.
 	"cancel_authorize": {"user_cancelled_authorize", "The user cancelled the authorization"}, //nolint:misspell // LinkedIn's exact wire values.
 }
 
-// linkedinAuthorizeFields are the authorize parameters the server sends, all
-// required. LinkedIn accepts nonce but never returns it. PKCE parameters are
-// refused rather than ignored.
 var linkedinAuthorizeFields = []string{"client_id", "redirect_uri", "response_type", "scope", "state", "nonce"}
 
-// linkedinTokenFields are the documented token request form parameters.
 var linkedinTokenFields = []string{"grant_type", "code", "redirect_uri", "client_id", "client_secret"}
 
 type linkedinBinding struct {
 	account linkedinAccount
 }
 
-// linkedinMock holds the LinkedIn mode's credentials and single-use codes.
 type linkedinMock struct {
 	svc          *Service
 	issuerURL    string
@@ -226,8 +207,6 @@ func (l *linkedinMock) serveAuthorize(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// validAuthorize accepts exactly the documented parameters with this client's
-// values, and refuses any PKCE parameter so a proof fails if one is sent.
 func (l *linkedinMock) validAuthorize(values url.Values) bool {
 	for _, name := range linkedinAuthorizeFields {
 		if !oneBoundedValue(values, name) {
@@ -267,9 +246,6 @@ func (l *linkedinMock) takeCode(code string) (linkedinBinding, bool) {
 	return binding, ok
 }
 
-// serveToken authenticates the client only through form parameters. An
-// Authorization header or a code_verifier gets 401 invalid_client before the
-// code is read, as a report of LinkedIn's live behavior describes.
 func (l *linkedinMock) serveToken(w http.ResponseWriter, r *http.Request) {
 	if !requireMethod(w, r, http.MethodPost) || !requireFormContentType(w, r) || !l.svc.parseForm(w, r) {
 		return
@@ -312,8 +288,6 @@ func (l *linkedinMock) serveToken(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// signIDToken leaves out the nonce claim, as LinkedIn does even when the
-// authorize request carried a nonce.
 func (l *linkedinMock) signIDToken(binding linkedinBinding) (string, error) {
 	now := l.svc.cfg.Now()
 	claims := map[string]any{
@@ -327,8 +301,6 @@ func (l *linkedinMock) signIDToken(binding linkedinBinding) (string, error) {
 	if binding.account.Email != "" {
 		claims["email"] = binding.account.Email
 		if binding.account.EmailVerified != nil {
-			// LinkedIn's ID token sends email_verified as the JSON string
-			// "true"/"false", not a JSON boolean.
 			claims["email_verified"] = strconv.FormatBool(*binding.account.EmailVerified)
 		}
 	}

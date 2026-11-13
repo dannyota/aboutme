@@ -1,9 +1,5 @@
 package auth_test
 
-// Password service HTTP tests: the seven-route inventory, the closed route
-// chain matrix, byte-equality responses, and the happy path for every operation
-// against a live migrated database.
-
 import (
 	"bytes"
 	"context"
@@ -26,11 +22,8 @@ import (
 	"danny.vn/aboutme/apps/server/internal/testutil"
 )
 
-// testPassword is a valid, already-NFC-normalized password for happy paths.
 const testPassword = "correct horse battery staple"
 
-// fastHashPolicy keeps Argon2id cheap in tests while staying within the parse
-// budget the hasher enforces.
 func fastHashPolicy() password.HashPolicy {
 	return password.HashPolicy{
 		Version:     19,
@@ -42,8 +35,6 @@ func fastHashPolicy() password.HashPolicy {
 	}
 }
 
-// passwordEnv bundles a full production-shaped password service with its
-// handler, query surface, and injectable clock.
 type passwordEnv struct {
 	handler http.Handler
 	svc     *auth.PasswordService
@@ -58,8 +49,6 @@ func newPasswordEnv(t *testing.T) *passwordEnv {
 	return newPasswordEnvWith(t, nil)
 }
 
-// newPasswordEnvWith builds the password service after mutate adjusts its
-// options; nil keeps the defaults.
 func newPasswordEnvWith(t *testing.T, mutate func(*auth.PasswordServiceOptions)) *passwordEnv {
 	t.Helper()
 
@@ -107,7 +96,6 @@ func newPasswordEnvWith(t *testing.T, mutate func(*auth.PasswordServiceOptions))
 	return &passwordEnv{handler: handler, svc: svc, q: q, pool: pool, clk: clk, hasher: hasher}
 }
 
-// passwordRequestOpt mutates a password request before it is served.
 type passwordRequestOpt func(*http.Request)
 
 func withOrigin(origin string) passwordRequestOpt {
@@ -126,8 +114,6 @@ func withContentType(ct string) passwordRequestOpt {
 	return func(r *http.Request) { r.Header.Set("Content-Type", ct) }
 }
 
-// request sends a JSON request through the full router chain and returns the
-// raw body plus the response.
 func (e *passwordEnv) request(t *testing.T, method, path, body string, opts ...passwordRequestOpt) (*http.Response, []byte) {
 	t.Helper()
 	req := httptest.NewRequestWithContext(context.Background(), method, path, strings.NewReader(body))
@@ -151,7 +137,6 @@ func (e *passwordEnv) request(t *testing.T, method, path, body string, opts ...p
 	return resp, raw
 }
 
-// jsonBody renders v as a request body, failing on any encode error.
 func jsonBody(t *testing.T, v any) string {
 	t.Helper()
 	b, err := json.Marshal(v)
@@ -173,8 +158,6 @@ func (e *passwordEnv) createUser(t *testing.T) uuid.UUID {
 	return user.ID
 }
 
-// setPassword stores a credential for rawPassword under userID using the same
-// fast hasher the service verifies with.
 func (e *passwordEnv) setPassword(t *testing.T, userID uuid.UUID, rawPassword string) {
 	t.Helper()
 	enc, err := e.hasher.Hash(context.Background(), rawPassword)
@@ -201,8 +184,6 @@ func (e *passwordEnv) createSession(t *testing.T, userID uuid.UUID) (raw string,
 	return raw, sess
 }
 
-// createRegistration inserts a pending registration with a known raw token and
-// returns the token and the registration row.
 func (e *passwordEnv) createRegistration(t *testing.T, email, name, rawPassword string) (password.Token, store.PasswordRegistration) {
 	t.Helper()
 	token, err := password.NewToken(rand.Reader)
@@ -228,7 +209,6 @@ func (e *passwordEnv) createRegistration(t *testing.T, email, name, rawPassword 
 	return token, reg
 }
 
-// createResetToken inserts a pending reset token with a known raw token.
 func (e *passwordEnv) createResetToken(t *testing.T, userID uuid.UUID) password.Token {
 	t.Helper()
 	token, err := password.NewToken(rand.Reader)
@@ -251,9 +231,6 @@ func newEmail() string {
 	return uuid.NewString() + "@example.com"
 }
 
-// newTestOutbox builds an outbox over a single key ring with the given nonce
-// source. A failing nonce source makes EnqueueTx fail, which the outbox-failure
-// race test uses to prove rollback.
 func newTestOutbox(t *testing.T, clk *testutil.Clock, nonce io.Reader) *authmail.Outbox {
 	t.Helper()
 	var key [32]byte
@@ -268,12 +245,9 @@ func newTestOutbox(t *testing.T, clk *testutil.Clock, nonce io.Reader) *authmail
 	return outbox
 }
 
-// errorReader is a nonce source that always fails, so Seal returns ErrNonce.
 type errorReader struct{}
 
 func (errorReader) Read([]byte) (int, error) { return 0, io.ErrUnexpectedEOF }
-
-// ---- inventory ----
 
 func TestPasswordRoutes_Inventory(t *testing.T) {
 	e := newPasswordEnv(t)
@@ -292,8 +266,6 @@ func TestPasswordRoutes_Inventory(t *testing.T) {
 	}
 	for _, p := range paths {
 		resp, body := e.request(t, p.method, p.path, "{}") //nolint:bodyclose // request closes the body itself before returning.
-		// A registered route must not be a 404; a valid route responds with
-		// something other than "no route".
 		if resp.StatusCode == http.StatusNotFound {
 			t.Errorf("%s %s returned 404: %s", p.method, p.path, body)
 		}
@@ -303,7 +275,6 @@ func TestPasswordRoutes_Inventory(t *testing.T) {
 func TestPasswordRoutes_WrongMethod(t *testing.T) {
 	e := newPasswordEnv(t)
 
-	// GET is not allowed on any password route.
 	for _, p := range []string{
 		auth.PasswordRegisterPath,
 		auth.PasswordVerifyPath,
@@ -320,8 +291,6 @@ func TestPasswordRoutes_WrongMethod(t *testing.T) {
 	}
 }
 
-// ---- route chain matrix ----
-
 func TestPasswordRoute_MediaTypeRejectedBeforeWork(t *testing.T) {
 	e := newPasswordEnv(t)
 	email := newEmail()
@@ -334,7 +303,6 @@ func TestPasswordRoute_MediaTypeRejectedBeforeWork(t *testing.T) {
 	}
 	assertErrorCode(t, body, "media_type_unsupported")
 
-	// No registration or job may be written for a rejected body.
 	assertNoRegistrationForEmail(t, e.pool, email)
 }
 
@@ -375,9 +343,6 @@ func TestPasswordRoute_MalformedJSONRejected(t *testing.T) {
 func TestPasswordRoute_OriginRejectedAfterJSON(t *testing.T) {
 	e := newPasswordEnv(t)
 
-	// Missing Origin/Referer fails closed (403), and it runs after the strict
-	// JSON chain: a request with BOTH a wrong origin and a malformed body
-	// reports the JSON failure first.
 	resp, body := e.request(t, http.MethodPost, auth.PasswordRegisterPath, //nolint:bodyclose // request closes the body itself before returning.
 		`{"name":"Ada","email":"a@example.com","password":"correct horse battery staple"}`,
 		withOrigin(""))
@@ -394,8 +359,6 @@ func TestPasswordRoute_OriginRejectedAfterJSON(t *testing.T) {
 	}
 	assertErrorCode(t, body, "request_invalid")
 }
-
-// ---- byte equality ----
 
 func TestPasswordRegisterForgot_ByteIdentical202(t *testing.T) {
 	e := newPasswordEnv(t)
@@ -434,8 +397,6 @@ func TestPasswordLogin_ByteIdentical401(t *testing.T) {
 	}
 }
 
-// ---- register happy path ----
-
 func TestPasswordRegister_HappyPath(t *testing.T) {
 	e := newPasswordEnv(t)
 	email := newEmail()
@@ -465,8 +426,6 @@ func TestPasswordRegister_HappyPath(t *testing.T) {
 	}
 }
 
-// ---- verify happy path ----
-
 func TestPasswordVerify_HappyPath(t *testing.T) {
 	e := newPasswordEnv(t)
 	email := newEmail()
@@ -485,13 +444,10 @@ func TestPasswordVerify_HappyPath(t *testing.T) {
 		t.Fatalf("credential not created: %v", err)
 	}
 
-	// The token must be single-use: the registration is gone.
 	if _, err := e.q.GetPasswordRegistrationByDigest(context.Background(), token.Digest[:]); err == nil {
 		t.Error("registration still present after verify, want consumed")
 	}
 }
-
-// ---- login happy path ----
 
 func TestPasswordLogin_HappyPath(t *testing.T) {
 	e := newPasswordEnv(t)
@@ -515,8 +471,6 @@ func TestPasswordLogin_HappyPath(t *testing.T) {
 	}
 }
 
-// userEmail reads the email of userID (creating a canonical-email account in the
-// helper above would otherwise require threading the email).
 func (e *passwordEnv) userEmail(t *testing.T, userID uuid.UUID) string {
 	t.Helper()
 	user, err := e.q.GetUserByID(context.Background(), userID)
@@ -525,8 +479,6 @@ func (e *passwordEnv) userEmail(t *testing.T, userID uuid.UUID) string {
 	}
 	return user.Email
 }
-
-// ---- helpers for assertions ----
 
 func assertErrorCode(t *testing.T, body []byte, code string) {
 	t.Helper()
@@ -547,9 +499,6 @@ func assertErrorCode(t *testing.T, body []byte, code string) {
 	}
 }
 
-// assertNoRegistrationForEmail asserts no pending registration exists for a
-// specific email, so a rejected request is proven not to have written one (the
-// shared database holds registrations from other tests).
 func assertNoRegistrationForEmail(t *testing.T, pool *store.Pool, email string) {
 	t.Helper()
 	var n int
@@ -562,7 +511,6 @@ func assertNoRegistrationForEmail(t *testing.T, pool *store.Pool, email string) 
 	}
 }
 
-// countSessions returns the number of live sessions for userID.
 func countSessions(t *testing.T, pool *store.Pool, userID uuid.UUID) int {
 	t.Helper()
 	var n int
@@ -571,8 +519,6 @@ func countSessions(t *testing.T, pool *store.Pool, userID uuid.UUID) int {
 	}
 	return n
 }
-
-// ---- forgot happy path ----
 
 func TestPasswordForgot_HappyPath(t *testing.T) {
 	e := newPasswordEnv(t)
@@ -585,7 +531,6 @@ func TestPasswordForgot_HappyPath(t *testing.T) {
 		t.Fatalf("status = %d, want 202 (body=%s)", resp.StatusCode, body)
 	}
 
-	// Exactly one reset token and one reset job now exist for the user.
 	rt, err := e.q.GetPasswordResetTokenByUserForUpdate(context.Background(), userID)
 	if err != nil {
 		t.Fatalf("reset token not created: %v", err)
@@ -603,13 +548,11 @@ func TestPasswordForgot_HappyPath(t *testing.T) {
 func TestPasswordForgot_UnknownAndProviderOnly_NoOp(t *testing.T) {
 	e := newPasswordEnv(t)
 
-	// Unknown email: 202 and no reset token created.
 	resp, _ := e.request(t, http.MethodPost, auth.PasswordForgotPath, jsonBody(t, map[string]string{"email": newEmail()})) //nolint:bodyclose // request closes the body itself before returning.
 	if resp.StatusCode != http.StatusAccepted {
 		t.Fatalf("unknown forgot status = %d, want 202", resp.StatusCode)
 	}
 
-	// Provider-only account: 202 and no reset token created.
 	userID := e.createUser(t)
 	email := e.userEmail(t, userID)
 	resp, _ = e.request(t, http.MethodPost, auth.PasswordForgotPath, jsonBody(t, map[string]string{"email": email})) //nolint:bodyclose // request closes the body itself before returning.
@@ -620,8 +563,6 @@ func TestPasswordForgot_UnknownAndProviderOnly_NoOp(t *testing.T) {
 		t.Error("reset token created for a provider-only account, want none")
 	}
 }
-
-// ---- reset happy path ----
 
 func TestPasswordReset_HappyPath(t *testing.T) {
 	e := newPasswordEnv(t)
@@ -638,15 +579,12 @@ func TestPasswordReset_HappyPath(t *testing.T) {
 		t.Fatalf("status = %d, want 204 (body=%s)", resp.StatusCode, body)
 	}
 
-	// The reset token is single-use.
 	if _, err := e.q.GetPasswordResetTokenByDigest(context.Background(), token.Digest[:]); err == nil {
 		t.Error("reset token still present after reset, want consumed")
 	}
-	// Every session is revoked.
 	if n := countSessions(t, e.pool, userID); n != 0 {
 		t.Errorf("live sessions after reset = %d, want 0", n)
 	}
-	// The credential is replaced: new password works, old does not.
 	email := e.userEmail(t, userID)
 	if r, _ := e.request(t, http.MethodPost, auth.PasswordLoginPath, jsonBody(t, map[string]string{"email": email, "password": newPassword})); r.StatusCode != http.StatusNoContent { //nolint:bodyclose // request closes the body itself before returning.
 		t.Errorf("login with new password status = %d, want 204", r.StatusCode)
@@ -657,8 +595,6 @@ func TestPasswordReset_HappyPath(t *testing.T) {
 	_ = raw
 }
 
-// totpBudgetSnapshot reads the non-secret failure-budget columns directly,
-// since no store query exposes them outside a row lock.
 type totpBudgetSnapshot struct {
 	failedAttempts int32
 	cooldownUntil  *time.Time
@@ -684,11 +620,6 @@ func totpTimePtrEqual(a, b *time.Time) bool {
 	return a.Equal(*b)
 }
 
-// TestPasswordReset_PreservesTOTPCooldownAndFailureCount proves a completed
-// password reset leaves cooldown_until, failed_attempts, and last_failed_at
-// unchanged: the reset transaction never touches totp_credentials
-// (docs/design/totp-second-factor-contract.md#per-account-totp-failure-budget;
-// AC-AUTH-028).
 func TestPasswordReset_PreservesTOTPCooldownAndFailureCount(t *testing.T) {
 	e := newPasswordEnv(t)
 	userID := e.createUser(t)
@@ -729,8 +660,6 @@ func TestPasswordReset_PreservesTOTPCooldownAndFailureCount(t *testing.T) {
 	}
 }
 
-// ---- reauth happy path ----
-
 func TestPasswordReauth_HappyPath(t *testing.T) {
 	e := newPasswordEnv(t)
 	userID := e.createUser(t)
@@ -744,7 +673,6 @@ func TestPasswordReauth_HappyPath(t *testing.T) {
 		t.Fatalf("status = %d, want 204 (body=%s)", resp.StatusCode, body)
 	}
 
-	// The current session's reauthenticated_at was refreshed to the new now.
 	got, err := e.q.GetSessionByID(context.Background(), sess.ID)
 	if err != nil {
 		t.Fatalf("get session: %v", err)
@@ -768,8 +696,6 @@ func TestPasswordReauth_WrongPassword(t *testing.T) {
 	assertErrorCode(t, body, "reauth_failed")
 }
 
-// ---- change happy path ----
-
 func TestPasswordChange_HappyPath(t *testing.T) {
 	e := newPasswordEnv(t)
 	userID := e.createUser(t)
@@ -792,7 +718,6 @@ func TestPasswordChange_HappyPath(t *testing.T) {
 		t.Error("fresh session token equals the old one, want a new token")
 	}
 
-	// The old session is revoked; the new one authenticates.
 	sm := auth.NewSessionManagerWithPoolForTest(e.pool, e.clk.Now)
 	if _, _, err := sm.Authenticate(context.Background(), oldRaw); err == nil {
 		t.Error("old session still authenticates after change, want revoked")
@@ -801,12 +726,10 @@ func TestPasswordChange_HappyPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new session does not authenticate: %v", err)
 	}
-	// The fresh session preserves the old session's absolute expiry.
 	if !newSess.AbsoluteExpiresAt.Equal(oldSess.AbsoluteExpiresAt) {
 		t.Errorf("new session absolute expiry = %v, want %v", newSess.AbsoluteExpiresAt, oldSess.AbsoluteExpiresAt)
 	}
 
-	// The credential is replaced.
 	email := e.userEmail(t, userID)
 	if r, _ := e.request(t, http.MethodPost, auth.PasswordLoginPath, jsonBody(t, map[string]string{"email": email, "password": newPassword})); r.StatusCode != http.StatusNoContent { //nolint:bodyclose // request closes the body itself before returning.
 		t.Errorf("login with new password status = %d, want 204", r.StatusCode)
@@ -816,10 +739,6 @@ func TestPasswordChange_HappyPath(t *testing.T) {
 	}
 }
 
-// TestPasswordChange_FreshSessionKeepsEpochAndFactorProof proves the forced
-// replacement session after a password change copies the locked account's
-// authentication epoch and the prior factor-proof time. Without the epoch the
-// account would be logged out once its epoch is above zero.
 func TestPasswordChange_FreshSessionKeepsEpochAndFactorProof(t *testing.T) {
 	e := newPasswordEnv(t)
 	userID := e.createUser(t)
@@ -861,7 +780,6 @@ func TestPasswordChange_RequiresRecentReauth(t *testing.T) {
 	e.setPassword(t, userID, testPassword)
 	raw, sess := e.createSession(t, userID)
 
-	// A stale reauthentication window is rejected before any write.
 	e.clk.Advance(16 * time.Minute)
 	resp, body := e.request(t, http.MethodPut, auth.PasswordMePath, jsonBody(t, map[string]string{"password": "another brand new password"}), //nolint:bodyclose // request closes the body itself before returning.
 		withCookie(sessionRequestCookie(raw)), withCSRF(csrfTokenFor(sess)))
@@ -877,14 +795,12 @@ func TestPasswordChange_RequiresSessionAndCSRF(t *testing.T) {
 	e.setPassword(t, userID, testPassword)
 	raw, sess := e.createSession(t, userID)
 
-	// No session cookie -> 401 authentication_required.
 	resp, body := e.request(t, http.MethodPut, auth.PasswordMePath, jsonBody(t, map[string]string{"password": "x"})) //nolint:bodyclose // request closes the body itself before returning.
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("no-session status = %d, want 401 (body=%s)", resp.StatusCode, body)
 	}
 	assertErrorCode(t, body, "authentication_required")
 
-	// Session but wrong CSRF token -> 403 csrf_rejected.
 	resp, body = e.request(t, http.MethodPut, auth.PasswordMePath, jsonBody(t, map[string]string{"password": "x"}), //nolint:bodyclose // request closes the body itself before returning.
 		withCookie(sessionRequestCookie(raw)), withCSRF("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"))
 	if resp.StatusCode != http.StatusForbidden {

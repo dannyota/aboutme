@@ -1,8 +1,5 @@
 package docmigrate
 
-// Compiling the released JSON schemas into ValidateFuncs, once at package
-// init.
-
 import (
 	"bytes"
 	"encoding/json"
@@ -15,10 +12,6 @@ import (
 	schema "danny.vn/aboutme/packages/schema/gen/go"
 )
 
-// releasedValidators compiles one ValidateFunc per released schema version,
-// exactly once, at package init -- never lazily and never per call. A
-// compilation failure is a hard startup failure: a server that cannot
-// validate a released document shape must not start.
 var releasedValidators = mustReleasedValidators()
 
 func mustReleasedValidators() map[int32]ValidateFunc {
@@ -32,9 +25,6 @@ func mustReleasedValidators() map[int32]ValidateFunc {
 		if err != nil {
 			panic(fmt.Sprintf("docmigrate: compiling released schema v%d: %v", version, err))
 		}
-		// schema_version is an int32 column; a released version outside that
-		// range could never be stored, so it is a build-time impossibility
-		// rather than a runtime condition to tolerate.
 		if version < 1 || version > math.MaxInt32 {
 			panic(fmt.Sprintf("docmigrate: released schema version %d is out of range for schema_version", version))
 		}
@@ -43,12 +33,6 @@ func mustReleasedValidators() map[int32]ValidateFunc {
 	return out
 }
 
-// newSchemaValidator compiles raw into a ValidateFunc with format assertion
-// enabled (matching ajv's configuration in packages/schema) and an empty
-// scheme map for the URL loader. Resolving any external $ref -- network or
-// filesystem -- can
-// never succeed. The schema is registered under its own $id, so its internal
-// $refs resolve exactly as they do in packages/schema.
 func newSchemaValidator(raw []byte) (ValidateFunc, error) {
 	var head struct {
 		ID string `json:"$id"`

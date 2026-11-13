@@ -7,6 +7,7 @@ import (
 	"danny.vn/aboutme/apps/server/internal/auth"
 	"danny.vn/aboutme/apps/server/internal/config"
 	"danny.vn/aboutme/apps/server/internal/media"
+	"danny.vn/aboutme/apps/server/internal/publicresume"
 	"danny.vn/aboutme/apps/server/internal/publicstate"
 	"danny.vn/aboutme/apps/server/internal/renderjob"
 	"danny.vn/aboutme/apps/server/internal/resume"
@@ -16,33 +17,19 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// ResumeDependencies are the resume service's collaborators.
 type ResumeDependencies struct {
-	// Config supplies the public origin, trusted proxies, and the
-	// sign-in-to-view switch.
-	Config config.Config
-	// Pool backs the resume and idempotency stores and recovery reads.
-	Pool *store.Pool
-	// Projector projects stored resume documents.
-	Projector *docmigrate.Projector
-	// Media holds resume photos.
-	Media media.Backend
-	// Logger receives resume diagnostics.
-	Logger *slog.Logger
-	// Sessions authenticates owner requests.
-	Sessions *auth.SessionManager
-	// Coordinator is the shared public-generation coordinator.
+	Config      config.Config
+	Pool        *store.Pool
+	Projector   *docmigrate.Projector
+	Media       media.Backend
+	Logger      *slog.Logger
+	Sessions    *auth.SessionManager
 	Coordinator *publicstate.Coordinator
-	// PrintQueue performs bounded private rendering after owner
-	// authorization.
-	PrintQueue *renderjob.Queue
-	// Showcase applies community-showcase state with resume writes.
-	Showcase *showcase.Service
+	PrintQueue  *renderjob.Queue
+	Showcase    *showcase.Service
+	Origin      publicresume.PublicOrigin
 }
 
-// NewResumes returns the authenticated resume service. It creates the
-// process-wide photo admission permit that the service's REST and agent upload
-// paths share, so a process calls it once.
 func NewResumes(deps ResumeDependencies) *resumeapi.Service {
 	cfg := deps.Config
 	return resumeapi.New(
@@ -54,6 +41,7 @@ func NewResumes(deps ResumeDependencies) *resumeapi.Service {
 			Logger:              deps.Logger,
 			SessionManager:      deps.Sessions,
 			PublicOrigin:        cfg.PublicOrigin,
+			CanonicalOrigin:     deps.Origin,
 			TrustedProxies:      api.TrustedProxies(cfg.TrustedProxyCIDRs),
 			PhotoAdmission:      media.NewPhotoAdmission(),
 			PhotoNormalizer:     media.NewPhotoNormalizer(),

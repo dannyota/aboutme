@@ -27,7 +27,6 @@ func (e *env) list(t *testing.T, filter Filter) Page {
 	return page
 }
 
-// setRequested pins the opt-in time the order depends on.
 func (e *env) setRequested(t *testing.T, f fixture, at time.Time) {
 	t.Helper()
 	if _, err := e.pool.Exec(e.ctx, `UPDATE resume_showcase SET requested_at = $2 WHERE resume_id = $1`, f.id, at); err != nil {
@@ -35,8 +34,6 @@ func (e *env) setRequested(t *testing.T, f fixture, at time.Time) {
 	}
 }
 
-// AC-SHOW-014: an opted-in, live resume with sign in to view off is listed at
-// once, with no review step.
 func TestListShowsAnOptInAtOnce(t *testing.T) {
 	e := newFreshEnv(t)
 	f := e.addResume(t, defaultSpec())
@@ -50,15 +47,11 @@ func TestListShowsAnOptInAtOnce(t *testing.T) {
 	}
 }
 
-// AC-SHOW-014: the listing checks all three conditions on every request: the
-// opt-in row, a live resume, and sign in to view off. Each one alone excludes.
 func TestListChecksAllThreeListingConditions(t *testing.T) {
 	e := newFreshEnv(t)
 	shown := e.listed(t, defaultSpec(), nil)
 	noRow := e.addResume(t, defaultSpec())
 
-	// The next two rows bypass the transactions that delete the row, so only
-	// the listing query itself keeps them out.
 	unpublished := e.listed(t, defaultSpec(), nil)
 	if _, err := e.pool.Exec(e.ctx, `UPDATE resumes SET live = false WHERE id = $1`, unpublished.id); err != nil {
 		t.Fatalf("unpublish: %v", err)
@@ -78,8 +71,6 @@ func TestListChecksAllThreeListingConditions(t *testing.T) {
 	}
 }
 
-// AC-SHOW-005, AC-SHOW-002: oldest opt-in first, then resume ID; role,
-// language, and template filters combine; an item holds only its closed fields.
 func TestListOrderFiltersAndItems(t *testing.T) {
 	e := newFreshEnv(t)
 	files := readTemplateFiles(t)
@@ -106,7 +97,6 @@ func TestListOrderFiltersAndItems(t *testing.T) {
 	unsetFixture := e.listed(t, unset, strp("other"))
 	e.setRequested(t, unsetFixture, base)
 
-	// Equal opt-in times fall back to the resume ID, smallest ID first.
 	tied := []fixture{styledFixture, otherFixture}
 	if tied[0].id.String() > tied[1].id.String() {
 		tied[0], tied[1] = tied[1], tied[0]
@@ -165,7 +155,6 @@ func TestListOrderFiltersAndItems(t *testing.T) {
 		}
 	}
 
-	// The wire form has exactly the closed item fields, with null for unset.
 	encoded, err := json.Marshal(page)
 	if err != nil {
 		t.Fatalf("marshal page: %v", err)
@@ -188,9 +177,6 @@ func TestListOrderFiltersAndItems(t *testing.T) {
 	}
 }
 
-// AC-SHOW-005: the oldest opt-in is listed first. An edit keeps the resume
-// listed and in place. Turning the switch off and on again starts a new
-// opt-in, which moves it to the end.
 func TestListOrdersByOptInTime(t *testing.T) {
 	e := newFreshEnv(t)
 	editedSpec := defaultSpec()
@@ -222,8 +208,6 @@ func TestListOrdersByOptInTime(t *testing.T) {
 	}
 }
 
-// AC-SHOW-013: twelve listings a page, a page past the last is empty with the
-// real page count, and no listings give a count of zero.
 func TestListPagesTwelveAtATime(t *testing.T) {
 	e := newFreshEnv(t)
 	for i := range 13 {
@@ -255,8 +239,6 @@ func TestListPagesTwelveAtATime(t *testing.T) {
 	}
 }
 
-// AC-SHOW-002: the image text follows the card's rule, so a headline holding a
-// contact value is left off.
 func TestListImageTextHoldsNoContactDetail(t *testing.T) {
 	e := newFreshEnv(t)
 	clean := defaultSpec()
@@ -284,8 +266,6 @@ func TestListImageTextHoldsNoContactDetail(t *testing.T) {
 	}
 }
 
-// revokeWhileListing runs revoke while readers list continuously, then checks
-// that no request admitted after revoke returned lists the resume.
 func revokeWhileListing(t *testing.T, e *env, slug string, revoke func()) {
 	t.Helper()
 	const readers = 3
@@ -360,9 +340,6 @@ func waitFor(t *testing.T, condition func() bool) {
 	}
 }
 
-// AC-SHOW-014: an opt-out, an unpublish, or sign in to view that commits while
-// listing requests are in flight takes effect for every request admitted
-// after it, because nothing is cached.
 func TestListOmitsAResumeAfterARevocationCommits(t *testing.T) {
 	e := newFreshEnv(t)
 	stays := e.listed(t, defaultSpec(), nil)

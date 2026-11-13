@@ -1,8 +1,5 @@
 package auth
 
-// Provider HTTP calls use one client with a fixed timeout. GitHub response
-// bodies also have a separate byte limit at the read site.
-
 import (
 	"context"
 	"fmt"
@@ -16,18 +13,12 @@ import (
 	"golang.org/x/oauth2"
 )
 
-// providerHTTPTimeout bounds discovery, JWKS, token, and profile requests.
 const providerHTTPTimeout = 10 * time.Second
 
-// maxProviderResponseBytes bounds each GitHub JSON response before decoding.
-const maxProviderResponseBytes = 1 << 20 // 1 MiB
+const maxProviderResponseBytes = 1 << 20
 
-// providerHTTPClient is safe for concurrent use by all provider requests.
 var providerHTTPClient = &http.Client{Timeout: providerHTTPTimeout}
 
-// localProviderHTTPClient returns a bounded client that can dial only an
-// IPv4 or IPv6 loopback listener. It disables proxy use so a local provider
-// request can never carry credentials through an ambient HTTP proxy.
 func localProviderHTTPClient() *http.Client {
 	defaultTransport, ok := http.DefaultTransport.(*http.Transport)
 	if !ok {
@@ -117,8 +108,6 @@ func validateLocalBackchannelURL(raw, wantPath string) error {
 	return nil
 }
 
-// withProviderHTTPClient configures oauth2 and go-oidc calls to use the bounded
-// client. Callers must pass the returned context through the complete flow.
 func withProviderHTTPClient(ctx context.Context) context.Context {
 	return context.WithValue(ctx, oauth2.HTTPClient, providerHTTPClient)
 }

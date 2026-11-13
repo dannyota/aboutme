@@ -1,16 +1,5 @@
 package publicapi
 
-// A Go copy of the web renderer's strict project envelope decoder,
-// apps/web/server/utils/public-render/project-decode.ts and the field checks
-// in envelope-fields.ts. Each check names the rule it applies, so a builder
-// change the renderer would refuse fails here first. Types are exact: a
-// value of another type fails its rule, as it does in TypeScript. Links and
-// origins follow the WHATWG URL parser through rendererLink and
-// whatwgHostPort, which renderer_link_test.go pins against Node's URL.
-// Preview text uses the project page bounds agreed with the renderer. The
-// rules follow the decoder at web commit 7ed24b18; the golden envelope test
-// runs the decoder itself.
-
 import (
 	"encoding/json"
 	"regexp"
@@ -24,7 +13,6 @@ import (
 )
 
 var (
-	// RE2 caps a repeat count at 1000, so the 2048 bound is checked apart.
 	decoderFaviconHref   = regexp.MustCompile(`^data:image/svg\+xml,[A-Za-z0-9._~%-]+$`)
 	decoderPreviewLocale = regexp.MustCompile(`^[a-z]{2,3}_[A-Z]{2}$`)
 	decoderSlug          = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`)
@@ -34,7 +22,6 @@ var (
 	decoderCardVersion   = regexp.MustCompile(`^[0-9a-f]{16}\.png$`)
 )
 
-// envelopeDecoder collects every decoder rule one envelope breaks.
 type envelopeDecoder struct{ broken []string }
 
 func (d *envelopeDecoder) require(ok bool, rule string) {
@@ -43,8 +30,6 @@ func (d *envelopeDecoder) require(ok bool, rule string) {
 	}
 }
 
-// decodeProjectEnvelopeRules runs the decoder for the envelope's mode over
-// its JSON encoding and returns the broken rules.
 func decodeProjectEnvelopeRules(t *testing.T, request any) []string {
 	t.Helper()
 	raw, err := json.Marshal(request)
@@ -92,7 +77,6 @@ func decodeProjectEnvelopeRules(t *testing.T, request any) []string {
 	return d.broken
 }
 
-// keys requires every required key and allows only the optional ones.
 func (d *envelopeDecoder) keys(value map[string]any, required, optional []string, rule string) {
 	for _, key := range required {
 		_, present := value[key]
@@ -103,7 +87,6 @@ func (d *envelopeDecoder) keys(value map[string]any, required, optional []string
 	}
 }
 
-// common checks the head fields and the resume, and returns the resume url.
 func (d *envelopeDecoder) common(envelope map[string]any) string {
 	origin, isString := envelope["canonicalOrigin"].(string)
 	d.require(isString && decoderNormalizedOrigin(origin), "canonicalOrigin is a normalized origin")
@@ -137,7 +120,6 @@ func (d *envelopeDecoder) common(envelope map[string]any) string {
 	return resumeURL
 }
 
-// preview checks the preview text against the project page bounds.
 func (d *envelopeDecoder) preview(preview map[string]any, origin, slug string) {
 	d.keys(preview, []string{"title", "description", "locale", "imageAlt"}, []string{"imageUrl"}, "preview keys")
 	title, isString := preview["title"].(string)
@@ -155,7 +137,6 @@ func (d *envelopeDecoder) preview(preview map[string]any, origin, slug string) {
 	}
 }
 
-// text checks the fields a list row and a project page share.
 func (d *envelopeDecoder) text(fields map[string]any, listURL string) {
 	slug, isString := fields["slug"].(string)
 	d.require(isString && len(slug) >= 2 && len(slug) <= 40 && decoderProjectSlug.MatchString(slug), "project slug")
@@ -214,8 +195,6 @@ func (d *envelopeDecoder) technologies(value any, limit int) int {
 	return len(names)
 }
 
-// optionalText requires an optional text to be absent, or a string, not
-// empty and within its limit.
 func (d *envelopeDecoder) optionalText(value map[string]any, key string, limit int) {
 	if field, present := value[key]; present {
 		text, isString := field.(string)
@@ -236,8 +215,6 @@ func (d *envelopeDecoder) dates(value any) {
 	}
 }
 
-// decoderMonth is monthOrdinal: the year in months, an omitted month read
-// as January.
 func decoderMonth(value any) float64 {
 	month, isObject := value.(map[string]any)
 	year, isYear := month["y"].(float64)
@@ -250,8 +227,6 @@ func decoderMonth(value any) float64 {
 	return year*12 + 1
 }
 
-// decoderDescription is the page description the decoder computes: the
-// summary when present, else the outcome's first 160 code points, else "".
 func decoderDescription(fields map[string]any) any {
 	if summary, present := fields["summary"]; present {
 		return summary
@@ -263,7 +238,6 @@ func decoderDescription(fields map[string]any) any {
 	return outcome
 }
 
-// object requires an object; another type fails and reads as empty.
 func (d *envelopeDecoder) object(value any, rule string) map[string]any {
 	object, isObject := value.(map[string]any)
 	d.require(isObject, rule+" is an object")
@@ -291,13 +265,10 @@ func decoderYearMonth(value any) bool {
 	return true
 }
 
-// decoderText is the decoder's text: at most maxCodePoints and storable.
 func decoderText(value string, maxCodePoints int) bool {
 	return utf8.RuneCountInString(value) <= maxCodePoints && decoderStorable(value)
 }
 
-// decoderStorable is storable: no NUL and well formed. Go's JSON decoding
-// already replaces a lone surrogate, which Go's encoding never writes.
 func decoderStorable(value string) bool {
 	return !strings.ContainsRune(value, 0) && utf8.ValidString(value)
 }

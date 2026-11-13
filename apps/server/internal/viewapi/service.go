@@ -1,7 +1,3 @@
-// Package viewapi serves the view-count routes: the public page script's
-// start and collect, and the owner's reads of daily aggregates
-// (docs/design/viewer-analytics/delivery.md, "API"). Owner routes take the
-// session cookie only; no bearer token or MCP tool reaches them.
 package viewapi
 
 import (
@@ -15,7 +11,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/viewcount"
 )
 
-// Route paths.
 const (
 	StartPath   = "/api/v1/public/resumes/{slug}/views/start"
 	CollectPath = "/api/v1/public/views/collect"
@@ -23,17 +18,13 @@ const (
 	DetailPath  = "/api/v1/views/{id}"
 )
 
-// Rate policies (docs/design/budgets.md, "Viewer analytics"; the owner
-// reads share the resume read policy).
 const (
 	publicRequests = 30
 	ownerRequests  = 600
 )
 
-// ErrInvalidConfig reports a missing dependency.
 var ErrInvalidConfig = errors.New("viewapi: invalid config")
 
-// Dependencies configure the Service.
 type Dependencies struct {
 	Counter        *viewcount.Counter
 	Queries        OwnerQueries
@@ -42,12 +33,9 @@ type Dependencies struct {
 	TrustedProxies api.TrustedProxies
 	Now            func() time.Time
 	Logger         *slog.Logger
-	// ViewPassKey seals and opens the __Host-view-pass cookie
-	// (docs/design/viewer-analytics/sign-in-to-view.md "Pass cookie").
-	ViewPassKey []byte
+	ViewPassKey    []byte
 }
 
-// Service owns the view-count routes.
 type Service struct {
 	counter        *viewcount.Counter
 	queries        OwnerQueries
@@ -59,7 +47,6 @@ type Service struct {
 	viewPassKey    []byte
 }
 
-// New validates the dependencies.
 func New(deps Dependencies) (*Service, error) {
 	if deps.Counter == nil || deps.Queries == nil || deps.Sessions == nil || deps.PublicOrigin == "" {
 		return nil, ErrInvalidConfig
@@ -74,9 +61,6 @@ func New(deps Dependencies) (*Service, error) {
 	}, nil
 }
 
-// RegisterRoutes installs the four routes. Each public route checks its
-// method, Origin, media type, and body before the optional session lookup,
-// which only recognizes the owner.
 func (s *Service) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle(StartPath, s.publicLimit()(s.publicRoute(s.handleStart)))
 	mux.Handle(CollectPath, s.publicLimit()(s.publicRoute(s.handleCollect)))

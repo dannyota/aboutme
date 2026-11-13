@@ -52,10 +52,8 @@ func TestAccountDeletionRetainsNoticeObligationOutcome(t *testing.T) {
 
 type deletionNoticeAuthority struct{}
 
-// AuthorizeSend isolates database lock behavior from host receipt parsing.
 func (deletionNoticeAuthority) AuthorizeSend(context.Context, *store.Queries) bool { return true }
 
-// ContentDigest matches the compiled campaign fixture.
 func (deletionNoticeAuthority) ContentDigest() []byte { return privacynotice.ContentDigest() }
 
 func TestAccountDeletionJoinsNoticeSendAndPreservesOutcome(t *testing.T) {

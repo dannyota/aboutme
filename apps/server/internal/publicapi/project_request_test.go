@@ -19,7 +19,6 @@ import (
 
 const projectTestCardURL = "https://aboutme.example/api/v1/public/resumes/ada/og/0123456789abcdef.png"
 
-// projectTestSnapshot is an admitted resume for the request builders.
 func projectTestSnapshot(lng, fullName string, scheme *schema.ColorScheme, dateFormat schema.DateFormat, discoverable bool) publicresume.Snapshot {
 	var customization schema.Customization
 	customization.ColorScheme, customization.DateFormat = scheme, dateFormat
@@ -43,10 +42,6 @@ func schemeOf(value schema.ColorScheme) *schema.ColorScheme { return &value }
 
 func monthOf(value int64) *int64 { return &value }
 
-// TestProjectRequests_BuildTheCorpusEnvelopes proves Go builds exactly the
-// envelopes of the shared corpus from the snapshot they describe. The corpus
-// favicon is a placeholder no emoji produces, so that one field is set from
-// the corpus.
 func TestProjectRequests_BuildTheCorpusEnvelopes(t *testing.T) {
 	corpus := readProjectCorpus(t)
 	en := "en"
@@ -246,7 +241,6 @@ func TestProjectRequests_OwnerAndResume(t *testing.T) {
 	}
 }
 
-// readProjectCorpus reads the shared corpus by case name.
 func readProjectCorpus(t *testing.T) map[string]projectCorpusCase {
 	t.Helper()
 	raw, err := os.ReadFile("testdata/project-render.json")

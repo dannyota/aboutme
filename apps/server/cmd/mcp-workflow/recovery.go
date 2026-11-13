@@ -14,20 +14,15 @@ var (
 )
 
 const (
-	journalVersion   = 1
-	workflowLabel    = "owner-vi-copy"
-	tokenHintRefresh = "refresh_token"
-	statusPending    = "pending"
-	// accessRevocationCutoff and refreshRevocationCutoff are the design's
-	// conservative bounds after the token response's server Date.
+	journalVersion          = 1
+	workflowLabel           = "owner-vi-copy"
+	tokenHintRefresh        = "refresh_token"
+	statusPending           = "pending"
 	accessRevocationCutoff  = 55 * time.Minute
 	refreshRevocationCutoff = 29 * 24 * time.Hour
-	// maxRevocationRounds allows the first proof plus one after a rotation.
-	maxRevocationRounds = 2
+	maxRevocationRounds     = 2
 )
 
-// completionSentinel is the durable one-shot control. It holds no owner or
-// grant identifier.
 type completionSentinel struct {
 	Version           int       `json:"version"`
 	Origin            string    `json:"origin"`
@@ -36,8 +31,6 @@ type completionSentinel struct {
 	TargetConfirmedAt time.Time `json:"target_confirmed_at"`
 }
 
-// revocationJournal is the secret-bearing revocation authority. It is
-// written before the sentinel and removed only after a timely proof.
 type revocationJournal struct {
 	Version           int       `json:"version"`
 	Origin            string    `json:"origin"`
@@ -69,8 +62,6 @@ func validJournal(journal revocationJournal, origin string) bool {
 		!journal.AccessUntil.IsZero() && !journal.RefreshUntil.IsZero() && !journal.AccessUntil.After(journal.RefreshUntil)
 }
 
-// validBearerValue accepts only visible ASCII so a token can never inject a
-// header or form field.
 func validBearerValue(value string) bool {
 	if value == "" || len(value) > 512 {
 		return false
@@ -115,9 +106,6 @@ func loadJournal(control privateArtifacts, origin string) (revocationJournal, bo
 	return journal, true, nil
 }
 
-// persistJournal atomically writes and syncs the journal. replace is false for
-// the first journal, so an unresolved journal is never overwritten by a new
-// grant.
 func persistJournal(control privateArtifacts, journal revocationJournal, origin string, replace bool) error {
 	if !validJournal(journal, origin) {
 		return errRecovery
@@ -135,8 +123,6 @@ func persistJournal(control privateArtifacts, journal revocationJournal, origin 
 	return control.createExclusive(revocationName, data)
 }
 
-// ensureSentinel makes the completion sentinel durable from the journal's
-// attested fields. An existing sentinel must match exactly.
 func ensureSentinel(control privateArtifacts, journal revocationJournal, origin string) error {
 	expected := journal.sentinel()
 	if !validSentinel(expected, origin) {
@@ -163,7 +149,6 @@ func ensureSentinel(control privateArtifacts, journal revocationJournal, origin 
 	return nil
 }
 
-// revocationTransport is the narrow RFC 7009, probe, and refresh surface.
 type revocationTransport interface {
 	Revoke(ctx context.Context, refreshToken string) error
 	Probe(ctx context.Context, accessToken string) (status int, serverDate time.Time, err error)
@@ -177,12 +162,8 @@ type refreshOutcome struct {
 	ServerDate   time.Time
 }
 
-// settleRevocation revokes and proves the grant dead. A timely 401 or a timely
-// invalid_grant proves revocation. A rotation proves the grant is live: the
-// successor is journaled before it is revoked. Anything else keeps the journal.
 func settleRevocation(ctx context.Context, transport revocationTransport, control privateArtifacts, origin string, journal revocationJournal) error {
 	for round := 0; round < maxRevocationRounds; round++ {
-		// The revoke result is not a proof; a lost response is settled below.
 		revokeErr := transport.Revoke(ctx, journal.RefreshToken)
 		status, probeDate, probeErr := transport.Probe(ctx, journal.AccessToken)
 		switch {
@@ -214,9 +195,6 @@ func settleRevocation(ctx context.Context, transport revocationTransport, contro
 	return errRevocation
 }
 
-// finishRevocation deletes the journal only after proof and a durable
-// sentinel, then drops the inert create intent. Local synthetic runs also
-// remove their sentinel so the separate local root starts clean.
 func finishRevocation(control privateArtifacts, journal revocationJournal, origin string, local bool) error {
 	if err := ensureSentinel(control, journal, origin); err != nil {
 		return err
@@ -233,8 +211,6 @@ func finishRevocation(control privateArtifacts, journal revocationJournal, origi
 	return nil
 }
 
-// recoverRevocationOnly is the only path when a journal exists. It never
-// initializes SDK OAuth, opens a browser, or reads resumes.
 func recoverRevocationOnly(ctx context.Context, transport revocationTransport, control privateArtifacts, origin string, local bool) error {
 	journal, present, err := loadJournal(control, origin)
 	if err != nil || !present {

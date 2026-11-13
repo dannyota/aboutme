@@ -18,15 +18,11 @@ import (
 	"danny.vn/aboutme/apps/server/internal/resume"
 )
 
-// fullFixtureWorkEntryID and fullFixtureCustomEntryID name entries of the
-// full schema fixture's work and custom sections.
 const (
 	fullFixtureWorkEntryID   = "dd89bd8a-ba7d-4bec-9c43-f1b296c56fac"
 	fullFixtureCustomEntryID = "6f2b6ec0-dc76-4c6e-a44f-6d9e2141b44e"
 )
 
-// unlinkedProjectEntry is a project entry with every text field, a hidden
-// flag and no link.
 func unlinkedProjectEntry() schema.ProjectEntry {
 	start, end := int64(4), int64(11)
 	hidden := true
@@ -41,8 +37,6 @@ func unlinkedProjectEntry() schema.ProjectEntry {
 	}
 }
 
-// existingEntryDocument returns the full fixture whose project section holds
-// a linked entry, target, and the fixture's own entry, in that order.
 func existingEntryDocument(t *testing.T, target schema.ProjectEntry, linkedTo uuid.UUID) schema.Resume {
 	t.Helper()
 	doc := loadFullDocument(t)
@@ -62,7 +56,6 @@ func canonicalDocument(t *testing.T, doc schema.Resume) json.RawMessage {
 	return raw
 }
 
-// withEntryLink returns a fresh copy of raw whose entryID links projectID.
 func withEntryLink(t *testing.T, raw json.RawMessage, entryID string, projectID uuid.UUID) schema.Resume {
 	t.Helper()
 	doc, err := strictDecodeCurrentDocument(raw)
@@ -185,8 +178,6 @@ func TestDecodeProjectLink_OptionalEntryID(t *testing.T) {
 			t.Errorf("%s = %+v %+v, want 400 request_invalid", name, prepared, failure)
 		}
 	}
-	// An omitted entryId inserts an entry, so an explicit null must not read
-	// as one.
 	if prepared, failure := decodeProjectLinkBody(t, resumeID, `{"projectId":"`+projectID+`","entryId":null}`); failure == nil ||
 		failure.Status != http.StatusBadRequest || failure.Code != "request_invalid" || !strings.Contains(failure.Message, `"entryId"`) {
 		t.Errorf("null entryId = %+v %+v, want 400 request_invalid naming entryId", prepared, failure)
@@ -196,9 +187,6 @@ func TestDecodeProjectLink_OptionalEntryID(t *testing.T) {
 	}
 }
 
-// A link that names an existing entry shares the insert's operation
-// identity, so one idempotency key cannot both insert and link an entry for
-// the same project.
 func TestProjectLinkTargets_ExistingEntryKeepsTheLinkIdentity(t *testing.T) {
 	t.Parallel()
 	resumeID, projectID, entryID := uuid.New(), uuid.New(), uuid.NewString()

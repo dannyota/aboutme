@@ -33,16 +33,6 @@ import (
 
 const stalledPhotoPath = "/api/v1/public/resumes/ada-lovelace/photo"
 
-// TestRouteTable_RevocationEndsAPublicWriteStalledBehindCaddy drives the
-// real Go public photo route through a real Caddy with an HTTP/2 viewer that
-// set its stream window to 0 and never updates it. Caddy stops reading the
-// origin once its own write to that stream blocks, so the Go handler's write
-// stalls mid-body while it holds the resume's lease. A revoking transition
-// must still drain within the five-second bound of
-// docs/adr/0010-public-artifact-revocation.md, and the viewer must never
-// receive the whole old photo: its stream ends with a reset or a closed
-// connection, either while its window is still 0 or, once it opens the
-// window, after what was in flight.
 func TestRouteTable_RevocationEndsAPublicWriteStalledBehindCaddy(t *testing.T) {
 	bin := caddyBinary(t)
 	origin := newStalledPhotoOrigin(t)
@@ -87,9 +77,7 @@ func TestRouteTable_RevocationEndsAPublicWriteStalledBehindCaddy(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Check for a reset while the window is still 0 first. Caddy's copy loop
-	// is blocked writing to this stream, so it may not see the origin's
-	// failure until the viewer reads; then open the window and read on.
+	// Caddy's copy loop is blocked writing this stream, so it may not see the origin's failure until the viewer reads.
 	received := 0
 	end, ended := client.endWhileWindowZero(t, time.Second)
 	if ended {
@@ -105,11 +93,6 @@ func TestRouteTable_RevocationEndsAPublicWriteStalledBehindCaddy(t *testing.T) {
 	t.Logf("origin stalled at %d of %d bytes; revocation drained in %s; viewer then got %d bytes and %s", stalledAt, len(origin.photo), drained, received, end)
 }
 
-// withH2C turns on cleartext HTTP/2 beside HTTP/1.1 in the adapted
-// Caddyfile's global options, so the hand-written client can speak HTTP/2
-// without TLS. Production serves HTTP/2 over TLS
-// (deploy/caddy/production/edges/direct.global); stream flow control, which
-// this test exercises, is the same in both.
 func withH2C(t *testing.T, content string) string {
 	t.Helper()
 	const globalOption = "\tadmin off\n"
@@ -119,10 +102,6 @@ func withH2C(t *testing.T, content string) string {
 	return strings.Replace(content, globalOption, globalOption+"\tservers {\n\t\tprotocols h1 h2c\n\t}\n", 1)
 }
 
-// stalledPhotoOrigin is a real Go public route handler over one live resume
-// whose photo is at its 2 MiB limit. It counts the body bytes the handler
-// has handed to its connection and closes done when the photo handler
-// returns.
 type stalledPhotoOrigin struct {
 	server      *httptest.Server
 	coordinator *publicstate.Coordinator
@@ -187,10 +166,6 @@ func newStalledPhotoOrigin(t *testing.T) *stalledPhotoOrigin {
 	return origin
 }
 
-// awaitStall waits until the photo handler has stopped handing bytes to its
-// connection short of the whole body, and returns how many it handed over.
-// It fails if the handler returns first: the body then fit in the buffers
-// between the origin and the viewer, and nothing stalled.
 func (o *stalledPhotoOrigin) awaitStall(t *testing.T) int64 {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
@@ -214,9 +189,6 @@ func (o *stalledPhotoOrigin) awaitStall(t *testing.T) int64 {
 	return 0
 }
 
-// progressWriter hands a body to the connection in 16 KiB pieces and counts
-// the bytes accepted, so the test sees where a write stalls. Unwrap lets
-// http.ResponseController reach the connection's write deadline.
 type progressWriter struct {
 	http.ResponseWriter
 	written *atomic.Int64
@@ -239,10 +211,7 @@ func (w *progressWriter) Write(body []byte) (int, error) {
 
 func (w *progressWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 
-// smallSendBufferListener gives each accepted connection a 16 KiB send
-// buffer. Linux grows loopback send buffers to megabytes, enough to hold the
-// whole 2 MiB photo; a small one makes the stall depend only on the viewer's
-// window, as a real network path does.
+// Linux grows loopback send buffers to megabytes, enough to hold the whole 2 MiB photo.
 type smallSendBufferListener struct{ net.Listener }
 
 func (l smallSendBufferListener) Accept() (net.Conn, error) {
@@ -272,8 +241,6 @@ func mustJSON(t *testing.T, value any) []byte {
 	return encoded
 }
 
-// photoResumeStore reads one live resume. The embedded nil interface makes
-// every other query panic, so an unexpected read fails the test loudly.
 type photoResumeStore struct {
 	store.PublicReadQueries
 	row store.Resume
@@ -286,7 +253,6 @@ func (s photoResumeStore) GetPublicResumeBySlug(_ context.Context, slug string) 
 	return store.GetPublicResumeBySlugRow{Resume: s.row, ProjectLinks: json.RawMessage(`[]`)}, nil
 }
 
-// photoBackend returns body as a PNG for every key.
 type photoBackend struct {
 	media.Backend
 	body []byte
@@ -296,6 +262,4 @@ func (b photoBackend) Get(context.Context, string) (io.ReadCloser, string, error
 	return io.NopCloser(bytes.NewReader(b.body)), "image/png", nil
 }
 
-// unusedDiscovery satisfies the service's discovery dependency; this test
-// never requests a discovery document.
 type unusedDiscovery struct{ store.PublicDiscoveryQueries }

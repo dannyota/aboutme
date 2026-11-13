@@ -10,10 +10,6 @@ import (
 	schema "danny.vn/aboutme/packages/schema/gen/go"
 )
 
-// Document v5 adds customization.colorScheme
-// (docs/design/public-page-theme.md). A v1 to v4 client cannot express it, so
-// its writes must keep the stored value.
-
 func seedColorScheme(t *testing.T, h *resumeAPITestHarness, scheme schema.ColorScheme) (uuid.UUID, int64) {
 	t.Helper()
 	created := h.createResume(t)

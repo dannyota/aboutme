@@ -95,10 +95,6 @@ func TestLogging_EmitsStructuredRequestLog(t *testing.T) {
 	}
 }
 
-// TestLogging_RecordsOnlyFirstWriteHeaderCall guards against the logged
-// status diverging from what was actually sent on the wire: net/http only
-// honors the first WriteHeader call (later ones are superfluous no-ops), so
-// the wrapper must not let a later call overwrite the recorded status.
 func TestLogging_RecordsOnlyFirstWriteHeaderCall(t *testing.T) {
 	t.Parallel()
 
@@ -106,8 +102,8 @@ func TestLogging_RecordsOnlyFirstWriteHeaderCall(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(&buf, nil))
 
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusAccepted) // first call: this is what is sent
-		w.WriteHeader(http.StatusTeapot)   // superfluous: must not change the log
+		w.WriteHeader(http.StatusAccepted)
+		w.WriteHeader(http.StatusTeapot)
 	})
 	handler := api.RequestID(api.Logging(logger)(next))
 
@@ -125,12 +121,6 @@ func TestLogging_RecordsOnlyFirstWriteHeaderCall(t *testing.T) {
 	}
 }
 
-// TestLogging_PreservesFlushThroughResponseController proves the Logging
-// wrapper doesn't break streaming responses: composed the same way api.New
-// wires the middleware chain (RequestID -> Logging -> BodyLimit -> handler),
-// a handler using http.ResponseController to flush must actually reach the
-// underlying ResponseWriter. This matters for SSE endpoints,
-// which flush events through this exact chain.
 func TestLogging_PreservesFlushThroughResponseController(t *testing.T) {
 	t.Parallel()
 
@@ -165,11 +155,6 @@ func TestLogging_PreservesFlushThroughResponseController(t *testing.T) {
 	}
 }
 
-// TestLogging_NakedFlusherAssertionFailsDocumentingWhyResponseControllerIsRequired
-// documents, rather than merely asserting, why handlers must use
-// http.ResponseController instead of a direct `w.(http.Flusher)` type
-// assertion: the Logging wrapper only exposes streaming capabilities via
-// Unwrap(), which naked type assertions do not traverse.
 func TestLogging_NakedFlusherAssertionFailsDocumentingWhyResponseControllerIsRequired(t *testing.T) {
 	t.Parallel()
 
@@ -221,7 +206,7 @@ func TestBodyLimit_RejectsBodyOverLimit(t *testing.T) {
 	t.Parallel()
 
 	const limit = 256 * 1024
-	const overLimit = limit + 1024 // 257 KB, per plan requirement
+	const overLimit = limit + 1024
 
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Error("downstream handler must not run when body exceeds the limit")
@@ -266,8 +251,6 @@ func TestBodyLimit_RejectsByContentLengthWithoutReadingBody(t *testing.T) {
 	})
 	handler := api.BodyLimit(limit)(next)
 
-	// Content-Length lies about the body being large; a fast rejection path
-	// should not need to read overLimit bytes to reject the request.
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", bytes.NewReader(nil))
 	req.ContentLength = overLimit
 	rec := httptest.NewRecorder()
@@ -278,17 +261,11 @@ func TestBodyLimit_RejectsByContentLengthWithoutReadingBody(t *testing.T) {
 	}
 }
 
-// TestBodyLimit_RejectsStreamingBodyWithUnknownContentLength exercises the
-// streaming read path (io.ReadAll + http.MaxBytesReader), not just the fast
-// Content-Length check. ContentLength = -1 simulates a request with no (or
-// a chunked, length-unknown) Content-Length header, which is exactly the
-// case the fast path can't handle and must fall through to actually
-// reading the body.
 func TestBodyLimit_RejectsStreamingBodyWithUnknownContentLength(t *testing.T) {
 	t.Parallel()
 
 	const limit = 256 * 1024
-	const overLimit = limit + 1024 // 257 KiB
+	const overLimit = limit + 1024
 
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Error("downstream handler must not run when the streamed body exceeds the limit")
@@ -297,7 +274,7 @@ func TestBodyLimit_RejectsStreamingBodyWithUnknownContentLength(t *testing.T) {
 
 	body := bytes.Repeat([]byte("a"), overLimit)
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", bytes.NewReader(body))
-	req.ContentLength = -1 // unknown length: forces the streaming read path
+	req.ContentLength = -1
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -306,16 +283,11 @@ func TestBodyLimit_RejectsStreamingBodyWithUnknownContentLength(t *testing.T) {
 	}
 }
 
-// TestBodyLimit_RejectsStreamingBodyWithUnderstatedContentLength covers a
-// client that understates Content-Length (accidentally or maliciously): the
-// declared length passes the fast Content-Length check, but the actual
-// stream is oversized. Enforcement must come from what is actually read,
-// not from trusting the declared header.
 func TestBodyLimit_RejectsStreamingBodyWithUnderstatedContentLength(t *testing.T) {
 	t.Parallel()
 
 	const limit = 256 * 1024
-	const overLimit = limit + 1024 // 257 KiB actually sent
+	const overLimit = limit + 1024
 
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Error("downstream handler must not run when the streamed body exceeds the limit")
@@ -324,7 +296,7 @@ func TestBodyLimit_RejectsStreamingBodyWithUnderstatedContentLength(t *testing.T
 
 	body := bytes.Repeat([]byte("a"), overLimit)
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", bytes.NewReader(body))
-	req.ContentLength = 10 // understated: far smaller than what's actually sent
+	req.ContentLength = 10
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 

@@ -14,7 +14,6 @@ import (
 
 const printContentSecurityPolicy = "sandbox allow-same-origin; default-src 'none'; script-src 'none'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src data:; connect-src 'none'; frame-src 'none'; worker-src 'none'; child-src 'none'; media-src 'none'; manifest-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
 
-// Keep this fixed allowlist synchronized with the generated web font catalog.
 var fontPaths = map[string]struct{}{
 	"/_nuxt/fonts/alegreya-400.woff2":                   {},
 	"/_nuxt/fonts/alegreya-700.woff2":                   {},

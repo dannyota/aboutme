@@ -36,7 +36,6 @@ func TestPrivacyLifecycleSchema(t *testing.T) {
 	}
 }
 
-// An identity unlink records only its kind and time.
 func TestLifecycleAuditAcceptsIdentityUnlinked(t *testing.T) {
 	t.Parallel()
 	tx, ctx := newResumeSchemaTx(t)

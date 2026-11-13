@@ -61,9 +61,6 @@ func TestWriteError_Envelope(t *testing.T) {
 	}
 }
 
-// TestWriteData_RejectsNoOtherTopLevelKeys guards the envelope shape: a
-// success body must contain exactly the "data" key, never "error", and vice
-// versa, since every API consumer branches on which key is present.
 func TestWriteData_RejectsNoOtherTopLevelKeys(t *testing.T) {
 	t.Parallel()
 

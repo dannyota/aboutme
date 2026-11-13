@@ -49,9 +49,6 @@ func TestLoad_PasskeyEnrollmentFlagRejectsInvalidValueWithoutEcho(t *testing.T) 
 	}
 }
 
-// TestLoad_PasskeyEnrollmentAcceptsHTTPSAndLocalhostOrigins proves both
-// accepted relying-party origin shapes: any https domain, and http on
-// exactly localhost (the native and HTTPS dev harnesses).
 func TestLoad_PasskeyEnrollmentAcceptsHTTPSAndLocalhostOrigins(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -80,12 +77,6 @@ func TestLoad_PasskeyEnrollmentAcceptsHTTPSAndLocalhostOrigins(t *testing.T) {
 	}
 }
 
-// TestLoad_PasskeyEnrollmentRejectsUnacceptableOrigins is the regression test
-// for "reject startup with enabled enrollment when PUBLIC_ORIGIN cannot
-// produce the accepted HTTPS or localhost relying-party configuration"
-// (docs/design/second-factor-authentication.md, "Passkeys"). An enrollment
-// flag left off never triggers this check — see
-// TestLoad_PasskeyEnrollmentDisabledIgnoresOriginShape below.
 func TestLoad_PasskeyEnrollmentRejectsUnacceptableOrigins(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -115,11 +106,6 @@ func TestLoad_PasskeyEnrollmentRejectsUnacceptableOrigins(t *testing.T) {
 	}
 }
 
-// TestLoad_PasskeyEnrollmentDisabledIgnoresOriginShape proves the relying
-// party check runs only when enrollment is enabled: a disabled flag starts
-// cleanly even with an origin that could never host WebAuthn ceremonies,
-// since a self-hosted operator who never turns passkeys on should not be
-// forced onto a domain host to run the server at all.
 func TestLoad_PasskeyEnrollmentDisabledIgnoresOriginShape(t *testing.T) {
 	t.Parallel()
 	for _, raw := range []string{"", "false"} {

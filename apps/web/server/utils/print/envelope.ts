@@ -7,6 +7,7 @@ import {
 } from '../../../app/components/preview/cardLayout';
 
 import validatePrintDocument from '#print-document-validator';
+import { isReservedPublicRoot } from '../../../app/public-roots.generated';
 
 export const PRINT_ENVELOPE_MAX_BYTES = 3_407_872;
 export const PRINT_HTML_MAX_BYTES = 6_291_456;
@@ -288,10 +289,57 @@ const decodeCardEnvelope = (
   return envelope as unknown as PrintCardEnvelope;
 };
 
-/**
- * Decodes a redeemed print envelope: a resume print envelope, which has no
- * kind, or a card envelope, whose kind is "card".
- */
+const PROJECT_SLUG = /^(?=.{2,40}$)[a-z0-9]+(?:-[a-z0-9]+)*$/u;
+
+const projectPageAddress = (value: unknown): boolean => {
+  if (
+    typeof value !== 'string'
+    || !/^https?:\/\/[\x21-\x7e]+$/u.test(value)
+    || /[?#%@]/u.test(value)
+  ) {
+    return false;
+  }
+  let origin: string;
+  try {
+    origin = new URL(value).origin;
+  } catch {
+    return false;
+  }
+  if (!value.startsWith(`${origin}/`)) return false;
+  const [resumeSlug, projects, projectSlug, ...extra]
+    = value.slice(origin.length + 1).split('/');
+  return validSlug(resumeSlug)
+    && !isReservedPublicRoot(resumeSlug)
+    && projects === 'projects'
+    && PROJECT_SLUG.test(projectSlug ?? '')
+    && extra.length === 0;
+};
+
+const visibleProjectEntries = (
+  document: PublicResumeDocument,
+): ReadonlySet<string> => {
+  const ids = new Set<string>();
+  const { main, sidebar } = document.customization.layout.sections;
+  for (const key of [...main, ...sidebar]) {
+    if (!Object.hasOwn(document.content, key)) continue;
+    const section = document.content[key]!;
+    if (section.sectionType !== 'project') continue;
+    for (const entry of section.entries) ids.add(entry.id);
+  }
+  return ids;
+};
+
+const validProjectLinks = (
+  value: unknown,
+  document: PublicResumeDocument,
+): boolean => {
+  if (!plainObject(value)) return false;
+  const entries = Object.entries(value);
+  const visible = visibleProjectEntries(document);
+  return entries.length > 0 && entries.every(([entryId, page]) =>
+    visible.has(entryId) && projectPageAddress(page));
+};
+
 export function decodePrintEnvelope(source: string): PrintJobEnvelope {
   if (Buffer.byteLength(source, 'utf8') > PRINT_ENVELOPE_MAX_BYTES) fail();
   try {
@@ -302,12 +350,16 @@ export function decodePrintEnvelope(source: string): PrintJobEnvelope {
     }
     const envelope = value as Record<string, unknown>;
     if (Object.hasOwn(envelope, 'kind')) return decodeCardEnvelope(envelope);
+    const linked = envelope.version === 2;
     if (
       Object.keys(envelope).sort().join(',')
-      !== 'document,lng,publicGeneration,resumeId,revision,version'
+      !== [
+        'document', 'lng', ...(linked ? ['projectLinks'] : []),
+        'publicGeneration', 'resumeId', 'revision', 'version',
+      ].join(',')
     ) fail();
     if (
-      envelope.version !== 1
+      (envelope.version !== 1 && !linked)
       || !canonicalUUID(envelope.resumeId)
       || !positiveInt64(envelope.revision)
       || (
@@ -322,7 +374,9 @@ export function decodePrintEnvelope(source: string): PrintJobEnvelope {
     ) fail();
     const document = envelope.document as PublicResumeDocument;
     if (
-      document.schemaVersion !== CURRENT_VERSION || !validPhoto(document)
+      document.schemaVersion !== CURRENT_VERSION
+      || !validPhoto(document)
+      || (linked && !validProjectLinks(envelope.projectLinks, document))
     ) fail();
     return envelope as unknown as PrintEnvelope;
   } catch {

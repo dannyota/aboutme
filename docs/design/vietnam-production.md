@@ -165,6 +165,10 @@ The host enforces these trust boundaries:
 - Chromium keeps its sandbox and its blocked proxy; the probe checks the user
   namespaces it needs.
 
+`host/data-volume.sh` formats the data volume only when given `--format` and
+only when the device has no signature at all; otherwise it only mounts and
+bind-mounts, so a rerun never erases data.
+
 Access is key-only SSH on TCP 22922 from all sources as `aboutme-admin` with
 `sudo`; root login is disabled and `AllowUsers` permits only `aboutme-admin`.
 The key is the owner's `ssh-ed25519` commit-signing key. CrowdSec bans SSH
@@ -188,8 +192,12 @@ templates name each unit's secret set. Runtime values include:
 `deploy/vn/scripts/secrets.sh` runs over SSH. It generates missing application
 keys on the host with `openssl` and imports provider credentials from standard
 input. Supported rotations require `--replace`. The script never prints a value.
-`age-copy` exports a copy encrypted to the owner's age recipient; the laptop
-keeps only that ciphertext in `aboutme-infra`.
+Each write goes to a fresh `mktemp` file inside a directory only root can write,
+then replaces the target with one `mv -T`, so no path is checked and later
+written under a directory another user controls. `host/install.sh` never prints
+a secret and never reads the contents of `/etc/aboutme/secrets/`. `age-copy`
+exports a copy encrypted to the owner's age recipient; the laptop keeps only
+that ciphertext in `aboutme-infra`.
 
 All four scheduled jobs receive the media keys because server configuration
 requires them when `MEDIA_ENDPOINT` is set. Only the two media jobs have
@@ -213,6 +221,9 @@ PostgreSQL 18 from the PGDG packages, pinned to the minor version.
 - The `aboutme` role owns the database with `CREATEROLE`, like the RDS master,
   and runs `db-setup`. Only pgBackRest and restores use the `postgres`
   superuser, apart from provisioning the separate CrowdSec database and role.
+  The first install sends the `aboutme` password to `psql` on standard input,
+  never on a command line, and raises `log_min_error_statement` for that session
+  so a failed statement cannot log it.
 
 The approved CrowdSec architecture uses a separate `crowdsec` database and
 least-privilege role in this cluster, with Unix-socket peer authentication. Its

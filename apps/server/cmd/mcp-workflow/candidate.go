@@ -22,8 +22,6 @@ var errCandidate = errors.New("candidate_invalid")
 const (
 	candidateWait         = 30 * time.Minute
 	candidatePollInterval = 250 * time.Millisecond
-	// maxCreateRequestBytes keeps the create call well below the 4 MiB MCP
-	// body limit after JSON-RPC framing.
 	maxCreateRequestBytes = 3 << 20
 )
 
@@ -33,8 +31,6 @@ type candidateReview struct {
 	FactsPreserved  bool   `json:"facts_preserved"`
 }
 
-// writeSourceArtifact writes the canonical source document without the
-// server-owned photo and returns the digest the review must name.
 func writeSourceArtifact(run privateArtifacts, source sourceSnapshot) (string, error) {
 	if len(source.Canonical) == 0 {
 		return "", errSourceSelection
@@ -45,7 +41,6 @@ func writeSourceArtifact(run privateArtifacts, source sourceSnapshot) (string, e
 	return digest(source.Canonical), nil
 }
 
-// waitForCandidate polls for both handoff files for at most candidateWait.
 func waitForCandidate(ctx context.Context, run privateArtifacts) error {
 	deadline := time.NewTimer(candidateWait)
 	defer deadline.Stop()
@@ -70,9 +65,6 @@ func waitForCandidate(ctx context.Context, run privateArtifacts) error {
 	}
 }
 
-// loadReviewedCandidate accepts only a digest-bound reviewed candidate that
-// passes schema, store, size, and preservation checks. It returns the
-// canonical create payload.
 func loadReviewedCandidate(run privateArtifacts, source sourceSnapshot) ([]byte, error) {
 	sourceBytes, err := run.read(sourceName)
 	if err != nil || !bytes.Equal(sourceBytes, source.Canonical) {
@@ -94,9 +86,6 @@ func loadReviewedCandidate(run privateArtifacts, source sourceSnapshot) ([]byte,
 	return validateCandidate(source.Canonical, candidateBytes)
 }
 
-// validateCandidate returns the canonical payload for a candidate that omits
-// the photo, passes store validation and bounds, and preserves every
-// protected path of the source.
 func validateCandidate(sourceCanonical, candidateBytes []byte) ([]byte, error) {
 	document, canonical, photo, err := canonicalDocument(candidateBytes)
 	if err != nil || photo != nil || resume.ValidateForStore(document) != nil {
@@ -139,11 +128,6 @@ const (
 	richText
 )
 
-// entryTextFields names the translatable entry fields per section type. The
-// design permits translating headlines, prose, generic role names, display
-// names, labels, subtitles, and rich-text text nodes. Names of people,
-// organizations, products, projects, certifications, places, skills,
-// languages, and degrees stay exact.
 var entryTextFields = map[string]map[string]textKind{
 	"profile":     {"text": richText},
 	"work":        {"jobTitle": plainText, "description": richText},
@@ -155,10 +139,6 @@ var entryTextFields = map[string]map[string]textKind{
 	"custom":      {"subtitle": plainText, "description": richText},
 }
 
-// validatePreservedDocument compares canonical documents value by value. Only
-// the translatable paths above may differ, and then only in text: rich text
-// keeps its exact element tree, attributes, and link targets, and every
-// translated field keeps its multiset of digit runs.
 func validatePreservedDocument(source, candidate []byte) error {
 	var oldValue, newValue any
 	if !decodeNumbers(source, &oldValue) || !decodeNumbers(candidate, &newValue) {
@@ -253,7 +233,6 @@ func comparePreserved(path []string, sectionType string, oldValue, newValue any)
 	}
 }
 
-// pathKind classifies a canonical path. Array indexes appear as "[]".
 func pathKind(path []string, sectionType string) textKind {
 	switch {
 	case len(path) == 2 && path[0] == "personalDetails" && path[1] == "headline":
@@ -269,14 +248,11 @@ func pathKind(path []string, sectionType string) textKind {
 	}
 }
 
-// samePlainText permits translation but keeps emptiness and numbers.
 func samePlainText(oldValue, newValue string) bool {
 	return (strings.TrimSpace(oldValue) == "") == (strings.TrimSpace(newValue) == "") &&
 		sameDigitRuns(oldValue, newValue) && !strings.ContainsAny(newValue, "<>")
 }
 
-// sameRichText permits text-node translation while preserving the element
-// tree, tag names, attributes, link targets, and numbers.
 func sameRichText(oldValue, newValue string) bool {
 	oldNodes, oldText, oldOK := parseRichText(oldValue)
 	newNodes, newText, newOK := parseRichText(newValue)
@@ -357,8 +333,6 @@ func sameAttributes(left, right []html.Attribute) bool {
 	return true
 }
 
-// sameDigitRuns requires the same multiset of digit runs, so dates, counts,
-// percentages, and amounts cannot change, appear, or disappear in translation.
 func sameDigitRuns(oldValue, newValue string) bool {
 	oldRuns, newRuns := digitRuns(oldValue), digitRuns(newValue)
 	if len(oldRuns) != len(newRuns) {

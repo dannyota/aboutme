@@ -3,7 +3,6 @@ package directrender
 import "testing"
 
 func TestRenderOriginEnvironmentAllowlist(t *testing.T) {
-	// This fails if a viewer-reachable or non-direct origin is accepted.
 	for _, test := range []struct {
 		name, raw, environment string
 		want                   string

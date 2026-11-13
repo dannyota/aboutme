@@ -1,10 +1,5 @@
 package auth_test
 
-// Second-factor HTTP adversarial cases over live pending and session rows:
-// pending authority is separate from session authority, Origin and pending
-// CSRF run before rate admission and work, failures clear the pending cookie
-// only when the contract says so, and disabled enrollment stays uniform.
-
 import (
 	"context"
 	"crypto/rand"
@@ -270,11 +265,6 @@ func TestSecondFactorAccountMutations_SessionCSRFAndResponses(t *testing.T) {
 	}
 }
 
-// TestSecondFactorTOTPEnrollment_WiredHappyPathAndErrorMapping drives the
-// enrollment start and completion routes against a wired fake over a live
-// session, covering the success bodies and the enrollment_invalid and
-// verification_failed status codes the contract adds
-// (docs/design/totp-second-factor-contract.md#enrollment-and-replacement-api).
 func TestSecondFactorTOTPEnrollment_WiredHappyPathAndErrorMapping(t *testing.T) {
 	pool := newTestPool(t)
 	userID := createTestUser(t, store.New(pool))
@@ -337,10 +327,6 @@ func TestSecondFactorTOTPEnrollment_WiredHappyPathAndErrorMapping(t *testing.T) 
 	}
 }
 
-// TestSecondFactorTOTPRemoval_WiredHappyPathAndNotFound proves DELETE maps
-// ErrSecondFactorNotFound to 404 factor_not_found, while an unwired TOTP
-// dependency answers exactly like an unregistered route
-// ("Removal, recovery, and races").
 func TestSecondFactorTOTPRemoval_WiredHappyPathAndNotFound(t *testing.T) {
 	pool := newTestPool(t)
 	userID := createTestUser(t, store.New(pool))
@@ -371,9 +357,6 @@ func TestSecondFactorTOTPRemoval_WiredHappyPathAndNotFound(t *testing.T) {
 	}
 }
 
-// TestSecondFactorState_MergesTOTPEnabled proves the state route adds
-// totpEnabled from the TOTP dependency, defaulting to false when it is
-// unwired ("Release surface").
 func TestSecondFactorState_MergesTOTPEnabled(t *testing.T) {
 	pool := newTestPool(t)
 	userID := createTestUser(t, store.New(pool))
@@ -430,9 +413,6 @@ func TestSecondFactorRegistrationComplete_DisabledConsumesThenNotFound(t *testin
 	}
 }
 
-// TestSecondFactorDisabledCompletion_StaleReauthConsumesCeremony runs the real
-// service: a completion from a session whose primary proof is stale still
-// consumes its matching ceremony and answers as an unregistered route.
 func TestSecondFactorDisabledCompletion_StaleReauthConsumesCeremony(t *testing.T) {
 	pool := newTestPool(t)
 	userID := createTestUser(t, store.New(pool))

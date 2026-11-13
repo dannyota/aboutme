@@ -21,12 +21,10 @@ import (
 
 const sfOrigin = "https://aboutme.vn"
 
-// sfCredential is the fake service's decoded credential.
 type sfCredential struct{ method string }
 
 func (c sfCredential) SecondFactorMethod() string { return c.method }
 
-// sfService is a scripted SecondFactorService that records every call.
 type sfService struct {
 	mu            sync.Mutex
 	enabled       bool
@@ -127,15 +125,11 @@ func (s *sfService) RegenerateRecoveryCodes(context.Context, store.Session) (aut
 	return auth.SecondFactorRecoveryCodes{Codes: []string{"amr_new"}, Session: s.replacement}, s.err
 }
 
-// sfMux builds the routes over service with no TOTP dependency wired. pool
-// may be nil for tests that fail before any database work.
 func sfMux(t *testing.T, service *sfService, pool *store.Pool) *http.ServeMux {
 	t.Helper()
 	return sfMuxWithTOTP(t, service, nil, pool)
 }
 
-// sfMuxWithTOTP builds the routes over service and totp. A nil totp matches
-// sfMux: every TOTP route then answers as unregistered.
 func sfMuxWithTOTP(t *testing.T, service *sfService, totp auth.TOTPSecondFactorService, pool *store.Pool) *http.ServeMux {
 	t.Helper()
 	sessions := auth.NewSessionManager(store.New(nil))
@@ -156,8 +150,6 @@ func sfMuxWithTOTP(t *testing.T, service *sfService, totp auth.TOTPSecondFactorS
 	return mux
 }
 
-// sfTOTPService is a scripted TOTPSecondFactorService that records every
-// call, mirroring sfService's shape.
 type sfTOTPService struct {
 	mu          sync.Mutex
 	enabled     bool
@@ -279,7 +271,6 @@ func sfErrorCode(t *testing.T, rec *httptest.ResponseRecorder) string {
 	return envelope.Error.Code
 }
 
-// sfClearsCookie reports whether rec expires the named cookie.
 func sfClearsCookie(rec *httptest.ResponseRecorder, name string) bool {
 	for _, header := range rec.Header().Values("Set-Cookie") {
 		if strings.HasPrefix(header, name+"=;") && strings.Contains(header, "Max-Age=0") {
@@ -328,9 +319,6 @@ func TestSecondFactorRegistrationComplete_DisabledIsUniformNotFound(t *testing.T
 	}
 }
 
-// TestSecondFactorPending_ChecksRunInContractOrder proves media type, body
-// size, and strict JSON fail before the pending cookie is read, and the
-// missing cookie fails before any service work.
 func TestSecondFactorPending_ChecksRunInContractOrder(t *testing.T) {
 	service := &sfService{enabled: true}
 	mux := sfMux(t, service, nil)
@@ -391,11 +379,6 @@ func TestSecondFactorAccountRoutes_RequireASession(t *testing.T) {
 	}
 }
 
-// TestSecondFactorTOTPRoutes_UnwiredMatchesUnregisteredRoute proves every
-// TOTP route is registered on the mux (a real pattern, not method_not_allowed
-// from a miss) but answers byte-identical to an unregistered route while no
-// TOTP dependency is wired, the same shape passkey registration options uses
-// while its flag is off.
 func TestSecondFactorTOTPRoutes_UnwiredMatchesUnregisteredRoute(t *testing.T) {
 	service := &sfService{enabled: true}
 	mux := sfMux(t, service, nil)
@@ -419,9 +402,6 @@ func TestSecondFactorTOTPRoutes_UnwiredMatchesUnregisteredRoute(t *testing.T) {
 	}
 }
 
-// TestSecondFactorTOTPEnrollmentStart_DisabledMatchesUnregisteredRoute
-// mirrors TestSecondFactorRegistrationOptions_DisabledMatchesUnregisteredRoute
-// for TOTP: the flag is rechecked before any session or database work.
 func TestSecondFactorTOTPEnrollmentStart_DisabledMatchesUnregisteredRoute(t *testing.T) {
 	totp := &sfTOTPService{}
 	mux := sfMuxWithTOTP(t, &sfService{}, totp, nil)
@@ -436,9 +416,6 @@ func TestSecondFactorTOTPEnrollmentStart_DisabledMatchesUnregisteredRoute(t *tes
 	}
 }
 
-// TestSecondFactorTOTPEnrollmentComplete_DisabledIsUniformNotFound mirrors
-// TestSecondFactorRegistrationComplete_DisabledIsUniformNotFound: a disabled
-// completion attempt without a session cannot reach the service at all.
 func TestSecondFactorTOTPEnrollmentComplete_DisabledIsUniformNotFound(t *testing.T) {
 	totp := &sfTOTPService{}
 	mux := sfMuxWithTOTP(t, &sfService{}, totp, nil)

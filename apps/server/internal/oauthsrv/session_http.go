@@ -52,8 +52,6 @@ type agentGrantsData struct {
 	Grants []agentGrantData `json:"grants"`
 }
 
-// ConsentHTTPHandler returns the method-dispatching, session-authenticated
-// consent adapter described by the OpenAPI contract.
 func (s *Service) ConsentHTTPHandler(sessions *auth.SessionManager) http.Handler {
 	get := auth.RequireSession(sessions)(http.HandlerFunc(s.handleConsentContext))
 	post := auth.RequireSession(sessions)(auth.RequireExactJSONCSRF(s.publicOrigin)(http.HandlerFunc(s.handleConsentDecision)))
@@ -70,8 +68,6 @@ func (s *Service) ConsentHTTPHandler(sessions *auth.SessionManager) http.Handler
 	})
 }
 
-// AgentGrantsHTTPHandler returns the session-authenticated connected-agent
-// collection adapter.
 func (s *Service) AgentGrantsHTTPHandler(sessions *auth.SessionManager) http.Handler {
 	get := auth.RequireSession(sessions)(http.HandlerFunc(s.handleAgentGrants))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -84,8 +80,6 @@ func (s *Service) AgentGrantsHTTPHandler(sessions *auth.SessionManager) http.Han
 	})
 }
 
-// AgentGrantHTTPHandler returns the session, CSRF, and exact-Origin protected
-// owner-scoped grant revocation adapter.
 func (s *Service) AgentGrantHTTPHandler(sessions *auth.SessionManager) http.Handler {
 	remove := auth.RequireSession(sessions)(auth.RequireExactJSONCSRF(s.publicOrigin)(http.HandlerFunc(s.handleRevokeAgentGrant)))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -326,8 +320,6 @@ func (s *Service) revokeAgentGrant(ctx context.Context, userID, grantID uuid.UUI
 	return tx.Commit(ctx)
 }
 
-// reauthRequiredCode covers stale primary proof and, for enrolled accounts,
-// stale second-factor proof, matching other sensitive-action routes.
 const reauthRequiredCode = "reauth_required"
 
 func writeConsentSessionError(w http.ResponseWriter, err error) {
@@ -357,9 +349,6 @@ func writeConsentInvalid(w http.ResponseWriter) {
 	api.WriteError(w, http.StatusBadRequest, "request_invalid", "authorization request is invalid")
 }
 
-// writeAgentLimitReached reports the ten-live-grant ceiling as its own
-// closed code, distinct from a malformed request, so a client can tell the
-// two apart; see docs/design/mcp-client-compatibility.md rule 7.
 func writeAgentLimitReached(w http.ResponseWriter) {
 	api.WriteError(w, http.StatusConflict, "agent_limit_reached", "you already have 10 connected agents")
 }

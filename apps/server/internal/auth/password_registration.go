@@ -1,9 +1,5 @@
 package auth
 
-// Registration and email verification: creating a pending password
-// registration and turning a verified token into a user with a password
-// credential.
-
 import (
 	"context"
 	"errors"
@@ -17,8 +13,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// ---- register ----
-
 func (s *PasswordService) register(ctx context.Context, name, email, rawPassword, clientIP string) error {
 	now := s.clock()
 
@@ -31,7 +25,6 @@ func (s *PasswordService) register(ctx context.Context, name, email, rawPassword
 		return errPasswordNameInvalid
 	}
 
-	// Email and IP budgets are shared by register and forgot.
 	if d := s.limits.AdmitRegisterOrForgotEmail(now, canonicalEmail); !d.Allowed {
 		return &passwordRateLimitedError{retryAfterSeconds: d.RetryAfterSeconds}
 	}
@@ -39,14 +32,12 @@ func (s *PasswordService) register(ctx context.Context, name, email, rawPassword
 		return &passwordRateLimitedError{retryAfterSeconds: d.RetryAfterSeconds}
 	}
 
-	// Expensive password policy/hash runs regardless of email ownership so an
-	// owned and an unowned email are indistinguishable in cost.
 	check, err := s.policy.CheckNew(ctx, rawPassword)
 	if err != nil {
 		if errors.Is(err, password.ErrBreachUnavailable) {
 			return errPasswordUnavailable
 		}
-		return err // length/common/breached: mapped by the handler
+		return err
 	}
 	encodedHash, err := s.hasher.Hash(ctx, check.Normalized)
 	if err != nil {
@@ -69,10 +60,7 @@ func (s *PasswordService) register(ctx context.Context, name, email, rawPassword
 		if lockErr := qtx.LockCanonicalAccountEmail(ctx, canonicalEmail); lockErr != nil {
 			return lockErr
 		}
-		// Registration rows precede users in the shared email lock order.
 		if prior, rerr := qtx.GetPasswordRegistrationByEmailForUpdate(ctx, canonicalEmail); rerr == nil {
-			// Owned email: leave its stale registration for verification or
-			// account deletion to consume through the same lock order.
 			if _, uerr := qtx.GetUserByCanonicalEmail(ctx, canonicalEmail); uerr == nil {
 				return nil
 			} else if !errors.Is(uerr, pgx.ErrNoRows) {
@@ -113,14 +101,12 @@ func (s *PasswordService) register(ctx context.Context, name, email, rawPassword
 	})
 	if err != nil {
 		if errors.Is(err, errPasswordRegistrationRace) {
-			return nil // a concurrent registration won; still the generic 202
+			return nil
 		}
 		return errPasswordUnavailable
 	}
 	return nil
 }
-
-// ---- verify ----
 
 func (s *PasswordService) verify(ctx context.Context, rawToken, clientIP string) error {
 	now := s.clock()
@@ -162,8 +148,6 @@ func (s *PasswordService) verify(ctx context.Context, rawToken, clientIP string)
 		if s.verifyRegistrationLockProbe != nil {
 			s.verifyRegistrationLockProbe()
 		}
-		// Email now owned (e.g. a provider signup won the race): consume the
-		// registration without creating a password.
 		if _, uerr := qtx.GetUserByCanonicalEmail(ctx, live.Email); uerr == nil {
 			_, derr := qtx.DeletePasswordRegistration(ctx, live.ID)
 			return derr
@@ -200,13 +184,8 @@ func (s *PasswordService) verify(ctx context.Context, rawToken, clientIP string)
 	return nil
 }
 
-// errPasswordEmailOwnedRace marks a verify whose user insert lost a
-// unique-email race; the registration is consumed without a password.
 var errPasswordEmailOwnedRace = errors.New("auth: password email owned race")
 
-// consumeRegistrationForOwnedEmail deletes the registration after a provider
-// signup won the email race. A concurrent winner may already have consumed it;
-// that is still the success outcome.
 func (s *PasswordService) consumeRegistrationForOwnedEmail(ctx context.Context, registrationID uuid.UUID, canonicalEmail string) error {
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		qtx := s.q.WithTx(tx)

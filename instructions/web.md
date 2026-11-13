@@ -10,6 +10,7 @@ Read this file for TypeScript, Nuxt, renderer, source-manifest, or display-check
   renew it with a new reason.
 - Renderer CSS and template tokens are frontend implementation; the designer
   supplies visual direction and UI specs.
+- The render context takes an optional project link map, entry id to project page URL. Only the public page and the PDF of a published resume pass it; the editor preview and an unpublished resume's PDF never do ([project entry points](../docs/design/project-entry-points.md)).
 - Adding a web file needs the source manifest regenerated through the primary.
   Renderer isolation and golden HTML remain required under ADRs 0019 and 0020.
 - [Display assertions](../docs/design/display-assertions.md) checks layout,

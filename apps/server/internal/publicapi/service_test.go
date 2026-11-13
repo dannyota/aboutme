@@ -22,8 +22,6 @@ import (
 )
 
 func TestPublicServiceDispatchesJSONAndRejectsWrongMethodBeforeLookup(t *testing.T) {
-	// This fails if a public JSON method error can reach the database or use
-	// the private API error shape.
 	slug, reader, coordinator := publicServiceReader(t)
 	cache, err := publiccache.New(4, time.Minute, time.Now)
 	if err != nil {
@@ -65,8 +63,6 @@ func TestPublicServiceDispatchesJSONAndRejectsWrongMethodBeforeLookup(t *testing
 }
 
 func TestPublicJSONCacheSitsAfterLiveAdmission(t *testing.T) {
-	// This fails if public JSON skips the generation-keyed cache, or if a
-	// stale cache value can answer before the current lease is acquired.
 	slug, reader, coordinator, backing := publicServiceReaderWithStore(t)
 	cache, err := publiccache.New(4, time.Minute, time.Now)
 	if err != nil {
@@ -111,8 +107,6 @@ func TestOriginAdmissionBoundaryAroundCompletedEdgeValidation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// This lease models an origin validation that completed before the fence
-	// closed but whose edge response has not yet finished.
 	lease, err := coordinator.AcquireDiscovery(context.Background(), 41, publicstate.RepresentationLLMS)
 	if err != nil {
 		t.Fatal(err)
@@ -166,7 +160,6 @@ func (s *publicServiceStore) GetPublicResumeProject(context.Context, store.GetPu
 	return store.GetPublicResumeProjectRow{}, errors.New("unused")
 }
 
-// linkContext is the statement's link column for links, or no links.
 func linkContext(links json.RawMessage) json.RawMessage {
 	if links == nil {
 		return json.RawMessage(`[]`)
@@ -190,9 +183,6 @@ func publicServiceReaderWithStore(t *testing.T) (string, *publicresume.Reader, *
 	return publicServiceReaderWithCoordinator(t, publicstate.CoordinatorConfig{DiscoveryGeneration: 1})
 }
 
-// publicServiceReaderWithCoordinator builds the same fixture as
-// publicServiceReaderWithStore but lets a test inject its own coordinator
-// clock, for example to observe when a revocation transition cancels leases.
 func publicServiceReaderWithCoordinator(t *testing.T, config publicstate.CoordinatorConfig) (string, *publicresume.Reader, *publicstate.Coordinator, *publicServiceStore) {
 	t.Helper()
 	slug, lng, name := "ada-lovelace", "en", "Ada"

@@ -80,8 +80,6 @@ func failureReason(reason string) bool {
 	return false
 }
 
-// Recover is only for independently reviewed production operations after the
-// host stops workers and revokes receipts. It is not a routine command.
 func (s *Service) Recover(ctx context.Context, reason string) error {
 	if !failureReason(reason) || s.outbox == nil {
 		return ErrState
@@ -134,8 +132,6 @@ func (s *Service) Recover(ctx context.Context, reason string) error {
 	})
 }
 
-// RecordLateFailure requires revoked host authority and a known provider
-// failure. It never infers delivery from the absence of feedback.
 func (s *Service) RecordLateFailure(ctx context.Context, jobID uuid.UUID) error {
 	return s.reviewed(ctx, func(q *store.Queries, campaign store.PrivacyNoticeCampaign) error {
 		if campaign.State != "sealed" && campaign.State != "activated" {

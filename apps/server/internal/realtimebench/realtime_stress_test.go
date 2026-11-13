@@ -107,9 +107,6 @@ type stressMeasurement struct {
 	ProductionEvidenceScope string             `json:"production_evidence_scope"`
 }
 
-// TestPublicSSEConnectionChurn is an opt-in local capacity measurement. A
-// production change that bypasses PublicHandler, its real hub admission
-// limits, the public lease, or HTTP response streaming makes this test fail.
 func TestPublicSSEConnectionChurn(t *testing.T) {
 	if os.Getenv("ABOUTME_REALTIME_STRESS") != "1" {
 		t.Skip("set ABOUTME_REALTIME_STRESS=1 to run the local realtime measurement")

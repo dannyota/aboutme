@@ -16,8 +16,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// sessionCutoff is the latest absolute expiry the session sweep deletes at
-// retentionNow.
 var sessionCutoff = retentionNow.Add(-sessionRetention)
 
 const absoluteTimeout = 90 * 24 * time.Hour
@@ -88,10 +86,6 @@ func TestRetainDeletesSessionsSevenDaysAfterAbsoluteExpiry(t *testing.T) {
 	assertSessionRetention(t, retainWithin(ctx, t, worker), 0, 0, 0)
 }
 
-// TestRetainDeletesRotationChainsWhole covers rotation lineage. Rotation copies
-// the predecessor's absolute expiry, so a chain becomes due as a whole. A
-// predecessor is never deleted while a successor survives outside the page,
-// so the delete never waits to clear a held successor's rotated_from.
 func TestRetainDeletesRotationChainsWhole(t *testing.T) {
 	ctx, pool := newRetentionPool(t)
 	worker := newSessionWorker(t, pool)
@@ -101,8 +95,6 @@ func TestRetainDeletesRotationChainsWhole(t *testing.T) {
 	expiry := sessionCutoff.Add(-24 * time.Hour)
 	chain := insertSessionChain(ctx, t, pool, userID, expiry, 3)
 	held := insertSessionChain(ctx, t, pool, userID, expiry, 2)
-	// No code path gives a successor a later absolute expiry; the page still
-	// keeps the predecessor of a live successor.
 	guarded := insertSessionChain(ctx, t, pool, userID, expiry, 1)[0]
 	liveSuccessor := insertSession(ctx, t, pool, userID, uuid.New(), retentionNow.Add(24*time.Hour), &guarded)
 	lockTx := lockRows(ctx, t, pool, lockedRow{"sessions", held[1]})
@@ -135,9 +127,6 @@ func TestDeleteExpiredSessionsPageKeepsSplitChainForNextPage(t *testing.T) {
 	t.Cleanup(func() { cleanupUsers(ctx, t, pool, userID) })
 	chain := insertSessionChain(ctx, t, pool, userID, sessionCutoff.Add(-time.Hour), 3)
 
-	// A two-row page holds the first two rows. The second stays because its
-	// successor is outside the page; deleting the first clears the second's
-	// rotated_from, a row the page holds.
 	if got := deleteSessionsPage(ctx, t, q, 2); got != 1 {
 		t.Errorf("first page deleted %d, want 1", got)
 	}
@@ -153,11 +142,6 @@ func TestDeleteExpiredSessionsPageKeepsSplitChainForNextPage(t *testing.T) {
 	}
 }
 
-// TestRetainDeletesExpiredSessionReferences covers the rows that reference a
-// session. ON DELETE CASCADE removes its pending authentications, WebAuthn
-// ceremonies (also those bound to such a pending authentication) and TOTP
-// enrollments. A session whose referencing row another transaction holds, or
-// that has not expired, stays.
 func TestRetainDeletesExpiredSessionReferences(t *testing.T) {
 	ctx, pool := newRetentionPool(t)
 	q := store.New(pool)
@@ -166,7 +150,6 @@ func TestRetainDeletesExpiredSessionReferences(t *testing.T) {
 	t.Cleanup(func() { cleanupUsers(ctx, t, pool, swept, heldPendingUser, heldCeremonyUser, unexpiredUser) })
 
 	expiry := sessionCutoff.Add(-24 * time.Hour)
-	// Each referencing row was made while its session was live.
 	issued := expiry.Add(-time.Hour)
 	sweptSession := insertSessionChain(ctx, t, pool, swept, expiry, 1)[0]
 	sweptPending := insertPendingReauth(ctx, t, pool, swept, sweptSession, issued)
@@ -260,8 +243,6 @@ func TestRetainKeepsDeletingSessionsAfterShortPage(t *testing.T) {
 	userID := createRetentionUser(ctx, t, store.New(pool))
 	t.Cleanup(func() { cleanupUsers(ctx, t, pool, userID) })
 
-	// The first page holds held[0] but keeps it, because its successor is
-	// locked, so it deletes 999 rows. The run goes on to the other 501.
 	held := insertSessionChain(ctx, t, pool, userID, sessionCutoff.Add(-24*time.Hour), 2)
 	insertExpiredSessionsBulk(ctx, t, pool, userID, 1500, sessionCutoff)
 	lockRows(ctx, t, pool, lockedRow{"sessions", held[1]})
@@ -294,8 +275,6 @@ func newSessionWorker(t *testing.T, pool *store.Pool) *Worker {
 	return worker
 }
 
-// retainWithin fails the test if a run does not finish within 20 seconds,
-// which it would when the session page waited for a row lock.
 func retainWithin(ctx context.Context, t *testing.T, worker *Worker) Result {
 	t.Helper()
 	runCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
@@ -324,9 +303,6 @@ func deleteSessionsPage(ctx context.Context, t *testing.T, q *store.Queries, lim
 	return deleted
 }
 
-// insertSessionChain inserts a rotation chain of n sessions, each rotated from
-// the one before, sharing one absolute expiry as rotation copies it. IDs
-// ascend along the chain, as uuidv7 IDs do.
 func insertSessionChain(ctx context.Context, t *testing.T, pool *store.Pool, userID uuid.UUID, absoluteExpiresAt time.Time, n int) []uuid.UUID {
 	t.Helper()
 	ids := make([]uuid.UUID, n)
@@ -344,8 +320,6 @@ func insertSessionChain(ctx context.Context, t *testing.T, pool *store.Pool, use
 	return ids
 }
 
-// insertSession inserts a session signed in 90 days before its absolute
-// expiry, with no IP or user agent, so metadata redaction leaves it alone.
 func insertSession(ctx context.Context, t *testing.T, pool *store.Pool, userID, id uuid.UUID, absoluteExpiresAt time.Time, rotatedFrom *uuid.UUID) uuid.UUID {
 	t.Helper()
 	signIn := absoluteExpiresAt.Add(-absoluteTimeout)
@@ -381,8 +355,6 @@ func insertPendingReauth(ctx context.Context, t *testing.T, pool *store.Pool, us
 	return id
 }
 
-// insertCeremony inserts a registration ceremony bound to sessionID, or an
-// assertion ceremony bound to pendingID.
 func insertCeremony(ctx context.Context, t *testing.T, pool *store.Pool, userID uuid.UUID, sessionID, pendingID *uuid.UUID, createdAt time.Time) uuid.UUID {
 	t.Helper()
 	purpose := "registration"
@@ -417,8 +389,6 @@ type lockedRow struct {
 	id    uuid.UUID
 }
 
-// lockRows holds rows FOR UPDATE in another transaction until the caller
-// commits it or the test ends.
 func lockRows(ctx context.Context, t *testing.T, pool *store.Pool, rows ...lockedRow) pgx.Tx {
 	t.Helper()
 	tx, err := pool.Begin(ctx)

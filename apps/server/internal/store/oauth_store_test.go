@@ -1,10 +1,3 @@
-// Live-database tests for the OAuth agent-access store
-// contract: single-use code consumption under two real transactions, single
-// live grant per (user, client), family revocation, rotation lineage that
-// cannot cross families, the joined bearer lookup, the throttled last-used
-// touch, and the bounded GC and cleanup queries — all through the generated
-// query layer (store.New) so the sqlc contract and the client, code, and token
-// database bounds are proven together.
 package store_test
 
 import (
@@ -22,18 +15,11 @@ import (
 	"danny.vn/aboutme/apps/server/internal/testutil"
 )
 
-// The generated *Queries must satisfy the agent-access surface exactly.
 var _ store.OAuthQueries = (*store.Queries)(nil)
 
 var (
-	// oauthStoreNow is the fixed instant fixtures are created at, so expiry
-	// and throttle boundaries name their offsets instead of racing wall time.
 	oauthStoreNow = time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
-	// oauthGCEpoch is a deliberately distant epoch used only by the bounded
-	// GC and cleanup tests. Fixtures created there can never be confused with
-	// the committed fixtures other tests in this shared database leave behind,
-	// so a batch-bound assertion counts exactly this test's own rows.
-	oauthGCEpoch = time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+	oauthGCEpoch  = time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
 )
 
 const (
@@ -47,15 +33,10 @@ const (
 	oauthStoreRedirect    = "http://127.0.0.1:20090/callback"
 )
 
-// oauthStoreRedirectURIs is the canonical one-entry redirect list every client
-// fixture registers.
 func oauthStoreRedirectURIs() json.RawMessage {
 	return json.RawMessage(`["` + oauthStoreRedirect + `"]`)
 }
 
-// newOAuthStoreTx returns a rolled-back transaction plus the underlying pool,
-// matching newPasswordStoreTx. Every query goes through the transaction so
-// repeated runs never accumulate rows in the shared database.
 func newOAuthStoreTx(t *testing.T) (context.Context, *pgxpool.Pool, pgx.Tx, *store.Queries) {
 	t.Helper()
 	dsn := testutil.RequireMigratedTestDatabaseURL(t)
@@ -120,8 +101,6 @@ func newOAuthStoreGrant(
 	return grant
 }
 
-// newOAuthStoreToken issues a first-of-family token, the shape the code
-// exchange creates.
 func newOAuthStoreToken(
 	ctx context.Context, t *testing.T, q *store.Queries,
 	grant store.OAuthGrant, kind string, familyID uuid.UUID, createdAt time.Time,
@@ -148,8 +127,6 @@ func newOAuthStoreToken(
 	return token
 }
 
-// newOAuthStoreCode issues a code bound to grant and its epoch, the shape
-// consent creates.
 func newOAuthStoreCode(
 	ctx context.Context, t *testing.T, q *store.Queries, grant store.OAuthGrant, createdAt time.Time,
 ) store.OAuthAuthorizationCode {
@@ -171,13 +148,9 @@ func newOAuthStoreCode(
 	return code
 }
 
-// ---------------------------------------------------------------------------
-// Code consumption is single-success under two concurrent transactions.
-// ---------------------------------------------------------------------------
-
 func TestOAuthCodeConsumeHasOneWinnerUnderConcurrentTransactions(t *testing.T) {
 	ctx, pool, _, _ := newOAuthStoreTx(t)
-	seed := store.New(pool) // committed so both transactions can see the code
+	seed := store.New(pool)
 
 	userID := newOAuthStoreUser(ctx, t, seed)
 	client := newOAuthStoreClient(ctx, t, seed, oauthStoreNow)
@@ -255,9 +228,6 @@ func TestOAuthCodeConsumeHasOneWinnerUnderConcurrentTransactions(t *testing.T) {
 	}
 }
 
-// TestOAuthCodeConsumeRejectsExpiredAndReplayedCodes proves the single-use and
-// 60-second rules through the contract, and that the replay lookup still
-// returns the consumed row so the caller can revoke the family it issued.
 func TestOAuthCodeConsumeRejectsExpiredAndReplayedCodes(t *testing.T) {
 	ctx, _, _, q := newOAuthStoreTx(t)
 	userID := newOAuthStoreUser(ctx, t, q)
@@ -308,10 +278,6 @@ func TestOAuthCodeConsumeRejectsExpiredAndReplayedCodes(t *testing.T) {
 		t.Fatalf("replay issued_family_id = %v, want %s", replay.IssuedFamilyID, family)
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Grants: upsert keeps one live row; revocation is owner-scoped and bounded.
-// ---------------------------------------------------------------------------
 
 func TestOAuthGrantUpsertKeepsExactlyOneLiveRow(t *testing.T) {
 	ctx, _, tx, q := newOAuthStoreTx(t)
@@ -369,7 +335,6 @@ func TestOAuthGrantUpsertKeepsExactlyOneLiveRow(t *testing.T) {
 		t.Fatalf("live lookup after revocation error = %v, want pgx.ErrNoRows", err)
 	}
 
-	// A revoked grant leaves room for a fresh live one under the same pair.
 	third := newOAuthStoreGrant(ctx, t, q, userID, client.ID, oauthStoreScopesRead)
 	if third.ID == first.ID {
 		t.Fatal("upsert after revocation reused the revoked grant, want a new live row")
@@ -549,11 +514,6 @@ func TestOAuthListLiveGrantsForUserIsBoundedAndCarriesClientName(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Tokens: rotation lineage, family revocation, the joined lookup, and the
-// throttled last-used touch.
-// ---------------------------------------------------------------------------
-
 func TestOAuthTokenRotationInheritsFamilyAndCannotCrossFamilies(t *testing.T) {
 	ctx, _, _, q := newOAuthStoreTx(t)
 	userID := newOAuthStoreUser(ctx, t, q)
@@ -593,8 +553,6 @@ func TestOAuthTokenRotationInheritsFamilyAndCannotCrossFamilies(t *testing.T) {
 			successor.ExpiresAt, successor.FamilyExpiresAt)
 	}
 
-	// Superseding under the wrong family matches no row, so a caller holding
-	// one family's identifier can never mark another family's token.
 	if _, crossFamilyErr := q.SupersedeOAuthToken(ctx, store.SupersedeOAuthTokenParams{
 		ID:           first.ID,
 		FamilyID:     familyTwo,
@@ -651,7 +609,6 @@ func TestOAuthTokenFamilyRevocationRevokesEveryMemberOnlyInThatFamily(t *testing
 	}
 	survivor := newOAuthStoreToken(ctx, t, q, grant, "access", spared, oauthStoreNow)
 
-	// The grant row is the family-revocation serialization point.
 	if _, lockErr := q.GetOAuthGrantForUpdate(ctx, grant.ID); lockErr != nil {
 		t.Fatalf("GetOAuthGrantForUpdate: %v", lockErr)
 	}
@@ -686,7 +643,6 @@ func TestOAuthTokenFamilyRevocationRevokesEveryMemberOnlyInThatFamily(t *testing
 		t.Error("a token in another family was revoked, want family-scoped revocation")
 	}
 
-	// Revoking through the grant kills every family under it in one statement.
 	grantRevoked, err := q.RevokeOAuthTokensForGrant(ctx, store.RevokeOAuthTokensForGrantParams{
 		GrantID:   grant.ID,
 		RevokedAt: revokedAt,
@@ -776,10 +732,6 @@ func TestOAuthTokenLastUsedTouchIsThrottled(t *testing.T) {
 	}
 }
 
-// TestOAuthTokenDigestColumnRejectsRawMaterial proves storage is digest-only:
-// the raw token spellings this test builds in memory are 48 characters and can
-// never reach a 32-byte digest column. The prefixes exist here and nowhere in
-// the migration, the queries, or any stored fixture.
 func TestOAuthTokenDigestColumnRejectsRawMaterial(t *testing.T) {
 	ctx, _, tx, q := newOAuthStoreTx(t)
 	userID := newOAuthStoreUser(ctx, t, q)
@@ -790,9 +742,6 @@ func TestOAuthTokenDigestColumnRejectsRawMaterial(t *testing.T) {
 		"amat_E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
 		"amrt_E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
 	} {
-		// Each attempt runs in its own savepoint: the first constraint
-		// violation aborts the enclosing transaction, so without one the
-		// second case would only ever observe "transaction is aborted".
 		savepoint, err := tx.Begin(ctx)
 		if err != nil {
 			t.Fatalf("open savepoint: %v", err)
@@ -814,10 +763,6 @@ func TestOAuthTokenDigestColumnRejectsRawMaterial(t *testing.T) {
 		}
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Bounded GC and cleanup.
-// ---------------------------------------------------------------------------
 
 func TestOAuthIdleClientGCExcludesExact24HourBoundary(t *testing.T) {
 	ctx, _, _, q := newOAuthStoreTx(t)
@@ -878,9 +823,6 @@ func TestOAuthIdleClientGCIsBoundedAndSkipsLiveClients(t *testing.T) {
 	}); revokeErr != nil {
 		t.Fatalf("revoke token client's grant: %v", revokeErr)
 	}
-	// The GC runs 25 hours after the epoch, so its idle cutoff (now - 24h)
-	// falls one hour after the epoch: every epoch-created client is idle, and
-	// a client registered two hours after the epoch is still too young.
 	now := oauthGCEpoch.Add(25 * time.Hour)
 	idleBefore := now.Add(-24 * time.Hour)
 	freshClient := newOAuthStoreClient(ctx, t, q, idleBefore.Add(time.Hour))
@@ -934,7 +876,6 @@ func TestOAuthIdleClientGCIsBoundedAndSkipsLiveClients(t *testing.T) {
 		t.Fatalf("deleted client lookup error = %v, want pgx.ErrNoRows", lookupErr)
 	}
 
-	// Once the token's own family has expired, its client becomes collectable.
 	afterExpiry := liveToken.FamilyExpiresAt.Add(time.Second)
 	candidates, err = q.ListIdleOAuthClientCandidates(ctx, store.ListIdleOAuthClientCandidatesParams{
 		IdleBefore: idleBefore,
@@ -1015,7 +956,6 @@ func TestOAuthCleanupQueriesRespectBatchBounds(t *testing.T) {
 		t.Fatalf("second code cleanup deleted %d rows, want the remaining 3", deleted)
 	}
 
-	// A code that has not expired at the cutoff is never collected.
 	live := newOAuthStoreCode(ctx, t, q, grant, cutoff)
 	deleted, err = q.DeleteExpiredOAuthAuthorizationCodes(ctx, store.DeleteExpiredOAuthAuthorizationCodesParams{
 		Cutoff:    cutoff,
@@ -1031,9 +971,6 @@ func TestOAuthCleanupQueriesRespectBatchBounds(t *testing.T) {
 		t.Fatalf("live code lookup after cleanup: %v", lookupErr)
 	}
 
-	// Access tokens leave as soon as they expire; refresh tokens are retained
-	// until their family dies, so a replayed superseded refresh token can
-	// still be recognized.
 	for i := 0; i < 5; i++ {
 		newOAuthStoreToken(ctx, t, q, grant, "access", uuid.New(), oauthGCEpoch)
 	}
@@ -1075,9 +1012,6 @@ func TestOAuthCleanupQueriesRespectBatchBounds(t *testing.T) {
 		t.Fatalf("cleanup after family expiry deleted %d rows, want the 1 refresh token", deleted)
 	}
 
-	// The fixed 200-row cleanup batch ceiling is enforced by the query, not
-	// merely by callers: a future sweep must not turn a caller bug into an
-	// unbounded request-path delete by passing a value larger than 200.
 	for i := 0; i < 201; i++ {
 		newOAuthStoreCode(ctx, t, q, grant, oauthGCEpoch)
 	}

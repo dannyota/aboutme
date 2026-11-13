@@ -8,7 +8,6 @@ import (
 	"testing"
 )
 
-// The sitemap's template pages must match the presets the gallery serves.
 func TestTemplateIDsMatchTheSchemaPresets(t *testing.T) {
 	paths, err := filepath.Glob(filepath.Join("..", "..", "..", "..", "packages", "schema", "templates", "*.json"))
 	if err != nil {

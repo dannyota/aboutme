@@ -6,14 +6,6 @@ import (
 	"testing"
 )
 
-// browserVector is one challenge this package issues, signed with the
-// secrets newProver derives from 64 bytes of 0x5a and bound to the view ID
-// 0x01..0x10, with the solution the public page's solver returns for it:
-// altcha-lib's solveChallenge with its Web Crypto PBKDF2 deriveKey, as
-// apps/web/app/public/viewBeacon.ts calls them. The web test
-// apps/web/test/public/viewBeacon.test.ts solves the same challenge and
-// expects the same solution, so a change on either side of the wire fails
-// one of the two tests.
 const (
 	browserVectorChallenge = `{"parameters":{"algorithm":"PBKDF2/SHA-256",` +
 		`"nonce":"51fbdcb225ff905fd95f74004f1d8bf3",` +

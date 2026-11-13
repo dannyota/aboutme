@@ -19,8 +19,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/testutil"
 )
 
-// --- Unit tests (no database) ---
-
 func TestNewWorkerRejectsInvalidOptions(t *testing.T) {
 	clock := testutil.NewClockAtEpoch()
 	ring := mustRing(t, "k-active", map[string][32]byte{"k-active": fixedKey()}, fixedNonce())
@@ -104,8 +102,6 @@ func TestBuildMessageTemplatesAndEscaping(t *testing.T) {
 			t.Errorf("text body missing %q: %q", want, msg.TextBody)
 		}
 	}
-	// The HTML body must escape the link value (which carries an attacker
-	// controlled token suffix).
 	if !strings.Contains(msg.HTMLBody, "t&lt;&#34;&gt;&amp;") {
 		t.Errorf("html body does not escape link: %q", msg.HTMLBody)
 	}
@@ -179,8 +175,6 @@ func TestSealedFromJob(t *testing.T) {
 	}
 }
 
-// --- Live-database tests (skip unless TEST_DATABASE_URL is set) ---
-
 type stubSender struct {
 	mu     sync.Mutex
 	calls  []Message
@@ -201,7 +195,6 @@ func (s *stubSender) count() int {
 	return len(s.calls)
 }
 
-// countingSender records the peak number of concurrent Send calls.
 type countingSender struct {
 	mu        sync.Mutex
 	active    int
@@ -239,7 +232,6 @@ func (s *countingSender) resultCount() (calls, maxActive int) {
 	return s.calls, s.maxActive
 }
 
-// hangSender enters Send, signals, and blocks until ctx is done.
 type hangSender struct {
 	entered chan struct{}
 	result  SendResult
@@ -251,8 +243,6 @@ func (s *hangSender) Send(ctx context.Context, _ Message) (SendResult, error) {
 	return s.result, ctx.Err()
 }
 
-// deadlineProbeSender returns the send context's deadline to the test via a
-// channel and immediately accepts, proving the send runs under a deadline.
 type deadlineProbeSender struct {
 	deadline chan time.Time
 }
@@ -266,17 +256,11 @@ func (s *deadlineProbeSender) Send(ctx context.Context, _ Message) (SendResult, 
 	return SendResult{Outcome: SendAccepted}, nil
 }
 
-// testRing returns a key ring whose nonce source can Seal at least n messages.
-// A ring from fixedNonce() carries exactly one nonce (Seal consumes it), so
-// tests that enqueue several jobs must build a larger reader.
 func testRing(t *testing.T, n int) *KeyRing {
 	t.Helper()
 	return mustRing(t, "k-active", map[string][32]byte{"k-active": fixedKey()}, bytes.Repeat(fixedNonce(), n+1))
 }
 
-// beginWorkerTx begins a transaction and guarantees it is rolled back when the
-// test ends, so a mid-test failure releases the pool connection instead of
-// hanging the pool.Close cleanup.
 func beginWorkerTx(ctx context.Context, t *testing.T, pool *store.Pool) pgx.Tx {
 	t.Helper()
 	tx, err := pool.Begin(ctx)
@@ -291,12 +275,6 @@ func beginWorkerTx(ctx context.Context, t *testing.T, pool *store.Pool) pgx.Tx {
 	return tx
 }
 
-// newWorkerPool opens a pool on a fresh migrated database owned by the calling
-// test. A tick claims the oldest due jobs across the whole table, requeues any
-// expired lease, and deletes any expired registration, while other packages
-// commit, claim, and lock auth mail rows in the shared database with their own
-// clocks. No fixture clock keeps those rows out of a tick or this test's rows
-// out of theirs, so each worker test gets a database of its own.
 func newWorkerPool(t *testing.T) (context.Context, *store.Pool, *store.Queries) {
 	t.Helper()
 	dsn, _ := testutil.NewMigratedTestDatabase(t)
@@ -311,9 +289,6 @@ func newWorkerPool(t *testing.T) (context.Context, *store.Pool, *store.Queries) 
 	return ctx, sp, store.New(sp)
 }
 
-// uniqueDigest returns 32 bytes that differ per call. password_registrations
-// has a UNIQUE token_digest, so tests creating several registrations must not
-// reuse the fixed testDigest.
 func uniqueDigest() [32]byte {
 	var d [32]byte
 	copy(d[:], []byte(uuid.NewString()+uuid.NewString()))
@@ -335,10 +310,8 @@ func newWorkerRegistration(ctx context.Context, t *testing.T, sp *store.Pool, no
 	if err != nil {
 		t.Fatalf("CreatePasswordRegistration: %v", err)
 	}
-	//nolint:contextcheck // the cleanup intentionally uses a bounded background context (see below), not the already-canceled test ctx.
+	//nolint:contextcheck // the cleanup intentionally uses a bounded background context, not the already-canceled test ctx.
 	t.Cleanup(func() {
-		// A bounded context so a leftover referenced row (an abandoned test tx)
-		// surfaces as an error instead of hanging the whole suite forever.
 		dctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if _, err := store.New(sp).DeletePasswordRegistration(dctx, reg.ID); err != nil {
@@ -536,8 +509,6 @@ func TestWorkerTemporaryFailureRequeuesWithBackoff(t *testing.T) {
 		t.Fatalf("Commit: %v", err)
 	}
 
-	// Identity jitter: next = now + backoffCap(attempt). First claim makes
-	// attempts = 1, so the cap is 30s.
 	sender := &stubSender{result: SendResult{Outcome: SendTemporaryFailure}}
 	w := newTestWorker(t, sp, q, ring, sender, clock, func(d time.Duration) time.Duration { return d }, uuid.New())
 	if err := w.RunOnce(ctx); err != nil {
@@ -572,8 +543,6 @@ func TestWorkerSenderErrorIsTemporary(t *testing.T) {
 		t.Fatalf("Commit: %v", err)
 	}
 
-	// The sender claims success but returns a transport error: ambiguous, so the
-	// outcome is forced temporary and the job is requeued, not marked sent.
 	sender := &stubSender{result: SendResult{Outcome: SendAccepted}, err: errors.New("ambiguous transport failure")}
 	w := newTestWorker(t, sp, q, ring, sender, clock, nil, uuid.New())
 	if err := w.RunOnce(ctx); err != nil {
@@ -598,8 +567,6 @@ func TestWorkerTemporaryFailureAttempt8Terminal(t *testing.T) {
 	if err := tx.Commit(ctx); err != nil {
 		t.Fatalf("Commit: %v", err)
 	}
-	// Force attempts to 7 (after commit, so the row is visible) so the claim
-	// reaches 8, which must go terminal.
 	if _, err := sp.Exec(ctx, `UPDATE auth_email_jobs SET attempts = 7 WHERE id = $1`, jobID); err != nil {
 		t.Fatalf("set attempts: %v", err)
 	}
@@ -650,7 +617,7 @@ func TestWorkerExpiryTerminalWithoutSend(t *testing.T) {
 		t.Fatalf("Commit: %v", err)
 	}
 
-	clock.Advance(2 * time.Hour) // job expires after 1h
+	clock.Advance(2 * time.Hour)
 
 	sender := &stubSender{result: SendResult{Outcome: SendAccepted}}
 	w := newTestWorker(t, sp, q, ring, sender, clock, nil, uuid.New())
@@ -678,8 +645,6 @@ func TestWorkerReplacementTerminalWithoutSend(t *testing.T) {
 		t.Fatalf("Commit: %v", err)
 	}
 
-	// Claim the job to this worker, then simulate a replacement that rotated
-	// the scope's token digest after the claim (scope-before-job ordering).
 	sender := &stubSender{result: SendResult{Outcome: SendAccepted}}
 	w := newTestWorker(t, sp, q, ring, sender, clock, nil, uuid.New())
 	claimed, err := w.claim(ctx, clock.Now())
@@ -751,7 +716,6 @@ func TestWorkerUndecryptableJobTerminalPersists(t *testing.T) {
 			if err := w.RunOnce(ctx); err != nil {
 				t.Fatalf("RunOnce: %v", err)
 			}
-			// A later tick past the claim's lease must find nothing to recover.
 			clock.Advance(leaseDuration + time.Second)
 			if err := w.RunOnce(ctx); err != nil {
 				t.Fatalf("RunOnce after lease expiry: %v", err)
@@ -793,8 +757,6 @@ func TestWorkerMissingScopeTerminalOrCancelled(t *testing.T) {
 	if err != nil {
 		t.Fatalf("claim: %v", err)
 	}
-	// Delete the scope; the cascade removes the job, exactly the replacement
-	// "cancel" path.
 	if _, err := sp.Exec(ctx, `DELETE FROM password_registrations WHERE id = $1`, regID); err != nil {
 		t.Fatalf("delete scope: %v", err)
 	}
@@ -825,8 +787,6 @@ func TestWorkerStaleLeaseDoesNotSendOrFinalize(t *testing.T) {
 		t.Fatalf("Commit: %v", err)
 	}
 
-	// Worker A claims the job, its lease lapses, and worker B claims it before
-	// A's send handoff runs. A must not send or finalize.
 	workerA := uuid.New()
 	workerB := uuid.New()
 	sender := &stubSender{result: SendResult{Outcome: SendAccepted}}
@@ -838,7 +798,6 @@ func TestWorkerStaleLeaseDoesNotSendOrFinalize(t *testing.T) {
 	if len(claimed) != 1 {
 		t.Fatalf("claimed = %d, want 1", len(claimed))
 	}
-	// Requeue the expired lease, then let B claim it.
 	if _, err := sp.Exec(ctx, `UPDATE auth_email_jobs SET state='pending', attempts=attempts-1, next_attempt_at=$2, lease_owner=NULL, lease_expires_at=NULL WHERE id=$1`, jobID, clock.Now()); err != nil {
 		t.Fatalf("requeue: %v", err)
 	}
@@ -880,7 +839,6 @@ func TestWorkerRequeueExpiredRestoresPending(t *testing.T) {
 	if len(claimed) != 1 {
 		t.Fatalf("claimed = %d, want 1", len(claimed))
 	}
-	// The claim's lease is 30s; advance past it, then requeue.
 	clock.Advance(leaseDuration + time.Second)
 	if err := w.requeueExpired(ctx, clock.Now()); err != nil {
 		t.Fatalf("requeueExpired: %v", err)
@@ -1036,7 +994,6 @@ func TestWorkerCleanupBounded(t *testing.T) {
 	ctx, sp, q := newWorkerPool(t)
 	clock := testutil.NewClockAtEpoch()
 
-	// Create expired registrations that the tick must delete.
 	regs := make([]uuid.UUID, 0, 5)
 	for i := 0; i < 5; i++ {
 		digest := uniqueDigest()
@@ -1103,8 +1060,6 @@ func TestWorkerCancellationLeavesRecoverableLease(t *testing.T) {
 		t.Fatal("Run did not return after cancellation")
 	}
 
-	// The canceled send rolled back, so the job is still leased and therefore
-	// recoverable by the requeue query, not sent or terminal.
 	state, leasedTo := jobState(ctx, t, sp, jobID)
 	if state != "leased" {
 		t.Fatalf("state = %q, want leased (recoverable)", state)
@@ -1120,11 +1075,7 @@ func TestWorkerClaimOrderAndBatch(t *testing.T) {
 	total := claimBatchSize + 1
 	ring := testRing(t, total)
 
-	// Insert one more due job than a claim takes, with next_attempt_at running
-	// opposite to insert order, so physical order cannot pass for due order.
-	// The claim must take the earliest due jobs and leave the latest pending.
-	// PostgreSQL does not order UPDATE ... RETURNING rows, so the claimed batch
-	// is compared as a set.
+	// PostgreSQL does not order UPDATE ... RETURNING rows, so the claimed batch is compared as a set.
 	inserted := make([]uuid.UUID, 0, total)
 	for i := 0; i < total; i++ {
 		offset := time.Duration(total-i) * time.Minute

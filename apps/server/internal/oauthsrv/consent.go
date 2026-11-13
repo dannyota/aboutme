@@ -17,74 +17,37 @@ import (
 )
 
 var (
-	// ErrConsentInvalid is the closed failure for a malformed, forged, or stale
-	// stateless consent request. It never contains request material.
-	ErrConsentInvalid = errors.New("oauth consent invalid")
-	// ErrConsentNotFound is the session API's no-oracle client or redirect
-	// miss. It remains an ErrConsentInvalid for protocol callers that need one
-	// closed authorization failure.
+	ErrConsentInvalid  = errors.New("oauth consent invalid")
 	ErrConsentNotFound = fmt.Errorf("%w: authorization client not found", ErrConsentInvalid)
-	// ErrGrantLimit is the closed failure when a user would receive an
-	// eleventh live agent grant. The consent HTTP handler reports it as its
-	// own closed code, HTTP 409 agent_limit_reached, rather than the generic
-	// invalid-request response; see
-	// docs/design/mcp-client-compatibility.md rule 7.
-	ErrGrantLimit = errors.New("oauth live grant limit")
+	ErrGrantLimit      = errors.New("oauth live grant limit")
 )
 
-// ConsentQuery is the validated browser representation of an authorization
-// request. Scope remains its canonical OAuth parameter spelling at this edge.
 type ConsentQuery struct {
-	// PublicClientID is the client_id as presented: a registered client UUID
-	// or an https client metadata document URL.
-	PublicClientID string
-	metadata       *CIMDMetadata
-	address        netip.Addr
-	// ClientID is the registered client's UUID; nil for an unresolved
-	// metadata document URL.
-	ClientID uuid.UUID
-	// RedirectURI is the redirect_uri, which must match a registered value
-	// exactly.
-	RedirectURI string
-	// ResponseType is the response_type; only "code" is valid.
-	ResponseType string
-	// Scope is the scope parameter in its canonical OAuth spelling.
-	Scope string
-	// State is the client's opaque state, at most 512 bytes.
-	State string
-	// CodeChallenge is the PKCE S256 code challenge.
-	CodeChallenge string
-	// CodeChallengeMethod is the PKCE method; only "S256" is valid.
+	PublicClientID      string
+	metadata            *CIMDMetadata
+	address             netip.Addr
+	ClientID            uuid.UUID
+	RedirectURI         string
+	ResponseType        string
+	Scope               string
+	State               string
+	CodeChallenge       string
 	CodeChallengeMethod string
-	// Scopes is Scope parsed into the closed scope set.
-	Scopes Scopes
+	Scopes              Scopes
 }
 
-// ConsentView is safe for the session-authenticated consent page: it exposes
-// display metadata but never state, verifier material, or credentials.
 type ConsentView struct {
-	// ClientKind is "dcr" for a registered client or "cimd" for a metadata
-	// document client.
 	ClientKind string
-	// ClientHost is a metadata document client's host; nil when unknown or
-	// for a registered client.
 	ClientHost *string
-	// ClientName is the client's display name.
 	ClientName string
-	// Scopes is the canonical requested scope set.
-	Scopes Scopes
+	Scopes     Scopes
 }
 
-// ConsentDecision carries the exact authorization request together with the
-// user's stateless approval or denial.
 type ConsentDecision struct {
 	ConsentQuery
-	// Decision is "approve" or "deny".
 	Decision string
 }
 
-// ConsentContext revalidates a stateless request and returns only the client
-// name and canonical requested scopes for rendering.
 func (s *Service) ConsentContext(ctx context.Context, _ uuid.UUID, q ConsentQuery) (ConsentView, error) {
 	resolved, client, err := s.resolveConsent(ctx, q)
 	if err != nil {
@@ -106,12 +69,6 @@ func (s *Service) ConsentContext(ctx context.Context, _ uuid.UUID, q ConsentQuer
 	return ConsentView{ClientName: client.ClientName, Scopes: scopes, ClientKind: kind, ClientHost: host}, nil
 }
 
-// ConsentDecision revalidates the complete request. Approval writes the grant
-// and code in one transaction, after locking the client, the user, and the
-// caller's concrete session in that order and requiring recent primary and
-// second-factor proof for an enrolled account. Denial only builds a result
-// URL for the exact registered redirect URI and needs no recent proof. See
-// docs/design/second-factor-authentication.md.
 func (s *Service) ConsentDecision(ctx context.Context, sess store.Session, d ConsentDecision) (string, error) {
 	if d.Decision != "approve" && d.Decision != "deny" {
 		return "", ErrConsentInvalid
@@ -260,12 +217,6 @@ func (s *Service) approveConsent(ctx context.Context, sess store.Session, reques
 	return oauthResultURL(request.RedirectURI, s.publicOrigin, rawCode, "", request.State), nil
 }
 
-// requireConsentAuthority locks the caller's concrete session and second-factor
-// policy inside qtx, after the client and user locks the lock order requires
-// (see docs/design/second-factor-authentication.md), and enforces the recent
-// primary and second-factor proof an enrolled account needs before approval or
-// silent grant reuse mints a grant or authorization code. A nil policy
-// preserves the primary-only requirement for an unenrolled account.
 func requireConsentAuthority(ctx context.Context, qtx *store.Queries, user store.User, sessionID uuid.UUID, now time.Time) (store.Session, error) {
 	sess, err := qtx.GetSessionByIDForUpdate(ctx, sessionID)
 	if err != nil {
@@ -280,8 +231,6 @@ func requireConsentAuthority(ctx context.Context, qtx *store.Queries, user store
 	case err == nil:
 		policyPtr = &policy
 	case errors.Is(err, pgx.ErrNoRows):
-		// Unenrolled account: RequireRecentSecondFactorReauth checks primary
-		// proof only.
 	default:
 		return store.Session{}, fmt.Errorf("lock consent factor policy: %w", err)
 	}
@@ -313,11 +262,6 @@ func (s *Service) issueCode(ctx context.Context, sess store.Session, request Con
 	return s.approveExistingGrant(ctx, sess, request)
 }
 
-// approveExistingGrant is the silent-reuse path HandleAuthorize takes when a
-// live grant already covers the request. It requires the same current session
-// authority and recent proof as an explicit approval, so a browser session
-// left over from before an authentication epoch change cannot mint a fresh
-// code without reproving itself.
 func (s *Service) approveExistingGrant(ctx context.Context, sess store.Session, request ConsentQuery) (redirectTo string, err error) {
 	if request.metadata != nil && nativeLoopbackRedirect(request.RedirectURI) {
 		return "", ErrConsentInvalid
@@ -353,8 +297,6 @@ func (s *Service) approveExistingGrant(ctx context.Context, sess store.Session, 
 		return "", fmt.Errorf("new authorization code: %w", err)
 	}
 	epoch := user.AuthEpoch
-	// A single live grant is the token authority. Narrow it atomically with
-	// code issue so the code's requested scope and later token authority agree.
 	updatedGrant, err := qtx.UpsertOAuthGrant(ctx, store.UpsertOAuthGrantParams{UserID: user.ID, ClientID: request.ClientID, Scopes: request.Scope, CreatedAt: now, AuthEpoch: epoch})
 	if err != nil {
 		return "", fmt.Errorf("narrow OAuth grant for authorization code: %w", err)

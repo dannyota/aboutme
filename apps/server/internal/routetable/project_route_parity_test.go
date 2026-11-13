@@ -8,7 +8,6 @@ import (
 	"testing"
 )
 
-// routeCase is one request the route-table test drives through Caddy.
 type routeCase struct {
 	name   string
 	method string
@@ -16,10 +15,6 @@ type routeCase struct {
 	want   wantBackend
 }
 
-// projectRouteParityCases reads deploy/caddy/testdata/project-route-parity.json,
-// the route parity fixture shared with the Go route classifier and the
-// request feed, and turns each row into a GET with its expected owner: go,
-// nuxt (the Nuxt catch-all), or 404 from Caddy itself.
 func projectRouteParityCases(t *testing.T) []routeCase {
 	t.Helper()
 	wd, err := os.Getwd()

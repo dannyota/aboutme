@@ -15,8 +15,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// createDescribedPublicStoreProject stores a project with a description in
-// two languages.
 func createDescribedPublicStoreProject(ctx context.Context, t *testing.T, tx pgx.Tx, userID uuid.UUID, slug string) uuid.UUID {
 	t.Helper()
 	var id uuid.UUID
@@ -35,9 +33,6 @@ func createDescribedPublicStoreProject(ctx context.Context, t *testing.T, tx pgx
 	return id
 }
 
-// publicProjectsFixture is one live resume with a visible linked entry, a
-// visible entry linking another account's project, a hidden linked entry
-// and an unlinked entry.
 type publicProjectsFixture struct {
 	slug     string
 	ids      []uuid.UUID
@@ -101,8 +96,6 @@ func TestGetPublicResumeProjectList_ReadsVisibleOwnedProjectsWithoutDescriptions
 	requireWithoutDescriptions(t, rows[0].Document)
 }
 
-// requireWithoutDescriptions requires the atlas fixture document with every
-// description removed and the rest kept.
 func requireWithoutDescriptions(t *testing.T, raw json.RawMessage) {
 	t.Helper()
 	var document struct {

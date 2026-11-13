@@ -20,11 +20,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/resume/docmigrate"
 )
 
-// A resume with discovery off must keep search engines out of every public
-// representation, not only its HTML. The header comes from the current state on
-// each request, so toggling discovery at the same revision, a cache hit, never
-// serves a stale header.
-
 const noindex = "noindex, noarchive"
 
 type robotsCase struct {
@@ -33,8 +28,6 @@ type robotsCase struct {
 	path    string
 }
 
-// robotsHeaders returns the X-Robots-Tag of a GET, a HEAD, and a conditional
-// GET (304) for path.
 func robotsHeaders(t *testing.T, handler http.Handler, path string) [3]string {
 	t.Helper()
 	var got [3]string
@@ -103,7 +96,7 @@ func TestPublicRepresentationsFollowDiscoveryForNoindex(t *testing.T) {
 		}
 		return renderjob.Result{Bytes: body, Digest: sha256.Sum256(body), Revision: snapshot.Revision}, nil
 	})
-	artifacts, err := newArtifactHandlers(ArtifactDependencies{
+	artifacts, err := newArtifactHandlers(ArtifactDependencies{PublicOrigin: mustPublicOrigin(t),
 		Reader: reader, Cache: cache, Queue: queue, AppDigest: "sha256:app", RendererDigest: "sha256:renderer", Clock: now,
 	})
 	if err != nil {
@@ -116,8 +109,6 @@ func TestPublicRepresentationsFollowDiscoveryForNoindex(t *testing.T) {
 		{"pdf", artifacts.pdf, "/api/v1/public/resumes/ada-lovelace/pdf"},
 		{"og.png", artifacts.png, "/api/v1/public/resumes/ada-lovelace/og.png"},
 	}
-	// The revision never changes across these toggles, so the second and
-	// later rounds are cache hits on the same key.
 	for _, round := range []struct {
 		discoverable bool
 		want         string

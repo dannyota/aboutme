@@ -19,6 +19,7 @@ import (
 	"danny.vn/aboutme/apps/server/internal/api"
 	"danny.vn/aboutme/apps/server/internal/auth"
 	"danny.vn/aboutme/apps/server/internal/media"
+	"danny.vn/aboutme/apps/server/internal/publicresume"
 	"danny.vn/aboutme/apps/server/internal/publicstate"
 	"danny.vn/aboutme/apps/server/internal/renderjob"
 	"danny.vn/aboutme/apps/server/internal/resume"
@@ -28,57 +29,26 @@ import (
 
 const apiResumePath = "/api/v1/resumes"
 
-// Options configures the resume API route service.
 type Options struct {
-	// Logger receives resume diagnostics; nil uses slog.Default.
-	Logger *slog.Logger
-	// SessionManager authenticates owner requests.
-	SessionManager *auth.SessionManager
-	// PublicOrigin is the canonical public origin the CSRF check compares with
-	// a mutating request's Origin.
-	PublicOrigin string
-	// TrustedProxies are the proxy prefixes whose forwarded client address is
-	// trusted for rate limits.
-	TrustedProxies api.TrustedProxies
-	// Clock returns the current time; nil uses time.Now.
-	Clock func() time.Time
-	// AcceptedVersions are the document wire versions requests may name; nil
-	// uses docmigrate.AcceptedVersions.
-	AcceptedVersions []int32
-	// PhotoKeyInvariant counts a stored photo key that fails to parse; nil
-	// uses a service counter.
-	PhotoKeyInvariant func()
-	// PhotoRandom supplies photo key suffix bytes; nil uses crypto/rand.
-	PhotoRandom io.Reader
-	// PhotoNormalizationDuration records each photo normalization time; nil
-	// uses a service counter.
+	Logger                     *slog.Logger
+	SessionManager             *auth.SessionManager
+	PublicOrigin               string
+	CanonicalOrigin            publicresume.PublicOrigin
+	TrustedProxies             api.TrustedProxies
+	Clock                      func() time.Time
+	AcceptedVersions           []int32
+	PhotoKeyInvariant          func()
+	PhotoRandom                io.Reader
 	PhotoNormalizationDuration func(time.Duration)
-	// PhotoAdmission is the process-wide photo decode permit that the REST
-	// and agent upload paths share. Nil gives this Service its own permit, so
-	// a process builds one Service or passes one PhotoAdmission to each.
-	PhotoAdmission *media.PhotoAdmission
-	// PhotoNormalizer serializes changes to the process memory limit. Share it
-	// among all photo normalization callers in the process; nil gives this
-	// Service its own normalizer.
-	PhotoNormalizer *media.PhotoNormalizer
-	// Coordinator is the shared public-generation coordinator. Composition
-	// initializes it from durable public_state before serving mutations.
-	Coordinator *publicstate.Coordinator
-	// RecoveryPool opens an independent connection for ambiguous outcomes.
-	RecoveryPool *store.Pool
-	// PrintQueue performs bounded private rendering after owner authorization.
-	PrintQueue PrintQueue
-	// SignInToViewEnabled lets a publish request turn the sign-in-to-view
-	// switch on (SIGN_IN_TO_VIEW_ENABLED); turning it off is always allowed
-	// (docs/design/viewer-analytics/sign-in-to-view.md "Setting").
-	SignInToViewEnabled bool
-	// Showcase applies a publish request's community-showcase state in the
-	// publish transaction. Nil is for tests that never opt a resume in.
-	Showcase ShowcasePublisher
+	PhotoAdmission             *media.PhotoAdmission
+	PhotoNormalizer            *media.PhotoNormalizer
+	Coordinator                *publicstate.Coordinator
+	RecoveryPool               *store.Pool
+	PrintQueue                 PrintQueue
+	SignInToViewEnabled        bool
+	Showcase                   ShowcasePublisher
 }
 
-// Service owns the authenticated resume HTTP surface and its write-safety
-// dependencies.
 type Service struct {
 	resumes                    resumeBoundary
 	idempotency                idempotencyBoundary
@@ -87,6 +57,7 @@ type Service struct {
 	logger                     *slog.Logger
 	sessions                   *auth.SessionManager
 	publicOrigin               string
+	canonicalOrigin            publicresume.PublicOrigin
 	trustedProxies             api.TrustedProxies
 	clock                      func() time.Time
 	acceptedVersions           []int32
@@ -125,12 +96,10 @@ type idempotencyBoundary interface {
 		func(*store.Queries) (resume.StoredResponse, error)) (resume.ExecuteResult, error)
 }
 
-// PrintQueue is the narrow owner-export rendering dependency.
 type PrintQueue interface {
 	Render(context.Context, renderjob.Request) (renderjob.Result, error)
 }
 
-// New constructs the resume API service. RegisterRoutes installs its routes.
 func New(store *resume.Store, idem *resume.IdempotencyStore, proj *docmigrate.Projector,
 	blobs media.Backend, opts Options,
 ) *Service {
@@ -166,7 +135,7 @@ func New(store *resume.Store, idem *resume.IdempotencyStore, proj *docmigrate.Pr
 	return &Service{
 		resumes: store, idempotency: idem, projector: proj, blobs: blobs,
 		logger: opts.Logger, sessions: opts.SessionManager,
-		publicOrigin: opts.PublicOrigin, trustedProxies: opts.TrustedProxies,
+		publicOrigin: opts.PublicOrigin, canonicalOrigin: opts.CanonicalOrigin, trustedProxies: opts.TrustedProxies,
 		clock: opts.Clock, acceptedVersions: append([]int32(nil), opts.AcceptedVersions...),
 		writeResponse: writeStoredResponse, sanitizeDocument: sanitizeDocument,
 		photoKeyInvariant:          opts.PhotoKeyInvariant,
@@ -227,7 +196,6 @@ func registeredRoutes() []routeSpec {
 	return routes
 }
 
-// RegisterRoutes attaches the whole resume route inventory in one step.
 func (s *Service) RegisterRoutes(mux *http.ServeMux) {
 	chains := s.sharedRouteChains()
 	byPattern := make(map[string][]routeSpec)

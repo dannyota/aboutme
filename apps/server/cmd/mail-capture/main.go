@@ -1,11 +1,3 @@
-// Command mail-capture runs the local, loopback-only authentication-email
-// capture server used by native and HTTPS development. It binds
-// 127.0.0.1:20091 by default, requires a 32-byte bearer secret read from a
-// mode-0600 harness-state file, and never logs the secret.
-//
-// Usage:
-//
-//	mail-capture --secret-file <path> [--addr 127.0.0.1:20091]
 package main
 
 import (
@@ -50,9 +42,6 @@ func main() {
 	}
 }
 
-// parseArgs parses and validates the command line. addr must be a loopback
-// host, because the capture server never binds a wildcard or non-loopback
-// address.
 func parseArgs(args []string) (config, error) {
 	fs := flag.NewFlagSet("mail-capture", flag.ContinueOnError)
 	var (
@@ -79,8 +68,6 @@ func parseArgs(args []string) (config, error) {
 	return config{secretFile: *secretFile, addr: *addr}, nil
 }
 
-// readSecret reads the mode-0600 harness-state secret file and requires exactly
-// 32 bytes. It never echoes the bytes.
 func readSecret(path string) ([]byte, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
@@ -92,8 +79,6 @@ func readSecret(path string) ([]byte, error) {
 	return b, nil
 }
 
-// run starts the capture server and blocks until SIGINT/SIGTERM, then shuts
-// down gracefully.
 func run(cfg config, logger *slog.Logger) error {
 	secret, err := readSecret(cfg.secretFile)
 	if err != nil {

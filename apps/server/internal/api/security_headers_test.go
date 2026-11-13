@@ -36,18 +36,13 @@ func TestSecurityHeaders_SetsBaselineHeaders(t *testing.T) {
 	}
 }
 
-// TestSecurityHeaders_HSTSAbsentOnPlainHTTPLocalDev is the specific case
-// the design calls out by name: a plain-HTTP request with no trusted-proxy
-// hint must never get Strict-Transport-Security, because a developer
-// hitting http://localhost would have their browser remember that and be
-// forced onto HTTPS for localhost from then on.
 func TestSecurityHeaders_HSTSAbsentOnPlainHTTPLocalDev(t *testing.T) {
 	t.Parallel()
 
 	handler := api.SecurityHeaders(api.LoopbackTrustedProxies())(passthroughHandler())
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "http://localhost/healthz", nil)
-	req.RemoteAddr = "127.0.0.1:54321" // plain HTTP: no TLS, no X-Forwarded-Proto
+	req.RemoteAddr = "127.0.0.1:54321"
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -56,10 +51,6 @@ func TestSecurityHeaders_HSTSAbsentOnPlainHTTPLocalDev(t *testing.T) {
 	}
 }
 
-// TestSecurityHeaders_HSTSPresentViaTrustedProxyHTTPS covers the production
-// path: Caddy terminates TLS and forwards to Go over plain loopback HTTP,
-// asserting X-Forwarded-Proto: https. Because the peer is trusted, that
-// assertion is honored and HSTS is sent.
 func TestSecurityHeaders_HSTSPresentViaTrustedProxyHTTPS(t *testing.T) {
 	t.Parallel()
 
@@ -76,18 +67,13 @@ func TestSecurityHeaders_HSTSPresentViaTrustedProxyHTTPS(t *testing.T) {
 	}
 }
 
-// TestSecurityHeaders_HSTSAbsentWhenProxyHintComesFromUntrustedPeer proves
-// the same spoofing-resistance property as rate limiting's client-IP
-// handling: X-Forwarded-Proto is only honored when it arrives via a
-// trusted proxy peer. A direct, untrusted client claiming https must not
-// get HSTS just by setting the header itself.
 func TestSecurityHeaders_HSTSAbsentWhenProxyHintComesFromUntrustedPeer(t *testing.T) {
 	t.Parallel()
 
 	handler := api.SecurityHeaders(api.LoopbackTrustedProxies())(passthroughHandler())
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/healthz", nil)
-	req.RemoteAddr = "203.0.113.5:54321" // not a trusted proxy
+	req.RemoteAddr = "203.0.113.5:54321"
 	req.Header.Set("X-Forwarded-Proto", "https")
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -112,10 +98,6 @@ func TestSecurityHeaders_HSTSPresentOnDirectTLS(t *testing.T) {
 	}
 }
 
-// TestSecurityHeaders_AppliesToRejectedResponses proves headers land even
-// when a downstream layer rejects the request, the specific requirement
-// that determined where SecurityHeaders sits in router.go's middleware
-// chain (outside every layer that can itself write a response).
 func TestSecurityHeaders_AppliesToRejectedResponses(t *testing.T) {
 	t.Parallel()
 
@@ -136,17 +118,13 @@ func TestSecurityHeaders_AppliesToRejectedResponses(t *testing.T) {
 	}
 }
 
-// TestRouter_New_HSTSAbsentOnPlainHTTPAndPresentViaTrustedProxy is an
-// end-to-end check through api.New()'s real middleware chain (not just the
-// SecurityHeaders middleware in isolation), confirming router.go's wiring
-// actually threads opts.TrustedProxies through to SecurityHeaders.
 func TestRouter_New_HSTSAbsentOnPlainHTTPAndPresentViaTrustedProxy(t *testing.T) {
 	t.Parallel()
 
 	handler := api.New(testLogger(), fakePinger{}, api.Options{TrustedProxies: api.LoopbackTrustedProxies()}, nil)
 
 	plain := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/healthz", nil)
-	plain.RemoteAddr = "203.0.113.9:1111" // not loopback: not the trusted Caddy hop
+	plain.RemoteAddr = "203.0.113.9:1111"
 	recPlain := httptest.NewRecorder()
 	handler.ServeHTTP(recPlain, plain)
 	if got := recPlain.Header().Get("Strict-Transport-Security"); got != "" {
@@ -154,7 +132,7 @@ func TestRouter_New_HSTSAbsentOnPlainHTTPAndPresentViaTrustedProxy(t *testing.T)
 	}
 
 	viaProxy := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/healthz", nil)
-	viaProxy.RemoteAddr = "127.0.0.1:1111" // the trusted Caddy hop
+	viaProxy.RemoteAddr = "127.0.0.1:1111"
 	viaProxy.Header.Set("X-Forwarded-Proto", "https")
 	recProxy := httptest.NewRecorder()
 	handler.ServeHTTP(recProxy, viaProxy)
@@ -163,20 +141,13 @@ func TestRouter_New_HSTSAbsentOnPlainHTTPAndPresentViaTrustedProxy(t *testing.T)
 	}
 }
 
-// TestRouter_New_DefaultOptions_NeverTrustsAnyPeer proves api.New does not
-// hardcode LoopbackTrustedProxies(), which is wrong for
-// any topology (e.g. podman-compose) where Caddy doesn't reach Go over
-// loopback. api.New must not assume a topology on the caller's behalf; a
-// zero-value Options (no TrustedProxies configured) must trust no peer at
-// all, even one connecting from loopback, matching
-// RateLimiterConfig.TrustedProxies' own documented zero-value semantics.
 func TestRouter_New_DefaultOptions_NeverTrustsAnyPeer(t *testing.T) {
 	t.Parallel()
 
 	handler := api.New(testLogger(), fakePinger{}, api.Options{}, nil)
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/healthz", nil)
-	req.RemoteAddr = "127.0.0.1:1111" // would be the trusted Caddy hop, IF configured
+	req.RemoteAddr = "127.0.0.1:1111"
 	req.Header.Set("X-Forwarded-Proto", "https")
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)

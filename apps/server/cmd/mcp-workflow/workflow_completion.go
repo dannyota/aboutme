@@ -6,9 +6,6 @@ import (
 	"time"
 )
 
-// verifyFinal proves one new private Vietnamese target, the unchanged
-// English source and photo, the unchanged baseline, and count delta one. It
-// returns the server Date of these reads.
 func (r *ownerRun) verifyFinal(ctx context.Context) (time.Time, error) {
 	mark := r.deps.Observations.mark()
 	listing, err := r.guard.list(ctx)
@@ -63,9 +60,6 @@ func (r *ownerRun) verifyFinal(ctx context.Context) (time.Time, error) {
 	return confirmedAt, nil
 }
 
-// complete journals revocation authority, makes the sentinel durable, drops
-// the resolved intent, inspects the target without media, revokes, and
-// requires the next SDK request to receive 401 and a refused reauthorization.
 func (r *ownerRun) complete(ctx context.Context, confirmedAt time.Time) error {
 	journal, err := r.prepareJournal(ctx, confirmedAt)
 	if err != nil {
@@ -117,10 +111,6 @@ func (r *ownerRun) complete(ctx context.Context, confirmedAt time.Time) error {
 
 var errReauthorizationUnproved = errors.New("post_revocation_proof_incomplete")
 
-// prepareJournal binds the current grant to server-bound cutoffs: access 55
-// minutes after the latest token response Date and refresh 29 days after the
-// first. When the current grant cannot be read, it journals the grant captured
-// before create, which is always a valid revocation authority.
 func (r *ownerRun) prepareJournal(ctx context.Context, confirmedAt time.Time) (revocationJournal, error) {
 	grant := r.grant
 	accessToken, refreshToken, err := r.deps.Tokens(ctx)

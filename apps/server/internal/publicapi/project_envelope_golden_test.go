@@ -14,20 +14,13 @@ import (
 	"danny.vn/aboutme/apps/server/internal/publicresume"
 )
 
-// The golden envelopes are what the builder makes for a fixed set of
-// projects. The web suite runs the renderer's decoder on each
-// (apps/web/test/public-render/project-envelope-parity.test.ts), so a
-// builder change the renderer would refuse fails there.
 const projectEnvelopesPath = "testdata/project-envelopes.json"
 
-// projectEnvelopeCase is one named envelope the builder makes.
 type projectEnvelopeCase struct {
 	Name     string `json:"name"`
 	Envelope any    `json:"envelope"`
 }
 
-// smallProject is a project with short English text and the given
-// technologies count.
 func smallProject(slug string, technologies int, dates *schema.DateRange) publicresume.PublicProject {
 	names := []string{}
 	for i := range technologies {
@@ -39,15 +32,11 @@ func smallProject(slug string, technologies int, dates *schema.DateRange) public
 	}}
 }
 
-// withText replaces a project's English text.
 func withText(available publicresume.PublicProject, text project.Text) publicresume.PublicProject {
 	available.Document.Text = map[string]project.Text{"en": text}
 	return available
 }
 
-// goldenProjectEnvelopes builds the golden set: thirty rows, an und resume,
-// the blank-name fallback, cards off, entry-link equality, the preview
-// bounds, an outcome cut across an accent, and blank optional text.
 func goldenProjectEnvelopes(t *testing.T) []projectEnvelopeCase {
 	t.Helper()
 	cases := []projectEnvelopeCase{}
@@ -135,9 +124,6 @@ func goldenProjectEnvelopes(t *testing.T) []projectEnvelopeCase {
 	return cases
 }
 
-// TestProjectEnvelopes_MatchTheGoldenFile proves the builder still makes
-// the golden envelopes, each of which passes the Go copy of the renderer's
-// decoder. Run with -update to rewrite the file, then review its diff.
 func TestProjectEnvelopes_MatchTheGoldenFile(t *testing.T) {
 	cases := goldenProjectEnvelopes(t)
 	for _, entry := range cases {

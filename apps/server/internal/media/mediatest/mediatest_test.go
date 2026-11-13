@@ -6,10 +6,6 @@ import (
 	"testing"
 )
 
-// fakeTB records Skip/Fatal calls instead of stopping the goroutine, so the
-// fail-closed arm is provable. Unlike the real testing.T, its methods
-// return; requireTestS3 is written to return immediately after each
-// Skip/Fatal call, so the difference is invisible to production callers.
 type fakeTB struct {
 	testing.TB
 	fatals []string
@@ -59,9 +55,6 @@ func TestRequireTestS3_SkipsWhenUnconfigured(t *testing.T) {
 	}
 }
 
-// TestRequireTestS3_FailsClosedUnderRequire is the gate's own proof: with
-// REQUIRE_TEST_S3=1 a missing TEST_S3_ENDPOINT is a hard failure, never a
-// skip, so `make server-test-media-s3` can never pass vacuously.
 func TestRequireTestS3_FailsClosedUnderRequire(t *testing.T) {
 	t.Parallel()
 	fake := &fakeTB{}
@@ -91,9 +84,6 @@ func TestRequireTestS3_ReturnsCompleteConfig(t *testing.T) {
 	}
 }
 
-// TestRequireTestS3_MissingVariableIsFatalAndSecretFree: a partially
-// configured harness is a broken harness — fail, never skip — and the
-// failure names only the missing variable, never any configured value.
 func TestRequireTestS3_MissingVariableIsFatalAndSecretFree(t *testing.T) {
 	t.Parallel()
 	for _, missing := range []string{"TEST_S3_REGION", "TEST_S3_BUCKET", "TEST_S3_ACCESS_KEY_ID", "TEST_S3_SECRET_ACCESS_KEY"} {

@@ -1,12 +1,3 @@
-// store_test.go exercises resume.Store against a live Postgres database:
-// create (cap-enforced), get/list (projected), delete, and the
-// revision-CAS writes. Every DB-backed test here is skipped, not failed,
-// when TEST_DATABASE_URL is unset -- UNLESS REQUIRE_TEST_DB=1 is also set,
-// in which case internal/testutil.RequireMigratedTestDatabaseURL fails
-// closed instead (see that helper's own doc comment). Test setup goes
-// through that same shared helper internal/auth, internal/user, and
-// internal/store use, so this package's tests never depend on another
-// package's test binary having already applied migrations first.
 package resume_test
 
 import (
@@ -29,19 +20,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/testutil"
 )
 
-// newIntegrationStore returns a resume.Store backed by a fresh connection
-// pool against TEST_DATABASE_URL, with the database's schema brought to
-// head first. Unlike internal/user's single-enclosing-transaction test
-// helper, resume.Store opens its own transactions per write, so tests
-// need a real pool, not a pre-opened tx -- isolation instead comes from
-// every test creating its own throwaway user (createTestUser) and scoping
-// all assertions to that user's own resumes. The pool itself is also
-// returned for tests that need to reach the database directly -- bypassing
-// the store's own application-level checks on
-// purpose, e.g. to exercise the cap trigger's own enforcement, or to
-// force two rows to share a created_at so the ListResumesForUser query's
-// `, id` tiebreak is actually exercised, not merely coincidentally
-// satisfied.
 func newIntegrationStore(t *testing.T) (*resume.Store, *store.Queries, *store.Pool, context.Context) {
 	t.Helper()
 	dsn := testutil.RequireMigratedTestDatabaseURL(t)
@@ -59,11 +37,6 @@ func newIntegrationStore(t *testing.T) (*resume.Store, *store.Queries, *store.Po
 	return s, store.New(pool), pool, ctx
 }
 
-// createTestUser inserts a minimal users row and returns its ID, so tests
-// that need a real userID (resumes.user_id REFERENCES users(id)) have one
-// to point at. The random email (matching internal/auth's
-// transaction_test.go convention) only needs to be globally unique, never
-// reproducible -- nothing asserts against its value.
 func createTestUser(t *testing.T, q *store.Queries) uuid.UUID {
 	return createTestUserWithContext(context.Background(), t, q)
 }
@@ -80,11 +53,6 @@ func createTestUserWithContext(ctx context.Context, t *testing.T, q *store.Queri
 	return u.ID
 }
 
-// assertResumeRowEqual compares every column of got against want,
-// including the doc via canonical-byte comparison (not reflect.DeepEqual --
-// see codec_test.go's own byte-stability comments for why). Wrong-user tests
-// and the CAS invalid-document test use this to prove a rejected
-// write left the row completely untouched.
 func assertResumeRowEqual(t *testing.T, got, want resume.Resume) {
 	t.Helper()
 
@@ -143,8 +111,6 @@ func assertResumeRowEqual(t *testing.T, got, want resume.Resume) {
 		t.Errorf("Doc canonical = %s, want %s", gotDoc, wantDoc)
 	}
 }
-
-// --- Happy-path integration tests ---
 
 func TestStore_Integration_CreateGetRoundTrip(t *testing.T) {
 	t.Parallel()
@@ -210,16 +176,6 @@ func TestStore_Integration_ListOrderingStable(t *testing.T) {
 		wantIDs = append(wantIDs, created.ID)
 	}
 
-	// Three sequential Create calls get three distinct created_at values
-	// on their own, so the query's `, id` tiebreak would never actually
-	// run -- the plain created_at order alone would already produce the
-	// right answer, and the assertion below would pass even if `, id`
-	// were accidentally dropped from ListResumesForUser. Force the first
-	// two rows to share the exact same created_at so the tiebreak is genuinely
-	// exercised: wantIDs[0] and
-	// wantIDs[1] are uuidv7 (monotonic with real creation time), so
-	// wantIDs[0] < wantIDs[1] -- with created_at tied, only the id
-	// tiebreak can produce creation order.
 	tiedAt := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
 	for _, id := range wantIDs[:2] {
 		if _, err := pool.Exec(ctx, "UPDATE resumes SET created_at = $1 WHERE id = $2", tiedAt, id); err != nil {
@@ -258,7 +214,6 @@ func TestStore_Integration_DeleteThenGetNotFound(t *testing.T) {
 		t.Errorf("Get() after Delete() error = %v, want resume.ErrNotFound", err)
 	}
 
-	// Deleting an already-gone id is ErrNotFound too, not a silent no-op.
 	if err := s.Delete(ctx, userID, created.ID); !errors.Is(err, resume.ErrNotFound) {
 		t.Errorf("second Delete() error = %v, want resume.ErrNotFound", err)
 	}
@@ -275,8 +230,6 @@ func TestStore_Integration_WrongUser_NotFoundAndRowUntouched(t *testing.T) {
 		t.Fatalf("Create() error: %v", err)
 	}
 
-	// A real id belonging to a different user is ErrNotFound, not a
-	// distinguishable "forbidden" -- no existence oracle.
 	_, err = s.Get(ctx, otherID, created.ID)
 	if !errors.Is(err, resume.ErrNotFound) {
 		t.Errorf("Get() with wrong user error = %v, want resume.ErrNotFound", err)
@@ -286,7 +239,6 @@ func TestStore_Integration_WrongUser_NotFoundAndRowUntouched(t *testing.T) {
 		t.Errorf("Delete() with wrong user error = %v, want resume.ErrNotFound", err)
 	}
 
-	// The owner's row must be byte-for-byte identical to right after Create.
 	afterAttack, err := s.Get(ctx, ownerID, created.ID)
 	if err != nil {
 		t.Fatalf("Get() by owner after wrong-user attempts error: %v", err)
@@ -294,8 +246,6 @@ func TestStore_Integration_WrongUser_NotFoundAndRowUntouched(t *testing.T) {
 	assertResumeRowEqual(t, afterAttack, created)
 }
 
-// TestStore_Integration_Create_InvalidDoc proves createTx's validation gate
-// rejects an invalid document. No row must be created.
 func TestStore_Integration_Create_InvalidDoc(t *testing.T) {
 	t.Parallel()
 	s, q, _, ctx := newIntegrationStore(t)
@@ -375,8 +325,6 @@ func TestStore_Integration_Create_TitleCharacterLimit(t *testing.T) {
 	}
 }
 
-// --- Cap tests ---
-
 func TestStore_Integration_CapEnforcement(t *testing.T) {
 	t.Parallel()
 	s, q, _, ctx := newIntegrationStore(t)
@@ -396,7 +344,6 @@ func TestStore_Integration_CapEnforcement(t *testing.T) {
 		t.Fatalf("4th Create() error = %v, want resume.ErrCapExceeded", err)
 	}
 
-	// Deleting one frees a slot for this same user.
 	if err := s.Delete(ctx, userID, created[0].ID); err != nil {
 		t.Fatalf("Delete() error: %v", err)
 	}
@@ -404,24 +351,12 @@ func TestStore_Integration_CapEnforcement(t *testing.T) {
 		t.Fatalf("Create() after Delete() error: %v", err)
 	}
 
-	// A second user's cap is independent of the first's.
 	otherUserID := createTestUser(t, q)
 	if _, err := s.Create(ctx, otherUserID, "Other user's first resume", doc); err != nil {
 		t.Fatalf("Create() for a second, unrelated user error: %v", err)
 	}
 }
 
-// TestStore_Integration_CapEnforcement_TriggerBackstop exercises the database
-// trigger's own cap enforcement directly. It inserts via q.CreateResume -- the
-// same sqlc-generated
-// method createTx itself calls -- with none of the store's own
-// LockUserForResumeWrite/CountResumesForUser pre-insert check. Every
-// sequential path through the STORE always has that Go-level check
-// short-circuit before the insert (TestStore_Integration_CapEnforcement
-// above never reaches the trigger), so this is the only coverage of the
-// trigger's own SQLSTATE/message against a REAL Postgres-produced error,
-// rather than the synthetic pgconn.PgError double
-// TestIsResumeCapExceeded_ExactMatchOnBothCodeAndMessage uses.
 func TestStore_Integration_CapEnforcement_TriggerBackstop(t *testing.T) {
 	t.Parallel()
 	s, q, _, ctx := newIntegrationStore(t)
@@ -462,28 +397,11 @@ func TestStore_Integration_CapEnforcement_TriggerBackstop(t *testing.T) {
 		t.Errorf("4th direct CreateResume() error = %v, want it to match the per-owner cap trigger's exact 23514/resumes_user_cap_exceeded mapping", err)
 	}
 
-	// The store's own Create, for the same now-at-3 user, must also see
-	// the cap as exceeded via its own count check -- the two enforcement
-	// layers agree.
 	if _, err := s.Create(ctx, userID, "Store-level create after bypass", doc); !errors.Is(err, resume.ErrCapExceeded) {
 		t.Errorf("Store.Create() after bypass-created rows error = %v, want resume.ErrCapExceeded", err)
 	}
 }
 
-// --- Cleared contact value survives the live store ---
-
-// TestStore_Integration_ClearedContactValue_PreservedThroughCreateGetSaveGet
-// proves at the live-store layer that a present personalDetails.details entry
-// whose value is explicitly cleared to "" survives a real write to
-// and read from Postgres, without the entry being dropped from the array or
-// its empty value being fabricated into something else. Absence means "never
-// entered" and "" means "explicitly cleared"; neither may be fabricated.
-//
-// The row is created with the value POPULATED and only then cleared by a
-// SaveDocument, so the assertions distinguish "the store persisted the
-// clearing" from "the row happened to be created that way": with a cleared
-// document on both legs, a SaveDocument that silently wrote nothing at all
-// would still pass.
 func TestStore_Integration_ClearedContactValue_PreservedThroughCreateGetSaveGet(t *testing.T) {
 	t.Parallel()
 	s, q, _, ctx := newIntegrationStore(t)
@@ -524,8 +442,6 @@ func TestStore_Integration_ClearedContactValue_PreservedThroughCreateGetSaveGet(
 	}
 	assertDetailValue(t, "Get() before clearing", populatedValue, got.Doc)
 
-	// Now clear it: the write path must persist "" as an explicit value, not
-	// drop the key, drop the entry, or leave the previous value standing.
 	newRev, err := s.SaveDocument(ctx, userID, created.ID, cleared, created.Revision)
 	if err != nil {
 		t.Fatalf("SaveDocument() error: %v", err)
@@ -540,8 +456,6 @@ func TestStore_Integration_ClearedContactValue_PreservedThroughCreateGetSaveGet(
 	}
 	assertDetailValue(t, "Get() after SaveDocument()", "", gotAfterSave.Doc)
 }
-
-// --- Compare-and-swap tests ---
 
 func TestStore_Integration_SaveDocument_CAS(t *testing.T) {
 	t.Parallel()
@@ -583,8 +497,6 @@ func TestStore_Integration_SaveDocument_CAS(t *testing.T) {
 		t.Errorf("Get().Doc canonical after save = %s, want %s", gotDoc, wantWinningDoc)
 	}
 
-	// Stale revision (the ORIGINAL, pre-save revision): must fail with the
-	// WINNING revision/doc just written above, not the loser's own content.
 	loserDoc := validDocForTest(t)
 	loserDoc.PersonalDetails.FullName = strp("Should Never Land")
 	_, err = s.SaveDocument(ctx, userID, created.ID, loserDoc, created.Revision)
@@ -603,13 +515,11 @@ func TestStore_Integration_SaveDocument_CAS(t *testing.T) {
 		t.Errorf("mismatch.Current.Doc canonical = %s, want the WINNING doc %s", mismatchDoc, wantWinningDoc)
 	}
 
-	// Unknown id -> ErrNotFound.
 	_, err = s.SaveDocument(ctx, userID, uuid.New(), winningDoc, 1)
 	if !errors.Is(err, resume.ErrNotFound) {
 		t.Errorf("SaveDocument() unknown id error = %v, want resume.ErrNotFound", err)
 	}
 
-	// Invalid doc -> *ValidationError, row completely untouched.
 	beforeInvalid, err := s.Get(ctx, userID, created.ID)
 	if err != nil {
 		t.Fatalf("Get() before invalid-doc attempt error: %v", err)
@@ -657,8 +567,6 @@ func TestStore_Integration_SaveTitle_CAS(t *testing.T) {
 		t.Errorf("Get().Revision = %d, want %d", got.Revision, newRev)
 	}
 
-	// Stale revision (the ORIGINAL, pre-save revision): must fail with the
-	// WINNING revision/title just written above.
 	_, err = s.SaveTitle(ctx, userID, created.ID, "Loser Title", created.Revision)
 	var mismatch *resume.RevisionMismatchError
 	if !errors.As(err, &mismatch) {
@@ -671,7 +579,6 @@ func TestStore_Integration_SaveTitle_CAS(t *testing.T) {
 		t.Errorf("mismatch.Current.Title = %q, want the WINNING title %q", mismatch.Current.Title, "Winning Title")
 	}
 
-	// Unknown id -> ErrNotFound.
 	if _, err := s.SaveTitle(ctx, userID, uuid.New(), "Doesn't matter", 1); !errors.Is(err, resume.ErrNotFound) {
 		t.Errorf("SaveTitle() unknown id error = %v, want resume.ErrNotFound", err)
 	}
@@ -736,13 +643,6 @@ func TestStore_Integration_SaveTitle_TitleCharacterLimit(t *testing.T) {
 	}
 }
 
-// --- Cap-error mapping: pure unit test, no database ---
-
-// TestIsResumeCapExceeded_ExactMatchOnBothCodeAndMessage proves the
-// mapping requires an EXACT match on both SQLSTATE 23514 and the message
-// "resumes_user_cap_exceeded" -- resumes has other CHECK constraints that
-// also raise 23514 (e.g. resumes_title_length_check), and those must never
-// be mistaken for a cap violation.
 func TestIsResumeCapExceeded_ExactMatchOnBothCodeAndMessage(t *testing.T) {
 	tests := []struct {
 		name string

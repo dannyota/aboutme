@@ -1,6 +1,3 @@
-// Migration 00011 (docs/design/showcase.md "Data and contract", ADR 0028):
-// the showcase has no review. It ends declined opt-ins, clears every stored
-// review result, defaults the unused review key, and adds the listing index.
 package migrations_test
 
 import (
@@ -14,9 +11,6 @@ import (
 	"danny.vn/aboutme/apps/server/migrations"
 )
 
-// seedShowcaseRow inserts a resume and its showcase row through plain SQL at
-// schema version 10, with the review columns as given. Each row gets its own
-// user, because an account holds at most three resumes.
 func seedShowcaseRow(ctx context.Context, t *testing.T, db *sql.DB, slug, reviewedKey, outcome, firstListed string) uuid.UUID {
 	t.Helper()
 	var userID, resumeID uuid.UUID
@@ -43,8 +37,6 @@ func seedShowcaseRow(ctx context.Context, t *testing.T, db *sql.DB, slug, review
 	return resumeID
 }
 
-// AC-SHOW-001, AC-SHOW-005: rows in each earlier review state end as the design
-// says, and the previous release's listing condition matches none of them.
 func TestShowcaseWithoutReviewMigrationClearsReviewState(t *testing.T) {
 	t.Parallel()
 	dsn := newTestDatabase(t)
@@ -63,7 +55,6 @@ func TestShowcaseWithoutReviewMigrationClearsReviewState(t *testing.T) {
 	stale := seedShowcaseRow(ctx, t, db, "nr-stale", showcaseHexB, "approved", "x")
 	declined := seedShowcaseRow(ctx, t, db, "nr-declined", showcaseHexA, "declined", "")
 	declinedAfterListing := seedShowcaseRow(ctx, t, db, "nr-declined-listed", showcaseHexA, "declined", "x")
-	// Declined for an older key: the previous UI showed this one as pending.
 	declinedOlderKey := seedShowcaseRow(ctx, t, db, "nr-declined-old", showcaseHexB, "declined", "")
 
 	const previousListing = `SELECT count(*) FROM resume_showcase WHERE review_outcome = 'approved' AND reviewed_key = review_key`
@@ -108,9 +99,6 @@ func TestShowcaseWithoutReviewMigrationClearsReviewState(t *testing.T) {
 	}
 }
 
-// AC-SHOW-005, AC-SHOW-015: an insert without review_key takes the default, and
-// the listing index serves the opt-in order. The test reads review_key, so it
-// runs at the last version that has it.
 func TestShowcaseWithoutReviewMigrationDefaultAndIndex(t *testing.T) {
 	t.Parallel()
 	tx, ctx := newResumeSchemaTxAt(t, showcaseReviewVersion)
@@ -145,7 +133,6 @@ func TestShowcaseWithoutReviewMigrationDefaultAndIndex(t *testing.T) {
 	}
 }
 
-// The migration reverses to the version-10 shape: no default, no new index.
 func TestShowcaseWithoutReviewMigrationUpDownUp(t *testing.T) {
 	t.Parallel()
 	dsn := newTestDatabase(t)

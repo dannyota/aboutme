@@ -312,7 +312,7 @@ The route parses the version strictly and reads no query. Nuxt decodes the card
 envelope against a closed schema and rejects unknown keys. The accent is a
 schema-validated hex color; text enters the page as escaped text; the photo is
 the normalized inline image the PDF path already uses. The head adds about 1.6
-KB, and the render request adds at most 2 KB, inside the 532,480-byte request
+KB, and the render request adds at most 2 KB, inside the 557,056-byte request
 bound; a test with the largest valid document proves the fit.
 
 ## Publish-panel preview

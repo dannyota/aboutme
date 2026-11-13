@@ -7,8 +7,6 @@ import (
 	"unicode/utf8"
 )
 
-// redirectOfBytes builds a syntactically ordinary https redirect URI of
-// exactly n bytes.
 func redirectOfBytes(t *testing.T, n int) string {
 	t.Helper()
 	const prefix = "https://example.com/"
@@ -116,8 +114,6 @@ func TestValidateRedirectURIByteBound(t *testing.T) {
 	if err := ValidateRedirectURI(redirectOfBytes(t, 513)); !errors.Is(err, ErrRedirectInvalid) {
 		t.Errorf("ValidateRedirectURI(513 bytes) error = %v, want ErrRedirectInvalid", err)
 	}
-	// The bound is on bytes, not characters: an oversize input must be
-	// rejected before any parsing work happens.
 	if err := ValidateRedirectURI(redirectOfBytes(t, 100_000)); !errors.Is(err, ErrRedirectInvalid) {
 		t.Errorf("ValidateRedirectURI(100000 bytes) error = %v, want ErrRedirectInvalid", err)
 	}
@@ -126,10 +122,6 @@ func TestValidateRedirectURIByteBound(t *testing.T) {
 func TestValidateRedirectURIDoesNotBoundListLength(t *testing.T) {
 	t.Parallel()
 
-	// A registration carries at most five redirect URIs. That count is the
-	// registration caller's rule: each of these six URIs is
-	// individually valid, so a validator that silently enforced the count
-	// here would hide the caller's check.
 	list := []string{
 		"https://a.example/cb",
 		"https://b.example/cb",
@@ -196,8 +188,6 @@ func TestValidateClientNameAccepts(t *testing.T) {
 func TestValidateClientNameNormalizesToNFC(t *testing.T) {
 	t.Parallel()
 
-	// "e" + U+0301 COMBINING ACUTE ACCENT is two code points that NFC
-	// composes into one.
 	decomposed := "cafe\u0301"
 	if utf8.RuneCountInString(decomposed) != 5 {
 		t.Fatalf("decomposed fixture holds %d code points, want 5", utf8.RuneCountInString(decomposed))
@@ -214,9 +204,6 @@ func TestValidateClientNameNormalizesToNFC(t *testing.T) {
 func TestValidateClientNameCodePointBounds(t *testing.T) {
 	t.Parallel()
 
-	// The bound is on code points after NFC, not bytes before it: 64
-	// decomposed pairs compose to exactly 64 code points and must pass,
-	// while 65 must not.
 	at := strings.Repeat("e\u0301", 64)
 	over := strings.Repeat("e\u0301", 65)
 	if utf8.RuneCountInString(at) != 128 || len(at) != 192 {
@@ -240,11 +227,6 @@ func TestValidateClientNameCodePointBounds(t *testing.T) {
 func TestValidateClientNamePreNormalizationGate(t *testing.T) {
 	t.Parallel()
 
-	// The name bound counts code points *after* NFC, so a conforming name can
-	// arrive in a decomposed form far longer than 64 code points: 64
-	// decomposed Hangul syllables are 192 code points in 576 bytes and compose
-	// to exactly 64 code points. Both that form and the composed wire form must be
-	// accepted, and both must canonicalize to the same stored name.
 	decomposed := strings.Repeat("\u1100\u1161\u11a8", 64)
 	composed := strings.Repeat("\uac01", 64)
 	if len(decomposed) != 576 || len(composed) != 192 {
@@ -267,10 +249,6 @@ func TestValidateClientNamePreNormalizationGate(t *testing.T) {
 		t.Errorf("ValidateClientName(composed Hangul) = %q, %v; want the input unchanged and nil", gotComposed, err)
 	}
 
-	// The gate itself sits at the registration body cap, so it can never
-	// reject a name a conforming body could carry. Input at or beyond it is
-	// rejected: at the cap by the code-point bound, beyond it before
-	// normalization runs.
 	for _, n := range []int{4096, 4097, 100_000} {
 		if _, err := ValidateClientName(strings.Repeat("a", n)); !errors.Is(err, ErrClientNameInvalid) {
 			t.Errorf("ValidateClientName(%d raw bytes) error = %v, want ErrClientNameInvalid", n, err)

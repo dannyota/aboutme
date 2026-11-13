@@ -11,8 +11,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/directrender"
 )
 
-// projectBackLabel is the accessible name of the bar's link back to the
-// resume (docs/design/ui/project-pages.md "Shared frame").
 func projectBackLabel(resume directrender.ProjectPageResume) string {
 	if resume.UILng == "vi" {
 		return "Về CV của " + resume.OwnerName
@@ -20,9 +18,6 @@ func projectBackLabel(resume directrender.ProjectPageResume) string {
 	return "Back to " + resume.OwnerName + "'s resume"
 }
 
-// visitAnchor classifies one anchor outside the description region: the
-// skip link, the credit, the back link, a repository, demo or entry link,
-// or an internal link to the resume, the list or a requested project.
 func (v *projectValidator) visitAnchor(node *html.Node) {
 	href := attribute(node, "href")
 	if attributeCount(node, "href") != 1 {
@@ -68,9 +63,6 @@ func (v *projectValidator) visitAnchor(node *html.Node) {
 	}
 }
 
-// visitDescription requires the one description region of a page with a
-// description, whose content is the request's description as a parsed tree
-// with comments ignored.
 func (v *projectValidator) visitDescription(node *html.Node) {
 	v.descriptions++
 	if v.want.description == "" || v.descriptions > 1 {
@@ -92,8 +84,6 @@ func (v *projectValidator) visitDescription(node *html.Node) {
 	}
 }
 
-// treeNode is one node of a comparable tree: comments dropped, adjacent
-// text merged, and attributes in a fixed order.
 type treeNode struct {
 	kind      html.NodeType
 	namespace string

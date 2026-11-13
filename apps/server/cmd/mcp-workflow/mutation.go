@@ -2,8 +2,6 @@ package main
 
 import "strconv"
 
-// validDecimalRevision accepts the server's canonical unsigned decimal
-// revision without leading zeros.
 func validDecimalRevision(value string) bool {
 	if value == "" || len(value) > 20 || (len(value) > 1 && value[0] == '0') {
 		return false
@@ -12,8 +10,6 @@ func validDecimalRevision(value string) bool {
 	return err == nil
 }
 
-// nextDecimalRevision reports whether next is exactly one revision after
-// previous, so each target mutation chains the latest revision.
 func nextDecimalRevision(previous, next string) bool {
 	if !validDecimalRevision(previous) || !validDecimalRevision(next) {
 		return false

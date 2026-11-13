@@ -16,9 +16,6 @@ const (
 	maxWorkflowArtifactBytes = 4 << 20
 )
 
-// Artifact names. The control root holds durable one-shot state that outlives
-// a run; the run root holds disposable owner content and evidence. See
-// docs/design/mcp-owner-workflow.md#inputs-and-private-runtime.
 const (
 	lockName            = "workflow.lock"
 	createIntentName    = "create-intent.json"
@@ -37,8 +34,6 @@ const (
 	runScope
 )
 
-// privateArtifacts is the only filesystem boundary for workflow state. Names
-// are constants at call sites, so untrusted identifiers never become paths.
 type privateArtifacts struct {
 	root  string
 	scope artifactScope
@@ -71,8 +66,6 @@ func (a privateArtifacts) allows(name string) bool {
 	}
 }
 
-// write atomically replaces name through a synced temporary file and then
-// syncs the directory. An existing entry must already be a safe regular file.
 func (a privateArtifacts) write(name string, data []byte) error {
 	if !a.validRoot() || !a.allows(name) || name == lockName || len(data) > maxWorkflowArtifactBytes {
 		return errUnsafeFile
@@ -86,8 +79,6 @@ func (a privateArtifacts) write(name string, data []byte) error {
 	return syncDirectory(a.root)
 }
 
-// writeExclusiveTemp writes and syncs the temporary file. Tests replace it to
-// prove a failed write leaves no final name.
 var writeExclusiveTemp = func(file *os.File, data []byte) error {
 	if _, err := file.Write(data); err != nil {
 		return err
@@ -95,10 +86,7 @@ var writeExclusiveTemp = func(file *os.File, data []byte) error {
 	return file.Sync()
 }
 
-// createExclusive publishes name only when it does not exist. It writes and
-// syncs a same-directory temporary file, then link(2)s it to the final name,
-// which fails if the name exists, so a reader never sees a partial file and
-// an existing intent is never replaced. Every path removes the temporary.
+// link(2) fails when the target name exists, so a reader never sees a partial file.
 func (a privateArtifacts) createExclusive(name string, data []byte) (err error) {
 	if !a.validRoot() || !a.allows(name) || name == lockName || len(data) > maxWorkflowArtifactBytes {
 		return errUnsafeFile
@@ -162,8 +150,6 @@ func (a privateArtifacts) read(name string) (data []byte, err error) {
 	return data, nil
 }
 
-// remove deletes a safe regular file and syncs the directory. A missing file
-// is already removed.
 func (a privateArtifacts) remove(name string) error {
 	exists, err := a.exists(name)
 	if err != nil || !exists {
@@ -189,8 +175,6 @@ func (a privateArtifacts) exists(name string) (bool, error) {
 	return true, nil
 }
 
-// lock takes the exclusive, non-blocking control lock that serializes every
-// run and recovery against one control root.
 func (a privateArtifacts) lock() (*workflowLock, error) {
 	if a.scope != controlScope || !a.validRoot() {
 		return nil, errUnsafeFile
@@ -260,8 +244,6 @@ func syncDirectory(path string) (err error) {
 	return nil
 }
 
-// removeOwnerContent deletes the run's owner-bearing handoff files. Evidence
-// stays.
 func removeOwnerContent(run privateArtifacts) error {
 	for _, name := range []string{sourceName, candidateName, candidateReviewName} {
 		if err := run.remove(name); err != nil {
@@ -271,22 +253,12 @@ func removeOwnerContent(run privateArtifacts) error {
 	return nil
 }
 
-// errRunEntries names a run root holding an entry outside the allowed set.
 var errRunEntries = fmt.Errorf("%w: run entries", errWorkflowBlocked)
 
-// syntheticLoginName is the local proof's generated login file. The runner
-// only checks its metadata and never opens it.
 const syntheticLoginName = "synthetic-login.env"
 
-// maxRunEntries bounds the run-root listing: four handoff and evidence files,
-// the browser directory, and the local synthetic login file.
 const maxRunEntries = 6
 
-// validateRunEntries rejects any run-root entry other than the handoff files,
-// evidence, and the real browser directory, such as a stray credential file,
-// a symbolic link, or a leftover temporary file. Local mode alone also admits
-// the synthetic login file when it is a regular mode-0600 file owned by the
-// current user. The read is bounded.
 func validateRunEntries(run privateArtifacts, browserRoot string, local bool) (err error) {
 	if !run.validRoot() || browserRoot != filepath.Join(run.root, browserDirectory) || !validPrivateDirectory(browserRoot) {
 		return errRunEntries
@@ -316,7 +288,6 @@ func validateRunEntries(run privateArtifacts, browserRoot string, local bool) (e
 	return nil
 }
 
-// validSyntheticLogin checks metadata only, through lstat.
 func validSyntheticLogin(path string) bool {
 	info, err := os.Lstat(path)
 	return err == nil && validArtifactInfo(info)

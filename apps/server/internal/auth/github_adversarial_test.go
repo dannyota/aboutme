@@ -1,6 +1,3 @@
-// These adversarial tests cover GitHub's verified-primary email rule, provider
-// binding, absence of OIDC logic, opaque provider failures, numeric IDs, and
-// consent denial. See docs/design/security.md.
 package auth_test
 
 import (
@@ -25,9 +22,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// ==== GitHub-specific assertions ====
-
-// assertNoGitHubIdentity proves rejection created no GitHub identity.
 func assertNoGitHubIdentity(t *testing.T, q *store.Queries, providerUserID string) {
 	t.Helper()
 
@@ -40,8 +34,6 @@ func assertNoGitHubIdentity(t *testing.T, q *store.Queries, providerUserID strin
 	}
 }
 
-// assertNoLeakedParsingDetails rejects upstream parsing details that would let
-// a browser fingerprint GitHub failure modes.
 func assertNoLeakedParsingDetails(t *testing.T, body string) {
 	t.Helper()
 
@@ -54,8 +46,6 @@ func assertNoLeakedParsingDetails(t *testing.T, body string) {
 	}
 }
 
-// randomIDAtLeast avoids shared-database collisions while forcing boundary
-// tests above min.
 func randomIDAtLeast(t *testing.T, min int64) int64 {
 	t.Helper()
 
@@ -63,16 +53,10 @@ func randomIDAtLeast(t *testing.T, min int64) int64 {
 	if _, err := rand.Read(buf[:]); err != nil {
 		t.Fatalf("rand.Read: %v", err)
 	}
-	offset := int64(binary.BigEndian.Uint64(buf[:]) & 0x1FFFFFFF) // 0 .. ~536,870,911
+	offset := int64(binary.BigEndian.Uint64(buf[:]) & 0x1FFFFFFF)
 	return min + offset
 }
 
-// ==== verified-primary email selection ====
-
-// TestGitHubCallback_NoVerifiedPrimaryEmail proves that the email list must
-// contain one entry with both primary and verified set. The failure uses the
-// same email_not_verified wire code as the OIDC providers even though GitHub
-// proves the property through its REST email list rather than an ID-token claim.
 func TestGitHubCallback_NoVerifiedPrimaryEmail(t *testing.T) {
 	t.Parallel()
 
@@ -102,20 +86,12 @@ func TestGitHubCallback_NoVerifiedPrimaryEmail(t *testing.T) {
 	assertNoUser(t, q, unverifiedOtherEmail)
 }
 
-// TestGitHubCallback_MixUp_RejectsTransactionFromAnotherProvider proves the
-// callback passes ProviderGitHub to transaction consumption. GitHub has no
-// issuer claim, so this provider-bound transaction check is its mix-up defense.
-//
-// The GitHub stub is deliberately never hit: provider mismatch is rejected
-// before state validation, consent handling, or token exchange.
 func TestGitHubCallback_MixUp_RejectsTransactionFromAnotherProvider(t *testing.T) {
 	t.Parallel()
 
-	gh := newGitHubStub(t) // intentionally unconfigured/never hit -- see doc comment
+	gh := newGitHubStub(t)
 	handler, q := newTestService(t, withGitHubEndpoint(gh.URL))
 
-	// A Path=/ transaction cookie can reach another provider's callback, so
-	// begin the transaction for Google and present it to GitHub.
 	ts := auth.NewTransactionStore(q)
 	handle, tx, err := ts.Begin(context.Background(), auth.ProviderGoogle, auth.PurposeLogin, uuid.Nil,
 		testPublicOrigin+"/api/v1/auth/google/callback")
@@ -131,9 +107,6 @@ func TestGitHubCallback_MixUp_RejectsTransactionFromAnotherProvider(t *testing.T
 	if errorCode != "auth_failed" {
 		t.Errorf("error code = %q, want %q (ErrTransactionInvalid -- including a cross-provider mismatch -- funnels to the generic code, no oracle distinguishing it from any other rejected transaction)", errorCode, "auth_failed")
 	}
-
-	// Rejection occurs before GitHub establishes an email or provider user ID,
-	// so there is no provider-scoped identity row to query here.
 }
 
 type productionAuthFunc struct {
@@ -142,9 +115,6 @@ type productionAuthFunc struct {
 	imports map[string]string
 }
 
-// productionAuthFuncs parses production files in this package. The callback
-// reachability walk below excludes Google and LinkedIn OIDC code by behavior,
-// not by trusting filenames: provider-only declarations remain unreachable.
 func productionAuthFuncs(t *testing.T, dir string) map[string][]productionAuthFunc {
 	t.Helper()
 
@@ -198,10 +168,6 @@ func isOIDCOrJWTImport(importPath string) bool {
 	return strings.Contains(lower, "oidc") || strings.Contains(lower, "jwt") || strings.Contains(lower, "go-jose")
 }
 
-// TestGitHubCallback_NoOIDCImportInPackage walks every package function the
-// GitHub callback can call. It fails if that shared path starts using an OIDC
-// or JWT package, asks for an id_token, or decodes claims. Provider-specific
-// Google and LinkedIn declarations are outside the reachable graph.
 func TestGitHubCallback_NoOIDCImportInPackage(t *testing.T) {
 	t.Parallel()
 
@@ -287,12 +253,6 @@ func TestGitHubCallback_NoOIDCImportInPackage(t *testing.T) {
 	}
 }
 
-// ==== verified-primary email selection edge case ====
-
-// TestGitHubCallback_EmailSelection_PrimaryUnverified_DoesNotFallBackToVerifiedSecondary
-// rejects a verified secondary email when the primary email is unverified.
-// This catches an implementation that accepts any verified entry instead of
-// requiring one entry to be both primary and verified.
 func TestGitHubCallback_EmailSelection_PrimaryUnverified_DoesNotFallBackToVerifiedSecondary(t *testing.T) {
 	t.Parallel()
 
@@ -317,24 +277,11 @@ func TestGitHubCallback_EmailSelection_PrimaryUnverified_DoesNotFallBackToVerifi
 		t.Errorf("error code = %q, want %q", errorCode, "email_not_verified")
 	}
 
-	// The critical checks: neither candidate email was used to create a
-	// user -- specifically, the verified-but-non-primary one, which a
-	// "fall back to any verified email" bug would have used.
 	assertNoUser(t, q, verifiedSecondary)
 	assertNoUser(t, q, unverifiedPrimary)
 	assertNoGitHubIdentity(t, q, strconv.FormatInt(githubID, 10))
 }
 
-// ==== malformed provider response ====
-
-// TestGitHubCallback_EmailsAPIMalformedJSON_NoLeakedParsingDetails
-// strengthens github_test.go's own
-// TestGitHubCallback_EmailsAPIMalformedJSON_RedirectsAuthFailed (same
-// stub, same scenario -- GET /user/emails responding 200 with a body that
-// isn't valid JSON at all) with the one assertion that test doesn't make:
-// the response body must not leak any parsing-failure detail. GET /user and
-// GET /user/emails share githubAPIGet, so one malformed JSON case proves the
-// shared decode-error path.
 func TestGitHubCallback_EmailsAPIMalformedJSON_NoLeakedParsingDetails(t *testing.T) {
 	t.Parallel()
 
@@ -358,16 +305,6 @@ func TestGitHubCallback_EmailsAPIMalformedJSON_NoLeakedParsingDetails(t *testing
 	assertNoGitHubIdentity(t, q, strconv.FormatInt(githubID, 10))
 }
 
-// ==== numeric ID conversion ====
-
-// TestGitHubCallback_NumericIDConvertsToStringProviderUserID pins the
-// "numeric user id" -> identities.provider_user_id (a text column) string
-// conversion for two boundary-shaped ids designed to catch a specific,
-// plausible bug class: an id decoded through a float64-typed intermediate
-// (Go's json.Unmarshal default for interface{}, or a github struct field
-// mistakenly typed float64 instead of int64) rather than a proper integer
-// type. Both cases use randomIDAtLeast so the magnitude boundary is crossed
-// by construction.
 func TestGitHubCallback_NumericIDConvertsToStringProviderUserID(t *testing.T) {
 	t.Parallel()
 
@@ -376,17 +313,10 @@ func TestGitHubCallback_NumericIDConvertsToStringProviderUserID(t *testing.T) {
 		id   int64
 	}{
 		{
-			// Past int32's max (2,147,483,647) and past 2^32 -- catches an
-			// accidental int32/uint32 field or truncating conversion.
 			name: "id beyond 2^32 (int32 truncation-shaped)",
 			id:   randomIDAtLeast(t, 10_000_000_000),
 		},
 		{
-			// Past 2^53 (9,007,199,254,740,992), the largest integer a
-			// float64 can represent exactly -- catches an id field decoded
-			// through float64 (or formatted with a float verb), which would
-			// silently corrupt digits at this magnitude while looking
-			// correct for any smaller, realistic id.
 			name: "id beyond float64's exact-integer precision (2^53)",
 			id:   randomIDAtLeast(t, (1<<53)+1),
 		},
@@ -437,18 +367,10 @@ func TestGitHubCallback_NumericIDConvertsToStringProviderUserID(t *testing.T) {
 	}
 }
 
-// ==== provider consent denial ====
-
-// TestGitHubCallback_ProviderAccessDenied_RedirectsCancelled proves an
-// RFC 6749 access_denied response gets the distinct canceled code rather than
-// the generic authentication-failure code.
-//
-// The callback needs state from a real transaction because state validation
-// precedes consent-denial handling.
 func TestGitHubCallback_ProviderAccessDenied_RedirectsCancelled(t *testing.T) {
 	t.Parallel()
 
-	gh := newGitHubStub(t) // never hit: a declined-consent callback carries no code to exchange
+	gh := newGitHubStub(t)
 	handler, _ := newTestService(t, withGitHubEndpoint(gh.URL))
 
 	txCookie, state := beginGitHubFlow(t, handler)

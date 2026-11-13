@@ -2,8 +2,6 @@ package config
 
 import "testing"
 
-// TestLoadLogLevel pins the accepted LOG_LEVEL spellings and the exact
-// rejection text.
 func TestLoadLogLevel(t *testing.T) {
 	t.Parallel()
 
@@ -40,7 +38,6 @@ func TestLoadLogLevel(t *testing.T) {
 	}
 }
 
-// TestLoadEnv pins the accepted ENV spellings and the exact rejection text.
 func TestLoadEnv(t *testing.T) {
 	t.Parallel()
 

@@ -1,8 +1,3 @@
-// These tests pin LinkedIn's documented confidential web flow: no PKCE, client
-// credentials in the token request body, a nonce claim that LinkedIn omits but
-// that must match when present, and LinkedIn's cancel errors. See
-// docs/design/linkedin-sign-in.md, docs/adr/0016-sign-in-providers.md,
-// and docs/adr/0016-sign-in-providers.md.
 package auth_test
 
 import (
@@ -23,18 +18,11 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// linkedinDiscoverySnapshot is LinkedIn's public discovery document as served
-// at https://www.linkedin.com/oauth/.well-known/openid-configuration on
-// 2026-09-26.
-//
 //go:embed testdata/linkedin-discovery.json
 var linkedinDiscoverySnapshot []byte
 
-// linkedinTestClientSecret matches the secret newTestService configures.
 const linkedinTestClientSecret = "test-linkedin-client-secret"
 
-// TestLinkedInStart_AuthorizeURL_NonceWithoutPKCE proves the authorize URL
-// carries the documented parameters and a nonce, and no PKCE challenge.
 func TestLinkedInStart_AuthorizeURL_NonceWithoutPKCE(t *testing.T) {
 	t.Parallel()
 
@@ -74,9 +62,6 @@ func TestLinkedInStart_AuthorizeURL_NonceWithoutPKCE(t *testing.T) {
 	}
 }
 
-// TestLinkedInCallback_TokenRequest_FormCredentialsWithoutVerifier proves the
-// token request sends client_id and client_secret in the form body, no
-// Authorization header, and no code_verifier, in exactly one request.
 func TestLinkedInCallback_TokenRequest_FormCredentialsWithoutVerifier(t *testing.T) {
 	t.Parallel()
 
@@ -115,9 +100,6 @@ func TestLinkedInCallback_TokenRequest_FormCredentialsWithoutVerifier(t *testing
 	}
 }
 
-// TestLinkedInCallback_CancelErrors_RedirectCancelled proves each LinkedIn
-// cancel error and access_denied give the canceled result after the state
-// check, and never reach the token endpoint.
 func TestLinkedInCallback_CancelErrors_RedirectCancelled(t *testing.T) {
 	t.Parallel()
 
@@ -143,8 +125,6 @@ func TestLinkedInCallback_CancelErrors_RedirectCancelled(t *testing.T) {
 	}
 }
 
-// TestLinkedInCallback_CancelError_StateCheckedFirst proves a cancel error
-// with a wrong state is a generic failure, not a cancel.
 func TestLinkedInCallback_CancelError_StateCheckedFirst(t *testing.T) {
 	t.Parallel()
 
@@ -160,8 +140,6 @@ func TestLinkedInCallback_CancelError_StateCheckedFirst(t *testing.T) {
 	}
 }
 
-// TestLinkedInCallback_OtherProviderError_GenericFailure proves any other
-// error value is the generic failure, even when a code is also present.
 func TestLinkedInCallback_OtherProviderError_GenericFailure(t *testing.T) {
 	t.Parallel()
 
@@ -194,10 +172,6 @@ func TestLinkedInCallback_OtherProviderError_GenericFailure(t *testing.T) {
 	}
 }
 
-// TestLinkedInCallback_AbsentNonceClaim_SignsIn pins LinkedIn's observed
-// behavior: its ID token has no nonce claim even though the authorize request
-// sends one. The callback accepts that token once, and the consumed
-// transaction still refuses a second callback before any token exchange.
 func TestLinkedInCallback_AbsentNonceClaim_SignsIn(t *testing.T) {
 	t.Parallel()
 
@@ -235,8 +209,6 @@ func TestLinkedInCallback_AbsentNonceClaim_SignsIn(t *testing.T) {
 		t.Errorf("identity.UserID = %v, want %v", identity.UserID, usr.ID)
 	}
 
-	// A replayed callback on the same transaction cookie and state stops at
-	// the consumed transaction and never reaches the token endpoint.
 	p.RegisterCode("code-no-nonce-replay", oidctest.Claims{
 		Subject: uniqueLinkedInSubject(t), Email: uniqueEmail(t), EmailVerified: ptrTrue(),
 	})
@@ -250,9 +222,6 @@ func TestLinkedInCallback_AbsentNonceClaim_SignsIn(t *testing.T) {
 	}
 }
 
-// TestLinkedInCallback_NonceCheckedAfterExchange proves a nonce claim that is
-// present must equal the transaction's: the exchange succeeds, the ID token
-// verifies, and the callback still rejects a foreign nonce without writing.
 func TestLinkedInCallback_NonceCheckedAfterExchange(t *testing.T) {
 	t.Parallel()
 
@@ -291,9 +260,6 @@ func TestLinkedInCallback_NonceCheckedAfterExchange(t *testing.T) {
 	}
 }
 
-// TestLinkedInDiscoverySnapshot_MatchesIssuerConstant serves LinkedIn's
-// committed discovery document and discovers it with the issuer constant. It
-// fails if LinkedIn's issuer and the constant disagree.
 func TestLinkedInDiscoverySnapshot_MatchesIssuerConstant(t *testing.T) {
 	t.Parallel()
 
@@ -342,7 +308,6 @@ func TestLinkedInDiscoverySnapshot_MatchesIssuerConstant(t *testing.T) {
 	}
 }
 
-// containsLogReason reports whether any JSON log line carries reason.
 func containsLogReason(logs []byte, reason string) bool {
 	for _, line := range bytes.Split(logs, []byte("\n")) {
 		var rec struct {

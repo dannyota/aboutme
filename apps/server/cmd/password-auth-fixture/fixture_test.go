@@ -13,7 +13,7 @@ func TestParseConfigValidatesDatabase(t *testing.T) {
 	tests := []struct {
 		name string
 		args []string
-		want string // substring the error must contain; empty = must succeed
+		want string
 	}{
 		{name: "seed ok", args: []string{"seed", "--database-url", validDSN}},
 		{name: "cleanup ok", args: []string{"cleanup", "--database-url", validDSN}},
@@ -84,8 +84,6 @@ func TestFixtureAccountsAreDeterministic(t *testing.T) {
 		}
 		seenEmails[acct.Email] = true
 
-		// Canonical, local-only account emails: lowercase, ASCII, reserved
-		// .invalid domain, exactly one @.
 		if acct.Email != strings.ToLower(acct.Email) {
 			t.Errorf("email %q is not lowercase", acct.Email)
 		}
@@ -114,7 +112,6 @@ func TestFixtureAccountsAreDeterministic(t *testing.T) {
 		}
 	}
 
-	// Exactly one provider-only account and two password accounts.
 	providerOnly := 0
 	passwordAccounts := 0
 	for _, acct := range fixtureAccounts {

@@ -5,10 +5,6 @@ import (
 	"strings"
 )
 
-// loadPasswordRegistrationFlag parses PASSWORD_REGISTRATION_ENABLED and returns
-// whether email-and-password sign-up is disabled. Blank or "true" keeps it on,
-// so existing environments are unchanged; "false" turns it off. The error
-// never echoes the raw value.
 func loadPasswordRegistrationFlag(raw string) (disabled bool, err error) {
 	switch strings.TrimSpace(raw) {
 	case "", "true":
