@@ -138,18 +138,13 @@ reload.
 
 **Table `resume_showcase`**, one row per opted-in resume:
 
-| Column            | Rule                                                                 |
-| ----------------- | -------------------------------------------------------------------- |
-| `resume_id`       | Primary key; references `resumes` with `ON DELETE CASCADE`           |
-| `requested_at`    | Not null; the opt-in time, which orders the listing                  |
-| `role`            | Null or one of the ten roles                                         |
-| `card_version`    | 16 lowercase hex, not null; maintained by Go                         |
-| `template_id`     | Null or a preset ID matching the slug grammar, at most 64 characters |
-| `review_key`      | Unused; not null, default `0000000000000000`; Go never writes it     |
-| `reviewed_key`    | Unused; always null                                                  |
-| `review_outcome`  | Unused; always null                                                  |
-| `reviewed_at`     | Unused; always null                                                  |
-| `first_listed_at` | Unused; always null                                                  |
+| Column         | Rule                                                                 |
+| -------------- | -------------------------------------------------------------------- |
+| `resume_id`    | Primary key; references `resumes` with `ON DELETE CASCADE`           |
+| `requested_at` | Not null; the opt-in time, which orders the listing                  |
+| `role`         | Null or one of the ten roles                                         |
+| `card_version` | 16 lowercase hex, not null; maintained by Go                         |
+| `template_id`  | Null or a preset ID matching the slug grammar, at most 64 characters |
 
 An index on `(requested_at, resume_id)` serves the listing. `aboutme_app` keeps
 select, insert, update, and delete. A row is about 100 bytes in use; three
@@ -165,18 +160,26 @@ row changes (**Owner approval** N1):
    null on every remaining row. Pending and approved opt-ins are then listed in
    opt-in order, and no review result stays stored.
 3. Set the default of `review_key` to `0000000000000000`, so inserts omit it.
-4. Create the listing index above. The old partial index stays until a later
-   migration drops the unused columns with it.
+4. Create the listing index above. The old partial index stayed until migration
+   00018 dropped it with the unused columns.
 
 `Down` drops the index and the default; it cannot restore deleted rows or
-cleared results. The unused columns and the old index go in a later contract
-migration, once no supported rollback reads them.
+cleared results.
 
-**Older release on the new schema.** The earlier release lists only rows with a
-matching approved result; after 00011 none has one, so it lists nothing and
-shows every owner `pending`. Its review command could list resumes again, but
-never one the new rules would not. Rows it writes are valid opt-ins under the
-new rules, and the new release ignores the `review_key` it rewrites at start.
+**Migration 00018** drops the five unused review columns (`review_key`,
+`reviewed_key`, `review_outcome`, `reviewed_at`, `first_listed_at`), their
+checks, and the old partial index. Every release before v0.9.2 selects those
+columns, so the tree's schema floor is v0.9.2 and the deploy raises the release
+fence to it before migrating ([release floors](release-floors.md)). `Down`
+restores them with `review_key` defaulting to `0000000000000000` and the others
+null.
+
+**Older release on schema versions 11 to 17.** The earlier release lists only
+rows with a matching approved result; after 00011 none has one, so it lists
+nothing and shows every owner `pending`. Its review command could list resumes
+again, but never one the new rules would not. Rows it writes are valid opt-ins
+under the new rules, and the new release ignores the `review_key` it rewrites at
+start. From version 18 no such release can start: the fence refuses it.
 
 **Publish request.** `PublishResumeRequest` gains two optional fields. Omitted
 keeps the stored value, so an older web tab that does not know them leaves the

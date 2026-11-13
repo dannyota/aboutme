@@ -449,9 +449,9 @@ type Querier interface {
 	// columns, never * or s.*: sqlc expands a star into every column when it
 	// generates, so a released binary fails once a migration drops one
 	// (docs/design/release-floors.md "Schema floor").
-	GetResumeShowcase(ctx context.Context, resumeID uuid.UUID) (GetResumeShowcaseRow, error)
+	GetResumeShowcase(ctx context.Context, resumeID uuid.UUID) (ResumeShowcase, error)
 	// Locks the opt-in row so concurrent derived-value writes serialize.
-	GetResumeShowcaseForUpdate(ctx context.Context, resumeID uuid.UUID) (GetResumeShowcaseForUpdateRow, error)
+	GetResumeShowcaseForUpdate(ctx context.Context, resumeID uuid.UUID) (ResumeShowcase, error)
 	// The "view" OAuth callback's re-read: live state, slug, the sign-in switch,
 	// and the pass epoch, by resume ID, with no user scoping since the callback
 	// authenticates no account (docs/design/viewer-analytics/sign-in-to-view.md
@@ -518,8 +518,6 @@ type Querier interface {
 	InsertIdentityUnlinkedAuditEvent(ctx context.Context, occurredAt time.Time) error
 	InsertPasskeyCounterSecurityEvent(ctx context.Context, arg InsertPasskeyCounterSecurityEventParams) (AuthenticationSecurityEvent, error)
 	InsertPrivacyNoticeRecipient(ctx context.Context, arg InsertPrivacyNoticeRecipientParams) error
-	// review_key and the other review columns are unused; the insert leaves them
-	// to their defaults (docs/design/showcase.md "Data and contract").
 	InsertResumeShowcase(ctx context.Context, arg InsertResumeShowcaseParams) error
 	// Refresh rotation. Every identity field -- family, client, user, grant,
 	// and family expiry -- is read from the predecessor row rather than trusted
@@ -601,7 +599,7 @@ type Querier interface {
 	ListResumeIDsBelowSchemaVersion(ctx context.Context, arg ListResumeIDsBelowSchemaVersionParams) ([]uuid.UUID, error)
 	ListResumeShareSignals(ctx context.Context, arg ListResumeShareSignalsParams) ([]ListResumeShareSignalsRow, error)
 	ListResumeShowcaseIDs(ctx context.Context) ([]uuid.UUID, error)
-	ListResumeShowcasesForUser(ctx context.Context, userID uuid.UUID) ([]ListResumeShowcasesForUserRow, error)
+	ListResumeShowcasesForUser(ctx context.Context, userID uuid.UUID) ([]ResumeShowcase, error)
 	ListResumeViewDays(ctx context.Context, arg ListResumeViewDaysParams) ([]ListResumeViewDaysRow, error)
 	ListResumesForUser(ctx context.Context, userID uuid.UUID) ([]Resume, error)
 	// The public listing. One statement checks all three listing conditions: the
