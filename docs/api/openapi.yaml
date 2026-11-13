@@ -383,19 +383,22 @@ paths:
         transaction. `GET` accepts the login and view purposes. A `link` or
         `reauth` purpose returns `405` with `Allow: POST` before a session
         lookup, database write, or cookie is set. `purpose=view` requires
-        `slug` and requests scope `openid` only, so Google returns no name
-        or email (see `AuthPurpose`, `AuthViewSlug`).
+        `slug`, may name a project `page`, and requests scope `openid` only,
+        so Google returns no name or email (see `AuthPurpose`,
+        `AuthViewSlug`, `AuthViewPage`).
       parameters:
         - $ref: "#/components/parameters/AuthPurpose"
         - $ref: "#/components/parameters/AuthReturnPath"
         - $ref: "#/components/parameters/AuthViewSlug"
+        - $ref: "#/components/parameters/AuthViewPage"
       responses:
         "302":
           description: >-
             Success: a redirect to Google's own authorize endpoint, or,
             for `purpose=view` naming a slug that is not currently a live
             resume with the sign-in-to-view switch on, a redirect back to
-            `/{slug}` with no transaction created.
+            `/{slug}`, or to the project `page` below it, with no
+            transaction created.
           headers:
             Location:
               schema:
@@ -403,7 +406,7 @@ paths:
                 format: uri
               example: https://accounts.google.com/o/oauth2/v2/auth?...
         "400":
-          description: "`purpose=view` with a malformed `slug`."
+          description: "`purpose=view` with a malformed `slug` or `page`."
           content:
             application/json:
               schema:
@@ -643,6 +646,7 @@ paths:
         - $ref: "#/components/parameters/AuthPurpose"
         - $ref: "#/components/parameters/AuthReturnPath"
         - $ref: "#/components/parameters/AuthViewSlug"
+        - $ref: "#/components/parameters/AuthViewPage"
       responses:
         "302":
           description: Success — a redirect to GitHub's own authorize endpoint.
@@ -838,20 +842,23 @@ paths:
         /auth/linkedin/callback` consumes. `HEAD` is rejected with `405`.
         `GET` accepts the login and view purposes. `link` and `reauth`
         return `405` with `Allow: POST` before any transaction is created.
-        `purpose=view` requires `slug`, requests scope `openid` only, and
-        offers LinkedIn on the gate whenever LinkedIn account login is
-        on (see `AuthPurpose`, `AuthViewSlug`).
+        `purpose=view` requires `slug`, may name a project `page`, requests
+        scope `openid` only, and offers LinkedIn on the gate whenever
+        LinkedIn account login is on (see `AuthPurpose`, `AuthViewSlug`,
+        `AuthViewPage`).
       parameters:
         - $ref: "#/components/parameters/AuthPurpose"
         - $ref: "#/components/parameters/AuthReturnPath"
         - $ref: "#/components/parameters/AuthViewSlug"
+        - $ref: "#/components/parameters/AuthViewPage"
       responses:
         "302":
           description: >-
             Success: a redirect to LinkedIn's own authorize endpoint, or,
             for `purpose=view` naming a slug that is not currently a live
             resume with the sign-in-to-view switch on, a redirect back to
-            `/{slug}` with no transaction created.
+            `/{slug}`, or to the project `page` below it, with no
+            transaction created.
           headers:
             Location:
               schema:
@@ -859,7 +866,7 @@ paths:
                 format: uri
               example: https://www.linkedin.com/oauth/v2/authorization?...
         "400":
-          description: "`purpose=view` with a malformed `slug`."
+          description: "`purpose=view` with a malformed `slug` or `page`."
           content:
             application/json:
               schema:
@@ -10231,6 +10238,26 @@ components:
         maxLength: 30
         pattern: '^[a-z0-9]+(-[a-z0-9]+)*$'
       example: ada-lovelace
+    AuthViewPage:
+      name: page
+      in: query
+      required: false
+      description: >-
+        The project page a sign-in-to-view start returns to below its
+        resume: `projects` for the project list or `projects/{project-slug}`
+        for one project, written without any percent-encoding. Absent
+        returns to the resume page. Read only with `purpose=view`; an
+        empty, repeated, encoded, or any other value returns
+        `400 bad_request` before any transaction is created. The callback,
+        and a start that creates no transaction, redirects to `/{slug}/{page}`
+        under the resume's current slug; a failed or cancelled sign-in adds
+        `?signin=failed` or `?signin=cancelled`. See
+        `docs/design/projects-contract.md`.
+      schema:
+        type: string
+        maxLength: 49
+        pattern: '^projects(/(?=[a-z0-9-]{2,40}$)[a-z0-9]+(-[a-z0-9]+)*)?$'
+      example: projects/analytical-engine
     AuthReturnPath:
       name: next
       in: query

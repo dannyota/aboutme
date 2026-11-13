@@ -159,6 +159,12 @@ func (s *publicServiceStore) GetPublicResumeBySlug(context.Context, string) (sto
 	s.calls++
 	return store.GetPublicResumeBySlugRow{Resume: s.row, ProjectLinks: linkContext(s.links)}, nil
 }
+func (s *publicServiceStore) GetPublicResumeProjectList(context.Context, string) (store.GetPublicResumeProjectListRow, error) {
+	return store.GetPublicResumeProjectListRow{}, errors.New("unused")
+}
+func (s *publicServiceStore) GetPublicResumeProject(context.Context, store.GetPublicResumeProjectParams) (store.GetPublicResumeProjectRow, error) {
+	return store.GetPublicResumeProjectRow{}, errors.New("unused")
+}
 
 // linkContext is the statement's link column for links, or no links.
 func linkContext(links json.RawMessage) json.RawMessage {

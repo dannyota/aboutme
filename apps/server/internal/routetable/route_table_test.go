@@ -369,12 +369,7 @@ func TestRouteTable_CaddyRoutesEachPathClassToTheCorrectBackend(t *testing.T) {
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", sitePort)
 	waitForCaddyReady(t, baseURL, 10*time.Second)
 
-	cases := []struct {
-		name   string
-		method string
-		path   string
-		want   wantBackend
-	}{
+	cases := []routeCase{
 		// go-proxied: `/api/v1/nope`, `/sitemap.xml`,
 		// `/robots.txt`, `/llms.txt`, plus the root-level `/*.md` class
 		// and the unversioned health endpoints, all under the @go
@@ -491,6 +486,7 @@ func TestRouteTable_CaddyRoutesEachPathClassToTheCorrectBackend(t *testing.T) {
 		{name: "internal_render_denied", method: http.MethodPost, path: "/internal-render/public", want: wantDenied},
 		{name: "internal_render_markdown_denied", method: http.MethodGet, path: "/internal-render.md", want: wantDenied},
 	}
+	cases = append(cases, projectRouteParityCases(t)...)
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

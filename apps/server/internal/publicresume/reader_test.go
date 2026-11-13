@@ -24,8 +24,12 @@ import (
 type readerStore struct {
 	row   store.Resume
 	links json.RawMessage
-	err   error
-	calls int
+	// projects is the project statements' projects column; projectSlug
+	// records the slug the project page statement was asked for.
+	projects    json.RawMessage
+	projectSlug string
+	err         error
+	calls       int
 }
 
 type photoBackend struct {
@@ -91,6 +95,22 @@ func (s *readerStore) GetPublicResumeBySlug(context.Context, string) (store.GetP
 		links = json.RawMessage(`[]`)
 	}
 	return store.GetPublicResumeBySlugRow{Resume: s.row, ProjectLinks: links}, s.err
+}
+func (s *readerStore) GetPublicResumeProjectList(context.Context, string) (store.GetPublicResumeProjectListRow, error) {
+	s.calls++
+	return store.GetPublicResumeProjectListRow{Resume: s.row, Projects: orEmptyColumn(s.projects)}, s.err
+}
+func (s *readerStore) GetPublicResumeProject(_ context.Context, arg store.GetPublicResumeProjectParams) (store.GetPublicResumeProjectRow, error) {
+	s.calls++
+	s.projectSlug = arg.ProjectSlug
+	return store.GetPublicResumeProjectRow{Resume: s.row, ProjectLinks: orEmptyColumn(s.links), Projects: orEmptyColumn(s.projects)}, s.err
+}
+
+func orEmptyColumn(column json.RawMessage) json.RawMessage {
+	if column == nil {
+		return json.RawMessage(`[]`)
+	}
+	return column
 }
 
 func TestReaderReadResumeClassifiesAbsentRowsAsNotFound(t *testing.T) {

@@ -68,8 +68,9 @@ func gateLng(resumeLng string) string {
 // serveGate renders and serves the sign-in-to-view gate for a resume with no
 // valid pass: status 200, Cache-Control: no-store, X-Robots-Tag: noindex,
 // noarchive, and the resume page's CSP, never cached (design "Gate";
-// AC-VIEW-002).
-func serveGate(ctx context.Context, w http.ResponseWriter, request *http.Request, dependencies HTMLDependencies, snapshot publicresume.Snapshot) {
+// AC-VIEW-002). projectPage is "projects" or "projects/{project-slug}" when the gate
+// stands in for a project page, and "" for the resume page.
+func serveGate(ctx context.Context, w http.ResponseWriter, request *http.Request, dependencies HTMLDependencies, snapshot publicresume.Snapshot, projectPage string) {
 	page := expectedPublicPage(snapshot.Public, snapshot.PublicTitle, snapshot.FaviconEmoji)
 	if dependencies.Cards != nil {
 		version, err := dependencies.Cards.Version(snapshot)
@@ -90,6 +91,7 @@ func serveGate(ctx context.Context, w http.ResponseWriter, request *http.Request
 		Preview:         page.Preview,
 		Providers:       dependencies.GateProviders,
 		Message:         gateMessage(request),
+		Page:            projectPage,
 	}
 	result, err := dependencies.Renderer.RenderGate(ctx, envelope)
 	if err != nil {
@@ -118,11 +120,17 @@ func serveGate(ctx context.Context, w http.ResponseWriter, request *http.Request
 // gateExpectedAnchors maps every href the gate page may link to the one class
 // its anchor must carry, from the envelope's own providers plus the home page
 // (design "Gate"). The gate styles those classes, so no other class or
-// attribute is allowed.
+// attribute is allowed. A gate for a project page ends each provider link in
+// &page={page}, so sign-in returns to that page
+// (docs/design/projects-contract.md "Render envelope").
 func gateExpectedAnchors(envelope directrender.GateRenderRequest, origin publicresume.PublicOrigin) map[string]string {
 	anchors := make(map[string]string, len(envelope.Providers)+1)
+	suffix := ""
+	if envelope.Page != "" {
+		suffix = "&page=" + envelope.Page
+	}
 	for _, provider := range envelope.Providers {
-		anchors["/api/v1/auth/"+provider+"/start?purpose=view&slug="+envelope.Slug] = "gate-provider"
+		anchors["/api/v1/auth/"+provider+"/start?purpose=view&slug="+envelope.Slug+suffix] = "gate-provider"
 	}
 	anchors[origin.Resolve("/")] = "gate-home"
 	return anchors

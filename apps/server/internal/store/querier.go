@@ -432,6 +432,20 @@ type Querier interface {
 	// project id never leaves the statement. The id is compared as text, so a
 	// malformed stored value matches nothing instead of failing the read.
 	GetPublicResumeBySlug(ctx context.Context, slug string) (GetPublicResumeBySlugRow, error)
+	// One project page's snapshot: the live resume, its project link context as
+	// in GetPublicResumeBySlug, and the document of the requested project only
+	// when an entry that is not hidden in a project section links it. The page
+	// needs the other links only to know whether another project is available.
+	// The project id never leaves the statement.
+	GetPublicResumeProject(ctx context.Context, arg GetPublicResumeProjectParams) (GetPublicResumeProjectRow, error)
+	// The project list's snapshot: the live resume and, for each entry that is
+	// not hidden in a project section and names a project of the same owner, the
+	// entry id, the project slug and the project document with every
+	// description removed. One statement reads both, so the projects belong to
+	// the returned revision (docs/design/projects-contract.md "Project link
+	// context"). The project id never leaves the statement, and the id is
+	// compared as text, as in GetPublicResumeBySlug.
+	GetPublicResumeProjectList(ctx context.Context, slug string) (GetPublicResumeProjectListRow, error)
 	GetPublicState(ctx context.Context) (PublicState, error)
 	// System-job read for the document-version backfill. It is intentionally
 	// not user-scoped, unlike product reads. It adds no write path.

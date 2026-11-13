@@ -30,16 +30,22 @@ import (
 // (design "Sign-in flow"; AC-VIEW-004).
 var viewOpenIDScope = []string{oidc.ScopeOpenID}
 
-// handleViewStart validates the slug, decides whether the gate offers
-// provider, and either redirects to the resume with no transaction or
-// begins a view transaction and redirects to the provider. GitHub never
-// appears on the gate (design "Sign-in flow"; the gate text and privacy
-// notice name only Google and LinkedIn).
+// handleViewStart validates the slug and the optional page, decides whether
+// the gate offers provider, and either redirects to the page with no
+// transaction or begins a view transaction and redirects to the provider.
+// GitHub never appears on the gate (design "Sign-in flow"; the gate text and
+// privacy notice name only Google and LinkedIn).
 func (s *Service) handleViewStart(w http.ResponseWriter, r *http.Request, provider Provider) {
 	slug := r.URL.Query().Get("slug")
 	if !publicroots.ValidSlug(slug) {
 		markStartRejection(r.Context(), reasonStartSlugInvalid)
 		api.WriteError(w, http.StatusBadRequest, "bad_request", "slug is missing or invalid")
+		return
+	}
+	pageSuffix, ok := viewPage(r)
+	if !ok {
+		markStartRejection(r.Context(), reasonStartPageInvalid)
+		api.WriteError(w, http.StatusBadRequest, "bad_request", "page is invalid")
 		return
 	}
 	if provider == ProviderGitHub {
@@ -54,23 +60,23 @@ func (s *Service) handleViewStart(w http.ResponseWriter, r *http.Request, provid
 	resume, err := s.q.GetLiveViewResumeBySlug(ctx, slug)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			s.redirectToSlugNoTransaction(w, r, slug)
+			s.redirectToSlugNoTransaction(w, r, slug, pageSuffix)
 			return
 		}
 		s.writeInternalError(w, r, provider, "view_start_read_resume", err)
 		return
 	}
 	if !resume.SignInToView {
-		s.redirectToSlugNoTransaction(w, r, slug)
+		s.redirectToSlugNoTransaction(w, r, slug, pageSuffix)
 		return
 	}
 
 	var handle, authURL, op string
 	switch provider {
 	case ProviderGoogle:
-		handle, authURL, op, err = s.buildGoogleViewAuthorizeURL(ctx, resume.ID)
+		handle, authURL, op, err = s.buildGoogleViewAuthorizeURL(ctx, resume.ID, pageSuffix)
 	case ProviderLinkedIn:
-		handle, authURL, op, err = s.buildLinkedInViewAuthorizeURL(ctx, resume.ID)
+		handle, authURL, op, err = s.buildLinkedInViewAuthorizeURL(ctx, resume.ID, pageSuffix)
 	}
 	if err != nil {
 		s.writeInternalError(w, r, provider, op, err)
@@ -81,23 +87,23 @@ func (s *Service) handleViewStart(w http.ResponseWriter, r *http.Request, provid
 	http.Redirect(w, r, authURL, http.StatusFound)
 }
 
-// redirectToSlugNoTransaction sends the viewer back to the public page with
-// no transaction: the slug is not live with the switch on, or the offered
-// provider is not offered for view (design "Sign-in flow").
-func (s *Service) redirectToSlugNoTransaction(w http.ResponseWriter, r *http.Request, slug string) {
-	//nolint:gosec // G710: slug already passed publicroots.ValidSlug (lowercase letters, digits, single internal hyphens, 4-30 chars), so it carries no scheme, host, or path separator that could redirect off s.publicOrigin.
-	http.Redirect(w, r, s.publicOrigin+"/"+slug, http.StatusFound)
+// redirectToSlugNoTransaction sends the viewer back to the page asked for
+// with no transaction: the slug is not live with the switch on, or the
+// offered provider is not offered for view (design "Sign-in flow").
+func (s *Service) redirectToSlugNoTransaction(w http.ResponseWriter, r *http.Request, slug, pageSuffix string) {
+	//nolint:gosec // G710: slug already passed publicroots.ValidSlug (lowercase letters, digits, single internal hyphens, 4-30 chars) and pageSuffix viewPage's closed grammar, so neither carries a scheme, host, or escape that could redirect off s.publicOrigin.
+	http.Redirect(w, r, s.publicOrigin+"/"+slug+pageSuffix, http.StatusFound)
 }
 
 // buildGoogleViewAuthorizeURL binds PKCE S256 and an OIDC nonce like an
 // ordinary Google start, but to a view transaction and the openid scope only.
-func (s *Service) buildGoogleViewAuthorizeURL(ctx context.Context, resumeID uuid.UUID) (handle, authURL, op string, err error) {
+func (s *Service) buildGoogleViewAuthorizeURL(ctx context.Context, resumeID uuid.UUID, pageSuffix string) (handle, authURL, op string, err error) {
 	provider, err := s.googleProvider(ctx)
 	if err != nil {
 		return "", "", "google_provider_discovery", err
 	}
 	redirectURI := s.googleRedirectURL()
-	handle, tx, err := s.tx.beginView(ctx, ProviderGoogle, resumeID, redirectURI)
+	handle, tx, err := s.tx.beginView(ctx, ProviderGoogle, resumeID, redirectURI, pageSuffix)
 	if err != nil {
 		return "", "", "begin_transaction", err
 	}
@@ -111,13 +117,13 @@ func (s *Service) buildGoogleViewAuthorizeURL(ctx context.Context, resumeID uuid
 
 // buildLinkedInViewAuthorizeURL sends no PKCE, like an ordinary LinkedIn
 // start, but to a view transaction and the openid scope only.
-func (s *Service) buildLinkedInViewAuthorizeURL(ctx context.Context, resumeID uuid.UUID) (handle, authURL, op string, err error) {
+func (s *Service) buildLinkedInViewAuthorizeURL(ctx context.Context, resumeID uuid.UUID, pageSuffix string) (handle, authURL, op string, err error) {
 	provider, err := s.linkedinProvider(ctx)
 	if err != nil {
 		return "", "", "linkedin_provider_discovery", err
 	}
 	redirectURI := s.linkedinRedirectURL()
-	handle, tx, err := s.tx.beginView(ctx, ProviderLinkedIn, resumeID, redirectURI)
+	handle, tx, err := s.tx.beginView(ctx, ProviderLinkedIn, resumeID, redirectURI, pageSuffix)
 	if err != nil {
 		return "", "", "begin_transaction", err
 	}
@@ -128,7 +134,8 @@ func (s *Service) buildLinkedInViewAuthorizeURL(ctx context.Context, resumeID uu
 
 // handleViewCallback runs once the ID token and its nonce have verified. It
 // never decodes claims, looks up an identity, or creates a session: it
-// re-reads the resume by ID and either sets a pass or redirects with none.
+// re-reads the resume by ID and either sets a pass or redirects with none,
+// to the page the start asked for under the resume's current slug.
 // tx's own transaction cookie was already cleared by the caller's callback
 // funnel before dispatch is decided in redirectWithError, so this success
 // path clears it here directly (docs/design/viewer-analytics/
@@ -145,7 +152,7 @@ func (s *Service) handleViewCallback(w http.ResponseWriter, r *http.Request, pro
 		http.Redirect(w, r, s.publicOrigin+"/", http.StatusFound)
 		return
 	}
-	target := s.publicOrigin + "/" + slugOrEmpty(state.Slug)
+	target := s.publicOrigin + "/" + slugOrEmpty(state.Slug) + viewReturnSuffix(tx.ReturnPath)
 	if !state.SignInToView {
 		http.Redirect(w, r, target, http.StatusFound)
 		return
@@ -163,10 +170,10 @@ func (s *Service) handleViewCallback(w http.ResponseWriter, r *http.Request, pro
 }
 
 // redirectViewFailure sends a view-purpose callback failure to its own gate
-// instead of the login page, re-reading the resume for its current slug
-// (design "Sign-in flow"). A read failure logs as the success path does and
-// falls back to an opaque 500; a missing or unpublished resume redirects
-// home, exactly as success would.
+// instead of the login page, re-reading the resume for its current slug and
+// keeping the page the start asked for (design "Sign-in flow"). A read
+// failure logs as the success path does and falls back to an opaque 500; a
+// missing or unpublished resume redirects home, exactly as success would.
 func (s *Service) redirectViewFailure(w http.ResponseWriter, r *http.Request, tx Transaction, code string) {
 	state, notFound, err := s.viewGateResumeState(r.Context(), tx.ResumeID)
 	if err != nil {
@@ -182,7 +189,7 @@ func (s *Service) redirectViewFailure(w http.ResponseWriter, r *http.Request, tx
 	if code == cancelledErrorCode {
 		message = "cancelled" //nolint:misspell // Exact wire value uses double-L "cancelled".
 	}
-	http.Redirect(w, r, s.publicOrigin+"/"+slugOrEmpty(state.Slug)+"?signin="+message, http.StatusFound)
+	http.Redirect(w, r, s.publicOrigin+"/"+slugOrEmpty(state.Slug)+viewReturnSuffix(tx.ReturnPath)+"?signin="+message, http.StatusFound)
 }
 
 // viewGateResumeState re-reads a view transaction's resume by ID. notFound

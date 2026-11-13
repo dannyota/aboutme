@@ -213,6 +213,12 @@ func (s formatReadStore) GetPublicState(context.Context) (store.PublicState, err
 func (s formatReadStore) GetPublicResumeBySlug(context.Context, string) (store.GetPublicResumeBySlugRow, error) {
 	return store.GetPublicResumeBySlugRow{Resume: s.row, ProjectLinks: linkContext(s.links)}, s.err
 }
+func (s formatReadStore) GetPublicResumeProjectList(context.Context, string) (store.GetPublicResumeProjectListRow, error) {
+	return store.GetPublicResumeProjectListRow{}, errors.New("unused")
+}
+func (s formatReadStore) GetPublicResumeProject(context.Context, store.GetPublicResumeProjectParams) (store.GetPublicResumeProjectRow, error) {
+	return store.GetPublicResumeProjectRow{}, errors.New("unused")
+}
 func (s formatReadStore) GetPublicResumeByOwner(context.Context, store.GetPublicResumeByOwnerParams) (store.Resume, error) {
 	return store.Resume{}, errors.New("unused")
 }

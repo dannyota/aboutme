@@ -50,6 +50,7 @@ const (
 	// Sign in to view (view purpose start).
 	reasonStartSlugInvalid             // purpose=view start with a missing or malformed slug
 	reasonStartViewProviderUnsupported // purpose=view start on a provider the gate never offers (GitHub)
+	reasonStartPageInvalid             // purpose=view start with a page outside projects or projects/{project-slug}
 
 	// numRejectReasons bounds exhaustive token tests.
 	numRejectReasons
@@ -89,6 +90,7 @@ var rejectReasonTokens = map[rejectReason]string{
 	reasonStartClientIPUnresolvable:           "start_client_ip_unresolvable",
 	reasonStartSlugInvalid:                    "start_slug_invalid",
 	reasonStartViewProviderUnsupported:        "start_view_provider_unsupported",
+	reasonStartPageInvalid:                    "start_page_invalid",
 }
 
 // String returns the stable log token. Callers must pass this string to slog;

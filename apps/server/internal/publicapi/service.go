@@ -63,18 +63,22 @@ var _ store.PublicReadQueries = (*store.Queries)(nil)
 
 // Service is the public-route boundary consumed by api.New.
 type Service struct {
-	json     http.Handler
-	photo    http.Handler
-	pdf      http.Handler
-	png      http.Handler
-	card     http.Handler
-	html     http.Handler
-	markdown http.Handler
-	sitemap  http.Handler
-	robots   http.Handler
-	llms     http.Handler
-	live     http.Handler
-	showcase http.Handler
+	json  http.Handler
+	photo http.Handler
+	pdf   http.Handler
+	png   http.Handler
+	card  http.Handler
+	html  http.Handler
+	// projectList and project serve /{slug}/projects and
+	// /{slug}/projects/{project-slug}.
+	projectList http.Handler
+	project     http.Handler
+	markdown    http.Handler
+	sitemap     http.Handler
+	robots      http.Handler
+	llms        http.Handler
+	live        http.Handler
+	showcase    http.Handler
 }
 
 // NewService creates the public-route dispatcher from its dependencies.
@@ -82,11 +86,20 @@ func NewService(dependencies ServiceDependencies) (*Service, error) {
 	if dependencies.Reader == nil || dependencies.DiscoveryStore == nil || dependencies.Cache == nil || dependencies.Renderer == nil || dependencies.PublicOrigin.String() == "" || dependencies.AppDigest == "" || dependencies.RendererDigest == "" {
 		return nil, ErrUnavailableDependencies
 	}
-	html, err := NewHTMLHandler(HTMLDependencies{
+	htmlDependencies := HTMLDependencies{
 		Reader: dependencies.Reader, Cache: dependencies.Cache, Renderer: dependencies.Renderer, PublicOrigin: dependencies.PublicOrigin,
 		AppDigest: dependencies.AppDigest, RendererDigest: dependencies.RendererDigest, Logger: dependencies.Logger, Cards: dependencies.Cards, Views: dependencies.Views,
 		ViewPassKey: dependencies.ViewPassKey, Clock: dependencies.Clock, GateProviders: dependencies.GateProviders, JoinInviteTarget: dependencies.JoinInviteTarget,
-	})
+	}
+	html, err := NewHTMLHandler(htmlDependencies)
+	if err != nil {
+		return nil, err
+	}
+	projectList, err := NewProjectListHandler(htmlDependencies)
+	if err != nil {
+		return nil, err
+	}
+	project, err := NewProjectHandler(htmlDependencies)
 	if err != nil {
 		return nil, err
 	}
@@ -110,7 +123,7 @@ func NewService(dependencies ServiceDependencies) (*Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	service := &Service{html: html, markdown: markdown, sitemap: sitemap, robots: robots, llms: llms, live: dependencies.Live}
+	service := &Service{html: html, projectList: projectList, project: project, markdown: markdown, sitemap: sitemap, robots: robots, llms: llms, live: dependencies.Live}
 	if dependencies.Showcase != nil {
 		service.showcase = newShowcaseHandler(dependencies.Showcase, dependencies.TrustedProxies, dependencies.Clock)
 	}
