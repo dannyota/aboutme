@@ -21,11 +21,11 @@ layout and copy.
 ## Shared frame
 
 Both pages reuse the resume's public page: the public page bar on top, the same
-color scheme and theme switch, and `.public-measure` for the column. They load
-the resume's chrome typeface and tokens and none of the template's own layout,
-so a project page looks the same under every template. The list is one column,
-at most 44 rem wide; the project page is at most 59 rem wide with a facts column
-beside its text. The bar's inner row aligns to the page's column.
+color scheme, and `.public-measure` for the column. They load the resume's
+chrome typeface and tokens and none of the template's own layout, so a project
+page looks the same under every template. The list is one column, at most 44 rem
+wide; the project page is at most 59 rem wide with a facts column beside its
+text. The bar's inner row aligns to the page's column.
 
 The bar keeps the credit. Its right side shows one outlined link back to the
 resume and no Download PDF (owner, 2026-11-12): "← {resume owner's name}" with

@@ -39,7 +39,12 @@ interface ProjectTextFields {
 }
 
 /** One row of the project list. */
-export type ProjectSummary = ProjectTextFields;
+export interface ProjectSummary extends ProjectTextFields {
+  /** At most the first six names; moreTechnologies counts the rest. */
+  technologies: string[];
+  /** Absent when the row shows every name. */
+  moreTechnologies?: number;
+}
 
 /** The project a project page shows. */
 export interface ProjectDetail extends ProjectTextFields {

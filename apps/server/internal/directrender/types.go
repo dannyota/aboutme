@@ -55,6 +55,11 @@ type GateRenderRequest struct {
 	// (docs/design/viewer-analytics/sign-in-to-view.md "Gate"); see
 	// gateMessage for the exact wire values.
 	Message string `json:"message"`
+	// Page is "projects" or "projects/{project-slug}" when the gate stands
+	// in for a project page, and omitted for the resume page. The provider
+	// links carry it so sign-in returns to that page
+	// (docs/design/projects-contract.md "Render envelope").
+	Page string `json:"page,omitempty"`
 }
 
 // Result is a validated renderer response.

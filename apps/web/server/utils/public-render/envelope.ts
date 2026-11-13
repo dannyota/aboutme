@@ -62,6 +62,12 @@ export interface PublicRenderGateRequest {
   preview: PublicRenderPreview;
   providers: readonly PublicGateProvider[];
   message: PublicGateMessage;
+  /**
+   * 'projects' or 'projects/{project-slug}' when the gate stands in for a
+   * project page; the provider links carry it. Absent for the resume page
+   * (docs/design/projects-contract.md "Render envelope").
+   */
+  page?: string;
 }
 
 export type PublicRenderRequest

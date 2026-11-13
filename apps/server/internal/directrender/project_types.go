@@ -40,12 +40,15 @@ type ProjectSummary struct {
 	// URL is the project page's absolute address.
 	URL string `json:"url"`
 	// Lang is set only when the text is not in the resume's language.
-	Lang         string            `json:"lang,omitempty"`
-	Name         string            `json:"name"`
-	Role         string            `json:"role,omitempty"`
-	Dates        *schema.DateRange `json:"dates,omitempty"`
-	Summary      string            `json:"summary,omitempty"`
-	Technologies []string          `json:"technologies"`
+	Lang    string            `json:"lang,omitempty"`
+	Name    string            `json:"name"`
+	Role    string            `json:"role,omitempty"`
+	Dates   *schema.DateRange `json:"dates,omitempty"`
+	Summary string            `json:"summary,omitempty"`
+	// Technologies holds at most the first six names the row shows, and
+	// MoreTechnologies counts the rest, omitted when none.
+	Technologies     []string `json:"technologies"`
+	MoreTechnologies int      `json:"moreTechnologies,omitempty"`
 }
 
 // ProjectDetail is the project a project page shows, from the library
@@ -100,7 +103,8 @@ type ProjectRenderRequest struct {
 	Resume           ProjectPageResume `json:"resume"`
 	Project          ProjectDetail     `json:"project"`
 	// EntryLink is the resume entry's own https link, sent only when it
-	// differs from both the repository and the demo address.
+	// differs from both the repository and the demo address under the
+	// comparison in docs/design/projects-contract.md "Render envelope".
 	EntryLink string `json:"entryLink,omitempty"`
 	// ListURL is the project list's absolute address.
 	ListURL string `json:"listUrl"`

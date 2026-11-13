@@ -230,8 +230,9 @@ adds the renderer replaces it with the renderer's exact output.
 - Every shown project field is the library project's, including its dates when
   the entry hides its own. The resume entry decides only availability and order,
   with one exception: `entryLink`, the entry's own `https` link, sent only when
-  it differs from both the repository and the demo address once scheme and host
-  are lowercased and a default port and one trailing `/` are removed.
+  it differs from both the repository and the demo address. The comparison
+  lowercases the scheme and host, drops a default port, and reads an empty path
+  as `/`; the rest must match byte for byte. The link is sent as stored.
 - Go chooses one language per project, as [Language](projects.md#language) says,
   falling back to the default language when the chosen text's name is blank. It
   sends only that text, with `lang` set when it is not the resume language's
@@ -239,6 +240,8 @@ adds the renderer replaces it with the renderer's exact output.
 - `uiLng` is `vi` when the resume language's primary subtag is `vi`, otherwise
   `en`, as for the gate. Dates go as stored; the renderer formats them with
   `dateFormat`, as on the resume page.
+- A list row carries at most its first six technologies and counts the rest in
+  `moreTechnologies`, omitted when none; a project page carries all of them.
 - The list page has no description. A project page's is its summary, else the
   first 160 characters of its outcome, else none; an empty `preview.description`
   omits both description elements.
@@ -261,8 +264,16 @@ Go serves 503 for rendered HTML that breaks any of these rules:
   resume, the list and the requested projects, with only `href` and `class`, and
   on the list each project once; `a.project-external` only for the request's
   repository, demo and entry links, each at most once, with
-  `rel="noopener noreferrer nofollow"`; and, only inside `.project-description`,
-  the sanitizer's tags and `https`, `mailto` or `tel` links.
+  `rel="noopener noreferrer nofollow"`; and the description's own links.
+- `.project-description` appears once on a project page whose
+  `project.description` is set, and nowhere else. Its content, parsed and with
+  comments ignored, is the same tree as `project.description` parsed.
+
+A gate that stands in for a project page carries `page` in its envelope
+(`GateRenderRequest`): `projects` or `projects/{project-slug}`, omitted for the
+resume page. Each provider link then ends in `&page={page}`, and the gate
+validator expects exactly those links. The view start stores the page and the
+callback returns to it under the resume's current slug.
 
 ## Print
 
