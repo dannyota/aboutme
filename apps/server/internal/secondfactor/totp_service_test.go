@@ -17,8 +17,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/testutil"
 )
 
-// testTOTPKeyRing returns a ring with one active key, drawn from the fixed
-// keys totp_crypto_test.go already establishes.
 func testTOTPKeyRing(t *testing.T) *TOTPKeyRing {
 	t.Helper()
 	ring, err := NewTOTPKeyRing(testTOTPKeySeqText, "", rand.Reader)
@@ -28,15 +26,10 @@ func testTOTPKeyRing(t *testing.T) *TOTPKeyRing {
 	return ring
 }
 
-// newTOTPTestClock starts at the wall clock, because pending authentication,
-// sessions, and the database's own expiry checks run on real time; tests
-// then advance it for cool-down and reset windows.
 func newTOTPTestClock() *testutil.Clock {
 	return testutil.NewClock(time.Now().UTC().Truncate(time.Second))
 }
 
-// newTOTPHarness builds a harness with TOTP enrollment enabled over an
-// injectable clock, so cool-down and reset-window tests need no real wait.
 func newTOTPHarness(t *testing.T, clock *testutil.Clock, mutate func(*Options)) *harness {
 	t.Helper()
 	return newHarness(t, func(o *Options) {
@@ -55,9 +48,6 @@ func newTOTPHarness(t *testing.T, clock *testutil.Clock, mutate func(*Options)) 
 	})
 }
 
-// parseTOTPSecret decodes the grouped Base32 display StartTOTPEnrollment
-// returns back into raw secret bytes, exactly as a real authenticator app
-// would after scanning the QR code.
 func parseTOTPSecret(t *testing.T, grouped string) TOTPSecret {
 	t.Helper()
 	compact := strings.ReplaceAll(grouped, " ", "")
@@ -70,8 +60,6 @@ func parseTOTPSecret(t *testing.T, grouped string) TOTPSecret {
 	return secret
 }
 
-// totpCodeAt computes the six-digit code for secret at the step containing
-// at, the same computation VerifyTOTPCode uses internally.
 func totpCodeAt(secret TOTPSecret, at time.Time) string {
 	return totpCode(secret, uint64(at.Unix())/totpPeriodSeconds)
 }
@@ -84,10 +72,6 @@ func totpCodeBody(code string) []byte {
 	return []byte(fmt.Sprintf(`{"code":%q}`, code))
 }
 
-// startAndCompleteTOTP starts and completes TOTP enrollment or replacement
-// for sess with a fresh secret, computing its proof code at now. It returns
-// the plaintext secret so a later pending-verification test can compute
-// further codes without decrypting storage.
 func (h *harness) startAndCompleteTOTP(sess store.Session, now time.Time) (TOTPSecret, auth.TOTPEnrollmentComplete, error) {
 	h.t.Helper()
 	start, err := h.svc.StartTOTPEnrollment(testContext(h.t), sess)
@@ -103,8 +87,6 @@ func (h *harness) startAndCompleteTOTP(sess store.Session, now time.Time) (TOTPS
 	return secret, result, err
 }
 
-// totpCredentialRow is a direct read of the stored row's non-secret columns,
-// for assertions the service's own API deliberately never exposes.
 type totpCredentialRow struct {
 	id             uuid.UUID
 	keyID          string
@@ -125,9 +107,6 @@ func (h *harness) totpCredentialRow(userID uuid.UUID) totpCredentialRow {
 	return row
 }
 
-// timePtrEqual compares two nullable timestamps by value: two nil pointers
-// are equal, and two non-nil pointers are equal exactly when the instants
-// they name are equal, regardless of pointer identity.
 func timePtrEqual(a, b *time.Time) bool {
 	if a == nil || b == nil {
 		return a == nil && b == nil
@@ -153,8 +132,6 @@ func (h *harness) pendingFailedAttempts(pendingID uuid.UUID) int32 {
 	return n
 }
 
-// completeTOTPPendingCode drives one pending TOTP verification with code
-// against pending, using the fixed test client.
 func (h *harness) completeTOTPPendingCode(pendingToken string, sessionID *uuid.UUID, code string) (*auth.SessionIssue, error) {
 	h.t.Helper()
 	credential, err := h.svc.DecodeTOTPCode(totpCodeBody(code))
@@ -183,7 +160,6 @@ func TestTOTPStartEnrollment_SupersedesPriorAndChangesNoActiveState(t *testing.T
 	if n := h.count("SELECT count(*) FROM totp_enrollments WHERE user_id = $1", acct.user.ID); n != 1 {
 		t.Fatalf("live enrollments = %d, want exactly 1 after supersession", n)
 	}
-	// The superseded enrollment ID is unusable.
 	credential, err := h.svc.DecodeTOTPEnrollmentCompletion(totpEnrollmentBody(first.EnrollmentID, totpCodeAt(parseTOTPSecret(t, first.Secret), clock.Now())))
 	if err != nil {
 		t.Fatalf("decode: %v", err)
@@ -245,9 +221,6 @@ func TestTOTPCompleteEnrollment_AddedToPasskeyEnrolledAccountSendsTOTPAdded(t *t
 	if h.mails(acct.user.ID, authmail.KindTOTPAdded) != 1 {
 		t.Fatal("adding totp did not send totp_added")
 	}
-	// The passkey registration above already sent the account's one
-	// second_factor_enabled mail as its first factor; adding totp as a
-	// second factor must not send a second one.
 	if h.mails(acct.user.ID, authmail.KindSecondFactorEnabled) != 1 {
 		t.Fatal("adding totp to an already-enrolled account sent an extra second_factor_enabled")
 	}
@@ -263,7 +236,6 @@ func TestTOTPCompleteEnrollment_ReplacementPreservesIdentitySendsTOTPReplacedAnd
 	}
 	original := h.totpCredentialRow(acct.user.ID)
 
-	// Drive one failure so replacement's budget reset is observable.
 	pending := h.newPending(acct.user.ID, nil)
 	if _, err = h.completeTOTPPendingCode(pending.RawToken, nil, "000000"); err == nil {
 		t.Fatal("wrong code unexpectedly succeeded")
@@ -309,7 +281,6 @@ func TestTOTPCompleteEnrollment_InvalidCodeIsVerificationFailedAndPreservesEnrol
 	if n := h.count("SELECT count(*) FROM totp_enrollments WHERE user_id = $1", acct.user.ID); n != 1 {
 		t.Fatalf("live enrollments after a wrong code = %d, want 1: the row must survive for a retry", n)
 	}
-	// A subsequent correct code still completes the same enrollment.
 	secret := parseTOTPSecret(t, start.Secret)
 	good, err := h.svc.DecodeTOTPEnrollmentCompletion(totpEnrollmentBody(start.EnrollmentID, totpCodeAt(secret, clock.Now())))
 	if err != nil {
@@ -409,12 +380,6 @@ func TestTOTPCompleteEnrollment_ConcurrentCompletionHasOneWinner(t *testing.T) {
 		return completeErr
 	}
 	results := runConcurrently(t, attempt, attempt)
-	// The winner's commit advances the epoch and revokes acct.sess, so the
-	// loser can observe either an enrollment row already consumed by the
-	// winner or, when it locks the account after the winner committed, its
-	// own now-superseded session, exactly the two losing outcomes
-	// TestCompetingFirstCompletions_OneWinner accepts for the same race
-	// over one session.
 	successes, losses := 0, 0
 	for _, err := range results {
 		switch {
@@ -454,8 +419,6 @@ func TestTOTPPendingLogin_ValidCodeIssuesSessionAndStepIsSingleUse(t *testing.T)
 		t.Fatal("login completion returned no session")
 	}
 
-	// The same code is single-use: a replay on a fresh pending row fails and
-	// counts as one attempt.
 	replay := h.newPending(acct.user.ID, nil)
 	_, replayErr := h.completeTOTPPendingCode(replay.RawToken, nil, code)
 	var failure *auth.PendingVerificationFailure
@@ -578,13 +541,6 @@ func TestTOTPPending_LazyReencryptsPreviousKeyRowOnSuccess(t *testing.T) {
 	}
 }
 
-// TestTOTPPending_FailureBudgetEscalatesCapsMailAndPreservesOtherMethods
-// proves the whole per-account failure budget: escalation to a cool-down,
-// the one-per-account-per-hour exhaustion-mail cap shared with the pending
-// exhaustion path, a live cool-down blocking even a valid code while
-// leaving passkeys usable, and the 24-hour-since-last-failure reset rule
-// (docs/design/totp-second-factor-contract.md#per-account-totp-failure-budget;
-// AC-AUTH-028).
 func TestTOTPPending_FailureBudgetEscalatesCapsMailAndPreservesOtherMethods(t *testing.T) {
 	epoch := testutil.Epoch
 	clock := testutil.NewClock(epoch)
@@ -597,8 +553,6 @@ func TestTOTPPending_FailureBudgetEscalatesCapsMailAndPreservesOtherMethods(t *t
 		t.Fatalf("enroll: %v", err)
 	}
 
-	// Four failures on one pending row: no cool-down yet, the pending row is
-	// not exhausted.
 	pending := h.newPending(acct.user.ID, nil)
 	for i := 1; i <= 4; i++ {
 		if _, err = h.completeTOTPPendingCode(pending.RawToken, nil, "000000"); err == nil {
@@ -610,9 +564,6 @@ func TestTOTPPending_FailureBudgetEscalatesCapsMailAndPreservesOtherMethods(t *t
 		}
 	}
 
-	// The fifth failure is also the pending row's fifth: both the credential
-	// cool-down and the pending exhaustion fire from the same transaction,
-	// and the shared cap must send exactly one exhaustion mail.
 	_, err = h.completeTOTPPendingCode(pending.RawToken, nil, "000000")
 	var failure *auth.PendingVerificationFailure
 	if !errors.As(err, &failure) || !failure.Exhausted {
@@ -629,7 +580,6 @@ func TestTOTPPending_FailureBudgetEscalatesCapsMailAndPreservesOtherMethods(t *t
 		t.Fatal("credential cool-down and pending exhaustion sent more than one capped mail")
 	}
 
-	// A live cool-down blocks even a correct code and changes no row.
 	fresh := h.newPending(acct.user.ID, nil)
 	_, coolingErr := h.completeTOTPPendingCode(fresh.RawToken, nil, totpCodeAt(secret, clock.Now()))
 	if coolingErr == nil || errors.As(coolingErr, &failure) {
@@ -643,33 +593,22 @@ func TestTOTPPending_FailureBudgetEscalatesCapsMailAndPreservesOtherMethods(t *t
 		t.Fatalf("fresh pending failed_attempts after a cool-down rejection = %d, want 0", n)
 	}
 
-	// A passkey still completes a fresh pending authentication during the
-	// TOTP cool-down.
 	passkeyPending := h.newPending(acct.user.ID, nil)
 	passkeyCredential := h.assertionCredential(passkeyPending.RawToken, nil, authenticator, 1, nil)
 	if _, err = h.complete(passkeyPending.RawToken, nil, passkeyCredential); err != nil {
 		t.Fatalf("passkey completion during a totp cool-down: %v", err)
 	}
 
-	// After the cool-down elapses but before 24 hours since the last
-	// failure, a valid code succeeds but keeps the escalation.
 	clock.Set(epoch.Add(16 * time.Minute))
 	afterCooldown := h.newPending(acct.user.ID, nil)
 	if _, err = h.completeTOTPPendingCode(afterCooldown.RawToken, nil, totpCodeAt(secret, clock.Now())); err != nil {
 		t.Fatalf("valid code after the cool-down elapsed: %v", err)
 	}
-	// resetTOTPBudgetIfDue is a no-op before the 24-hour window, so a valid
-	// code neither clears nor extends the now-stale cooldown_until from the
-	// fifth failure; it stays past, so it no longer blocks anything
-	// (docs/design/totp-second-factor-contract.md#per-account-totp-failure-budget;
-	// AC-AUTH-028).
 	kept := h.totpCredentialRow(acct.user.ID)
 	if kept.failedAttempts != 5 || !timePtrEqual(kept.cooldownUntil, row.cooldownUntil) || kept.lastFailedAt == nil || !kept.lastFailedAt.Equal(epoch) {
 		t.Fatalf("credential row after an early valid code = %+v, want the escalation kept", kept)
 	}
 
-	// At least 24 hours after the last failure, a valid code resets the
-	// budget.
 	clock.Set(epoch.Add(24*time.Hour + time.Minute))
 	resetPending := h.newPending(acct.user.ID, nil)
 	if _, err = h.completeTOTPPendingCode(resetPending.RawToken, nil, totpCodeAt(secret, clock.Now())); err != nil {
@@ -681,12 +620,6 @@ func TestTOTPPending_FailureBudgetEscalatesCapsMailAndPreservesOtherMethods(t *t
 	}
 }
 
-// TestTOTPPending_MailClaimOnlyOnFailuresThatStartACooldown proves the
-// attempt-mail window is claimed only by a failure that itself sets a fresh
-// cool-down (failed_attempts a multiple of five), not by every failure that
-// merely inherits a stale, already-elapsed cooldown_until from an earlier
-// one (docs/design/totp-second-factor-contract.md#per-account-totp-failure-budget;
-// AC-AUTH-028).
 func TestTOTPPending_MailClaimOnlyOnFailuresThatStartACooldown(t *testing.T) {
 	epoch := testutil.Epoch
 	clock := testutil.NewClock(epoch)
@@ -719,9 +652,6 @@ func TestTOTPPending_MailClaimOnlyOnFailuresThatStartACooldown(t *testing.T) {
 		t.Fatal("want exactly one exhaustion mail after the first cool-down")
 	}
 
-	// Past the cool-down, the sixth failure inherits the stale
-	// cooldown_until (6 is not a multiple of five) and must not re-claim
-	// the mail window.
 	clock.Set(epoch.Add(16 * time.Minute))
 	fail()
 	row = h.totpCredentialRow(acct.user.ID)
@@ -732,9 +662,6 @@ func TestTOTPPending_MailClaimOnlyOnFailuresThatStartACooldown(t *testing.T) {
 		t.Fatalf("attempt_mail_at after the sixth failure = %v, want unchanged %v", got, firstClaim)
 	}
 
-	// Once an hour has passed since the first claim, failures seven through
-	// nine still claim nothing, and the tenth both starts a second
-	// cool-down and re-claims the window.
 	clock.Set(epoch.Add(61 * time.Minute))
 	for i := 7; i <= 9; i++ {
 		fail()
@@ -818,10 +745,6 @@ func TestTOTPRemove_MissingCredentialIsFactorNotFound(t *testing.T) {
 	}
 }
 
-// TestTOTPPendingMethods_FixedOrderPasskeyTOTPRecovery proves the pending
-// method list follows the contract's fixed order and lists totp purely from
-// credential existence, unaffected by an active cool-down
-// ("Release surface"; AC-AUTH-028).
 func TestTOTPPendingMethods_FixedOrderPasskeyTOTPRecovery(t *testing.T) {
 	clock := newTOTPTestClock()
 	h := newTOTPHarness(t, clock, nil)
@@ -846,8 +769,6 @@ func TestTOTPPendingMethods_FixedOrderPasskeyTOTPRecovery(t *testing.T) {
 		}
 	}
 
-	// Driving the credential into cool-down does not remove totp from the
-	// list; verification, not listing, is what enforces the cool-down.
 	pending := h.newPending(acct.user.ID, nil)
 	for i := 0; i < 5; i++ {
 		if _, err = h.completeTOTPPendingCode(pending.RawToken, nil, "000000"); err == nil {
@@ -866,13 +787,6 @@ func TestTOTPPendingMethods_FixedOrderPasskeyTOTPRecovery(t *testing.T) {
 	}
 }
 
-// totpHandleScript intercepts every userHandleBytes-length entropy read once
-// armed, returning its preset candidates in order, and always defers to real
-// randomness otherwise. StartTOTPEnrollment's enrollment-token draw is also
-// exactly userHandleBytes long, so a test arms the script only between
-// Start and Complete, isolating interception to
-// createTOTPPolicyHandle's candidate draws
-// (docs/design/totp-second-factor-contract.md#enrollment-and-replacement-api).
 type totpHandleScript struct {
 	armed      bool
 	candidates [][]byte
@@ -888,11 +802,6 @@ func (s *totpHandleScript) Read(p []byte) (int, error) {
 	return rand.Read(p)
 }
 
-// totpHandleCandidate returns a userHandleBytes candidate that starts with a
-// fresh random prefix and ends with marker: the prefix keeps candidates from
-// this run from colliding with rows earlier runs committed to the shared test
-// database, and the fixed marker keeps candidate1, candidate2, and candidate3
-// distinct from each other within one run.
 func totpHandleCandidate(t *testing.T, marker byte) []byte {
 	t.Helper()
 	candidate := make([]byte, userHandleBytes)
@@ -903,9 +812,6 @@ func totpHandleCandidate(t *testing.T, marker byte) []byte {
 	return candidate
 }
 
-// seedCollidingHandle installs an active TOTP-only policy for a fresh
-// foreign account using handle, so a later INSERT of the same handle hits
-// second_factor_policies' unique constraint.
 func (h *harness) seedCollidingHandle(handle []byte, now time.Time) {
 	h.t.Helper()
 	foreign := h.newAccount()
@@ -916,12 +822,6 @@ func (h *harness) seedCollidingHandle(handle []byte, now time.Time) {
 	}
 }
 
-// TestTOTPCompleteEnrollment_PolicyHandleRetriesUpToThreeCandidates proves
-// the first-completion handle collision retry: a collision on candidate one
-// retries onto candidate two and persists it, a later passkey registration
-// reuses that exact handle, and three collisions in a row return the
-// closed 503 with nothing created
-// ("Enrollment and replacement API": "When no policy exists..."; AC-AUTH-027).
 func TestTOTPCompleteEnrollment_PolicyHandleRetriesUpToThreeCandidates(t *testing.T) {
 	t.Run("retries onto the second candidate and persists it", func(t *testing.T) {
 		candidate1, candidate2 := totpHandleCandidate(t, 0xA1), totpHandleCandidate(t, 0xA2)
@@ -1004,19 +904,12 @@ func TestTOTPCompleteEnrollment_PolicyHandleRetriesUpToThreeCandidates(t *testin
 		if h.epoch(acct.user.ID) != 0 {
 			t.Fatal("exhaustion advanced the epoch")
 		}
-		// Handle exhaustion is reported before the enrollment row is
-		// deleted, and every policy attempt rolled back to its own
-		// savepoint, so the transaction commits with no net change: the
-		// enrollment row survives for a retry.
 		if n := h.count("SELECT count(*) FROM totp_enrollments WHERE user_id = $1", acct.user.ID); n != 1 {
 			t.Fatalf("enrollments after exhaustion = %d, want 1 (unconsumed)", n)
 		}
 	})
 }
 
-// TestTOTPCompleteEnrollment_MailFailureRollsBackEveryWrite mirrors
-// TestRegistrationMailFailure_RollsBackEveryWrite for TOTP: a failed
-// notification aborts the whole first-completion transaction.
 func TestTOTPCompleteEnrollment_MailFailureRollsBackEveryWrite(t *testing.T) {
 	clock := newTOTPTestClock()
 	h := newTOTPHarness(t, clock, nil)
@@ -1043,10 +936,6 @@ func TestTOTPCompleteEnrollment_MailFailureRollsBackEveryWrite(t *testing.T) {
 		errors.Is(err, auth.ErrSecondFactorVerificationFailed) || errors.Is(err, auth.ErrTOTPEnrollmentInvalid) {
 		t.Fatalf("completion with a failing outbox error = %v, want an internal error", err)
 	}
-	// The enrollment row's own delete happens inside the same transaction
-	// that the outbox failure rolls back, so it survives for a retry, the
-	// same way an unconsumed webauthn ceremony survives a failed passkey
-	// registration notification.
 	if h.count("SELECT count(*) FROM totp_credentials WHERE user_id = $1", acct.user.ID) != 0 ||
 		h.count("SELECT count(*) FROM totp_enrollments WHERE user_id = $1", acct.user.ID) != 1 ||
 		h.count("SELECT count(*) FROM second_factor_policies WHERE user_id = $1", acct.user.ID) != 0 ||
@@ -1056,8 +945,6 @@ func TestTOTPCompleteEnrollment_MailFailureRollsBackEveryWrite(t *testing.T) {
 	}
 }
 
-// TestTOTPRemove_MailFailureRollsBackEveryWrite proves a failed removal
-// notification leaves the credential, epoch, and session untouched.
 func TestTOTPRemove_MailFailureRollsBackEveryWrite(t *testing.T) {
 	clock := newTOTPTestClock()
 	h := newTOTPHarness(t, clock, nil)

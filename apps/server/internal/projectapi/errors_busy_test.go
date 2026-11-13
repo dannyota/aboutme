@@ -8,8 +8,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/resumeapi"
 )
 
-// A deletion whose linking resumes kept changing, or whose revoked public
-// requests did not drain, answers the shared busy error and changed nothing.
 func TestMapError_PublicStateBusy(t *testing.T) {
 	for name, err := range map[string]error{
 		"replanned": resumeapi.ErrPublicStateBusy,

@@ -23,12 +23,10 @@ const (
 	publicPNGFormatVersion          = 1
 )
 
-// RenderQueue is the public artifact boundary to the shared print queue.
 type RenderQueue interface {
 	Render(context.Context, renderjob.Request) (renderjob.Result, error)
 }
 
-// ArtifactDependencies contains the dependencies shared by PDF and PNG.
 type ArtifactDependencies struct {
 	Reader         *publicresume.Reader
 	Cache          *publiccache.Cache
@@ -37,15 +35,8 @@ type ArtifactDependencies struct {
 	RendererDigest string
 	TrustedProxies api.TrustedProxies
 	Clock          func() time.Time
-	// Cards turns on stored preview cards: og.png becomes an alias of the
-	// current card and the versioned card route answers. Nil keeps the
-	// og.png share image and the versioned route returns 404.
-	Cards PreviewCards
-	// ViewPassKey seals and opens the __Host-view-pass cookie
-	// (docs/design/viewer-analytics/sign-in-to-view.md "Pass cookie"). Only
-	// the PDF representation checks it; the preview card and og.png stay
-	// public (design "Gated routes").
-	ViewPassKey []byte
+	Cards          PreviewCards
+	ViewPassKey    []byte
 }
 
 type artifactHandlers struct {
@@ -67,16 +58,9 @@ type artifactContract struct {
 	variant        publiccache.Variant
 	formatVersion  int
 	contentType    string
-	// namedDownload serves the body as an attachment named after the slug.
-	namedDownload bool
-	maxBytes      int
-	// gated requires a sign-in-to-view pass, and adds "private" to
-	// Cache-Control for a gated resume's response. The PDF and the
-	// fallback og.png (preview cards off) set this, since both render the
-	// resume itself; the preview card carries no contact data and stays
-	// public (docs/design/viewer-analytics/sign-in-to-view.md "Gated
-	// routes").
-	gated bool
+	namedDownload  bool
+	maxBytes       int
+	gated          bool
 }
 
 func newArtifactHandlers(dependencies ArtifactDependencies) (*artifactHandlers, error) {
@@ -147,10 +131,6 @@ func (s *artifactService) handler(contract artifactContract) http.Handler {
 			return
 		}
 		defer releaseAfterFlush(w, lease)
-		// The pass check runs after admission and before any public cache
-		// lookup (docs/design/viewer-analytics/sign-in-to-view.md "Gated
-		// routes"; AC-VIEW-003). The PDF and the fallback og.png are gated;
-		// the preview card stays public.
 		if contract.gated && snapshot.SignInToView && !hasValidPass(request, s.dependencies.ViewPassKey, snapshot.ResumeID, snapshot.ViewPassEpoch, s.dependencies.Clock) {
 			servePublicJSONError(w, request, http.StatusNotFound)
 			return
@@ -246,8 +226,6 @@ func (s *artifactService) handler(contract artifactContract) http.Handler {
 	})
 }
 
-// served adds the per-request headers. The download name comes from the
-// served revision's full name and is set here, never cached.
 func (contract artifactContract) served(response SelectedResponse, snapshot publicresume.Snapshot) SelectedResponse {
 	response = withDiscoveryRobots(response, snapshot.DiscoveryEnabled)
 	response = withPrivateCacheControl(response, contract.gated && snapshot.SignInToView)
@@ -299,12 +277,6 @@ func servePublicRateError(w http.ResponseWriter, request *http.Request, retry in
 	}
 }
 
-// serveLeasedArtifact writes an artifact's 304, HEAD, or body while lease
-// stays live (writeWhileLeased): a revocation before the response is
-// committed gets the public 503, and one during the write or its final
-// flush sets the write deadline, so a write blocked on a slow reader ends.
-// A writer without deadline support leaves the handler and lease active, so
-// the mutation drain times out.
 func serveLeasedArtifact(w http.ResponseWriter, request *http.Request, lease *publicstate.Lease, response SelectedResponse) {
 	if serveCanceledLease(w, request, lease) {
 		return

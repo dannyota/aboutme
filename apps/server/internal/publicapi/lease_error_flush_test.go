@@ -18,10 +18,6 @@ const (
 	leaseTestPublicNotFound   = "{\"error\":{\"code\":\"public_not_found\",\"message\":\"public resume not found\"}}\n"
 )
 
-// TestLeasedErrorResponses_LeaveGoWhileLeased proves over a real connection
-// that an error a leased handler writes, which carries no resume data, still
-// leaves Go before the handler releases its lease: an artifact's malformed
-// If-None-Match and a JSON pass refusal.
 func TestLeasedErrorResponses_LeaveGoWhileLeased(t *testing.T) {
 	t.Run("artifact_malformed_conditional", func(t *testing.T) {
 		handlers, _, _ := newArtifactHarness(t, mustNotRenderQueue(), 2, time.Now)
@@ -36,10 +32,6 @@ func TestLeasedErrorResponses_LeaveGoWhileLeased(t *testing.T) {
 	})
 }
 
-// TestLeasedErrorResponses_RevocationEndsABlockedErrorFlush proves a leased
-// error response is flushed under the lease's cancel hook: a revocation
-// during a flush blocked on a reader that stopped reading sets the write
-// deadline, and the lease drains before the transition's deadline.
 func TestLeasedErrorResponses_RevocationEndsABlockedErrorFlush(t *testing.T) {
 	handlers, backing, coordinator := newArtifactHarness(t, mustNotRenderQueue(), 2, time.Now)
 	writer := flushBlockedWriter{newDeadlineBlockedWriter()}

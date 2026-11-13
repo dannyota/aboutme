@@ -8,13 +8,8 @@ import (
 	"testing"
 )
 
-// projectRouteParityPath is the route parity fixture shared with the Caddy
-// route-table test and the request feed.
 var projectRouteParityPath = filepath.Join("..", "..", "..", "..", "deploy", "caddy", "testdata", "project-route-parity.json")
 
-// TestClassifyPublicRoute_ProjectRouteParity proves the Go classifier
-// recognizes exactly the paths Caddy sends to Go for the project shapes, and
-// tells the list from a project page by depth.
 func TestClassifyPublicRoute_ProjectRouteParity(t *testing.T) {
 	t.Parallel()
 	raw, err := os.ReadFile(projectRouteParityPath)
@@ -44,8 +39,6 @@ func TestClassifyPublicRoute_ProjectRouteParity(t *testing.T) {
 	}
 }
 
-// TestClassifyPublicRoute_ProjectShapesRejectEscapes proves a percent sign
-// anywhere in a project path classifies as no route, as for the resume page.
 func TestClassifyPublicRoute_ProjectShapesRejectEscapes(t *testing.T) {
 	t.Parallel()
 	for _, path := range []string{

@@ -13,8 +13,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/api"
 )
 
-// buildGoogleAuthorizeURL binds PKCE S256 and an OIDC nonce to the stored
-// transaction. start.go owns the GET-versus-POST response policy.
 func (s *Service) buildGoogleAuthorizeURL(ctx context.Context, purpose Purpose, linkingUserID uuid.UUID, returnPath string) (handle, authURL, op string, err error) {
 	provider, err := s.googleProvider(ctx)
 	if err != nil {
@@ -34,11 +32,7 @@ func (s *Service) buildGoogleAuthorizeURL(ctx context.Context, purpose Purpose, 
 	), "", nil
 }
 
-// handleGoogleCallback consumes the transaction, verifies PKCE and OIDC, then
-// resolves the provider identity. Every exit clears the transaction cookie
-// before writing the response; deferring the clear would miss real clients.
 func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
-	// Discovery, token exchange, and JWKS fetch share one bounded client.
 	ctx := withProviderHTTPClient(r.Context())
 	if s.googleLocalOIDC && s.googleIssuerOverride == "" {
 		ctx = withLocalProviderHTTPClient(ctx)
@@ -60,15 +54,12 @@ func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// State prevents an attacker from splicing their authorization code into
-	// a victim's pending transaction; the cookie and PKCE do not replace it.
 	state := r.URL.Query().Get("state")
 	if state == "" || state != tx.State {
 		s.redirectAuthFailed(w, r, ProviderGoogle, tx, reasonStateMismatch)
 		return
 	}
 
-	// Validate state before exposing the friendlier consent-denied result.
 	if r.URL.Query().Get("error") == "access_denied" {
 		s.redirectWithError(w, r, ProviderGoogle, tx, cancelledErrorCode, reasonConsentDenied)
 		return
@@ -86,9 +77,6 @@ func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Use the redirect URI stored for this transaction. The provider requires
-	// it to match the authorization request exactly, even if configuration
-	// changed before the callback.
 	oauth2Cfg := s.googleOAuth2Config(provider.Endpoint(), tx.RedirectURI)
 	token, err := oauth2Cfg.Exchange(ctx, code, oauth2.VerifierOption(tx.PKCEVerifier))
 	if err != nil {
@@ -109,7 +97,7 @@ func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// go-oidc exposes the nonce but does not validate it.
+	// go-oidc's IDTokenVerifier.Verify does not validate the nonce; that is the caller's job (go-oidc docs).
 	if idToken.Nonce == "" || idToken.Nonce != tx.Nonce {
 		s.redirectAuthFailed(w, r, ProviderGoogle, tx, reasonNonceMismatch)
 		return
@@ -126,7 +114,6 @@ func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Link and reauth use provider identity without an email check.
 	if tx.Purpose == PurposeLink || tx.Purpose == PurposeReauth {
 		pendingRaw, linkErr := s.resolveLinkOrReauth(ctx, r, w, tx, ProviderGoogle, idToken.Subject)
 		if linkErr != nil {
@@ -137,7 +124,7 @@ func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	clientIP, _ := api.ClientIP(r, s.trustedProxies) // best-effort: IssueTx tolerates an empty ip
+	clientIP, _ := api.ClientIP(r, s.trustedProxies)
 	ua := r.UserAgent()
 
 	login, found, err := s.resolveProviderLogin(ctx, ProviderSubject{
@@ -153,7 +140,6 @@ func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// A new subject requires a verified, canonical email.
 	if claims.Email == "" || !claims.EmailVerified {
 		s.redirectWithError(w, r, ProviderGoogle, tx, emailNotVerifiedErrorCode, reasonEmailNotVerified)
 		return

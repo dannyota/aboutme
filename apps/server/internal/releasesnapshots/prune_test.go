@@ -37,17 +37,11 @@ func day(year int, month time.Month, d int) time.Time {
 	return time.Date(year, month, d, 0, 0, 0, 0, time.UTC)
 }
 
-// fixture has three snapshots to delete and one of every kind that must stay.
 func fixture() []types.DBSnapshot {
 	return []types.DBSnapshot{
 		snapshot("aboutme-prod-v0-1-2-202607010000", Instance, "manual", "available", day(2026, 7, 1), true),
 		snapshot("aboutme-prod-v0-1-1-202609171438", Instance, "manual", "available", time.Date(2026, 9, 17, 7, 38, 12, 0, time.UTC), false),
-		// 29.5 days old: past MaxAge, so the daily run deletes it before 30 days.
 		snapshot("aboutme-prod-v0-1-2-202609201200", Instance, "manual", "available", time.Date(2026, 9, 20, 12, 0, 0, 0, time.UTC), true),
-		// Kept: recent; exactly 27 days old; created after now; a name
-		// deploy.sh cannot generate; untagged and unlisted; foreign
-		// name; another instance; automated; the final snapshot; not available;
-		// a wrong tag value; missing fields.
 		snapshot("aboutme-prod-v0-1-3-202610010000", Instance, "manual", "available", day(2026, 10, 1), true),
 		snapshot("aboutme-prod-v0-1-2-202609230000", Instance, "manual", "available", day(2026, 9, 23), true),
 		snapshot("aboutme-prod-v0-1-5-202610250000", Instance, "manual", "available", day(2026, 10, 25), true),
@@ -112,7 +106,6 @@ func testLogger() (*slog.Logger, *bytes.Buffer) {
 func TestPruneDeletesOnlyExpiredReleaseSnapshots(t *testing.T) {
 	t.Parallel()
 	all := fixture()
-	// Split across pages so pagination is exercised.
 	client := &fakeClient{pages: [][]types.DBSnapshot{all[:5], all[5:]}}
 	logger, _ := testLogger()
 
@@ -174,9 +167,6 @@ func TestPruneDeletesNothingWhenListingFails(t *testing.T) {
 	}
 }
 
-// A snapshot is deleted by the first daily run after it passes MaxAge. MaxAge
-// plus two schedule intervals must stay strictly under the 30-day promise, so
-// one missed run and a late task start cannot break it.
 func TestMaxAgeKeepsEverySnapshotWithinThirtyDaysDespiteAMissedRun(t *testing.T) {
 	t.Parallel()
 	const scheduleInterval = 24 * time.Hour
@@ -276,8 +266,6 @@ func TestPruneLogsOnlyATokenErrorCodeOnAFailedDelete(t *testing.T) {
 	}
 }
 
-// manyReleases returns n tagged release snapshots, one per hour ending an hour
-// before now, so all are far younger than MaxAge. Index 0 is the oldest.
 func manyReleases(n int) []types.DBSnapshot {
 	var out []types.DBSnapshot
 	for i := range n {
@@ -291,13 +279,10 @@ func manyReleases(n int) []types.DBSnapshot {
 func TestPruneKeepsOnlyTheNewestThirtyReleaseSnapshots(t *testing.T) {
 	t.Parallel()
 	all := manyReleases(35)
-	// Untagged snapshots with release names never count toward the cap and are
-	// never deleted, however many exist or how old they are.
 	for i := range 10 {
 		id := "aboutme-prod-v2-0-" + strconv.Itoa(i) + "-202601010000"
 		all = append(all, snapshot(id, Instance, "manual", "available", day(2026, 1, 1), false))
 	}
-	// Reverse the listing order: the cap goes by creation time, not position.
 	slices.Reverse(all)
 	client := &fakeClient{pages: [][]types.DBSnapshot{all}}
 	logger, _ := testLogger()

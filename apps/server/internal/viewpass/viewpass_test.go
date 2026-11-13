@@ -13,7 +13,7 @@ import (
 )
 
 func testKey() []byte {
-	return []byte("01234567890123456789012345678901") // 32 bytes
+	return []byte("01234567890123456789012345678901")
 }
 
 func mustUUID(t *testing.T) uuid.UUID {
@@ -25,9 +25,6 @@ func mustUUID(t *testing.T) uuid.UUID {
 	return id
 }
 
-// AC-VIEW-007: a sealed pass round trips through Valid for its own resume
-// and epoch, and does not validate for another resume, another epoch, or
-// past its expiry.
 func TestValid_RoundTrip(t *testing.T) {
 	t.Parallel()
 	key := testKey()
@@ -73,8 +70,6 @@ func TestValid_ExpiredRejected(t *testing.T) {
 	if viewpass.Valid(token, key, resumeID, 1, now) {
 		t.Fatal("Valid() = true for an expired pass, want false")
 	}
-	// Exactly at the expiry instant is also expired: Valid uses a strict
-	// before-comparison, matching "expires 7 days after sign-in".
 	tokenAtBoundary := viewpass.Seal(key, resumeID, 1, now)
 	if viewpass.Valid(tokenAtBoundary, key, resumeID, 1, now) {
 		t.Fatal("Valid() = true at the exact expiry instant, want false")
@@ -92,15 +87,13 @@ func TestValid_BadTagRejected(t *testing.T) {
 	if err != nil {
 		t.Fatalf("decode sealed token: %v", err)
 	}
-	decoded[len(decoded)-1] ^= 0xFF // flip a tag bit
+	decoded[len(decoded)-1] ^= 0xFF
 	tampered := base64.RawURLEncoding.EncodeToString(decoded)
 
 	if viewpass.Valid(tampered, key, resumeID, 1, now) {
 		t.Fatal("Valid() = true for a tampered tag, want false")
 	}
 
-	// A different key must also fail to validate the same otherwise-valid
-	// token: proves the tag actually binds to the key, not just its length.
 	otherKey := []byte("98765432109876543210987654321098")
 	if viewpass.Valid(token, otherKey, resumeID, 1, now) {
 		t.Fatal("Valid() = true under a different key, want false")
@@ -130,8 +123,6 @@ func TestValid_TruncatedOrGarbageRejected(t *testing.T) {
 	}
 }
 
-// AC-VIEW-007: at most 10 passes, one per resume; an 11th drops whichever
-// kept pass expires first, and Max-Age is the latest remaining expiry.
 func TestAdd_EleventhPassDropsEarliestExpiring(t *testing.T) {
 	t.Parallel()
 	key := testKey()
@@ -230,8 +221,6 @@ func TestAdd_MaxAgeIsLatestRemainingExpiry(t *testing.T) {
 	}
 }
 
-// AC-VIEW-007: the whole cookie, attributes included, stays under 1 KiB
-// even holding the maximum 10 passes.
 func TestAdd_TenPassesStayUnderOneKiB(t *testing.T) {
 	t.Parallel()
 	key := testKey()

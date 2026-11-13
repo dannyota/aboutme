@@ -1,5 +1,3 @@
-// Package config_test exercises env-var parsing and validation for the
-// server configuration.
 package config_test
 
 import (
@@ -13,11 +11,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/config"
 )
 
-// env builds a lookup function for config.Load from a map, so tests never
-// touch real process environment variables.
-
-// testBase64URL32 is the unpadded base64url spelling of 32 zero bytes, a valid
-// value for every 32-byte secret.
 const testBase64URL32 = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
 
 func env(vars map[string]string) func(string) string {
@@ -25,10 +18,6 @@ func env(vars map[string]string) func(string) string {
 		if value, ok := vars[key]; ok {
 			return value
 		}
-		// Media is required startup configuration. Most tests exercise
-		// unrelated fields, so give them one explicit valid filesystem mode;
-		// media-specific tests override these keys, including with an empty
-		// value when they need to prove a missing-variable failure.
 		switch key {
 		case "PUBLIC_RENDER_ORIGIN":
 			return "http://127.0.0.1:20030"
@@ -40,10 +29,6 @@ func env(vars map[string]string) func(string) string {
 			return "fs"
 		case "MEDIA_FS_DIR":
 			return "/tmp/aboutme-config-test-media"
-		// Password-mail config defaults to a valid SES mode so every
-		// Load test (dev, staging, and prod) has a complete, valid config; the
-		// auth-email tests override these keys, including with an empty value
-		// when proving a missing-variable failure.
 		case "PASSWORD_RATE_HMAC_KEY":
 			return testBase64URL32
 		case "AUTH_EMAIL_ACTIVE_KEY_ID":
@@ -58,16 +43,8 @@ func env(vars map[string]string) func(string) string {
 			return "aboutme"
 		case "AWS_REGION":
 			return "ap-southeast-1"
-		// TOTP_ACTIVE_KEY is required startup configuration regardless of
-		// TOTP_ENROLLMENT_ENABLED (see internal/config/totp.go); the totp
-		// tests override it, including with an empty or malformed value when
-		// proving a rejection.
 		case "TOTP_ACTIVE_KEY":
 			return testBase64URL32
-		// VIEW_PASS_KEY is required startup configuration regardless of
-		// SIGN_IN_TO_VIEW_ENABLED (see internal/config/view_pass.go); the
-		// sign-in-to-view tests override it, including with an empty or
-		// short value when proving a rejection.
 		case "VIEW_PASS_KEY":
 			return testBase64URL32
 		}
@@ -297,8 +274,6 @@ func TestLoad_ProviderLoginFlagRejectsBadLists(t *testing.T) {
 	}
 }
 
-// A disabled provider's credentials are never kept in the loaded config, even
-// when its variables are set.
 func TestLoad_DisabledProviderCredentialsAreNotRead(t *testing.T) {
 	t.Parallel()
 	for _, environment := range []string{"dev", "prod"} {
@@ -335,7 +310,6 @@ func TestLoad_DisabledProviderCredentialsAreNotRead(t *testing.T) {
 	}
 }
 
-// Only an enabled provider needs credentials in prod and staging.
 func TestLoad_ProviderCredentialsRequiredPerEnabledProvider(t *testing.T) {
 	t.Parallel()
 	base := func(environment, flag string) map[string]string {
@@ -361,7 +335,6 @@ func TestLoad_ProviderCredentialsRequiredPerEnabledProvider(t *testing.T) {
 				t.Fatalf("ProviderLogin = %+v, want google only", got.ProviderLogin)
 			}
 		})
-		// Production may enable Google and LinkedIn together (ADR 0016).
 		t.Run(environment+" google,linkedin with both providers' credentials", func(t *testing.T) {
 			t.Parallel()
 			vars := base(environment, "google,linkedin")
@@ -617,8 +590,6 @@ func TestLoad_ValidConfig(t *testing.T) {
 		t.Fatalf("Load() unexpected error: %v", err)
 	}
 
-	// Config.TrustedProxyCIDRs is a slice, so Config is not comparable with
-	// == — compare each field explicitly instead.
 	if got.Port != 9090 {
 		t.Errorf("Port = %d, want %d", got.Port, 9090)
 	}
@@ -642,10 +613,6 @@ func TestLoad_ValidConfig(t *testing.T) {
 	}
 }
 
-// TestLoad_ValidConfig_StagingRequiresTrustBoundary is the staging
-// counterpart of TestLoad_ValidConfig: staging carries the same client-IP
-// trust-boundary strictness as prod. A valid staging config must supply
-// TRUSTED_PROXY_CIDRS and parse it exactly like prod does.
 func TestLoad_ValidConfig_StagingRequiresTrustBoundary(t *testing.T) {
 	t.Parallel()
 
@@ -834,8 +801,6 @@ func TestLoad_ValidEnvValues(t *testing.T) {
 				"ENV":           envValue,
 			}
 			if envValue == "prod" || envValue == "staging" {
-				// prod and staging require TRUSTED_PROXY_CIDRS; see
-				// TestLoad_TrustedProxyCIDRs_RequiredInProd.
 				vars["TRUSTED_PROXY_CIDRS"] = "127.0.0.1/32,::1/128"
 			}
 
@@ -900,8 +865,6 @@ func TestLoad_ListenHostInvalidValue(t *testing.T) {
 	}
 }
 
-// TestLoad_ListenHostNonLoopbackRejectedInProd proves production cannot
-// expose port 8080 around Caddy's origin-secret boundary.
 func TestLoad_ListenHostNonLoopbackRejectedInProd(t *testing.T) {
 	t.Parallel()
 
@@ -944,10 +907,6 @@ func TestLoad_ListenHostLoopbackAcceptedInProd(t *testing.T) {
 	}
 }
 
-// TestLoad_ListenHostNonLoopbackRejectedInStaging is the staging
-// counterpart of TestLoad_ListenHostNonLoopbackRejectedInProd. Staging uses
-// the same client-IP trust boundary as prod, so it also rejects a non-loopback
-// LISTEN_HOST.
 func TestLoad_ListenHostNonLoopbackRejectedInStaging(t *testing.T) {
 	t.Parallel()
 
@@ -990,10 +949,6 @@ func TestLoad_ListenHostLoopbackAcceptedInStaging(t *testing.T) {
 	}
 }
 
-// TestLoad_TrustedProxyCIDRs_RequiredInProd proves production fails closed when
-// its client-IP trust configuration is absent rather than silently trusting no one
-// (which collapses every real client into one bucket) or everyone (a
-// spoofing bypass).
 func TestLoad_TrustedProxyCIDRs_RequiredInProd(t *testing.T) {
 	t.Parallel()
 
@@ -1010,9 +965,6 @@ func TestLoad_TrustedProxyCIDRs_RequiredInProd(t *testing.T) {
 	}
 }
 
-// TestLoad_TrustedProxyCIDRs_RequiredInStaging is the staging counterpart
-// of TestLoad_TrustedProxyCIDRs_RequiredInProd: staging fails closed on
-// an absent client-IP trust boundary too.
 func TestLoad_TrustedProxyCIDRs_RequiredInStaging(t *testing.T) {
 	t.Parallel()
 
@@ -1074,11 +1026,6 @@ func TestLoad_TrustedProxyCIDRs_ParsesCommaSeparatedList(t *testing.T) {
 	}
 }
 
-// TestLoad_TrustedProxyCIDRs_RejectsTrustEveryone proves a /0 CIDR passes
-// ordinary CIDR syntax validation but trusts every possible peer, defeating the
-// client-IP trust boundary rather than merely narrowing it to a wrong
-// range. Load must reject it outright rather than starting successfully
-// with a value this implausible for any deployment topology.
 func TestLoad_TrustedProxyCIDRs_RejectsTrustEveryone(t *testing.T) {
 	t.Parallel()
 
@@ -1102,22 +1049,15 @@ func TestLoad_TrustedProxyCIDRs_RejectsTrustEveryone(t *testing.T) {
 	}
 }
 
-// TestLoad_TrustedProxyCIDRs_RejectsBroaderThanMinimumPrefix proves a literal
-// /0 check is insufficient because the whole IPv4 space can be split into
-// two /1 prefixes that individually pass ordinary CIDR syntax. Load must
-// instead enforce a minimum prefix length per address family (narrower
-// than /8 for IPv4, /48 for IPv6 is rejected outright) so every configured
-// prefix is checked on its own, closing the split-evasion case along with
-// any other implausibly broad single CIDR.
 func TestLoad_TrustedProxyCIDRs_RejectsBroaderThanMinimumPrefix(t *testing.T) {
 	t.Parallel()
 
 	cases := []string{
-		"0.0.0.0/1",             // half of IPv4 alone
-		"128.0.0.0/1",           // the other half alone
-		"0.0.0.0/1,128.0.0.0/1", // split-evasion: together cover all of IPv4, but each must still be rejected on its own
-		"10.0.0.0/7",            // one bit broader than the IPv4 minimum (/8)
-		"::/47",                 // one bit broader than the IPv6 minimum (/48)
+		"0.0.0.0/1",
+		"128.0.0.0/1",
+		"0.0.0.0/1,128.0.0.0/1",
+		"10.0.0.0/7",
+		"::/47",
 	}
 	for _, cidr := range cases {
 		t.Run(cidr, func(t *testing.T) {
@@ -1139,11 +1079,6 @@ func TestLoad_TrustedProxyCIDRs_RejectsBroaderThanMinimumPrefix(t *testing.T) {
 	}
 }
 
-// TestLoad_TrustedProxyCIDRs_NarrowPrefixesStillAccepted proves the minimum
-// prefix rejection is specifically about implausibly broad CIDRs, not
-// about broad prefixes in general: a deployment legitimately trusting a
-// large-but-bounded internal range (e.g. all of RFC 1918 10.0.0.0/8, or the
-// IPv6 minimum /48) must still be accepted.
 func TestLoad_TrustedProxyCIDRs_NarrowPrefixesStillAccepted(t *testing.T) {
 	t.Parallel()
 
@@ -1165,19 +1100,13 @@ func TestLoad_TrustedProxyCIDRs_NarrowPrefixesStillAccepted(t *testing.T) {
 	}
 }
 
-// TestLoad_TrustedProxyCIDRs_RejectsIPv4MappedPrefix proves an IPv4-in-IPv6
-// mapped prefix can pass the /48 IPv6 minimum-prefix bound yet can never match
-// a real peer, because
-// api.resolveClientIP Unmap()s every peer address before testing trust — so
-// such a prefix silently trusts nobody. Load must reject it (naming the v4
-// form) rather than accept a value that reads as configured but is inert.
 func TestLoad_TrustedProxyCIDRs_RejectsIPv4MappedPrefix(t *testing.T) {
 	t.Parallel()
 
 	cases := []string{
-		"::ffff:0.0.0.0/104",     // every IPv4 address, expressed 4-in-6; passes the /48 IPv6 bound
-		"::ffff:203.0.113.0/120", // a specific v4-mapped /24, still inert against unmapped peers
-		"::ffff:10.90.0.0/124",   // the compose /28 written in mapped form
+		"::ffff:0.0.0.0/104",
+		"::ffff:203.0.113.0/120",
+		"::ffff:10.90.0.0/124",
 	}
 	for _, cidr := range cases {
 		t.Run(cidr, func(t *testing.T) {
@@ -1203,8 +1132,6 @@ func TestLoad_TrustedProxyCIDRs_RejectsIPv4MappedPrefix(t *testing.T) {
 	}
 }
 
-// ---- GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET --------------------------
-
 func TestLoad_GoogleCredentials_ValidConfig(t *testing.T) {
 	t.Parallel()
 
@@ -1227,9 +1154,6 @@ func TestLoad_GoogleCredentials_ValidConfig(t *testing.T) {
 	}
 }
 
-// TestLoad_GoogleCredentials_OptionalInDev proves a developer working on an
-// unrelated feature is never forced to obtain real Google OAuth
-// credentials just to start the server in dev.
 func TestLoad_GoogleCredentials_OptionalInDev(t *testing.T) {
 	t.Parallel()
 
@@ -1249,8 +1173,6 @@ func TestLoad_GoogleCredentials_OptionalInDev(t *testing.T) {
 	}
 }
 
-// TestLoad_GoogleCredentials_RequiredInProd proves a production server with
-// provider login enabled refuses to start without Google credentials.
 func TestLoad_GoogleCredentials_RequiredInProd(t *testing.T) {
 	t.Parallel()
 
@@ -1299,8 +1221,6 @@ func TestLoad_GoogleCredentials_RequiredInProd(t *testing.T) {
 	}
 }
 
-// TestLoad_GoogleCredentials_RequiredInStaging is the staging counterpart
-// of TestLoad_GoogleCredentials_RequiredInProd: staging uses prod's rules.
 func TestLoad_GoogleCredentials_RequiredInStaging(t *testing.T) {
 	t.Parallel()
 
@@ -1319,13 +1239,6 @@ func TestLoad_GoogleCredentials_RequiredInStaging(t *testing.T) {
 		t.Errorf("Load() error = %q, want it to contain %q", err.Error(), "GOOGLE_CLIENT_ID")
 	}
 }
-
-// ---- GITHUB_CLIENT_ID / GITHUB_CLIENT_SECRET --------------------------
-//
-// GitHub login is plain OAuth2, not OIDC -- no discovery, no
-// issuer, no nonce -- but its client credentials carry the identical
-// fail-closed requirement as Google's: same optional-in-dev,
-// required-in-prod/staging shape, mirrored test-for-test below.
 
 func TestLoad_GitHubCredentials_ValidConfig(t *testing.T) {
 	t.Parallel()
@@ -1349,9 +1262,6 @@ func TestLoad_GitHubCredentials_ValidConfig(t *testing.T) {
 	}
 }
 
-// TestLoad_GitHubCredentials_OptionalInDev proves a developer working on an
-// unrelated feature is never forced to obtain real GitHub OAuth
-// credentials just to start the server in dev.
 func TestLoad_GitHubCredentials_OptionalInDev(t *testing.T) {
 	t.Parallel()
 
@@ -1371,8 +1281,6 @@ func TestLoad_GitHubCredentials_OptionalInDev(t *testing.T) {
 	}
 }
 
-// TestLoad_GitHubCredentials_RequiredInProd proves a production server with
-// provider login enabled refuses to start without GitHub credentials.
 func TestLoad_GitHubCredentials_RequiredInProd(t *testing.T) {
 	t.Parallel()
 
@@ -1423,8 +1331,6 @@ func TestLoad_GitHubCredentials_RequiredInProd(t *testing.T) {
 	}
 }
 
-// TestLoad_GitHubCredentials_RequiredInStaging is the staging counterpart
-// of TestLoad_GitHubCredentials_RequiredInProd: staging uses prod's rules.
 func TestLoad_GitHubCredentials_RequiredInStaging(t *testing.T) {
 	t.Parallel()
 
@@ -1445,8 +1351,6 @@ func TestLoad_GitHubCredentials_RequiredInStaging(t *testing.T) {
 		t.Errorf("Load() error = %q, want it to contain %q", err.Error(), "GITHUB_CLIENT_ID")
 	}
 }
-
-// ---- LINKEDIN_CLIENT_ID / LINKEDIN_CLIENT_SECRET ----------------------
 
 func TestLoad_LinkedInCredentials_ValidConfig(t *testing.T) {
 	t.Parallel()
@@ -1470,10 +1374,6 @@ func TestLoad_LinkedInCredentials_ValidConfig(t *testing.T) {
 	}
 }
 
-// TestLoad_LinkedInCredentials_OptionalInDev mirrors
-// TestLoad_GoogleCredentials_OptionalInDev: a developer working on an
-// unrelated feature is never forced to obtain real LinkedIn OAuth
-// credentials just to start the server in dev.
 func TestLoad_LinkedInCredentials_OptionalInDev(t *testing.T) {
 	t.Parallel()
 
@@ -1493,8 +1393,6 @@ func TestLoad_LinkedInCredentials_OptionalInDev(t *testing.T) {
 	}
 }
 
-// TestLoad_LinkedInCredentials_RequiredInProd proves a production server with
-// provider login enabled refuses to start without LinkedIn credentials.
 func TestLoad_LinkedInCredentials_RequiredInProd(t *testing.T) {
 	t.Parallel()
 
@@ -1547,9 +1445,6 @@ func TestLoad_LinkedInCredentials_RequiredInProd(t *testing.T) {
 	}
 }
 
-// TestLoad_LinkedInCredentials_RequiredInStaging is the staging
-// counterpart of TestLoad_LinkedInCredentials_RequiredInProd: staging uses
-// prod's rules.
 func TestLoad_LinkedInCredentials_RequiredInStaging(t *testing.T) {
 	t.Parallel()
 
@@ -1573,11 +1468,6 @@ func TestLoad_LinkedInCredentials_RequiredInStaging(t *testing.T) {
 	}
 }
 
-// ---- PUBLIC_ORIGIN format validation -----------------------------------
-
-// TestLoad_PublicOrigin_ValidFormats proves the format check accepts every
-// shape a real deployment's PUBLIC_ORIGIN legitimately takes: with and
-// without an explicit port, https and http (dev).
 func TestLoad_PublicOrigin_ValidFormats(t *testing.T) {
 	t.Parallel()
 
@@ -1605,23 +1495,18 @@ func TestLoad_PublicOrigin_ValidFormats(t *testing.T) {
 	}
 }
 
-// TestLoad_PublicOrigin_InvalidFormats guards fail-fast format validation.
-// PUBLIC_ORIGIN must parse as scheme://host[:port] only — no path, trailing slash,
-// query, no fragment — since it becomes the base of every absolute OAuth
-// redirect/callback URL this server builds (an unnoticed trailing slash or
-// path would silently double up or corrupt every one of them).
 func TestLoad_PublicOrigin_InvalidFormats(t *testing.T) {
 	t.Parallel()
 
 	cases := []string{
-		"https://aboutme.vn/",         // trailing slash
-		"https://aboutme.vn/api",      // path
-		"https://aboutme.vn?x=1",      // query
-		"https://aboutme.vn#frag",     // fragment
-		"aboutme.vn",                  // no scheme
-		"ftp://aboutme.vn",            // unsupported scheme
-		"https://",                    // no host
-		"not a url at all : : spaces", // unparseable
+		"https://aboutme.vn/",
+		"https://aboutme.vn/api",
+		"https://aboutme.vn?x=1",
+		"https://aboutme.vn#frag",
+		"aboutme.vn",
+		"ftp://aboutme.vn",
+		"https://",
+		"not a url at all : : spaces",
 	}
 	for _, origin := range cases {
 		t.Run(origin, func(t *testing.T) {
@@ -1642,16 +1527,6 @@ func TestLoad_PublicOrigin_InvalidFormats(t *testing.T) {
 	}
 }
 
-// TestLoad_PublicOrigin_Normalization proves the configured transformations
-// run before exact comparison with each request's Origin header
-// (auth.originAllowed, csrf.go) and before it is used to build every OAuth
-// redirect/callback URL. A browser sends a
-// normalized Origin (lowercase host, default port omitted), so mixed-case
-// hosts and explicit default ports must normalize before comparison. The
-// table proves: (1) scheme+host are lowercased, (2) a default port for the
-// scheme (":80" on http, ":443" on https) is stripped, (3) a non-default port
-// is preserved unchanged, (4)
-// an origin already in canonical form round-trips byte-identical.
 func TestLoad_PublicOrigin_Normalization(t *testing.T) {
 	t.Parallel()
 
@@ -1768,7 +1643,6 @@ func TestLoad_MediaS3Modes(t *testing.T) {
 			for key, value := range tt.vars {
 				vars[key] = value
 			}
-			// Suppress the test helper's filesystem default in S3 mode.
 			vars["MEDIA_FS_DIR"] = ""
 
 			got, err := config.Load(env(vars))
@@ -1855,8 +1729,6 @@ func TestLoad_MediaErrorsDoNotExposeCredentials(t *testing.T) {
 	}
 }
 
-// TestLoad_ProdStartsWithoutProviderCredentialsWhenLoginDisabled proves the
-// password-only release needs no provider credentials.
 func TestLoad_ProdStartsWithoutProviderCredentialsWhenLoginDisabled(t *testing.T) {
 	t.Parallel()
 

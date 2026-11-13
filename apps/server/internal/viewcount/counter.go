@@ -1,7 +1,3 @@
-// Package viewcount counts real views of public resumes without storing
-// personal data (docs/design/viewer-analytics/counting.md, ADR 0022). It
-// keeps tokens, dedupe keys, and pending counts in memory, and writes only
-// daily aggregates.
 package viewcount
 
 import (
@@ -17,7 +13,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// Bounds from docs/design/budgets.md, "Viewer analytics".
 const (
 	minTokenAge        = 8 * time.Second
 	maxTokenAge        = 30 * time.Minute
@@ -28,50 +23,30 @@ const (
 )
 
 var (
-	// ErrNotFound means the resume is not live.
-	ErrNotFound = errors.New("viewcount: resume not found")
-	// ErrBusy means the one-time token store is full, so no token is issued.
-	ErrBusy = errors.New("viewcount: busy")
-	// ErrInvalidConfig reports a missing dependency.
+	ErrNotFound      = errors.New("viewcount: resume not found")
+	ErrBusy          = errors.New("viewcount: busy")
 	ErrInvalidConfig = errors.New("viewcount: invalid config")
 )
 
-// LiveResume is a live resume as the live-state gate sees it.
 type LiveResume struct {
-	// ID is the resume's ID.
-	ID uuid.UUID
-	// Owner is the ID of the account that owns the resume.
+	ID    uuid.UUID
 	Owner uuid.UUID
 }
 
-// Store is the database boundary.
 type Store interface {
-	// LiveResumeByID returns ErrNotFound unless the resume is live.
 	LiveResumeByID(ctx context.Context, id uuid.UUID) (LiveResume, error)
-	// AddCounts adds the cells to the daily rows in one statement per table.
 	AddCounts(ctx context.Context, days []DayCell, signals []SignalCell) error
 }
 
-// Config supplies a Counter's dependencies. Now and Random default to the
-// system clock and crypto/rand.
 type Config struct {
-	// Store reads the live-state gate and writes daily counts. It is required.
-	Store Store
-	// Logger receives buffer, flush, and day key failures. It is required.
-	Logger *slog.Logger
-	// Now returns the current time; nil uses time.Now.
-	Now func() time.Time
-	// Random supplies key and challenge entropy; nil uses crypto/rand.
-	Random io.Reader
-	// MapLimit overrides the budget default for each in-memory key set in
-	// tests; zero or less keeps the default.
-	MapLimit int
-	// BufferLimit overrides the budget default for pending count cells in
-	// tests; zero or less keeps the default.
+	Store       Store
+	Logger      *slog.Logger
+	Now         func() time.Time
+	Random      io.Reader
+	MapLimit    int
 	BufferLimit int
 }
 
-// Counter applies layers 1 and 4 to 7 and buffers the outcomes.
 type Counter struct {
 	store  Store
 	logger *slog.Logger
@@ -100,7 +75,6 @@ type signalKey struct {
 	name     string
 }
 
-// New builds a Counter with fresh per-process keys.
 func New(config Config) (*Counter, error) {
 	if config.Store == nil || config.Logger == nil {
 		return nil, ErrInvalidConfig
@@ -140,13 +114,8 @@ func New(config Config) (*Counter, error) {
 	}, nil
 }
 
-// Viewer is what the HTTP layer knows about the request: its canonical
-// client address and, when a valid session cookie came with it, the account.
 type Viewer struct {
-	// Addr is the canonical client address; the zero value records nothing
-	// in Collect.
-	Addr netip.Addr
-	// Account is the signed-in account ID, or nil without a valid session.
+	Addr    netip.Addr
 	Account *uuid.UUID
 }
 
@@ -154,21 +123,12 @@ func (v Viewer) owns(resume LiveResume) bool {
 	return v.Account != nil && *v.Account == resume.Owner
 }
 
-// StartResult is either an owner flag or a token with its challenge.
 type StartResult struct {
-	// Owner reports that the viewer owns the resume; Token and Challenge are
-	// then empty.
-	Owner bool
-	// Token is the sealed one-time view token.
-	Token string
-	// Challenge is the proof-of-work challenge bound to Token.
+	Owner     bool
+	Token     string
 	Challenge Challenge
 }
 
-// Start issues a one-time token and a proof-of-work challenge for resume,
-// which the caller has just read through the live-state gate; Collect checks
-// that gate again before it counts. The owner gets no token, and the owner's
-// network is excluded from the resume's count for the rest of the day.
 func (c *Counter) Start(resume LiveResume, viewer Viewer) (StartResult, error) {
 	now := c.now()
 	if viewer.owns(resume) {
@@ -196,42 +156,25 @@ func (c *Counter) Start(resume LiveResume, viewer Viewer) (StartResult, error) {
 	return StartResult{Token: token, Challenge: challenge}, nil
 }
 
-// EdgeLabels are the WAF labels Caddy passes from the CloudFront edge.
 type EdgeLabels struct {
-	// Bot reports the edge bot label.
-	Bot bool
-	// Datacenter reports the edge hosting-network label.
+	Bot        bool
 	Datacenter bool
 }
 
-// CollectInput is a validated collect body.
 type CollectInput struct {
-	// Token is the one-time view token that Start issued.
-	Token string
-	// Challenge is the proof-of-work challenge returned with Token.
+	Token     string
 	Challenge Challenge
-	// Solution is the client's answer to Challenge.
-	Solution Solution
+	Solution  Solution
 }
 
-// Outcome is what one collect recorded.
 type Outcome string
 
-// Outcomes. OutcomeNone records nothing.
 const (
-	// OutcomeNone records nothing.
-	OutcomeNone Outcome = ""
-	// OutcomeCounted is a view that passed every check.
-	OutcomeCounted Outcome = "counted"
-	// OutcomeBot is a view the edge labeled as a bot.
-	OutcomeBot Outcome = "bot"
-	// OutcomeDatacenter is a view the edge labeled as a hosting network.
+	OutcomeNone       Outcome = ""
+	OutcomeCounted    Outcome = "counted"
+	OutcomeBot        Outcome = "bot"
 	OutcomeDatacenter Outcome = "datacenter"
-	// OutcomeAnomaly is a valid view above the resume's hourly cap.
-	OutcomeAnomaly Outcome = "anomaly"
-	// OutcomeInvalid is a report that failed token age, single use, or
-	// proof of work.
-	OutcomeInvalid Outcome = "invalid"
-	// OutcomeCrawler is a declared crawler's fetch of the resume page.
-	OutcomeCrawler Outcome = "crawler"
+	OutcomeAnomaly    Outcome = "anomaly"
+	OutcomeInvalid    Outcome = "invalid"
+	OutcomeCrawler    Outcome = "crawler"
 )

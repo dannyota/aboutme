@@ -18,7 +18,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/testutil"
 )
 
-// testRateSecret returns a fixed nonzero 32-byte HMAC key.
 func testRateSecret() [32]byte {
 	var k [32]byte
 	for i := range k {
@@ -36,7 +35,6 @@ func newTestRatePolicies(t *testing.T) *PasswordRatePolicies {
 	return p
 }
 
-// recordingAdmission records the key an admission limiter receives.
 type recordingAdmission struct {
 	record func(key string)
 }
@@ -46,7 +44,6 @@ func (r *recordingAdmission) Admit(_ time.Time, key string) RateDecision {
 	return RateDecision{Allowed: true}
 }
 
-// recordingFailure records the email key a failure limiter receives.
 type recordingFailure struct {
 	record func(key [32]byte)
 }
@@ -58,8 +55,6 @@ func (r *recordingFailure) RecordFailure(_ time.Time, key [32]byte) FailureState
 }
 func (r *recordingFailure) ClearSuccess(_ [32]byte) {}
 
-// exhaustAdmission drives one policy method to its limit and proves the
-// limit+1 call is denied with a positive ceiling-rounded retry.
 func exhaustAdmission(t *testing.T, limit int, admit func() RateDecision) {
 	t.Helper()
 	for i := 0; i < limit; i++ {
@@ -77,8 +72,6 @@ func exhaustAdmission(t *testing.T, limit int, admit func() RateDecision) {
 func TestPasswordRateBudgetParity(t *testing.T) {
 	t.Parallel()
 
-	// Every store is capped at the ADR 0007 default of 10,000 active keys plus
-	// one overflow bucket.
 	if passwordRateMaxKeys != api.DefaultRateLimitMaxKeys {
 		t.Errorf("passwordRateMaxKeys = %d, api default = %d; want equal",
 			passwordRateMaxKeys, api.DefaultRateLimitMaxKeys)
@@ -87,7 +80,6 @@ func TestPasswordRateBudgetParity(t *testing.T) {
 		t.Errorf("passwordRateMaxKeys = %d, want 10000", passwordRateMaxKeys)
 	}
 
-	// The exact password rate budget rows (budgets.md).
 	if loginAdmissionLimit != 30 {
 		t.Errorf("loginAdmissionLimit = %d, want 30", loginAdmissionLimit)
 	}
@@ -124,7 +116,6 @@ func TestPasswordRateLoginIPBudget(t *testing.T) {
 		return p.AdmitLoginIP(now, ip)
 	})
 
-	// A different IP has its own budget.
 	if d := p.AdmitLoginIP(now, netip.MustParseAddr("203.0.113.11")); !d.Allowed {
 		t.Fatalf("different IP denied: %+v; want independent budget", d)
 	}
@@ -140,8 +131,6 @@ func TestPasswordRateRegisterOrForgotIPBudget(t *testing.T) {
 		return p.AdmitRegisterOrForgotIP(now, ip)
 	})
 
-	// Register and forgot share this per-IP budget: exhausting one route's
-	// admission denies the other route for the same IP.
 	if d := p.AdmitRegisterOrForgotIP(now, ip); d.Allowed {
 		t.Fatal("second route allowed after shared per-IP budget exhausted")
 	}
@@ -157,12 +146,9 @@ func TestPasswordRateRegisterOrForgotEmailBudget(t *testing.T) {
 		return p.AdmitRegisterOrForgotEmail(now, email)
 	})
 
-	// A different email is independent.
 	if d := p.AdmitRegisterOrForgotEmail(now, "bob@example.com"); !d.Allowed {
 		t.Fatalf("different email denied: %+v; want independent budget", d)
 	}
-	// Canonical case equivalence: the same mailbox spelled differently shares
-	// the same budget.
 	if d := p.AdmitRegisterOrForgotEmail(now, "Alice@Example.com"); d.Allowed {
 		t.Fatal("mixed-case spelling allowed after lowercase budget exhausted; want shared bucket")
 	}
@@ -192,11 +178,9 @@ func TestPasswordRateAccountMutationBudget(t *testing.T) {
 		return p.AdmitAccountMutation(now, userA, ip)
 	})
 
-	// Same account from a different IP is an independent (account, IP) bucket.
 	if d := p.AdmitAccountMutation(now, userA, otherIP); !d.Allowed {
 		t.Fatalf("same account, different IP denied: %+v; want independent budget", d)
 	}
-	// Different account from the same IP is also independent.
 	if d := p.AdmitAccountMutation(now, userB, ip); !d.Allowed {
 		t.Fatalf("different account, same IP denied: %+v; want independent budget", d)
 	}
@@ -212,8 +196,6 @@ func TestPasswordRateAdmissionRefillsAfterWindow(t *testing.T) {
 		return p.AdmitRegisterOrForgotEmail(now, email)
 	})
 
-	// The hourly budget refills continuously, so a full hour later the whole
-	// budget is available again (rolling expiry).
 	full := now.Add(time.Hour)
 	for i := 0; i < registerForgotEmailLimit; i++ {
 		if d := p.AdmitRegisterOrForgotEmail(full, email); !d.Allowed {
@@ -248,9 +230,6 @@ func TestPasswordEmailHMACDomainSeparation(t *testing.T) {
 
 	digest := emailDigest(secret, email)
 
-	// A bare HMAC of the email without the domain-separation prefix must differ,
-	// proving the prefix actually shapes the input so the email digest can never
-	// collide with another use of the same secret over the raw email.
 	mac := hmac.New(sha256.New, secret[:])
 	mac.Write([]byte(email))
 	var bare [32]byte
@@ -326,7 +305,6 @@ func TestPasswordRateInvalidEmailFailsClosed(t *testing.T) {
 	if !s.Exhausted || s.RetryAfterSeconds < 1 {
 		t.Fatalf("RecordLoginFailure(invalid) = %+v; want exhausted with positive retry", s)
 	}
-	// The malformed input must not have consumed any real limiter budget.
 	if d := p.AdmitRegisterOrForgotEmail(now, "alice@example.com"); !d.Allowed {
 		t.Fatalf("valid email denied after malformed input: %+v", d)
 	}
@@ -348,8 +326,6 @@ func TestPasswordFailureRecordThreshold(t *testing.T) {
 	if !s.Exhausted || s.RetryAfterSeconds != 900 {
 		t.Fatalf("failure 10: %+v; want exhausted with retry 900", s)
 	}
-	// An 11th failure at the same instant stays exhausted with the full window
-	// remaining (the window is not extended).
 	s = p.RecordLoginFailure(now, email)
 	if !s.Exhausted || s.RetryAfterSeconds != 900 {
 		t.Fatalf("failure 11: %+v; want exhausted with retry 900", s)
@@ -373,7 +349,6 @@ func TestPasswordFailureStateObservesWithoutMutation(t *testing.T) {
 	if !after.Exhausted || after.RetryAfterSeconds != 900 {
 		t.Fatalf("State = %+v; want exhausted with retry 900", after)
 	}
-	// Observing again after another record still sees the accumulated debt.
 	p.RecordLoginFailure(now, email)
 	if s := p.LoginFailureState(now, email); !s.Exhausted {
 		t.Fatal("State after an extra failure lost exhaustion")
@@ -397,7 +372,6 @@ func TestPasswordFailureClearSuccessOnlyThatEmail(t *testing.T) {
 	if s := p.LoginFailureState(now, "bob@example.com"); !s.Exhausted {
 		t.Fatalf("bob was cleared too: %+v; ClearSuccess must remove only that email key", s)
 	}
-	// Alice's next failure starts a fresh window at count 1.
 	if s := p.RecordLoginFailure(now, "alice@example.com"); s.Exhausted {
 		t.Fatalf("first post-clear failure exhausted: %+v; want a fresh window", s)
 	}
@@ -410,24 +384,20 @@ func TestPasswordFailureLaterFailuresDoNotExtendWindow(t *testing.T) {
 	const email = "alice@example.com"
 
 	for i := 0; i < 10; i++ {
-		p.RecordLoginFailure(start, email) // all at the same instant: window opens at start
+		p.RecordLoginFailure(start, email)
 	}
 
-	// A failure ten minutes in must not push the expiry out: five minutes remain.
 	s := p.RecordLoginFailure(start.Add(10*time.Minute), email)
 	if !s.Exhausted || s.RetryAfterSeconds != 300 {
 		t.Fatalf("failure at +10m: %+v; want exhausted with retry 300", s)
 	}
-	// At exactly 15 minutes the fixed window has closed.
 	if s := p.LoginFailureState(start.Add(15*time.Minute), email); s.Exhausted {
 		t.Fatalf("State at +15m: %+v; want unexhausted (window closed)", s)
 	}
-	// A failure after expiry opens a brand-new window.
 	after := start.Add(16 * time.Minute)
 	if s := p.RecordLoginFailure(after, email); s.Exhausted {
 		t.Fatalf("first failure after expiry exhausted: %+v; want a new window", s)
 	}
-	// Re-exhausting the new window reports the fresh window's full retry.
 	for i := 0; i < 9; i++ {
 		p.RecordLoginFailure(after, email)
 	}
@@ -443,10 +413,9 @@ func TestPasswordFailureClockRollbackFailsClosed(t *testing.T) {
 	peak := testutil.Epoch.Add(100 * time.Second)
 
 	for i := 0; i < 10; i++ {
-		p.RecordLoginFailure(peak, email) // window opens at peak
+		p.RecordLoginFailure(peak, email)
 	}
 
-	// A backward clock step must not make the open window look expired.
 	rolledBack := testutil.Epoch.Add(50 * time.Second)
 	s := p.LoginFailureState(rolledBack, email)
 	if !s.Exhausted || s.RetryAfterSeconds != 900 {
@@ -476,8 +445,6 @@ func TestPasswordFailureConcurrentRecordExact(t *testing.T) {
 	}
 	wg.Wait()
 
-	// Exactly failures 1..9 report unexhausted; the tenth and the remaining
-	// ninety report exhausted — no increment is lost or double-counted.
 	if got := unexhausted.Load(); got != loginFailuresLimit-1 {
 		t.Fatalf("unexhausted = %d, want %d", got, loginFailuresLimit-1)
 	}
@@ -492,11 +459,6 @@ func TestPasswordFailureConcurrentSuccessAndFailure(t *testing.T) {
 	now := testutil.Epoch
 	const email = "alice@example.com"
 
-	// Nine failures leave the bucket one short of exhaustion, then a tenth
-	// failure races a success. The mutex is the linearization point: if the
-	// failure lands first the success clears it; if the success lands first the
-	// failure opens a fresh window. Either way the bucket must not report
-	// exhausted, and no later call can resurrect cleared debt.
 	for i := 0; i < 9; i++ {
 		p.RecordLoginFailure(now, email)
 	}
@@ -541,14 +503,11 @@ func TestPasswordFailureLimiterMaxKeysAndOverflow(t *testing.T) {
 	keyC := emailDigest(secret, "c@example.com")
 	keyD := emailDigest(secret, "d@example.com")
 
-	// A protected key records nine failures (just short of exhaustion) and B
-	// fills the second slot: the store is now full of active entries.
 	for i := 0; i < 9; i++ {
 		f.RecordFailure(now, keyA)
 	}
 	f.RecordFailure(now, keyB)
 
-	// C arrives at a saturated store: it shares the single overflow bucket.
 	for i := 0; i < 10; i++ {
 		s := f.RecordFailure(now, keyC)
 		if i < 9 && s.Exhausted {
@@ -559,15 +518,12 @@ func TestPasswordFailureLimiterMaxKeysAndOverflow(t *testing.T) {
 		}
 	}
 
-	// The protected key was never evicted and keeps its own debt.
 	if s := f.State(now, keyA); s.Exhausted {
 		t.Fatalf("protected key A exhausted by the flood: %+v", s)
 	}
-	// State for an untracked key at saturation reflects the shared overflow.
 	if s := f.State(now, keyC); !s.Exhausted {
 		t.Fatalf("State for overflow key C = %+v; want exhausted (shared bucket)", s)
 	}
-	// A further overflow key finds the shared bucket already exhausted.
 	if s := f.RecordFailure(now, keyD); !s.Exhausted {
 		t.Fatalf("overflow key D not exhausted: %+v", s)
 	}
@@ -581,10 +537,8 @@ func TestPasswordFailureLimiterExpiredReclamation(t *testing.T) {
 	keyA := emailDigest(secret, "a@example.com")
 	keyB := emailDigest(secret, "b@example.com")
 
-	f.RecordFailure(now, keyA) // takes the store's single slot
+	f.RecordFailure(now, keyA)
 
-	// Sixteen minutes later A's fixed window has closed. Admitting B must
-	// reclaim A's expired slot rather than send B to overflow.
 	later := now.Add(16 * time.Minute)
 	s := f.RecordFailure(later, keyB)
 	if s.Exhausted {
@@ -593,7 +547,6 @@ func TestPasswordFailureLimiterExpiredReclamation(t *testing.T) {
 	if f.State(later, keyB).Exhausted {
 		t.Fatal("B is not tracked after reclamation")
 	}
-	// A's closed-window debt is gone.
 	if f.State(later, keyA).Exhausted {
 		t.Fatal("A still exhausted after its window closed")
 	}
@@ -611,8 +564,6 @@ func TestPasswordRateIntegrationFakeVerificationStillRuns(t *testing.T) {
 		return raw == "correct-password"
 	}
 
-	// Ten wrong attempts: each verifies once and then records a failure. The
-	// tenth records exhaustion, but the verification call still happened.
 	for i := 0; i < 10; i++ {
 		if verify("wrong-password") {
 			t.Fatal("wrong password verified")
@@ -630,7 +581,6 @@ func TestPasswordRateIntegrationFakeVerificationStillRuns(t *testing.T) {
 			"(exhaustion never blocks the verification call)", got)
 	}
 
-	// A correct attempt still verifies once, clears debt, and succeeds.
 	if !verify("correct-password") {
 		t.Fatal("correct password did not verify")
 	}
@@ -652,8 +602,6 @@ func TestPasswordRateLoginIPRejectionPrecedesVerification(t *testing.T) {
 	exhaustAdmission(t, loginAdmissionLimit, func() RateDecision {
 		return p.AdmitLoginIP(now, ip)
 	})
-	// A denied login admission is independent of failure state, so the handler
-	// can 429 before any verification/body work.
 	if s := p.LoginFailureState(now, "alice@example.com"); s.Exhausted {
 		t.Fatalf("failure state unexpectedly exhausted by IP admission: %+v", s)
 	}

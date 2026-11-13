@@ -1,4 +1,3 @@
-// Package renderprocess supervises one isolated browser process group.
 package renderprocess
 
 import (
@@ -33,7 +32,6 @@ type processOS struct {
 	waitCadence  func(context.Context) error
 }
 
-// Run supervises one browser process and does not return until its process group is terminal.
 func Run(args []string) int {
 	extraFiles, proofFD, command, err := parseArgs(args)
 	if err != nil {
@@ -69,7 +67,6 @@ func Run(args []string) int {
 	default:
 	}
 
-	// argv comes from the server process that starts this supervisor and parseArgs checks its shape
 	cmd := exec.CommandContext(context.Background(), command[0], command[1:]...) //nolint:gosec // validated argv is the supervisor's input contract
 	cmd.Env = make([]string, 0)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
@@ -102,7 +99,6 @@ func Run(args []string) int {
 	if !canceled {
 		return exitCode(waitErr)
 	}
-	// Cancellation always reports failure, regardless of the browser's exit status.
 	ignoreError(<-done)
 	return fail("browser canceled")
 }

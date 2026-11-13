@@ -8,19 +8,10 @@ import (
 	"danny.vn/aboutme/apps/server/internal/publicresume"
 )
 
-// publicMarkSVG is the page bar's brand mark, the seal mark alone without the
-// hairline inner ring (docs/design/public-page-theme.md, "Page bar",
-// "Structure"), with the geometry from
-// apps/web/app/components/app/sealMark.ts.
 const publicMarkSVG = `<svg aria-hidden="true" class="public-mark" focusable="false" height="20" viewBox="0 0 30 32" width="19" xmlns="http://www.w3.org/2000/svg"><g fill="none" stroke="currentColor" transform="rotate(-8 15 16)"><circle cx="15" cy="16" r="13.4" stroke-width="2.6"/><g stroke-linecap="round" stroke-width="3.2"><circle cx="13.4" cy="17.2" r="3.7"/><path d="M17.1 13.2v7.8"></path></g></g></svg>`
 
-// publicDownloadSVG is the download anchor's icon, Lucide's "download" glyph
-// at 16 px (docs/design/public-page-theme.md, "Page bar", "Structure").
 const publicDownloadSVG = `<svg aria-hidden="true" fill="none" focusable="false" height="16" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="16" xmlns="http://www.w3.org/2000/svg"><path d="M12 15V3"></path><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><path d="m7 10 5 5 5-5"></path></svg>`
 
-// publicBar renders the page bar's exact markup for an origin, slug, and
-// credit label (docs/design/public-page-theme.md, "Page bar", "Structure"),
-// with the download anchor present only while download is on.
 func publicBar(origin, slug, creditLabel string, download bool, downloadLabel string) string {
 	downloadAnchor := ""
 	if download {
@@ -32,9 +23,6 @@ func publicBar(origin, slug, creditLabel string, download bool, downloadLabel st
 		downloadAnchor + `</div></div>`
 }
 
-// The public HTML validator accepts the page bar's full markup, mark and
-// download anchor included, in both resume languages and with download on
-// and off (docs/design/public-page-theme.md, "Baselines and tests").
 func TestPublicHTMLAcceptsTheBarMarkup(t *testing.T) {
 	origin := mustPublicOrigin(t)
 	oldBar := `<div class="public-toolbar"><a class="public-credit" href="https://aboutme.example/">Built with aboutme.vn</a></div>`

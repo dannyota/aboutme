@@ -55,8 +55,6 @@ func TestToken_RejectsFormStrictnessWithClosedBody(t *testing.T) {
 	}
 }
 
-// This catches a body reader that either accepts 4097 bytes or lets a cookie
-// alter the raw bearer-world endpoint.
 func TestToken_BodyLimitAndCookieIsolation(t *testing.T) {
 	s := &Service{}
 	within := "grant_type=unsupported" + strings.Repeat(" ", 4096-len("grant_type=unsupported"))
@@ -95,8 +93,6 @@ func validSessionCookie(t *testing.T, pool *store.Pool, userID uuid.UUID) *http.
 	return &http.Cookie{Name: "__Host-session", Value: raw}
 }
 
-// This uses a database-backed, live browser-session value. The two full HTTP
-// responses must match because a bearer-world endpoint has no session branch.
 func TestToken_IgnoresValidHostSessionCookieByteIdentically(t *testing.T) {
 	f := newCodeFixture(t, time.Date(2026, 9, 1, 11, 0, 0, 0, time.UTC))
 	body := "grant_type=unsupported"
@@ -113,8 +109,6 @@ func TestToken_IgnoresValidHostSessionCookieByteIdentically(t *testing.T) {
 	}
 }
 
-// Raw OAuth credentials may appear only in the form, never in closed error
-// values or bodies. Diagnostics deliberately avoid interpolating them too.
 func TestToken_ClosedErrorsNeverEchoCredentials(t *testing.T) {
 	f := newCodeFixture(t, time.Date(2026, 9, 1, 11, 30, 0, 0, time.UTC))
 	badVerifier := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~credential-sentinel"
@@ -129,8 +123,6 @@ func TestToken_ClosedErrorsNeverEchoCredentials(t *testing.T) {
 	}
 }
 
-// This catches a missing consume/issue transaction or a replay branch that
-// returns invalid_grant without revoking the family it exposed.
 func TestToken_CodeExchangeConsumesAndReplayRevokesFamily(t *testing.T) {
 	now := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
 	s, pool, q := newTokenTestService(t, now)
@@ -200,9 +192,6 @@ func TestToken_CodeExchangeConsumesAndReplayRevokesFamily(t *testing.T) {
 	}
 }
 
-// A consumed code is replay evidence, not fresh authority. Once client,
-// redirect, and PKCE still bind it to this request, it must revoke the issued
-// family even when mutable grant scopes or the code TTL have changed.
 func TestToken_ConsumedReplayRevokesFamilyAfterScopeChangeOrExpiry(t *testing.T) {
 	now := time.Date(2026, 9, 1, 12, 30, 0, 0, time.UTC)
 	for _, tc := range []struct {
@@ -275,9 +264,6 @@ func TestToken_ConsumedReplayRevokesFamilyAfterScopeChangeOrExpiry(t *testing.T)
 	}
 }
 
-// A mismatched replay is not evidence that the caller holds the original code
-// binding. It must remain a closed invalid_grant without becoming a family
-// revocation oracle.
 func TestToken_ConsumedReplayWrongBindingDoesNotRevokeFamily(t *testing.T) {
 	now := time.Date(2026, 9, 1, 12, 45, 0, 0, time.UTC)
 	for _, tc := range []struct {
@@ -343,8 +329,6 @@ func TestToken_ConsumedReplayWrongBindingDoesNotRevokeFamily(t *testing.T) {
 	}
 }
 
-// This catches a grant that is narrowed after code issue being silently
-// replaced with the narrower grant while the old code still mints authority.
 func TestToken_RejectsCodeWhenGrantScopesChangedAfterIssue(t *testing.T) {
 	now := time.Date(2026, 9, 1, 13, 0, 0, 0, time.UTC)
 	s, pool, q := newTokenTestService(t, now)
@@ -387,9 +371,6 @@ func TestToken_RejectsCodeWhenGrantScopesChangedAfterIssue(t *testing.T) {
 	}
 }
 
-// This catches an exchange that ignores an authentication-epoch change: a
-// code issued before the epoch advanced must not mint tokens after. See
-// docs/design/second-factor-authentication.md.
 func TestToken_RejectsCodeWithStaleAccountEpoch(t *testing.T) {
 	f := newCodeFixture(t, time.Date(2026, 9, 9, 12, 0, 0, 0, time.UTC))
 	if _, err := f.q.AdvanceUserAuthEpoch(context.Background(), f.userID); err != nil {
@@ -409,9 +390,6 @@ func TestToken_RejectsCodeWithStaleAccountEpoch(t *testing.T) {
 	}
 }
 
-// This catches an exchange that trusts whichever grant is currently live for
-// (user, client) instead of the exact grant the code names: a code left over
-// from a superseded grant must not inherit a newer grant's authority.
 func TestToken_RejectsCodeBoundToForeignGrant(t *testing.T) {
 	f := newCodeFixture(t, time.Date(2026, 9, 9, 13, 0, 0, 0, time.UTC))
 	if _, err := f.q.RevokeOAuthGrant(context.Background(), store.RevokeOAuthGrantParams{ID: f.grantID, RevokedAt: f.now}); err != nil {
@@ -438,8 +416,6 @@ func TestToken_RejectsCodeBoundToForeignGrant(t *testing.T) {
 	}
 }
 
-// This catches a refresh rotation that ignores an authentication-epoch
-// change on the grant. See docs/design/second-factor-authentication.md.
 func TestToken_RejectsRefreshWithStaleGrantEpoch(t *testing.T) {
 	now := time.Date(2026, 9, 9, 14, 0, 0, 0, time.UTC)
 	f := newRefreshFixture(t, now, now.Add(refreshFamilyTTL))
@@ -460,7 +436,6 @@ func TestToken_RejectsRefreshWithStaleGrantEpoch(t *testing.T) {
 	}
 }
 
-// This catches refresh reuse failing open or a successor leaving its family.
 func TestToken_RefreshRotationChainAndSupersededReuseRevokesFamily(t *testing.T) {
 	now := time.Date(2026, 9, 2, 12, 0, 0, 0, time.UTC)
 	s, pool, q := newTokenTestService(t, now)
@@ -575,9 +550,6 @@ func (f codeFixture) exchange(t *testing.T, clientID uuid.UUID, redirect, verifi
 	return w
 }
 
-// Rule 1 of docs/design/mcp-client-compatibility.md: the code exchange accepts
-// the same two resource spellings as authorize and rejects every neighbor with
-// invalid_grant, before the code is consumed or any token is written.
 func TestToken_ResourceCompatibility(t *testing.T) {
 	for _, tc := range resourceCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -618,8 +590,6 @@ func TestToken_ResourceCompatibility(t *testing.T) {
 	}
 }
 
-// This catches validation branches that consume a code or insert tokens before
-// rejecting a bad binding, and pins the 60-second exclusive expiry boundary.
 func TestToken_CodeBindingAndExpiryMatrixDoesNotConsume(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -768,8 +738,6 @@ func (f refreshFixture) rotate(t *testing.T, raw string) (*httptest.ResponseReco
 	return w, response
 }
 
-// This catches a rotation that changes its predecessor's authority or lets an
-// access response outlive the 30-day family boundary.
 func TestToken_RotationPreservesLineageAndClampsExpiry(t *testing.T) {
 	now := time.Date(2026, 9, 6, 12, 0, 0, 0, time.UTC)
 	t.Run("ordinary rotation has one-hour access lifetime", func(t *testing.T) {
@@ -855,8 +823,6 @@ func TestToken_RotationPreservesLineageAndClampsExpiry(t *testing.T) {
 	}
 }
 
-// waitForBlockedTransactions observes PostgreSQL's actual transaction locks;
-// test ordering never relies on a duration-based scheduling guess.
 func waitForBlockedTransactions(t *testing.T, pool *store.Pool, holderPID int32, want int) {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
@@ -888,9 +854,6 @@ func waitForBlockedTransactions(t *testing.T, pool *store.Pool, holderPID int32,
 	}
 }
 
-// waitForBlockedDescendants follows transaction-id waits from the fixture's
-// external user-lock holder. It therefore proves both endpoint requests are in
-// this fixture's lock chain, rather than counting unrelated package activity.
 func waitForBlockedDescendants(t *testing.T, pool *store.Pool, holderPID int32, want int) {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
@@ -990,9 +953,6 @@ func awaitTokenResult(t *testing.T, result <-chan tokenHandlerResult) tokenHandl
 	}
 }
 
-// This catches a second code exchange escaping the conditional consume. The
-// user lock creates a deterministic queue: one exchange holds the client lock
-// while waiting for user, then the other waits behind that client lock.
 func TestToken_ConcurrentCodeExchangeHasOneSuccessAndRevokesReplayFamily(t *testing.T) {
 	now := time.Date(2026, 9, 7, 12, 0, 0, 0, time.UTC)
 	f := newCodeFixture(t, now)

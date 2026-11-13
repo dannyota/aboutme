@@ -1,9 +1,5 @@
 package auth_test
 
-// Password-service adversarial cases: token expiry/replacement boundaries,
-// rehash CAS, corrupt-hash no-oracle behavior, breach unavailability, the login
-// failure limiter, and secret-free diagnostics.
-
 import (
 	"bytes"
 	"context"
@@ -27,7 +23,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/testutil"
 )
 
-// failingBreachChecker simulates an unreachable HIBP endpoint.
 type failingBreachChecker struct{}
 
 func (failingBreachChecker) Breached(context.Context, string) (bool, error) {
@@ -75,7 +70,6 @@ func TestPasswordRegister_ReplacesPriorRegistration(t *testing.T) {
 		}
 	}
 
-	// Exactly one registration and one job remain: the second replaced the first.
 	var n int
 	if err := e.pool.QueryRow(context.Background(),
 		`SELECT count(*) FROM password_registrations WHERE email = $1`, email).Scan(&n); err != nil {
@@ -120,7 +114,6 @@ func TestPasswordLogin_RehashCAS(t *testing.T) {
 	e := newPasswordEnv(t)
 	userID := e.createUser(t)
 
-	// Store a weaker encoding; the service's hasher uses memory=64.
 	weak, err := password.NewHasher(password.HashPolicy{
 		Version: 19, MemoryKiB: 32, Iterations: 1, Parallelism: 1, SaltLen: 16, KeyLen: 32,
 	}, rand.Reader, password.NewAdmission())
@@ -215,8 +208,6 @@ func TestPasswordRegister_HIBPUnavailable(t *testing.T) {
 	assertErrorCode(t, raw, "authentication_unavailable")
 }
 
-// newPasswordServiceWith builds a service with a caller-supplied policy, used by
-// the breach-unavailability test. It mirrors newPasswordServiceWithOutbox.
 func newPasswordServiceWith(pool *store.Pool, q *store.Queries, sm *auth.SessionManager, policy *password.Policy, hasher *password.Hasher, outbox *authmail.Outbox, clk *testutil.Clock) (*auth.PasswordService, error) {
 	var emailKey [32]byte
 	for i := range emailKey {
@@ -237,7 +228,6 @@ func TestPasswordLogin_FailureLimiter429(t *testing.T) {
 	e := newPasswordEnv(t)
 	email := newEmail()
 
-	// Failures 1..9 return the identical 401; the tenth returns 429.
 	for i := 0; i < 9; i++ {
 		resp, body := e.request(t, http.MethodPost, auth.PasswordLoginPath, jsonBody(t, map[string]string{ //nolint:bodyclose // request closes the body itself before returning.
 			"email": email, "password": testPassword,
@@ -286,15 +276,6 @@ func TestPasswordSecretLeak_AbsentFromResponses(t *testing.T) {
 	}
 }
 
-// ---- enrolled accounts ----
-//
-// Password login and reauthentication for an enrolled account create a pending
-// authentication instead of a session or proof update. Add or change and reset
-// keep factor enforcement. See docs/design/second-factor-authentication.md.
-
-// newRealClockPasswordEnv runs the password service on the wall clock, which
-// the pending authentication manager also uses. The outbox shares that clock:
-// it rejects a mail expiry more than 24 hours after its own clock.
 func newRealClockPasswordEnv(t *testing.T) *passwordEnv {
 	t.Helper()
 	var key [32]byte
@@ -313,7 +294,6 @@ func newRealClockPasswordEnv(t *testing.T) *passwordEnv {
 	})
 }
 
-// realSession issues a wall-clock session for userID.
 func (e *passwordEnv) realSession(t *testing.T, userID uuid.UUID) (string, store.Session) {
 	t.Helper()
 	raw, sess, err := auth.NewSessionManagerWithPool(e.pool).Issue(t.Context(), userID, "test-agent/1.0", "203.0.113.60")
@@ -323,8 +303,6 @@ func (e *passwordEnv) realSession(t *testing.T, userID uuid.UUID) (string, store
 	return raw, sess
 }
 
-// assertSecondFactorRequired checks the fixed 202 body, a pending cookie, and
-// no session cookie. It returns the pending cookie value.
 func assertSecondFactorRequired(t *testing.T, resp *http.Response, body []byte) string {
 	t.Helper()
 	if resp.StatusCode != http.StatusAccepted {
@@ -373,8 +351,6 @@ func TestPasswordLogin_EnrolledAccount_PendingNotSession(t *testing.T) {
 		t.Fatalf("enrolled login created %d sessions, want 0", n)
 	}
 
-	// An invalid next falls back to the default, and the new pending login
-	// consumes the browser's previous one.
 	resp, body = e.request(t, http.MethodPost, auth.PasswordLoginPath, jsonBody(t, map[string]string{ //nolint:bodyclose // request closes the body itself before returning.
 		"email": email, "password": testPassword, "next": "https://evil.example/app",
 	}), withCookie(requestCookie(pendingCookieName, first)))
@@ -386,7 +362,6 @@ func TestPasswordLogin_EnrolledAccount_PendingNotSession(t *testing.T) {
 		t.Error("previous pending login still live after a new primary login")
 	}
 
-	// A failed primary credential neither creates nor replaces a pending row.
 	resp, body = e.request(t, http.MethodPost, auth.PasswordLoginPath, jsonBody(t, map[string]string{ //nolint:bodyclose // request closes the body itself before returning.
 		"email": email, "password": "totally wrong password",
 	}), withCookie(requestCookie(pendingCookieName, second)))
@@ -536,9 +511,6 @@ func TestPasswordChange_StaleEpochSnapshotRejected(t *testing.T) {
 	}
 }
 
-// TestPasswordReset_PreservesFactorEnforcement proves reset revokes sessions
-// but keeps the factor policy, credentials, and recovery codes, so the next
-// password login still stops at the pending boundary.
 func TestPasswordReset_PreservesFactorEnforcement(t *testing.T) {
 	e := newRealClockPasswordEnv(t)
 	userID := e.createUser(t)
@@ -600,7 +572,6 @@ func TestPasswordReset_PreservesFactorEnforcement(t *testing.T) {
 	}
 }
 
-// servePasswordLoginAsync posts one password login on its own goroutine.
 func servePasswordLoginAsync(ctx context.Context, handler http.Handler, email string) <-chan *httptest.ResponseRecorder {
 	done := make(chan *httptest.ResponseRecorder, 1)
 	body := `{"email":` + strconvQuote(email) + `,"password":` + strconvQuote(testPassword) + `}`
@@ -615,7 +586,6 @@ func servePasswordLoginAsync(ctx context.Context, handler http.Handler, email st
 	return done
 }
 
-// strconvQuote renders s as a JSON string.
 func strconvQuote(s string) string {
 	b, err := json.Marshal(s)
 	if err != nil {
@@ -624,10 +594,6 @@ func strconvQuote(s string) string {
 	return string(b)
 }
 
-// TestPasswordLogin_FactorChangeUnderUserLock holds a factor change under the
-// user lock while a login with a valid password waits for it. The login
-// decides between session and pending from the committed factor state it
-// reads under the lock, never from a snapshot taken before it.
 func TestPasswordLogin_FactorChangeUnderUserLock(t *testing.T) {
 	t.Run("first enrollment commits first, login gets pending", func(t *testing.T) {
 		e := newRealClockPasswordEnv(t)

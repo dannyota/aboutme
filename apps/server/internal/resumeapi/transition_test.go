@@ -231,9 +231,6 @@ func TestRunMutationRechecksBeforeCloseAndCommitsExactGeneration(t *testing.T) {
 }
 
 func TestAllRevisionMutationRoutesCloseAdmission(t *testing.T) {
-	// The catalog excludes publish. Its fourteen mutations include create;
-	// create has no existing public revision to fence, leaving these thirteen
-	// revision mutation handlers to exercise at the real Close/Execute seam.
 	h := newResumeAPITestHarness(t)
 	fixture := newRemainingFixture(t, h)
 	mutations := remainingOpenAPIMutations(t, fixture.resume.ID)
@@ -243,8 +240,6 @@ func TestAllRevisionMutationRoutesCloseAdmission(t *testing.T) {
 			continue
 		}
 		t.Run(mutation.operationID, func(t *testing.T) {
-			// Each handler gets its own stable revision and fixture because a
-			// successful callback advances that revision or retires the resume.
 			local := newResumeAPITestHarness(t)
 			localFixture := newRemainingFixture(t, local)
 			localMutation := remainingMutationByOperation(t, remainingOpenAPIMutations(t, localFixture.resume.ID), mutation.operationID)
@@ -495,7 +490,6 @@ func TestDrainTimeoutBeginsNoTransactionAndReopens(t *testing.T) {
 	}
 	defer lease.Release()
 	idem := &failedRecheckIdempotency{}
-	// Fresh recheck reaches Close; Execute must remain unreachable on the timed-out drain.
 	idemFresh := transitionIdempotency{events: &[]string{}}
 	service := &Service{coordinator: coordinator, idempotency: idemFresh, clock: func() time.Time { return now }}
 	_, err = service.runMutation(context.Background(), mutationIdentity{UserID: uuid.New(), Operation: "deleteResume", Key: uuid.New()}, mutationPlan{Fence: publicstate.Plan{Resumes: []publicstate.ResumeTarget{{ID: id, ExpectedRevision: 7, Class: publicstate.Revoking}}}, Mutate: func(context.Context, *store.Queries) (resume.StoredResponse, publicstate.CommittedState, error) {
@@ -617,10 +611,6 @@ func TestTransitionTransactionOrderReadsResumeBeforeSessionForRenameAndSlugDelet
 	})
 }
 
-// enrollResumeAPISecondFactor creates a second-factor policy and one active
-// passkey credential for userID, mirroring the storage shape
-// docs/design/second-factor-authentication.md describes, without depending on
-// the auth or secondfactor packages under concurrent edit.
 func enrollResumeAPISecondFactor(ctx context.Context, t *testing.T, q *store.Queries, userID uuid.UUID, now time.Time) {
 	t.Helper()
 	handle := make([]byte, 0, 32)
@@ -646,11 +636,6 @@ func enrollResumeAPISecondFactor(ctx context.Context, t *testing.T, q *store.Que
 	}
 }
 
-// TestPublishRenameRequiresFreshFactorProofWhenEnrolled proves a slug rename
-// on an enrolled account needs both a recent primary and a recent
-// second-factor proof, and that a stale factor proof neither changes the slug
-// nor advances the revision. See
-// docs/design/second-factor-authentication.md#assurance-boundary.
 func TestPublishRenameRequiresFreshFactorProofWhenEnrolled(t *testing.T) {
 	h := newResumeAPITestHarness(t)
 	created, err := h.resumes.Create(h.ctx, h.userID, "Factor rename", publishCompleteDocument(t))
@@ -688,9 +673,6 @@ func TestPublishRenameRequiresFreshFactorProofWhenEnrolled(t *testing.T) {
 	}
 }
 
-// TestDeleteResumeRequiresFreshFactorProofWhenEnrolled proves a slug-owning
-// whole-resume delete on an enrolled account needs a recent factor proof, and
-// that rejection leaves the resume and its slug claim untouched.
 func TestDeleteResumeRequiresFreshFactorProofWhenEnrolled(t *testing.T) {
 	h := newResumeAPITestHarness(t)
 	created, err := h.resumes.Create(h.ctx, h.userID, "Factor delete", publishCompleteDocument(t))
@@ -723,10 +705,6 @@ func TestDeleteResumeRequiresFreshFactorProofWhenEnrolled(t *testing.T) {
 	}
 }
 
-// TestConcurrentSlugReleasingDeletesSerializeWithoutDeadlock proves the new
-// user, session, and factor-policy locks two concurrent slug-releasing
-// deletes for the same account take do not deadlock against each other or
-// against the public-state lock the deletion transition already takes.
 func TestConcurrentSlugReleasingDeletesSerializeWithoutDeadlock(t *testing.T) {
 	h := newResumeAPITestHarness(t)
 	first, err := h.resumes.Create(h.ctx, h.userID, "Concurrent A", publishCompleteDocument(t))

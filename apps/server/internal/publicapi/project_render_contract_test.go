@@ -13,11 +13,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/project"
 )
 
-// TestProjectRenderCorpusMatchesEnvelopeTypes proves every envelope in the
-// shared project render corpus decodes into the Go request type of its mode
-// with no unknown field and encodes back to the same JSON, so Go and the
-// renderer read one contract (docs/design/projects-contract.md "Render
-// envelope").
 func TestProjectRenderCorpusMatchesEnvelopeTypes(t *testing.T) {
 	raw, err := os.ReadFile("testdata/project-render.json")
 	if err != nil {
@@ -77,11 +72,6 @@ func TestProjectRenderCorpusMatchesEnvelopeTypes(t *testing.T) {
 	}
 }
 
-// TestProjectRenderCorpusHoldsStorableProjects proves the corpus describes
-// projects the library can store: each one passes project.Prepare unchanged,
-// so its dates, links and sanitized description are values Go would really
-// send. A list row shows at most six technologies and counts the rest, and an
-// entry link is a normalized https link.
 func TestProjectRenderCorpusHoldsStorableProjects(t *testing.T) {
 	raw, err := os.ReadFile("testdata/project-render.json")
 	if err != nil {
@@ -136,9 +126,6 @@ func TestProjectRenderCorpusHoldsStorableProjects(t *testing.T) {
 	}
 }
 
-// requireStorable fails unless the project built from fields and text in
-// language lang (the resume's primary subtag when empty) passes
-// project.Prepare unchanged.
 func requireStorable(t *testing.T, resume directrender.ProjectPageResume, text project.Text, lang string, fields project.Document) {
 	t.Helper()
 	if lang == "" {

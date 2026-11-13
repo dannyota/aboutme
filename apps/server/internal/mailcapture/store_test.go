@@ -51,7 +51,7 @@ func TestMailCaptureStoreEvictsOldestByCount(t *testing.T) {
 	s := NewStore()
 	for i := 0; i < MaxMessages+1; i++ {
 		m := sampleMessage()
-		m.To = "u" + strings.Repeat("x", i) // distinct but tiny
+		m.To = "u" + strings.Repeat("x", i)
 		if _, err := s.Add(m); err != nil {
 			t.Fatalf("Add %d: %v", i, err)
 		}
@@ -63,7 +63,6 @@ func TestMailCaptureStoreEvictsOldestByCount(t *testing.T) {
 	if len(msgs) != MaxMessages {
 		t.Fatalf("messages = %d, want %d", len(msgs), MaxMessages)
 	}
-	// The first added (ID 1) was evicted; the newest has ID MaxMessages+1.
 	if msgs[0].ID != uint64(MaxMessages+1) {
 		t.Errorf("newest ID = %d, want %d", msgs[0].ID, MaxMessages+1)
 	}
@@ -116,7 +115,6 @@ func TestMailCaptureStoreReset(t *testing.T) {
 	if msgs := s.Messages(); len(msgs) != 0 {
 		t.Fatalf("messages after reset = %d, want 0", len(msgs))
 	}
-	// Restart semantics: IDs restart from 1 after reset.
 	rec, err := s.Add(sampleMessage())
 	if err != nil {
 		t.Fatal(err)

@@ -8,8 +8,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/previewcard"
 )
 
-// AC-SHOW-006: Derive reads the same card inputs as the preview card builder,
-// so the card version it stores is the card builder's.
 func TestDeriveFollowsTheCardBuilder(t *testing.T) {
 	t.Parallel()
 	spec := defaultSpec()
@@ -41,8 +39,6 @@ func TestDeriveFollowsTheCardBuilder(t *testing.T) {
 	}
 }
 
-// AC-SHOW-006: a color change moves the card version, so a tile fetched before
-// the edit stops matching, and nothing else about the row is stored.
 func TestDeriveCardVersionFollowsTheAccent(t *testing.T) {
 	t.Parallel()
 	spec := defaultSpec()
@@ -60,7 +56,6 @@ func TestDeriveCardVersionFollowsTheAccent(t *testing.T) {
 	}
 }
 
-// AC-SHOW-004: Derive reports the preset an applied template matches.
 func TestDeriveReportsThePresetTemplate(t *testing.T) {
 	t.Parallel()
 	files := readTemplateFiles(t)

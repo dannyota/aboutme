@@ -8,8 +8,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/publicresume"
 )
 
-// Every public page carries exactly one "Built with aboutme.vn" credit in its
-// chrome, outside the resume article, linking the canonical home page.
 func TestPublicHTMLRequiresExactlyOneCreditLink(t *testing.T) {
 	origin := mustPublicOrigin(t)
 	resume := publicresume.PublicResume{Slug: "ada", Revision: "1",
@@ -75,8 +73,6 @@ func TestPublicHTMLRequiresExactlyOneCreditLink(t *testing.T) {
 	}
 }
 
-// A resume's own link to the home page is content, not the credit, and stays
-// allowed like any https link.
 func TestPublicHTMLKeepsOtherHomeLinksAsContent(t *testing.T) {
 	origin := mustPublicOrigin(t)
 	resume := publicresume.PublicResume{Slug: "ada", Revision: "1",

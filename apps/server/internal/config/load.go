@@ -6,18 +6,6 @@ import (
 	"strings"
 )
 
-// Load reads and validates configuration using getenv to look up each
-// variable. Passing os.Getenv reads the real process environment; tests can
-// substitute a fake lookup so they never mutate global state.
-//
-// PORT defaults to 8080, LISTEN_HOST defaults to "127.0.0.1", and
-// LOG_LEVEL defaults to "info" when unset. DATABASE_URL, ENV, and
-// PUBLIC_ORIGIN and MEDIA_BACKEND have no safe default and are required.
-// TRUSTED_PROXY_CIDRS is required when
-// ENV=prod or ENV=staging (see TrustedProxyCIDRs and
-// requiresProductionTrustBoundary) and optional in dev. Load fails fast
-// with a descriptive error naming the offending variable when any of these
-// are missing or invalid.
 func Load(getenv func(string) string) (Config, error) {
 	port, err := loadPort(getenv("PORT"))
 	if err != nil {
@@ -192,7 +180,6 @@ func Load(getenv func(string) string) (Config, error) {
 	return cfg, nil
 }
 
-// LoadEnv loads configuration from the real process environment.
 func LoadEnv() (Config, error) {
 	return Load(os.Getenv)
 }

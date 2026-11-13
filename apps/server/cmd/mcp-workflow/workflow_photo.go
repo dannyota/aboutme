@@ -5,9 +5,6 @@ import (
 	"errors"
 )
 
-// copyPhoto copies the source photo and crop to the target, chaining the
-// latest decimal revision. A conflict or unknown result is accepted only when
-// a read proves the target already exact; nothing is rebased or deleted.
 func (r *ownerRun) copyPhoto(ctx context.Context) error {
 	state, err := r.guard.getResume(ctx, r.target)
 	if err != nil || state.Revision != r.revision {
@@ -84,8 +81,6 @@ func (r *ownerRun) cropPhoto(ctx context.Context) error {
 	})
 }
 
-// reconcileTargetWrite reads the target after a conflict or unknown write. It
-// accepts only the next revision with the exact intended result.
 func (r *ownerRun) reconcileTargetWrite(ctx context.Context, code string, cause error, applied func(resumeState, *photoMeta) bool) error {
 	if cause == nil && code != "revision_conflict" && code != "" {
 		return errWorkflowContract

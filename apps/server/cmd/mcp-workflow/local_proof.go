@@ -9,10 +9,6 @@ import (
 
 var errLocalProof = errors.New("local_proof_failed")
 
-// proveLocalReplay runs only in local synthetic mode. It treats the create
-// response as lost, reloads the durable intent, reconciles by reads, and then
-// sends the exact same-key request, which must return the same target
-// without a second resume. See docs/design/mcp-owner-workflow.md#workflow.
 func (r *ownerRun) proveLocalReplay(ctx context.Context) error {
 	if !r.config.local() {
 		return errMutationCap
@@ -48,9 +44,6 @@ func (r *ownerRun) proveLocalReplay(ctx context.Context) error {
 	return nil
 }
 
-// proveLocalConflict runs only in local synthetic mode. One crop with a
-// revision that is not current must return revision_conflict and leave the
-// target unchanged.
 func (r *ownerRun) proveLocalConflict(ctx context.Context) error {
 	if !r.config.local() {
 		return errMutationCap

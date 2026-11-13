@@ -199,7 +199,6 @@ func TestPreservationRichTextKeepsLinkTargetsAndMarks(t *testing.T) {
 	}
 }
 
-// listAt returns the object at index of a JSON array, or an empty object.
 func listAt(value any, index int) map[string]any {
 	items, ok := value.([]any)
 	if !ok || index >= len(items) {

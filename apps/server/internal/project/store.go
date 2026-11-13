@@ -14,51 +14,32 @@ import (
 )
 
 var (
-	// ErrNotFound covers both absent and foreign project IDs.
-	ErrNotFound = errors.New("project not found")
-	// ErrLimit reports a full account library.
-	ErrLimit = errors.New("project limit reached")
-	// ErrSlugTaken reports an existing account-local claim.
-	ErrSlugTaken = errors.New("project slug taken")
-	// ErrSlugHeld reports a released slug still held by this account.
-	ErrSlugHeld = errors.New("project slug held")
-	// ErrSlugRateLimited reports a slug claim refused by the shared budget.
+	ErrNotFound        = errors.New("project not found")
+	ErrLimit           = errors.New("project limit reached")
+	ErrSlugTaken       = errors.New("project slug taken")
+	ErrSlugHeld        = errors.New("project slug held")
 	ErrSlugRateLimited = errors.New("project slug claims rate limited")
 )
 
-// Project is an owner project with its stored content and revision.
 type Project struct {
-	// ID is the server-generated UUIDv7 identity.
-	ID uuid.UUID `json:"id"`
-	// Slug is unique within the owner's library.
-	Slug string `json:"slug"`
-	// Revision is a positive compare-and-swap counter, encoded as decimal text.
-	Revision int64 `json:"revision,string"`
-	// Document contains every replaceable field.
+	ID       uuid.UUID `json:"id"`
+	Slug     string    `json:"slug"`
+	Revision int64     `json:"revision,string"`
 	Document
-	// CreatedAt is the creation time in UTC.
 	CreatedAt time.Time `json:"createdAt"`
-	// UpdatedAt is the last write time in UTC.
 	UpdatedAt time.Time `json:"updatedAt"`
 }
 
-// RevisionMismatch carries the current owned project for a failed precondition.
 type RevisionMismatch struct {
-	// Current is the complete current project.
 	Current Project
 }
 
-// Error returns a closed mismatch description.
 func (e *RevisionMismatch) Error() string { return "project revision mismatch" }
 
-// Store validates complete library writes. Callers hold the owner row lock
-// and use the same transaction for mutation and replay storage.
 type Store struct{}
 
-// NewStore constructs the project aggregate boundary.
 func NewStore() *Store { return &Store{} }
 
-// GetTx reads only the owner's project, treating foreign IDs as absent.
 func (s *Store) GetTx(ctx context.Context, q *store.Queries, owner, id uuid.UUID) (Project, error) {
 	row, err := q.GetProjectForUser(ctx, store.GetProjectForUserParams{ID: id, UserID: owner})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -70,7 +51,6 @@ func (s *Store) GetTx(ctx context.Context, q *store.Queries, owner, id uuid.UUID
 	return FromRow(row)
 }
 
-// ListTx lists one library in creation order.
 func (s *Store) ListTx(ctx context.Context, q *store.Queries, owner uuid.UUID) ([]Project, error) {
 	rows, err := q.ListProjectsForUser(ctx, owner)
 	if err != nil {
@@ -86,8 +66,6 @@ func (s *Store) ListTx(ctx context.Context, q *store.Queries, owner uuid.UUID) (
 	return out, nil
 }
 
-// SlugAdmission spends one slug claim from a shared budget and reports
-// whether the claim may proceed. Nil admits every claim.
 type SlugAdmission func() bool
 
 func (a SlugAdmission) admit() error {
@@ -97,8 +75,6 @@ func (a SlugAdmission) admit() error {
 	return nil
 }
 
-// CreateTx sanitizes and validates content, enforces the cap and claims a
-// slug. The claim is admitted only after the complete document is valid.
 func (s *Store) CreateTx(ctx context.Context, q *store.Queries, owner uuid.UUID, slug string, d Document, now time.Time, admit SlugAdmission) (Project, error) {
 	raw, prepared, err := prepareStored(ctx, q, d)
 	if err != nil {
@@ -129,8 +105,6 @@ func (s *Store) CreateTx(ctx context.Context, q *store.Queries, owner uuid.UUID,
 	return FromRow(row)
 }
 
-// ReplaceTx replaces every content field and advances the matched revision.
-// A slug change is admitted only after the complete document is valid.
 func (s *Store) ReplaceTx(ctx context.Context, q *store.Queries, owner, id uuid.UUID, revision int64, slug string, d Document, now time.Time, admit SlugAdmission) (Project, error) {
 	current, err := s.MatchTx(ctx, q, owner, id, revision)
 	if err != nil {
@@ -160,23 +134,14 @@ func (s *Store) ReplaceTx(ctx context.Context, q *store.Queries, owner, id uuid.
 	return FromRow(row)
 }
 
-// Change is how a complete replacement changes a project's stored forms.
 type Change int
 
 const (
-	// Unchanged stores the same slug and the same document.
 	Unchanged Change = iota
-	// DocumentChanged keeps the slug and stores a different document.
 	DocumentChanged
-	// SlugChanged stores a different slug, with or without a document change.
 	SlugChanged
 )
 
-// ChangeTx reports how ReplaceTx with the same arguments would change the
-// stored project. It matches the revision, prepares d as ReplaceTx does, and
-// compares the stored slug and the stored document with what the
-// replacement would store, so a request that differs only in formatting or
-// in what sanitizing removes is Unchanged.
 func (s *Store) ChangeTx(ctx context.Context, q *store.Queries, owner, id uuid.UUID, revision int64, slug string, d Document) (Change, error) {
 	current, err := s.MatchTx(ctx, q, owner, id, revision)
 	if err != nil {
@@ -203,7 +168,6 @@ func (s *Store) ChangeTx(ctx context.Context, q *store.Queries, owner, id uuid.U
 	}
 }
 
-// DeleteTx removes a matched owned row and holds its released slug.
 func (s *Store) DeleteTx(ctx context.Context, q *store.Queries, owner, id uuid.UUID, revision int64, now time.Time) error {
 	current, err := s.MatchTx(ctx, q, owner, id, revision)
 	if err != nil {
@@ -222,7 +186,6 @@ func (s *Store) DeleteTx(ctx context.Context, q *store.Queries, owner, id uuid.U
 	return nil
 }
 
-// MatchTx checks ownership before evaluating a revision precondition.
 func (s *Store) MatchTx(ctx context.Context, q *store.Queries, owner, id uuid.UUID, revision int64) (Project, error) {
 	current, err := s.GetTx(ctx, q, owner, id)
 	if err != nil {
@@ -234,7 +197,6 @@ func (s *Store) MatchTx(ctx context.Context, q *store.Queries, owner, id uuid.UU
 	return current, nil
 }
 
-// FromRow decodes a stored project without exposing its owner identity.
 func FromRow(row store.Project) (Project, error) {
 	var d Document
 	if err := json.Unmarshal(row.Document, &d); err != nil {

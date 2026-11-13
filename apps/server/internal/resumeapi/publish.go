@@ -10,15 +10,11 @@ type optionalSlug struct {
 	Value   string
 }
 
-// optionalText is a publication text setting: absent keeps the stored value,
-// and a present value (possibly empty, which clears it) replaces it.
 type optionalText struct {
 	Present bool
 	Value   string
 }
 
-// optionalBool is an optional publish switch: absent keeps the stored value
-// (docs/design/viewer-analytics/sign-in-to-view.md "Setting"; AC-VIEW-001).
 type optionalBool struct {
 	Present bool
 	Value   bool
@@ -32,9 +28,6 @@ type publishInput struct {
 	PublicTitle     optionalText
 	FaviconEmoji    optionalText
 	SignInToView    optionalBool
-	// ShowcaseEnabled and ShowcaseRole are the community-showcase opt-in and
-	// role; absent keeps the stored value (docs/design/showcase.md "Data and
-	// contract"). An empty role clears it.
 	ShowcaseEnabled optionalBool
 	ShowcaseRole    optionalText
 }
@@ -46,17 +39,7 @@ type currentPublish struct {
 	SEOGeoEnabled   bool
 	PublicTitle     *string
 	FaviconEmoji    *string
-	// SignInToView is the resolved effective value: for the current state it
-	// is the stored switch, and for the validated result it is the caller's
-	// merged final value (input.SignInToView.Value when present, else the
-	// stored value), computed in resumes_publish.go before validatePublish
-	// runs (docs/design/viewer-analytics/sign-in-to-view.md "Setting").
-	SignInToView bool
-	// ShowcaseEnabled and ShowcaseRole are the community-showcase opt-in and
-	// the owner's role. For the current state they come from the showcase row
-	// (on while a row exists). For the validated result they are the final
-	// state after the request, with the live and sign-in-to-view rules applied
-	// (docs/design/showcase.md "Opt-in").
+	SignInToView    bool
 	ShowcaseEnabled bool
 	ShowcaseRole    *string
 	Revision        int64
@@ -74,14 +57,10 @@ type publishIssue struct {
 	Message string
 }
 
-// publishShapeError has no request value because its caller must map all
-// malformed publish bodies to the closed request_invalid response.
 type publishShapeError struct{ Field string }
 
 func (e *publishShapeError) Error() string { return "publish request shape is invalid" }
 
-// decodePublish accepts only the closed PublishResumeRequest object. Its caller
-// owns content-type and header validation; this seam owns the bounded JSON body.
 func decodePublish(body io.Reader) (publishInput, error) {
 	raw, err := readBoundedBody(body, maxJSONBodyBytes)
 	if err != nil {
@@ -150,9 +129,6 @@ func decodePublish(body io.Reader) (publishInput, error) {
 	return input, nil
 }
 
-// decodePublishOptionalBool accepts an absent field or a JSON boolean; null
-// and every other type are malformed. Absent keeps the caller's stored
-// value (docs/design/viewer-analytics/sign-in-to-view.md "Setting").
 func decodePublishOptionalBool(fields map[string]json.RawMessage, field string) (optionalBool, error) {
 	raw, ok := fields[field]
 	if !ok {
@@ -165,8 +141,6 @@ func decodePublishOptionalBool(fields map[string]json.RawMessage, field string) 
 	return optionalBool{Present: true, Value: *value}, nil
 }
 
-// decodePublishOptionalText accepts an absent field or a JSON string; null
-// and every other type are malformed.
 func decodePublishOptionalText(fields map[string]json.RawMessage, field string) (optionalText, error) {
 	raw, ok := fields[field]
 	if !ok {

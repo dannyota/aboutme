@@ -1,6 +1,3 @@
-// These adversarial tests cover LinkedIn's verified-email rule, link carve-out,
-// OIDC and transaction checks, no-oracle behavior, and consent denial. They use
-// the real callback handler. See docs/design/security.md.
 package auth_test
 
 import (
@@ -17,9 +14,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// assertLinkedInLoginAccepted checks the successful login shape: redirect to
-// the public root, issue a non-empty session cookie, and clear the transaction
-// cookie. Link callbacks have a different success shape and do not use it.
 func assertLinkedInLoginAccepted(t *testing.T, resp *http.Response) {
 	t.Helper()
 
@@ -44,23 +38,14 @@ func assertLinkedInLoginAccepted(t *testing.T, resp *http.Response) {
 	}
 }
 
-// ==== registration email rule ====
-
-// TestLinkedInCallback_RegistrationEmailRuleAdversarial covers verified,
-// unverified, absent-verification, and absent-email claims, plus LinkedIn's
-// documented string encoding of email_verified and garbage wire values. Each
-// case uses a unique email, subject, and provider so rows in the shared live
-// test database cannot make a rejected case appear successful.
-//
-// A nil EmailVerified claim is never treated as true.
 func TestLinkedInCallback_RegistrationEmailRuleAdversarial(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
 		name             string
 		emailPresent     bool
-		emailVerified    *bool // nil = claim absent -- never treated as true
-		emailVerifiedRaw any   // non-nil overrides emailVerified with a raw wire value
+		emailVerified    *bool
+		emailVerifiedRaw any
 		wantCreated      bool
 	}{
 		{"verified email present", true, ptrTrue(), nil, true},
@@ -95,7 +80,7 @@ func TestLinkedInCallback_RegistrationEmailRuleAdversarial(t *testing.T) {
 				Email:            email,
 				EmailVerified:    tc.emailVerified,
 				EmailVerifiedRaw: tc.emailVerifiedRaw,
-				Nonce:            nonce, // pass every OTHER check so only the email rule is under test
+				Nonce:            nonce,
 			})
 
 			resp := doLinkedInCallback(t, handler, "code-"+tc.name, state, txCookie) //nolint:bodyclose // doLinkedInCallback -> doGet closes the body itself before returning.
@@ -132,11 +117,6 @@ func TestLinkedInCallback_RegistrationEmailRuleAdversarial(t *testing.T) {
 	}
 }
 
-// ==== linking carve-out ====
-
-// TestLinkedInCallback_PurposeLink_AllowsUnverifiedEmail proves the link-only
-// email carve-out through the real callback. Direct transaction setup isolates
-// callback behavior; success keeps the caller's current session.
 func TestLinkedInCallback_PurposeLink_AllowsUnverifiedEmail(t *testing.T) {
 	t.Parallel()
 
@@ -144,16 +124,16 @@ func TestLinkedInCallback_PurposeLink_AllowsUnverifiedEmail(t *testing.T) {
 	handler, q := newTestService(t, withGoogleIssuer(p.URL), withLinkedInIssuer(p.URL))
 
 	existingUserID := createTestUser(t, q)
-	raw, _ := issueTestSession(t, q, existingUserID) // The callback authenticates the session again before attaching the identity.
+	raw, _ := issueTestSession(t, q, existingUserID)
 	txCookie, tx := beginLinkedInTransaction(t, q, auth.PurposeLink, existingUserID)
 
 	subject := uniqueLinkedInSubject(t)
-	email := uniqueEmail(t) // present, but EmailVerified is nil -- see doc comment above
+	email := uniqueEmail(t)
 	p.RegisterCode("code-link", oidctest.Claims{
 		Subject:       subject,
 		Email:         email,
 		EmailVerified: nil,
-		Nonce:         tx.Nonce, // the real, server-generated nonce for this transaction
+		Nonce:         tx.Nonce,
 	})
 
 	resp := doLinkedInCallback(t, handler, "code-link", tx.State, txCookie, sessionRequestCookie(raw)) //nolint:bodyclose // doLinkedInCallback -> doGet closes the body itself before returning.
@@ -187,15 +167,9 @@ func TestLinkedInCallback_PurposeLink_AllowsUnverifiedEmail(t *testing.T) {
 		t.Errorf("linked identity.UserID = %v, want %v (the existing user the link transaction named)", identity.UserID, existingUserID)
 	}
 
-	// The carve-out attaches to the existing account; it must not also
-	// spawn a brand-new user row from the claims email.
 	assertNoUser(t, q, email)
 }
 
-// ==== OIDC rejection matrix ====
-
-// TestLinkedInCallback_RejectsWrongIssuer proves LinkedIn's verifier rejects a
-// token from another issuer.
 func TestLinkedInCallback_RejectsWrongIssuer(t *testing.T) {
 	t.Parallel()
 
@@ -217,8 +191,6 @@ func TestLinkedInCallback_RejectsWrongIssuer(t *testing.T) {
 	assertNoUser(t, q, email)
 }
 
-// TestLinkedInCallback_RejectsWrongAudience proves the configured client ID is
-// enforced.
 func TestLinkedInCallback_RejectsWrongAudience(t *testing.T) {
 	t.Parallel()
 
@@ -240,7 +212,6 @@ func TestLinkedInCallback_RejectsWrongAudience(t *testing.T) {
 	assertNoUser(t, q, email)
 }
 
-// TestLinkedInCallback_RejectsTamperedSignature uses an unpublished signing key.
 func TestLinkedInCallback_RejectsTamperedSignature(t *testing.T) {
 	t.Parallel()
 
@@ -262,7 +233,6 @@ func TestLinkedInCallback_RejectsTamperedSignature(t *testing.T) {
 	assertNoUser(t, q, email)
 }
 
-// TestLinkedInCallback_RejectsNonceMismatch targets the manual nonce check.
 func TestLinkedInCallback_RejectsNonceMismatch(t *testing.T) {
 	t.Parallel()
 
@@ -271,7 +241,7 @@ func TestLinkedInCallback_RejectsNonceMismatch(t *testing.T) {
 
 	subject := uniqueLinkedInSubject(t)
 	email := uniqueEmail(t)
-	txCookie, state, _ := beginLinkedIn(t, handler) // the real nonce is deliberately discarded
+	txCookie, state, _ := beginLinkedIn(t, handler)
 	p.RegisterCode("code-nonce-mismatch", oidctest.Claims{
 		Subject: subject, Email: email, EmailVerified: ptrTrue(),
 		Nonce: "wrong-nonce-does-not-match-the-real-transaction",
@@ -284,7 +254,6 @@ func TestLinkedInCallback_RejectsNonceMismatch(t *testing.T) {
 	assertNoUser(t, q, email)
 }
 
-// TestLinkedInCallback_RejectsExpiredIDToken uses a past exp claim.
 func TestLinkedInCallback_RejectsExpiredIDToken(t *testing.T) {
 	t.Parallel()
 
@@ -306,10 +275,6 @@ func TestLinkedInCallback_RejectsExpiredIDToken(t *testing.T) {
 	assertNoUser(t, q, email)
 }
 
-// ==== callback transaction checks ====
-
-// TestLinkedInCallback_RejectsStateMismatch proves state remains bound to the
-// exact transaction cookie.
 func TestLinkedInCallback_RejectsStateMismatch(t *testing.T) {
 	t.Parallel()
 
@@ -318,7 +283,7 @@ func TestLinkedInCallback_RejectsStateMismatch(t *testing.T) {
 
 	subject := uniqueLinkedInSubject(t)
 	email := uniqueEmail(t)
-	txCookie, _, nonce := beginLinkedIn(t, handler) // deliberately discard the real state
+	txCookie, _, nonce := beginLinkedIn(t, handler)
 	p.RegisterCode("code-state-mismatch", oidctest.Claims{
 		Subject: subject, Email: email, EmailVerified: ptrTrue(), Nonce: nonce,
 	})
@@ -330,8 +295,6 @@ func TestLinkedInCallback_RejectsStateMismatch(t *testing.T) {
 	assertNoUser(t, q, email)
 }
 
-// TestLinkedInCallback_RejectsMissingTxCookie presents plausible query values
-// without the transaction handle.
 func TestLinkedInCallback_RejectsMissingTxCookie(t *testing.T) {
 	t.Parallel()
 
@@ -340,7 +303,7 @@ func TestLinkedInCallback_RejectsMissingTxCookie(t *testing.T) {
 
 	subject := uniqueLinkedInSubject(t)
 	email := uniqueEmail(t)
-	_, state, nonce := beginLinkedIn(t, handler) // begin a real transaction, never attach its cookie below
+	_, state, nonce := beginLinkedIn(t, handler)
 	p.RegisterCode("code-missing-cookie", oidctest.Claims{
 		Subject: subject, Email: email, EmailVerified: ptrTrue(), Nonce: nonce,
 	})
@@ -352,9 +315,6 @@ func TestLinkedInCallback_RejectsMissingTxCookie(t *testing.T) {
 	assertNoUser(t, q, email)
 }
 
-// TestLinkedInCallback_ProviderAccessDenied_RedirectsCancelled proves a
-// provider-declined consent response maps to the distinct canceled code.
-// assertRejected also checks the rejection redirect and cookie effects.
 func TestLinkedInCallback_ProviderAccessDenied_RedirectsCancelled(t *testing.T) {
 	t.Parallel()
 
@@ -372,8 +332,6 @@ func TestLinkedInCallback_ProviderAccessDenied_RedirectsCancelled(t *testing.T) 
 	}
 }
 
-// TestLinkedInCallback_OIDCFailures_NoOracleAcrossFailureModes requires the
-// same error code and body across all OIDC verification failures.
 func TestLinkedInCallback_OIDCFailures_NoOracleAcrossFailureModes(t *testing.T) {
 	t.Parallel()
 

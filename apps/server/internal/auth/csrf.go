@@ -11,33 +11,20 @@ import (
 	"danny.vn/aboutme/apps/server/internal/api"
 )
 
-// CSRFHeaderName is the header carrying a mutating request's CSRF token:
-// base64.RawURLEncoding of the authenticated session's csrf_secret.
 const CSRFHeaderName = "X-CSRF-Token"
 
-// csrfRejectedCode collapses every CSRF failure into one no-oracle response.
 const csrfRejectedCode = "csrf_rejected"
 
 const csrfRejectedMessage = "CSRF validation failed"
 
-// RequireCSRF runs after session authentication. Mutations require exact origin
-// evidence and the synchronizer token; bodiless requests alone skip the JSON
-// content-type check. See docs/design/security.md.
 func RequireCSRF(allowedOrigin string) api.Middleware {
 	return requireCSRF(allowedOrigin, jsonContentTypeAllowed, rejectJSONMediaType, false)
 }
 
-// RequireExactJSONCSRF applies the same Origin and synchronizer-token checks
-// as RequireCSRF, but mutating requests with a body accept exactly one
-// application/json field value and map any other media type to the OpenAPI
-// 415 response used by OAuth consent.
 func RequireExactJSONCSRF(allowedOrigin string) api.Middleware {
 	return requireCSRF(allowedOrigin, exactJSONContentTypeAllowed, rejectExactJSONMediaType, false)
 }
 
-// RequireCSRFMultipart applies the same origin, session, and synchronizer
-// token checks as RequireCSRF, but accepts only one multipart/form-data media
-// type with a non-empty boundary. The resume photo POST is its sole caller.
 func RequireCSRFMultipart(allowedOrigin string) api.Middleware {
 	return requireCSRF(allowedOrigin, multipartContentTypeAllowed, rejectMultipartMediaType, true)
 }
@@ -52,7 +39,6 @@ func requireCSRF(allowedOrigin string, mediaTypeAllowed func(http.Header) bool,
 				return
 			}
 
-			// Reject cheap boundary failures before session and token work.
 			if !originAllowed(r, allowedOrigin) {
 				rejectCSRF(w)
 				return
@@ -92,13 +78,10 @@ func rejectExactJSONMediaType(w http.ResponseWriter) {
 	api.WriteError(w, http.StatusUnsupportedMediaType, "media_type_unsupported", "Content-Type must be application/json")
 }
 
-// rejectCSRF preserves one response across all failure classes.
 func rejectCSRF(w http.ResponseWriter) {
 	api.WriteError(w, http.StatusForbidden, csrfRejectedCode, csrfRejectedMessage)
 }
 
-// isMutatingMethod reports whether method needs a CSRF check: everything
-// except GET, HEAD, and OPTIONS.
 func isMutatingMethod(method string) bool {
 	switch method {
 	case http.MethodGet, http.MethodHead, http.MethodOptions:
@@ -108,8 +91,6 @@ func isMutatingMethod(method string) bool {
 	}
 }
 
-// originAllowed requires exact Origin, with exact Referer origin fallback. A
-// missing or malformed value fails closed. See docs/design/security.md.
 func originAllowed(r *http.Request, allowedOrigin string) bool {
 	origin, originPresent, originOK := optionalSingletonSecurityHeader(r.Header, "Origin")
 	if originPresent {
@@ -146,8 +127,6 @@ func optionalSingletonSecurityHeader(header http.Header, name string) (string, b
 	return values[0], true, true
 }
 
-// hasBody treats an unknown Content-Length and any transfer encoding as a body.
-// This prevents chunked requests from bypassing the JSON content-type check.
 func hasBody(r *http.Request) bool {
 	return r.ContentLength != 0 || len(r.TransferEncoding) > 0
 }
@@ -186,8 +165,6 @@ func multipartContentTypeAllowed(header http.Header) bool {
 	return params["boundary"] != ""
 }
 
-// validCSRFToken decodes base64url before constant-time comparison of the raw
-// secret bytes.
 func validCSRFToken(headerToken string, secret []byte) bool {
 	if headerToken == "" || len(secret) == 0 {
 		return false

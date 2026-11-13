@@ -15,9 +15,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// linkedReaderRow stores a main project section with two linked entries
-// around an unlinked one, a hidden linked entry, and a sidebar project
-// section with one linked entry.
 func linkedReaderRow(t *testing.T, slug string, ids map[string]string) store.Resume {
 	t.Helper()
 	row := validReaderRow(t, slug)
@@ -67,8 +64,6 @@ func linkColumn(t *testing.T, pairs ...string) json.RawMessage {
 
 func TestReaderReadResume_ProjectLinksFollowLayoutAndEntryOrder(t *testing.T) {
 	ids := linkIDs()
-	// The statement returns links in no particular order and, as a guard,
-	// one for an entry the projection does not show.
 	readStore := &readerStore{row: linkedReaderRow(t, "ada", ids), links: linkColumn(t,
 		ids["aside"], "side-tool", ids["second"], "second-tool", ids["hidden"], "hidden-tool", ids["first"], "first-tool")}
 	snapshot, lease, err := newTestReader(t, readStore).ReadResume(context.Background(), "ada", publicstate.RepresentationJSON)

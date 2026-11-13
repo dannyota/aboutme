@@ -1,6 +1,3 @@
-// Head-state constraint tests for the idempotency_usage counters and the
-// media_deletion_jobs ledger (ADR 0006, ADR 0009). See docs/design/data.md
-// for the retention and cleanup rules these tables enforce.
 package migrations_test
 
 import (

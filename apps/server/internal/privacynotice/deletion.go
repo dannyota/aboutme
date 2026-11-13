@@ -9,8 +9,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// ResolveAccountDeletion runs after the caller locks the user. Recipient and
-// job locks precede the user's cascading deletion, including cleaned-up jobs.
 func ResolveAccountDeletion(ctx context.Context, q *store.Queries, user uuid.UUID, now time.Time) error {
 	recipients, err := q.ListUserPrivacyNoticeRecipientsForUpdate(ctx, &user)
 	if err != nil {

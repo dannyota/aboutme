@@ -176,10 +176,6 @@ func (s *Service) authorizeBinding(values url.Values) (codeBinding, bool) {
 	}, true
 }
 
-// authorizeScopeAllowed accepts exactly the two scope strings the server
-// sends: "openid profile email" for login and link, and "openid" alone for the
-// sign-in-to-view purpose (docs/design/viewer-analytics/sign-in-to-view.md
-// "Sign-in flow"; AC-VIEW-004). Any other value is refused.
 func authorizeScopeAllowed(scope string) bool {
 	return scope == "openid profile email" || scope == "openid"
 }
@@ -197,7 +193,6 @@ func oneBoundedValue(values url.Values, name string) bool {
 	return ok && len(items) == 1 && items[0] != "" && len(items[0]) <= maxFieldBytes
 }
 
-// randomCode returns a 256-bit authorization code.
 func randomCode(random io.Reader) (string, error) {
 	raw := make([]byte, 32)
 	if _, err := io.ReadFull(random, raw); err != nil {
@@ -310,7 +305,6 @@ func (s *Service) signIDToken(nonce string, acct account) (string, error) {
 	return s.sign(payload, signingKeyID)
 }
 
-// sign returns payload as a compact RS256 JWT under the service key.
 func (s *Service) sign(payload []byte, keyID string) (string, error) {
 	signer, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.RS256, Key: s.key}, &jose.SignerOptions{ExtraHeaders: map[jose.HeaderKey]any{jose.HeaderKey("kid"): keyID}})
 	if err != nil {

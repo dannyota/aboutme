@@ -5,8 +5,6 @@ import (
 	"net/url"
 )
 
-// ParseRenderOrigin accepts only the configured direct Nuxt listener. It is
-// intentionally separate from the viewer-facing public origin parser.
 func ParseRenderOrigin(raw, environment string) (RenderOrigin, error) {
 	if raw == "" || len(raw) > 512 {
 		return RenderOrigin{}, errors.New("render origin is empty or too long")

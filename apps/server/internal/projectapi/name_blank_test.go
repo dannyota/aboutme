@@ -6,9 +6,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// TestProjects_NameIsBlankAsTheRendererTrims proves the write path refuses a
-// default-language name of only U+FEFF, which the renderer reads as blank,
-// and stores one of only U+0085, which it does not.
 func TestProjects_NameIsBlankAsTheRendererTrims(t *testing.T) {
 	h := newHarness(t)
 	body := func(slug, escapedName string) string {

@@ -11,10 +11,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// TestMutationRoutes_RejectInexactPropertyNames drives each JSON-body
-// mutation route up to its decoder. A rejected name answers the route's
-// request_invalid and names its path; exact names pass decoding and stop at
-// the missing session, before any database work.
 func TestMutationRoutes_RejectInexactPropertyNames(t *testing.T) {
 	t.Parallel()
 
@@ -22,13 +18,12 @@ func TestMutationRoutes_RejectInexactPropertyNames(t *testing.T) {
 	entryID := uuid.NewString()
 	projectID := uuid.NewString()
 	type route struct {
-		name    string
-		method  string
-		match   bool
-		section bool
-		handler func(*Service, http.ResponseWriter, *http.Request)
-		exact   string
-		// rejected maps a body to the path its 400 message must name.
+		name     string
+		method   string
+		match    bool
+		section  bool
+		handler  func(*Service, http.ResponseWriter, *http.Request)
+		exact    string
 		rejected map[string]string
 	}
 	routes := []route{
@@ -150,8 +145,6 @@ func TestMutationRoutes_RejectInexactPropertyNames(t *testing.T) {
 	}
 }
 
-// TestDecodeJSONBody_RejectsInexactNamesBeforeBinding checks the shared body
-// decoder directly, including a struct nested below a slice.
 func TestDecodeJSONBody_RejectsInexactNamesBeforeBinding(t *testing.T) {
 	t.Parallel()
 

@@ -1,5 +1,3 @@
-// Package realtime contains the bounded local invalidation hub and PostgreSQL
-// notification listener used by the SSE transport.
 package realtime
 
 import (
@@ -22,37 +20,25 @@ const (
 )
 
 var (
-	// ErrLimited indicates that a hub admission budget is exhausted.
-	ErrLimited = errors.New("realtime: connection limit reached")
-	// ErrUnavailable indicates that the notification listener is not ready.
+	ErrLimited     = errors.New("realtime: connection limit reached")
 	ErrUnavailable = errors.New("realtime: listener unavailable")
 )
 
-// Config contains hub admission limits. Zero values select the documented defaults.
 type Config struct {
-	// MaxConnections is the task-wide stream limit.
 	MaxConnections int
-	// MaxPerIP is the stream limit for one canonical client IP.
-	MaxPerIP int
-	// MaxPerAccount is the stream limit for one account.
-	MaxPerAccount int
-	// QueueDepth is the per-stream metadata queue capacity.
-	QueueDepth int
-	// AdmitFD reports whether the process has sufficient file descriptor headroom.
-	AdmitFD func() bool
-	// Observe, when set, receives every published change before any stream
-	// does. It must not block; the preview card scheduler uses it.
-	Observe func(Change)
+	MaxPerIP       int
+	MaxPerAccount  int
+	QueueDepth     int
+	AdmitFD        func() bool
+	Observe        func(Change)
 }
 
-// Scope identifies either an account-owned or public resume stream.
 type Scope struct {
 	AccountID uuid.UUID
 	ResumeID  uuid.UUID
 	IP        string
 }
 
-// Change is the metadata invalidation delivered to matching subscriptions.
 type Change struct {
 	AccountID uuid.UUID `json:"account_id"`
 	ResumeID  uuid.UUID `json:"resume_id"`
@@ -60,7 +46,6 @@ type Change struct {
 	Deleted   bool      `json:"deleted"`
 }
 
-// Hub coordinates bounded local realtime subscriptions.
 type Hub struct {
 	mu                            sync.Mutex
 	max, maxIP, maxAccount, depth int
@@ -73,11 +58,8 @@ type Hub struct {
 	accounts                      map[uuid.UUID]int
 }
 
-// Subscription is a bounded stream of matching metadata changes.
 type Subscription struct {
-	// Events receives metadata changes until the subscription closes.
 	Events <-chan Change
-	// Done closes when the subscription is closed or evicted.
 	Done   <-chan struct{}
 	h      *Hub
 	id     uint64
@@ -87,7 +69,6 @@ type Subscription struct {
 	scope  Scope
 }
 
-// NewHub creates an unavailable, bounded local realtime hub.
 func NewHub(c Config) (*Hub, error) {
 	limits := []struct {
 		name string
@@ -108,7 +89,6 @@ func NewHub(c Config) (*Hub, error) {
 	return &Hub{max: c.MaxConnections, maxIP: c.MaxPerIP, maxAccount: c.MaxPerAccount, depth: c.QueueDepth, fd: c.AdmitFD, observe: c.Observe, subs: make(map[uint64]*Subscription), ip: make(map[string]int), accounts: make(map[uuid.UUID]int)}, nil
 }
 
-// SetAvailable changes listener readiness. Becoming unavailable closes streams.
 func (h *Hub) SetAvailable(v bool) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -121,7 +101,6 @@ func (h *Hub) SetAvailable(v bool) {
 	}
 }
 
-// Subscribe admits a stream for the supplied account or resume scope.
 func (h *Hub) Subscribe(scope Scope) (*Subscription, error) {
 	ip, err := canonicalIP(scope.IP)
 	if err != nil {
@@ -150,12 +129,10 @@ func (h *Hub) Subscribe(scope Scope) (*Subscription, error) {
 	return s, nil
 }
 
-// Close idempotently closes the subscription and reclaims its admission keys.
 func (s *Subscription) Close() {
 	s.once.Do(func() { s.h.mu.Lock(); defer s.h.mu.Unlock(); s.h.removeLocked(s) })
 }
 
-// Publish queues a metadata change for every matching stream.
 func (h *Hub) Publish(c Change) {
 	if h.observe != nil {
 		h.observe(c)
@@ -188,7 +165,6 @@ func matches(s Scope, c Change) bool {
 	return s.ResumeID == c.ResumeID
 }
 
-// Close permanently stops admission and closes every subscription.
 func (h *Hub) Close() {
 	h.mu.Lock()
 	defer h.mu.Unlock()

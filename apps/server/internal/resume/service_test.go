@@ -1,16 +1,3 @@
-// service_test.go exercises the transaction seam on resume.Store
-// against a live Postgres database: the exported tx-scoped mirrors
-// (CreateTx, GetTx, ListTx, SaveDocumentTx), the full-aggregate metadata
-// CAS (SaveMetadataAndDocumentTx), the revision-CAS delete (DeleteTx), and
-// the transactional media deletion-job enqueue (EnqueueMediaDeletionTx).
-//
-// Every method is driven through a hand-rolled pgx transaction, proving:
-// (a) identical behavior to the pool-backed method it mirrors, including
-// every error shape; (b) rollback leaves ZERO observable effect; (c) a
-// wrong-owner id and a nonexistent id are byte-identical on every method
-// (no existence oracle). Shares store_test.go's helpers
-// (newIntegrationStore, createTestUser, assertResumeRowEqual) and
-// validate_test.go's validDocForTest.
 package resume_test
 
 import (
@@ -32,10 +19,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/testutil"
 )
 
-// beginSeamTx opens a hand-rolled transaction for driving the tx-scoped
-// seam directly. The cleanup rollback is a safety net; tests that commit
-// do so explicitly first (rolling back a committed tx is a no-op error we
-// ignore).
 func beginSeamTx(ctx context.Context, t *testing.T, pool *store.Pool) (pgx.Tx, *store.Queries) {
 	t.Helper()
 	tx, err := pool.Begin(ctx)
@@ -54,10 +37,6 @@ func rollbackSeamTx(ctx context.Context, t *testing.T, tx pgx.Tx) {
 	}
 }
 
-// closedSeamTx returns a *store.Queries bound to an already rolled-back
-// transaction. Any statement through it fails loudly with pgx.ErrTxClosed,
-// so a method that returns a domain validation error through it has
-// provably validated BEFORE running any statement.
 func closedSeamTx(ctx context.Context, t *testing.T, pool *store.Pool) *store.Queries {
 	t.Helper()
 	tx, err := pool.Begin(ctx)
@@ -70,10 +49,6 @@ func closedSeamTx(ctx context.Context, t *testing.T, pool *store.Pool) *store.Qu
 	return store.New(pool).WithTx(tx)
 }
 
-// seamRowSnapshot returns the resumes row's complete textual representation
-// (every column, including revision and updated_at), or "<absent>" when no
-// row exists. Byte-compare two snapshots to prove a rejected or rolled-back
-// write left literally nothing behind.
 func seamRowSnapshot(ctx context.Context, t *testing.T, pool *store.Pool, id uuid.UUID) string {
 	t.Helper()
 	var snap string
@@ -97,12 +72,9 @@ func seamJobCount(ctx context.Context, t *testing.T, pool *store.Pool, resumeID 
 	return n
 }
 
-// seamPhotoKey builds the exact canonical photo key for resumeID.
 func seamPhotoKey(resumeID uuid.UUID) string {
 	return "resumes/" + resumeID.String() + "/photo-0123456789abcdef0123456789abcdef.jpg"
 }
-
-// --- Step 1: tx-scoped mirrors of the pool-backed methods ---
 
 func TestCreateTx_CommitPersistsAndMirrorsCreate(t *testing.T) {
 	t.Parallel()
@@ -166,20 +138,16 @@ func TestCreateTx_MirrorsCapAndTitleErrors(t *testing.T) {
 	userID := createTestUser(t, q)
 	doc := validDocForTest(t)
 
-	// Title over 160 code points is rejected before ANY statement: the
-	// closed transaction would fail loudly on any query.
 	longTitle := strings.Repeat("x", 161)
 	if _, err := s.CreateTx(ctx, closedSeamTx(ctx, t, pool), userID, longTitle, nil, doc); !errors.Is(err, resume.ErrTitleTooLong) {
 		t.Errorf("CreateTx(161-char title) error = %v, want ErrTitleTooLong before any statement", err)
 	}
 
-	// lng over 35 characters is likewise rejected before any statement.
 	longLng := strings.Repeat("a", 36)
 	if _, err := s.CreateTx(ctx, closedSeamTx(ctx, t, pool), userID, "ok", strp(longLng), doc); !errors.Is(err, resume.ErrLngTooLong) {
 		t.Errorf("CreateTx(36-char lng) error = %v, want ErrLngTooLong before any statement", err)
 	}
 
-	// The boundary values pass.
 	tx, qtx := beginSeamTx(ctx, t, pool)
 	if _, err := s.CreateTx(ctx, qtx, userID, strings.Repeat("x", 160), strp(strings.Repeat("a", 35)), doc); err != nil {
 		t.Errorf("CreateTx(160-char title, 35-char lng) error = %v, want nil", err)
@@ -188,7 +156,6 @@ func TestCreateTx_MirrorsCapAndTitleErrors(t *testing.T) {
 		t.Fatalf("rollback: %v", rollbackErr)
 	}
 
-	// The cap error mirrors the pool-backed Create exactly.
 	for i := range 3 {
 		if _, err := s.Create(ctx, userID, fmt.Sprintf("Resume %d", i), doc); err != nil {
 			t.Fatalf("Create() #%d error: %v", i, err)
@@ -239,7 +206,6 @@ func TestGetTxListTx_MirrorPoolBackedAndHideOwnership(t *testing.T) {
 	}
 	assertResumeRowEqual(t, listTx[0], listPool[0])
 
-	// Wrong owner and nonexistent id are byte-identical.
 	_, wrongOwnerErr := s.GetTx(ctx, qtx, otherID, created.ID)
 	_, missingErr := s.GetTx(ctx, qtx, otherID, uuid.New())
 	if !errors.Is(wrongOwnerErr, resume.ErrNotFound) || !errors.Is(missingErr, resume.ErrNotFound) {
@@ -249,7 +215,6 @@ func TestGetTxListTx_MirrorPoolBackedAndHideOwnership(t *testing.T) {
 		t.Errorf("GetTx() wrong-owner error %q differs from missing error %q", wrongOwnerErr, missingErr)
 	}
 
-	// A wrong owner's ListTx simply does not contain the resume.
 	otherList, err := s.ListTx(ctx, qtx, otherID)
 	if err != nil {
 		t.Fatalf("ListTx(other) error: %v", err)
@@ -297,8 +262,6 @@ func TestSaveDocumentTx_MirrorsSaveDocument(t *testing.T) {
 		t.Errorf("committed FullName = %v, want Seam Updated", got.Doc.PersonalDetails.FullName)
 	}
 
-	// Stale revision: *RevisionMismatchError carrying the WINNING document,
-	// exactly like the pool-backed SaveDocument.
 	tx2, qtx2 := beginSeamTx(ctx, t, pool)
 	defer rollbackSeamTx(ctx, t, tx2)
 	_, staleErr := s.SaveDocumentTx(ctx, qtx2, userID, created.ID, doc, created.Revision)
@@ -312,10 +275,6 @@ func TestSaveDocumentTx_MirrorsSaveDocument(t *testing.T) {
 	assertResumeRowEqual(t, mismatch.Current, got)
 }
 
-// TestSaveDocumentTx_ReturnsTheStoredRow proves the saved resume is exactly
-// what a reread in the same transaction gives: the stored row with its
-// database-set revision and updated_at, and the document decoded from the
-// stored parts at the current version, not the caller's value.
 func TestSaveDocumentTx_ReturnsTheStoredRow(t *testing.T) {
 	t.Parallel()
 	s, q, pool, ctx := newIntegrationStore(t)
@@ -371,7 +330,6 @@ func TestSaveDocumentTx_RollbackLeavesZeroEffect(t *testing.T) {
 		t.Fatalf("rollback: %v", rollbackErr)
 	}
 
-	// Row count, row bytes, revision, and updated_at all unchanged.
 	if after := seamRowSnapshot(ctx, t, pool, created.ID); after != before {
 		t.Errorf("row after rollback changed\n before: %s\n  after: %s", before, after)
 	}
@@ -404,8 +362,6 @@ func TestSaveDocumentTx_WrongOwnerVsMissing_ByteIdentical(t *testing.T) {
 		t.Errorf("wrong-owner attempt changed the row\n before: %s\n  after: %s", before, after)
 	}
 }
-
-// --- Step 2: full-aggregate metadata CAS and revision-CAS delete ---
 
 func TestSaveMetadataAndDocumentTx_WritesAllUnderOneCAS(t *testing.T) {
 	t.Parallel()
@@ -536,7 +492,6 @@ func TestSaveMetadataAndDocumentTx_StaleRevisionChangesNothing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Create() error: %v", err)
 	}
-	// Move the revision forward so created.Revision is stale.
 	winningRev, err := s.SaveDocument(ctx, userID, created.ID, doc, created.Revision)
 	if err != nil {
 		t.Fatalf("SaveDocument() error: %v", err)
@@ -555,8 +510,6 @@ func TestSaveMetadataAndDocumentTx_StaleRevisionChangesNothing(t *testing.T) {
 	if mismatch.Current.Title != "Winner Title" {
 		t.Errorf("mismatch winner title = %q, want Winner Title", mismatch.Current.Title)
 	}
-	// Even committing the transaction persists nothing: the CAS matched
-	// zero rows.
 	if err := tx.Commit(ctx); err != nil {
 		t.Fatalf("commit: %v", err)
 	}
@@ -576,8 +529,6 @@ func TestSaveMetadataAndDocumentTx_BoundsBeforeAnyStatement(t *testing.T) {
 		t.Fatalf("Create() error: %v", err)
 	}
 
-	// 161-code-point title and 36-character lng fail through a CLOSED
-	// transaction: proof the validation runs before any statement.
 	if _, err := s.SaveMetadataAndDocumentTx(ctx, closedSeamTx(ctx, t, pool), userID, created.ID,
 		strings.Repeat("x", 161), nil, doc, created.Revision); !errors.Is(err, resume.ErrTitleTooLong) {
 		t.Errorf("161-char title error = %v, want ErrTitleTooLong before any statement", err)
@@ -587,7 +538,6 @@ func TestSaveMetadataAndDocumentTx_BoundsBeforeAnyStatement(t *testing.T) {
 		t.Errorf("36-char lng error = %v, want ErrLngTooLong before any statement", err)
 	}
 
-	// The exact boundary values succeed.
 	tx, qtx := beginSeamTx(ctx, t, pool)
 	if _, err := s.SaveMetadataAndDocumentTx(ctx, qtx, userID, created.ID,
 		strings.Repeat("x", 160), strp(strings.Repeat("a", 35)), doc, created.Revision); err != nil {
@@ -644,8 +594,6 @@ func TestDeleteTx_ReturnsDeletedRowAndDeletes(t *testing.T) {
 		t.Fatalf("commit: %v", err)
 	}
 
-	// The returned row is the deleted row, complete — so the caller can
-	// validate its photo key and enqueue cleanup in the same transaction.
 	assertResumeRowEqual(t, deleted, preRead)
 
 	if _, err := s.Get(ctx, userID, created.ID); !errors.Is(err, resume.ErrNotFound) {
@@ -738,15 +686,12 @@ func TestDeleteTx_WrongOwnerVsMissing_ByteIdentical(t *testing.T) {
 	}
 }
 
-// --- Step 3: the composition every wave-3 route relies on ---
-
 func TestExecuteComposition_CreateAndSaveCommit_FailureLeavesNothing(t *testing.T) {
 	t.Parallel()
 	idem, s, q, _, ctx := newIntegrationIdempotencyStore(t, testutil.NewClockAtEpoch().Now)
 	userID := createTestUser(t, q)
 	doc := validDocForTest(t)
 
-	// Execute #1: CreateTx inside the callback.
 	var createdID uuid.UUID
 	createRes, err := idem.Execute(ctx, userID, "createResume-op", uuid.New(), sha256.Sum256([]byte("create")),
 		func(qtx *store.Queries) (resume.StoredResponse, error) {
@@ -764,7 +709,6 @@ func TestExecuteComposition_CreateAndSaveCommit_FailureLeavesNothing(t *testing.
 		t.Fatalf("Execute(create) = %+v, want fresh CommitCommitted", createRes)
 	}
 
-	// Execute #2 (different key): SaveDocumentTx inside the callback.
 	updated := validDocForTest(t)
 	updated.PersonalDetails.FullName = strp("Composed Save")
 	saveRes, err := idem.Execute(ctx, userID, "saveResume-op", uuid.New(), sha256.Sum256([]byte("save")),
@@ -788,8 +732,6 @@ func TestExecuteComposition_CreateAndSaveCommit_FailureLeavesNothing(t *testing.
 		t.Errorf("revision after both Executes = %d, want 2", got.Revision)
 	}
 
-	// Execute #3: callback fails AFTER SaveDocumentTx — neither the
-	// mutation nor an idempotency record survives.
 	failKey := uuid.New()
 	errAfterSave := errors.New("test: fails after save")
 	failRes, err := idem.Execute(ctx, userID, "saveResume-op", failKey, sha256.Sum256([]byte("fail")),
@@ -820,15 +762,12 @@ func TestExecuteComposition_CreateAndSaveCommit_FailureLeavesNothing(t *testing.
 	assertIdempotencyRecordAbsent(ctx, t, q, userID, "saveResume-op", failKey)
 }
 
-// --- Step 3e: transactional media deletion-job enqueue ---
-
 func TestEnqueueMediaDeletionTx_CommitPersistsBoth_RollbackNeither(t *testing.T) {
 	t.Parallel()
 	s, q, pool, ctx := newIntegrationStore(t)
 	userID := createTestUser(t, q)
 	doc := validDocForTest(t)
 
-	// Rollback case first.
 	victim, err := s.Create(ctx, userID, "Rollback Victim", doc)
 	if err != nil {
 		t.Fatalf("Create() error: %v", err)
@@ -851,7 +790,6 @@ func TestEnqueueMediaDeletionTx_CommitPersistsBoth_RollbackNeither(t *testing.T)
 		t.Errorf("deletion jobs after rollback = %d, want 0", n)
 	}
 
-	// Commit case: both the aggregate change and the job persist.
 	tx2, qtx2 := beginSeamTx(ctx, t, pool)
 	if _, err := s.DeleteTx(ctx, qtx2, userID, victim.ID, victim.Revision); err != nil {
 		t.Fatalf("DeleteTx() (second) error: %v", err)
@@ -869,7 +807,6 @@ func TestEnqueueMediaDeletionTx_CommitPersistsBoth_RollbackNeither(t *testing.T)
 		t.Errorf("deletion jobs after commit = %d, want exactly 1", n)
 	}
 
-	// The job row records the exact key with sane defaults.
 	var gotKey string
 	var attempts int64
 	if err := pool.QueryRow(ctx,
@@ -881,8 +818,6 @@ func TestEnqueueMediaDeletionTx_CommitPersistsBoth_RollbackNeither(t *testing.T)
 		t.Errorf("job = (%q, attempts=%d), want (%q, 0)", gotKey, attempts, key)
 	}
 
-	// The pending job survives resume deletion (already deleted) AND
-	// account deletion: no cascade may remove queued physical cleanup.
 	if _, err := pool.Exec(ctx, `DELETE FROM users WHERE id = $1`, userID); err != nil {
 		t.Fatalf("delete user: %v", err)
 	}
@@ -914,7 +849,6 @@ func TestEnqueueMediaDeletionTx_DuplicateEnqueueIsIdempotent(t *testing.T) {
 		t.Fatalf("commit: %v", err)
 	}
 
-	// A later transaction re-enqueueing the immutable key is also a no-op.
 	tx2, qtx2 := beginSeamTx(ctx, t, pool)
 	if err := s.EnqueueMediaDeletionTx(ctx, qtx2, created.ID, key); err != nil {
 		t.Fatalf("cross-tx duplicate EnqueueMediaDeletionTx() error: %v, want nil (idempotent)", err)
@@ -1007,7 +941,6 @@ func TestEnqueueMediaDeletionTx_MalformedAndCrossResumeChangeNothing(t *testing.
 	}
 	for _, bad := range badKeys {
 		tx, qtx := beginSeamTx(ctx, t, pool)
-		// A realistic caller sequence: mutate the aggregate, then enqueue.
 		if _, err := s.SaveDocumentTx(ctx, qtx, userID, resumeA.ID, doc, resumeA.Revision); err != nil {
 			t.Fatalf("%s: SaveDocumentTx() error: %v", bad.name, err)
 		}
@@ -1020,8 +953,6 @@ func TestEnqueueMediaDeletionTx_MalformedAndCrossResumeChangeNothing(t *testing.
 				t.Errorf("%s: production error exposes object-key material %q: %v", bad.name, sensitive, err)
 			}
 		}
-		// The enqueue failure aborts the transaction; neither the aggregate
-		// write nor any queue row survives.
 		rollbackSeamTx(ctx, t, tx)
 		if after := seamRowSnapshot(ctx, t, pool, resumeA.ID); after != beforeA {
 			t.Errorf("%s: aggregate changed\n before: %s\n  after: %s", bad.name, beforeA, after)
@@ -1055,8 +986,6 @@ func TestEnqueueMediaDeletionTx_StaleRevisionEnqueuesNothing(t *testing.T) {
 	_ = winningRev
 	before := seamRowSnapshot(ctx, t, pool, created.ID)
 
-	// The caller pattern: DeleteTx first; on a stale revision it fails, so
-	// the enqueue never happens and the whole transaction rolls back.
 	tx, qtx := beginSeamTx(ctx, t, pool)
 	_, staleErr := s.DeleteTx(ctx, qtx, userID, created.ID, created.Revision)
 	var mismatch *resume.RevisionMismatchError
@@ -1091,12 +1020,6 @@ func TestMediaDeletionJobs_DueOrderIndexSupportsBoundedClaim(t *testing.T) {
 		t.Fatalf("commit: %v", commitErr)
 	}
 
-	// Query-plan evidence: the partial active-job (next_attempt_at, id) index
-	// serves the bounded oldest-due claim in order, with no sort. The shared
-	// test database keeps rows from earlier runs, so its statistics can make
-	// a bitmap scan of another partial index plus a sort cheaper; turning off
-	// sequential scans, bitmap scans, and sorts leaves only the ordered index
-	// scan this proof is about, whatever the table holds.
 	planTx, err := pool.Begin(ctx)
 	if err != nil {
 		t.Fatalf("begin plan tx: %v", err)

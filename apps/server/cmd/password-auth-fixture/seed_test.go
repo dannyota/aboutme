@@ -142,7 +142,6 @@ func TestMCPSeedTransactionRefusesCollisionAndRollsBackCredentialFailure(t *test
 	}
 }
 
-// The database boundary returns controlled collision and write-failure results.
 type seedDBState struct {
 	firstRows             int64
 	credentialError       error

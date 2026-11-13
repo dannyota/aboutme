@@ -57,7 +57,6 @@ func revisionTag(revision int64) string { return `"r` + strconv.FormatInt(revisi
 
 func identity(method string, id uuid.UUID, revision int64, body []byte) (string, [32]byte) {
 	operation := sha256.Sum256([]byte("aboutme.project.operation.v1\x00" + method + "\x00" + id.String()))
-	// Decimal digits never contain NUL, so the revision and body stay separable.
 	request := append(strconv.AppendInt(nil, revision, 10), 0)
 	return hex.EncodeToString(operation[:]), sha256.Sum256(append(request, body...))
 }

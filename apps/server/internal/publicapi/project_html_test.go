@@ -20,10 +20,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/project"
 )
 
-// projectPageSections is the name-only corpus page's resume: a project
-// section with the linked note-g, a hidden linked entry, an unlinked entry
-// and an entry linking another account's project, and a linked entry in a
-// section outside the layout.
 func projectPageSections() map[string][]projectEntry {
 	return map[string][]projectEntry{
 		"projects": {
@@ -49,13 +45,11 @@ func projectPageRows() []projectStoreRow {
 	}
 }
 
-// projectPageFixture is the resume behind the name-only corpus page.
 func projectPageFixture(t *testing.T) *projectPagesStore {
 	t.Helper()
 	return &projectPagesStore{row: projectResumeRow(t, "en", nil, schema.MmYyyy, projectPageSections(), "projects"), rows: projectPageRows()}
 }
 
-// projectListFixture is the resume behind the Vietnamese corpus list.
 func projectListFixture(t *testing.T) *projectPagesStore {
 	t.Helper()
 	system := schema.System
@@ -129,9 +123,6 @@ func TestProjectPages_DiscoverableHasNoRobotsHeader(t *testing.T) {
 	}
 }
 
-// TestProjectPages_UnavailableAnswersLikeAnUnknownResume proves every state
-// without an available page answers with the exact status, headers and body
-// of an unknown resume.
 func TestProjectPages_UnavailableAnswersLikeAnUnknownResume(t *testing.T) {
 	without := func(slug string) []projectStoreRow {
 		var rows []projectStoreRow
@@ -185,8 +176,6 @@ func TestProjectPages_UnavailableAnswersLikeAnUnknownResume(t *testing.T) {
 		{"omitted project by slug", http.MethodGet, "/ada/projects/outside-tool", nil},
 		{"another account's project by slug", http.MethodGet, "/ada/projects/foreign-tool", nil},
 		{"unknown project slug, HEAD", http.MethodHead, "/ada/projects/unknown-tool", nil},
-		// With a valid pass, availability answers exactly as without sign in
-		// to view; without one, only an unknown or non-live resume does.
 		{unknownWithPass, http.MethodGet, "/ada/projects/unknown-tool", gated(nil)},
 		{emptyWithPass, http.MethodGet, "/ada/projects",
 			gated(withSections(func(sections map[string][]projectEntry) { sections["projects"][0].hidden = true }))},

@@ -93,11 +93,6 @@ func TestAuthorizationURLValidationAcceptsSDKShape(t *testing.T) {
 	}
 }
 
-// The pinned SDK's step-up scope union collects the requested set through a
-// map (internal/authutil.UnionScopes), so it hands the authorization URL
-// either scope order at random. Both must be accepted, and the browser must
-// always be sent the canonical order the server's own authorize endpoint
-// requires (see docs/design/mcp-owner-workflow.md#browser-helper-interface).
 func TestAuthorizationURLValidationAcceptsEitherSDKScopeOrder(t *testing.T) {
 	const redirectURI = "http://127.0.0.1:20090/oauth/callback"
 	const issuer = "https://aboutme.vn"
@@ -170,10 +165,6 @@ func TestAuthorizationURLValidationRejectsContractMismatch(t *testing.T) {
 	}
 }
 
-// The pinned SDK checks the challenge's protected-resource metadata against
-// the MCP endpoint URL and then sends that metadata resource, so the runner
-// expects exactly origin + "/mcp" in its raw url.QueryEscape form. See rule 1
-// of docs/design/mcp-client-compatibility.md.
 func TestAuthorizationURLValidationRequiresMCPEndpointResource(t *testing.T) {
 	const redirectURI = "http://127.0.0.1:20090/oauth/callback"
 	const issuer = "https://aboutme.vn"

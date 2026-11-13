@@ -19,8 +19,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// prepareDocumentForPersistence sanitizes a new canonical document exactly
-// once, then applies the complete-document store validation.
 func prepareDocumentForPersistence(doc schema.Resume) (schema.Resume, error) {
 	return (&Service{}).prepareDocumentForPersistence(doc)
 }
@@ -37,8 +35,6 @@ func (s *Service) sanitizeForPersistence(doc schema.Resume) schema.Resume {
 	return s.sanitizeDocument(doc)
 }
 
-// validateDocumentForPersistence applies the complete-document store checks
-// without sanitizing content that already crossed the sanitizer boundary.
 func validateDocumentForPersistence(doc schema.Resume) (schema.Resume, error) {
 	if err := resume.ValidateForStore(doc); err != nil {
 		return schema.Resume{}, err
@@ -105,7 +101,6 @@ type deletePreparedInput struct {
 
 type createOperation struct{ service *Service }
 
-// Run creates one resume through the transaction-bound store seam.
 func (op createOperation) Run(ctx context.Context, qtx *store.Queries, mutation mutationContext,
 	prepared preparedInput,
 ) (mutationRunResult, error) {
@@ -130,7 +125,6 @@ func (op createOperation) Run(ctx context.Context, qtx *store.Queries, mutation 
 
 type aggregateOperation struct{ service *Service }
 
-// Run applies one complete-document aggregate mutation and revision CAS.
 func (op aggregateOperation) Run(ctx context.Context, qtx *store.Queries, mutation mutationContext,
 	prepared preparedInput,
 ) (mutationRunResult, error) {
@@ -169,8 +163,6 @@ func (op aggregateOperation) Run(ctx context.Context, qtx *store.Queries, mutati
 	return mutationRunResult{Response: response}, err
 }
 
-// requireNextRevision checks that a document save advanced exactly one
-// revision past the one the request expected.
 func requireNextRevision(saved resume.Resume, expected int64) error {
 	if saved.Revision != expected+1 {
 		return errors.New("resumeapi: saved resume revision is not the expected revision plus one")
@@ -180,7 +172,6 @@ func requireNextRevision(saved resume.Resume, expected int64) error {
 
 type deleteOperation struct{ service *Service }
 
-// Run performs the revision-aware whole-resume delete without a document write.
 func (op deleteOperation) Run(ctx context.Context, qtx *store.Queries, mutation mutationContext,
 	prepared preparedInput,
 ) (mutationRunResult, error) {
@@ -225,9 +216,6 @@ func (op deleteOperation) Run(ctx context.Context, qtx *store.Queries, mutation 
 	return mutationRunResult{Response: response}, err
 }
 
-// photoCandidateOperation commits a proved-created candidate only through
-// the ordinary aggregate operation. Candidate creation and compensation stay
-// outside the database callback.
 type photoCandidateOperation struct{ aggregateOperation }
 
 type photoCandidate struct {
@@ -288,8 +276,6 @@ func cloneDocumentForHook(doc schema.Resume) (schema.Resume, error) {
 	return cloned, nil
 }
 
-// applyAtWireVersion preserves the fixed down-emit, apply, up-accept order.
-// apply receives and returns a complete document at the caller's version.
 func (s *Service) applyAtWireVersion(current schema.Resume, version int32,
 	apply func(json.RawMessage) (json.RawMessage, error), fontTargeted ...bool,
 ) (schema.Resume, error) {

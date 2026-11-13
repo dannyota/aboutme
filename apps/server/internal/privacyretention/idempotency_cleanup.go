@@ -11,9 +11,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// ExpireIdempotency deletes expired replay records under the same user-first
-// lock order used by writers and releases exact retained usage in each page's
-// transaction.
 func (w *Worker) ExpireIdempotency(ctx context.Context) (result Result, returnErr error) {
 	started := time.Now()
 	defer func() {
@@ -53,10 +50,6 @@ func (w *Worker) ExpireIdempotency(ctx context.Context) (result Result, returnEr
 	}
 
 	now := w.now()
-	// Only an empty page ends the run: a page can come back short while
-	// expired records remain, for example when a request deletes some of a
-	// locked user's records first. The last page asks only for what the run
-	// cap leaves, so the cap is exact.
 	for result.IdempotencyRecordsDeleted < maxRowsPerRun {
 		limit := pageSize
 		if remaining := maxRowsPerRun - result.IdempotencyRecordsDeleted; remaining > 0 && remaining < int64(pageSize) {

@@ -6,11 +6,6 @@ import (
 	"fmt"
 )
 
-// Document v6 adds an optional projectId on project entries
-// (docs/design/projects.md, docs/adr/0004-resume-document-contract.md).
-// Lifting v5 changes only the version; lowering drops every projectId, which
-// is the declared v5 emission loss.
-
 func convertV5ToV6(doc json.RawMessage) (json.RawMessage, error) {
 	value, err := decodeDocumentValue(doc)
 	if err != nil {
@@ -32,7 +27,6 @@ func convertV6ToV5(doc json.RawMessage) (json.RawMessage, error) {
 	return encodeConverted(value)
 }
 
-// removeV6Fields deletes every field v5 cannot represent, in place.
 func removeV6Fields(value map[string]any) error {
 	content, ok := value["content"].(map[string]any)
 	if !ok {

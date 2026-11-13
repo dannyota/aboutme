@@ -20,8 +20,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/resume/docmigrate"
 )
 
-// The known card version must pass before deletion and fail afterwards even
-// while the card collaborator still has its cached bytes.
 type deletionCards struct{}
 
 func (deletionCards) Version(publicresume.Snapshot) (string, error) {

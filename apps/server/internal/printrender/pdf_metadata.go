@@ -5,13 +5,10 @@ import (
 	"time"
 )
 
-// epochPDFDate is written when a render has no revision time.
 const epochPDFDate = "D:19700101000000+00'00'"
 
 const pdfDateLayout = "D:20060102150405+00'00'"
 
-// pdfDate formats a revision time as a UTC PDF date the same length as
-// Chromium's own, so replacing it moves no byte offset.
 func pdfDate(revisionTime time.Time) (string, bool) {
 	if revisionTime.IsZero() {
 		return epochPDFDate, true
@@ -23,8 +20,6 @@ func pdfDate(revisionTime time.Time) (string, bool) {
 	return utc.Format(pdfDateLayout), true
 }
 
-// setPDFMetadataDates replaces the Info dictionary's CreationDate and ModDate
-// with the revision time. The same revision therefore renders the same bytes.
 func setPDFMetadataDates(data []byte, revisionTime time.Time) error {
 	date, ok := pdfDate(revisionTime)
 	if !ok {

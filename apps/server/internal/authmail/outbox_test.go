@@ -21,9 +21,6 @@ import (
 
 var testNow = time.Date(2026, 8, 16, 12, 0, 0, 0, time.UTC)
 
-// fakeDBTX implements store.DBTX just enough for EnqueueTx: only QueryRow is
-// used (CreateAuthEmailJob), and each call records the exact SQL args so tests
-// can prove scope mapping and encrypted-only inserts without a database.
 type fakeDBTX struct {
 	inserts []insertCall
 	err     error
@@ -66,8 +63,6 @@ func testDigest() [32]byte {
 	return d
 }
 
-// isNilAny reports whether a captured query arg is nil, including a typed nil
-// pointer/slice (pgx passes *uuid.UUID(nil) and []byte(nil) as typed nils).
 func isNilAny(a any) bool {
 	if a == nil {
 		return true
@@ -81,8 +76,6 @@ func isNilAny(a any) bool {
 	}
 }
 
-// dumpArgs renders captured query args with pointer/string/slice contents so a
-// plaintext leak is visible as a substring rather than a pointer address.
 func dumpArgs(args []any) string {
 	parts := make([]string, len(args))
 	for i, a := range args {
@@ -155,7 +148,7 @@ func TestOutboxEnqueueScopeMapping(t *testing.T) {
 		usr          *uuid.UUID
 		digest       *[32]byte
 		wantKind     string
-		wantScopeIdx int // 3=registration, 4=reset token, 5=user
+		wantScopeIdx int
 	}{
 		{"verify", KindVerify, &regID, nil, nil, &digest, "verify", 3},
 		{"reset", KindReset, nil, &tokID, nil, &digest, "reset", 4},
@@ -163,7 +156,6 @@ func TestOutboxEnqueueScopeMapping(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			// A fresh ring per case: Seal consumes nonce entropy.
 			ring := mustRing(t, "k-active", map[string][32]byte{"k-active": fixedKey()}, fixedNonce())
 			o := newTestOutbox(t, ring, func() time.Time { return testNow })
 
@@ -343,7 +335,7 @@ func TestOutboxEnqueueEncryptedOnlyInsert(t *testing.T) {
 	f := &fakeDBTX{}
 	regID := uuid.New()
 	digest := testDigest()
-	payload := validVerifyPayload() // destination + link token live only here
+	payload := validVerifyPayload()
 
 	req := EnqueueRequest{
 		JobID:          uuid.New(),
@@ -375,8 +367,6 @@ func TestOutboxEnqueueEncryptedOnlyInsert(t *testing.T) {
 		t.Error("ciphertext contains link prefix plaintext")
 	}
 
-	// The digest column holds only the 32-byte digest; the API has no raw-token
-	// field, so no raw token can ever reach the capture.
 	if got, ok := args[6].([]byte); !ok || !bytes.Equal(got, digest[:]) {
 		t.Errorf("token digest arg = %x, want %x", got, digest[:])
 	}
@@ -502,8 +492,6 @@ func TestOutboxNoInsertOnEncryptionFailure(t *testing.T) {
 	}
 }
 
-// --- Live-database tests (skipped unless TEST_DATABASE_URL is set) ---
-
 func newAuthmailPool(t *testing.T) (context.Context, *pgxpool.Pool) {
 	t.Helper()
 	dsn := testutil.RequireMigratedTestDatabaseURL(t)
@@ -562,8 +550,6 @@ func TestOutboxEnqueueRollsBackWithCallerTransaction(t *testing.T) {
 		t.Fatalf("EnqueueTx: %v", err)
 	}
 
-	// EnqueueTx must not open or commit its own transaction: rolling back the
-	// caller's transaction removes the row entirely.
 	if err := tx.Rollback(ctx); err != nil {
 		t.Fatalf("Rollback: %v", err)
 	}
@@ -606,7 +592,6 @@ func TestOutboxEnqueueCommitsEncryptedJob(t *testing.T) {
 	if commitErr := tx.Commit(ctx); commitErr != nil {
 		t.Fatalf("Commit: %v", commitErr)
 	}
-	// Deleting the registration cascades the job, keeping the shared DB clean.
 	t.Cleanup(func() {
 		if _, cleanupErr := store.New(pool).DeletePasswordRegistration(context.Background(), regID); cleanupErr != nil {
 			t.Errorf("cleanup delete registration: %v", cleanupErr)

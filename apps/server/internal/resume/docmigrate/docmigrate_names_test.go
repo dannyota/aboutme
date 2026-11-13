@@ -5,9 +5,6 @@ import (
 	"testing"
 )
 
-// TestAcceptWire_RejectsCaseVariantDocumentKeys pins that the wire boundary
-// matches resume document property names exactly at every level: the closed
-// JSON schema rejects a case variant before any typed decode can fold it.
 func TestAcceptWire_RejectsCaseVariantDocumentKeys(t *testing.T) {
 	t.Parallel()
 

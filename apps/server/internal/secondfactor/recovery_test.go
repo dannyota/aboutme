@@ -157,7 +157,6 @@ func TestRecoveryCompletion_ConsumesOneCodeAndNotifies(t *testing.T) {
 	}
 }
 
-// TestRecoveryRace_OneWinner submits one code from two pending logins at once.
 func TestRecoveryRace_OneWinner(t *testing.T) {
 	h := newHarness(t, nil)
 	acct := h.newAccount()

@@ -32,18 +32,14 @@ import (
 
 var projectTestOwner = uuid.MustParse("00000000-0000-0000-0000-0000000000d1")
 
-// projectStoreRow is one project an entry links, as the project statements
-// join it: entry id, the project's owner, slug and document.
 type projectStoreRow struct {
 	entryID string
 	owner   uuid.UUID
 	slug    string
 	doc     project.Document
-	// raw, when set, is the stored document instead of doc.
-	raw json.RawMessage
+	raw     json.RawMessage
 }
 
-// stored is the row's document as the statements return it.
 func (row projectStoreRow) stored() any {
 	if row.raw != nil {
 		return row.raw
@@ -51,9 +47,6 @@ func (row projectStoreRow) stored() any {
 	return row.doc
 }
 
-// projectPagesStore answers the project statements like PostgreSQL for the
-// live gate and the owner join. It does not drop hidden entries, so the
-// reader's own availability rule is what the handler tests prove.
 type projectPagesStore struct {
 	mu    sync.Mutex
 	row   store.Resume
@@ -66,8 +59,6 @@ func (s *projectPagesStore) GetPublicState(context.Context) (store.PublicState, 
 	return store.PublicState{Singleton: true, DiscoveryGeneration: 1}, nil
 }
 
-// GetPublicResumeBySlug finds no resume, so the resume page handler over
-// this store answers every slug as an unknown resume.
 func (s *projectPagesStore) GetPublicResumeBySlug(context.Context, string) (store.GetPublicResumeBySlugRow, error) {
 	return store.GetPublicResumeBySlugRow{}, pgx.ErrNoRows
 }
@@ -106,8 +97,6 @@ func (s *projectPagesStore) GetPublicResumeProjectList(_ context.Context, slug s
 	return store.GetPublicResumeProjectListRow{Resume: resume, Projects: raw}, err
 }
 
-// withoutDescriptions is the statements' link context: every linked
-// document with each description removed.
 func withoutDescriptions(rows []projectStoreRow) []map[string]any {
 	column := []map[string]any{}
 	for _, row := range rows {
@@ -148,15 +137,11 @@ func (s *projectPagesStore) update(change func(*projectPagesStore)) {
 	change(s)
 }
 
-// projectEntry is one project entry of a test resume; projectID "" leaves
-// it unlinked.
 type projectEntry struct {
 	id, projectID string
 	hidden        bool
 }
 
-// projectResumeRow is a live resume whose sections hold project entries;
-// layout names the sections in the main column.
 func projectResumeRow(t *testing.T, lng string, scheme *schema.ColorScheme, dateFormat schema.DateFormat, sections map[string][]projectEntry, layout ...string) store.Resume {
 	t.Helper()
 	slug, name := "ada", "Ada Lovelace"
@@ -213,8 +198,6 @@ func projectTestReaderAndCoordinator(t *testing.T, readStore *projectPagesStore)
 	return reader, coordinator
 }
 
-// advanceProjectRevision commits a non-draining transition of the store's
-// resume to the next revision, as a library or resume write does.
 func advanceProjectRevision(t *testing.T, coordinator *publicstate.Coordinator, readStore *projectPagesStore) {
 	t.Helper()
 	readStore.mu.Lock()
@@ -233,7 +216,6 @@ func advanceProjectRevision(t *testing.T, coordinator *publicstate.Coordinator, 
 	}
 }
 
-// projectTestCards names the corpus card version for every snapshot.
 type projectTestCards struct{}
 
 func (projectTestCards) Version(publicresume.Snapshot) (string, error) {
@@ -246,22 +228,16 @@ func (projectTestCards) Build(context.Context, publicresume.Snapshot, renderjob.
 	return nil, errors.New("unused")
 }
 
-// countingViews counts every observed view.
 type countingViews struct{ count int }
 
 func (v *countingViews) ObserveHTML(context.Context, uuid.UUID, string) { v.count++ }
 
-// fakeProjectRenderer is an httptest server standing in for the renderer.
-// It answers a project envelope of the corpus with that case's HTML, any
-// other project page with the name-only case's HTML renamed to it, and a
-// gate envelope with gateValidHTML.
 type fakeProjectRenderer struct {
 	t         *testing.T
 	mu        sync.Mutex
 	calls     map[string]int
 	envelopes map[string][]byte
-	// mutate, when set, changes the HTML of every project page answer.
-	mutate func(string) string
+	mutate    func(string) string
 }
 
 func newFakeProjectRenderer(t *testing.T) (*fakeProjectRenderer, *directrender.Client) {
@@ -347,8 +323,6 @@ func (f *fakeProjectRenderer) envelope(mode string) []byte {
 	return bytes.Clone(f.envelopes[mode])
 }
 
-// projectHandlers builds both project handlers and the resume page handler
-// over one reader, cache and renderer.
 type projectHandlers struct {
 	list, page, resume http.Handler
 	views              *countingViews

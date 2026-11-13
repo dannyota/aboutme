@@ -41,7 +41,5 @@ func (s *Store) checkSlug(ctx context.Context, q *store.Queries, owner, id uuid.
 
 func (s *Store) proposeAvailable(ctx context.Context, q *store.Queries, owner uuid.UUID, name string, now time.Time) (string, error) {
 	base := ProposeSlug(name)
-	// Every collision consumes a previously claimed slug. The query selects the
-	// first unused numeric suffix in one statement, including unexpired holds.
 	return q.ProposeProjectSlug(ctx, store.ProposeProjectSlugParams{UserID: owner, Base: base, Cutoff: now.Add(-SlugHoldDays * 24 * time.Hour)})
 }

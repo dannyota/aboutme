@@ -60,11 +60,6 @@ func (s *Service) executeDeletion(ctx context.Context, plan accountDeletionPlan)
 	}, nil
 }
 
-// mutateDeletion follows the lock order in docs/design/data.md: canonical
-// email, password registration, user, slug claims in sorted order, then public
-// state. Resume writes take the user before slug claims and public state, and
-// the operator command runs outside the server's in-process fences, so another
-// order deadlocks against a concurrent publish.
 func (s *Service) mutateDeletion(ctx context.Context, qtx *store.Queries, plan accountDeletionPlan) error {
 	if lockErr := qtx.LockCanonicalAccountEmail(ctx, plan.user.Email); lockErr != nil {
 		return fmt.Errorf("accountapi: lock canonical email: %w", lockErr)
@@ -95,8 +90,6 @@ func (s *Service) mutateDeletion(ctx context.Context, qtx *store.Queries, plan a
 		}
 	}
 	if plan.operatorSlug != "" && !slices.Contains(slugs, plan.operatorSlug) {
-		// The reported slug moved to another account after the plan was built.
-		// Lock it too so the owner check below reads a stable row.
 		slugs = append(slugs, plan.operatorSlug)
 	}
 	sort.Strings(slugs)
@@ -165,9 +158,6 @@ func (s *Service) mutateDeletion(ctx context.Context, qtx *store.Queries, plan a
 		}
 	}
 	if plan.operatorSlug == "" {
-		// The operator command runs in another process than the server, whose
-		// in-memory fences would stay on the old generation and refuse every
-		// discovery read and public-state transition after a durable advance.
 		if generation, err := qtx.AdvanceDiscoveryGeneration(ctx); err != nil {
 			return fmt.Errorf("accountapi: advance discovery: %w", err)
 		} else if generation != plan.discoveryGeneration+1 {
@@ -190,9 +180,6 @@ func (s *Service) mutateDeletion(ctx context.Context, qtx *store.Queries, plan a
 	return nil
 }
 
-// requireSelfDeleteProof locks the deleting session and the second-factor
-// policy and requires recent reauthentication. The operator command has no
-// session and skips it.
 func requireSelfDeleteProof(ctx context.Context, qtx *store.Queries, plan accountDeletionPlan, lockedUser store.User, now time.Time) error {
 	liveSession, err := qtx.GetAccountDeletionSessionForUpdate(ctx, store.GetAccountDeletionSessionForUpdateParams{
 		ID: plan.sessionID, UserID: plan.user.ID,
@@ -209,8 +196,6 @@ func requireSelfDeleteProof(ctx context.Context, qtx *store.Queries, plan accoun
 	case err == nil:
 		policyPtr = &policy
 	case errors.Is(err, pgx.ErrNoRows):
-		// Unenrolled account: RequireRecentSecondFactorReauth checks primary
-		// proof only.
 	default:
 		return fmt.Errorf("accountapi: lock factor policy: %w", err)
 	}

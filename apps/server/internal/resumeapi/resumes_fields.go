@@ -1,8 +1,5 @@
 package resumeapi
 
-// Resume document field decoding and validation: title, language, and the
-// default document seeded for a new resume.
-
 import (
 	"bytes"
 	"encoding/json"

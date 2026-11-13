@@ -6,15 +6,6 @@ import (
 	"strings"
 )
 
-// Message copy is fixed code. Each message is bilingual, Vietnamese first
-// because the initial community is Vietnamese (docs/design/product.md), then
-// English. Only the canonical-origin link is interpolated, HTML-escaped. The
-// HTML has no image, script, stylesheet, web font, tracking pixel, or any
-// external resource: every style is inline and the wordmark is text.
-
-// Ink and paper desk colors, and seal red (ADR 0020) for the dot before "vn"
-// in the aboutme.vn wordmark: the text color, with only that dot in red, like
-// AppLogo.
 const (
 	colorInk    = "#192024"
 	colorSeal   = "#CC2649"
@@ -29,7 +20,6 @@ const (
 	fallbackTxt = "Mở liên kết / Open the link:"
 )
 
-// section is one language's copy for a message.
 type section struct {
 	lang    string
 	heading string
@@ -37,8 +27,6 @@ type section struct {
 	note    string
 }
 
-// template is the fixed copy for one message kind. action is empty for a
-// notice that carries no link.
 type template struct {
 	subject   string
 	preheader string
@@ -47,8 +35,6 @@ type template struct {
 	security  bool
 }
 
-// FooterNoteForMode identifies the SMTP relay and reply mailbox from
-// docs/design/vietnam-production.md, "DNS and mail". Other modes have no note.
 func FooterNoteForMode(mode string) string {
 	if mode != "smtp" {
 		return ""
@@ -139,8 +125,6 @@ func securityTemplate(subject, viAction, enAction string) template {
 	}
 }
 
-// buildMessage renders the fixed template for a decrypted payload. An unknown
-// kind yields a message with no subject or body, which SES rejects.
 func buildMessage(kind Kind, p Payload, footerNote string) Message {
 	t, ok := templates()[kind]
 	if !ok {
@@ -203,7 +187,6 @@ func renderHTML(t template, link, footerNote string) string {
 		`<meta name="viewport" content="width=device-width,initial-scale=1">` +
 		`<meta name="color-scheme" content="light"><title>` + esc(t.subject) + `</title></head>`)
 	b.WriteString(`<body style="margin:0;padding:0;background:` + colorDesk + `;">`)
-	// Inbox preview text; hidden in the opened message.
 	b.WriteString(`<div style="display:none;max-height:0;overflow:hidden;">` + esc(t.preheader) + `</div>`)
 	b.WriteString(`<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:` +
 		colorDesk + `;"><tr><td align="center" style="padding:32px 16px;">`)

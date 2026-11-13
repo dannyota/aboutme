@@ -50,8 +50,6 @@ func fontV2Document(t *testing.T, family string) json.RawMessage {
 	return raw
 }
 
-// fontCurrentDocument is fontV2Document at the current version, which adds no
-// field the font tests touch.
 func fontCurrentDocument(t *testing.T, family string) json.RawMessage {
 	t.Helper()
 	doc := decodeFontTestMap(t, fontV2Document(t, family))

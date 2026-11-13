@@ -12,9 +12,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/viewcount"
 )
 
-// Retain redacts or deletes the daily privacy categories and performs one
-// existing 200-row OAuth cleanup pass. Password and auth-mail cleanup remains
-// owned by authmail.Worker.
 func (w *Worker) Retain(ctx context.Context) (result Result, returnErr error) {
 	started := time.Now()
 	defer func() {
@@ -141,10 +138,6 @@ func runPages(ctx context.Context, pages int64, run func(context.Context, int32)
 	return total, updatedPages, nil
 }
 
-// runPagesUntilEmpty ends only on an empty page. A session page comes back
-// short while due rows remain when it keeps a session whose successor or
-// referencing row another transaction holds. The last page asks only for what
-// the run cap leaves, so the cap is exact.
 func runPagesUntilEmpty(ctx context.Context, pages int64, run func(context.Context, int32) (int64, error)) (total, updatedPages int64, err error) {
 	updatedPages = pages
 	for total < maxRowsPerRun {

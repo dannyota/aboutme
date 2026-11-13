@@ -41,11 +41,6 @@ func TestTOTPMigrationDefinesRequiredRelations(t *testing.T) {
 	}
 }
 
-// TestTOTPMigrationEnforcesOneRowPerAccount pins the accepted contract's
-// plain unique totp_enrollments.user_id (no partial index conditioned on
-// expiry or a consumed marker) and confirms the table has no consumed_at
-// column, since every enrollment exit deletes the row instead
-// (docs/design/totp-second-factor-contract.md#postgresql-shape-and-bounds).
 func TestTOTPMigrationEnforcesOneRowPerAccount(t *testing.T) {
 	t.Parallel()
 	contents := totpMigrationContents(t)
@@ -107,18 +102,11 @@ func TestTOTPMigrationAdmitsOnlyUserScopedTOTPMail(t *testing.T) {
 			t.Errorf("migration does not contain %q", fragment)
 		}
 	}
-	// The token-digest rule from 00004 is untouched: TOTP kinds are not in
-	// the verify/reset array, so it already requires token_digest IS NULL
-	// for them without any change to that constraint.
 	if strings.Contains(contents, "auth_email_jobs_token_digest_required_check") {
 		t.Error("migration touches auth_email_jobs_token_digest_required_check, which the TOTP contract leaves unchanged")
 	}
 }
 
-// TestTOTPMigrationDownRefusesWhileCredentialsExist pins the down section's
-// exact order: the guard raises before either table is dropped, so a
-// database holding a TOTP credential cannot lose it to a rollback
-// (docs/design/totp-second-factor-contract.md#postgresql-shape-and-bounds).
 func TestTOTPMigrationDownRefusesWhileCredentialsExist(t *testing.T) {
 	t.Parallel()
 	contents := totpMigrationContents(t)
@@ -153,8 +141,6 @@ func TestTOTPMigrationDownRefusesWhileCredentialsExist(t *testing.T) {
 	if !strings.Contains(down, "ALTER TABLE second_factor_policies DROP COLUMN attempt_mail_at") {
 		t.Error("down section does not drop attempt_mail_at")
 	}
-	// Down restores the exact v0.4.2 (00004) constraint bodies: the TOTP
-	// kinds must not survive into the restored kind_check.
 	kindCheckIdx := strings.LastIndex(down, "auth_email_jobs_kind_check CHECK")
 	if kindCheckIdx < 0 {
 		t.Fatal("down section does not restore auth_email_jobs_kind_check")
@@ -165,10 +151,6 @@ func TestTOTPMigrationDownRefusesWhileCredentialsExist(t *testing.T) {
 	}
 }
 
-// totpMigrationV042JobKinds are the ten mail kinds migration 00004 already
-// admits, each scoped as the existing auth_email_jobs_scope_check requires:
-// verify to a registration, reset to a reset token, and every other kind to
-// a user.
 var totpMigrationV042JobKinds = []string{
 	"verify", "reset", "password_changed",
 	"second_factor_enabled", "passkey_added", "passkey_removed",
@@ -176,22 +158,10 @@ var totpMigrationV042JobKinds = []string{
 	"second_factor_attempts_exhausted",
 }
 
-// totpMigrationTOTPJobKinds are the three mail kinds migration 00005 adds,
-// each requiring exactly the same user-only scope as the second group of
-// totpMigrationV042JobKinds
-// (docs/design/totp-second-factor-contract.md#security-mail-and-locales).
 var totpMigrationTOTPJobKinds = []string{"totp_added", "totp_replaced", "totp_removed"}
 
-// totpMigrationValidKeyID returns a key identifier shaped exactly like the
-// migration's tk1_ CHECK constraint requires: 26 bytes total.
 func totpMigrationValidKeyID() string { return "tk1_" + string(bytesOf(22, 'k')) }
 
-// insertTOTPMigrationJob inserts one pending auth_email_jobs row of kind,
-// scoped by whichever of registrationID, resetTokenID, or userID is
-// non-nil (verify to a registration, reset to a reset token, every other
-// kind including the three TOTP additions to a user). Passing nil for the
-// kind's required scope column, or a value for the wrong one, is how the
-// scope_check and kind_check violation cases below are built.
 func insertTOTPMigrationJob(ctx context.Context, t *testing.T, db *sql.DB, kind string, registrationID, resetTokenID, userID any, now, expires time.Time) error {
 	t.Helper()
 	var tokenDigest any
@@ -240,16 +210,6 @@ func columnExists(ctx context.Context, t *testing.T, db *sql.DB, table, column s
 	return n == 1
 }
 
-// TestTOTPMigrationLiveUpDownRoundTrip proves the migration's up/down
-// behavior against a real, freshly migrated database, not just the source
-// text: version 5 admits every v0.4.2 mail kind and the three TOTP
-// additions under the exact scope_check the contract requires; a live
-// totp_credentials row refuses the down migration and leaves version 5
-// untouched; removing that row lets the down migration delete only the
-// TOTP jobs, restore the v0.4.2-only kind_check, and drop both TOTP tables
-// and attempt_mail_at; and the schema then upgrades cleanly back to
-// version 5
-// (docs/design/totp-second-factor-contract.md#postgresql-shape-and-bounds).
 func TestTOTPMigrationLiveUpDownRoundTrip(t *testing.T) {
 	t.Parallel()
 

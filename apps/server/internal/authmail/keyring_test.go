@@ -89,7 +89,6 @@ func TestKeyRingNewCopiesKeyMap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Mutating the caller's map after construction must not change the ring.
 	delete(keys, "k-active")
 	keys["k-intruder"] = keyAt(9)
 	if _, ok := ring.keys["k-active"]; !ok {
@@ -224,7 +223,6 @@ func TestOpenRejectsOversizedCiphertext(t *testing.T) {
 
 func TestOpenAcceptsBoundCiphertext(t *testing.T) {
 	ring := mustRing(t, "k-active", map[string][32]byte{"k-active": fixedKey()}, fixedNonce())
-	// Exactly the upper bound passes the size gate and fails authentication.
 	_, err := ring.Open(fixedJobID(), KindVerify, JobScope{}, Sealed{KeyID: "k-active", Ciphertext: make([]byte, maxCiphertextBytes)})
 	if !errors.Is(err, ErrAuthentication) {
 		t.Fatalf("err = %v, want ErrAuthentication (bound accepted, auth failed)", err)
@@ -306,7 +304,6 @@ func TestOpenRejectsWrongKind(t *testing.T) {
 }
 
 func TestOpenRejectsWrongKeyMaterial(t *testing.T) {
-	// Same key ID, different key bytes: the GCM tag cannot verify.
 	good := mustRing(t, "k-active", map[string][32]byte{"k-active": fixedKey()}, fixedNonce())
 	bad := mustRing(t, "k-active", map[string][32]byte{"k-active": keyAt(200)}, fixedNonce())
 

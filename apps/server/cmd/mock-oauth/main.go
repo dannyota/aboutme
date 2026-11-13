@@ -1,5 +1,3 @@
-// Command mock-oauth runs the local-only Google and LinkedIn OIDC providers for
-// the native HTTPS authentication proofs.
 package main
 
 import (

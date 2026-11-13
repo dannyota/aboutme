@@ -58,7 +58,6 @@ func testReader(t *testing.T) *publicresume.Reader {
 	return reader
 }
 
-// testRow is a live resume row named name with headline and contacts.
 func testRow(t *testing.T, id uuid.UUID, name, headline string, contacts []schema.PersonalDetail) store.Resume {
 	t.Helper()
 	slug, lng := "ada-lovelace", "en"
@@ -99,15 +98,13 @@ func testSnapshot(t *testing.T, name, headline string, contacts []schema.Persona
 	return snapshot
 }
 
-// fakeStore is an in-memory CardStore.
 type fakeStore struct {
-	mu      sync.Mutex
-	live    map[uuid.UUID]publicresume.Snapshot
-	stored  map[uuid.UUID]StoredCard
-	saveErr error
-	saves   int
-	liveErr error
-	// listFailures fails that many LiveCards calls before one succeeds.
+	mu           sync.Mutex
+	live         map[uuid.UUID]publicresume.Snapshot
+	stored       map[uuid.UUID]StoredCard
+	saveErr      error
+	saves        int
+	liveErr      error
 	listFailures int
 }
 
@@ -159,7 +156,6 @@ func (s *fakeStore) LiveCards(context.Context) ([]LiveCard, error) {
 	return cards, nil
 }
 
-// Save follows the real store's rule: live and current, or refused.
 func (s *fakeStore) Save(_ context.Context, id uuid.UUID, version string, png []byte) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -178,8 +174,6 @@ func (s *fakeStore) Save(_ context.Context, id uuid.UUID, version string, png []
 	return nil
 }
 
-// fakeQueue runs Prepare and ValidateGeneration like the real queue and
-// returns a fixed PNG. A non-nil gate blocks each render until it closes.
 type fakeQueue struct {
 	mu         sync.Mutex
 	calls      int

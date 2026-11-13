@@ -49,11 +49,6 @@ func TestDeleteRecoveryProofNoPhotoRequiresExactResumeTombstoneGenerationAndReco
 	}
 }
 
-// TestDeleteRecoveryProofRejectsMismatchedTombstoneReleasedAt proves
-// proveCommittedDelete does not accept a tombstone merely because its slug
-// matches: the tombstone carries no account link (docs/design/product.md), so
-// the exact release time is the other half of the proof that this is the
-// request's own tombstone, not some other release of the same slug.
 func TestDeleteRecoveryProofRejectsMismatchedTombstoneReleasedAt(t *testing.T) {
 	h := newResumeAPITestHarness(t)
 	created, err := h.resumes.Create(h.ctx, h.userID, "Recover mismatch", publishCompleteDocument(t))
@@ -223,11 +218,6 @@ func TestPublishRenameRecoveryRequiresExactRowClaimTombstoneAndResponse(t *testi
 	}
 }
 
-// TestPublishRenameRecoveryRejectsMismatchedTombstoneReleasedAt is
-// proveCommittedPublish's counterpart to
-// TestDeleteRecoveryProofRejectsMismatchedTombstoneReleasedAt: the old
-// slug's tombstone carries no account link, so an exact released_at match is
-// what proves this rename's own tombstone rather than a stale or foreign one.
 func TestPublishRenameRecoveryRejectsMismatchedTombstoneReleasedAt(t *testing.T) {
 	h := newResumeAPITestHarness(t)
 	created, err := h.resumes.Create(h.ctx, h.userID, "Recover rename mismatch", publishCompleteDocument(t))
@@ -322,9 +312,6 @@ func TestPublishFlagChangeRecoveryRequiresExactEffectiveRow(t *testing.T) {
 	}
 }
 
-// TestPublishRecoveryRejectsMismatchedSignInToView proves the recovery proof
-// compares the sign-in-to-view switch against both the stored row and the
-// stored response, like every other publish field (AC-VIEW-001).
 func TestPublishRecoveryRejectsMismatchedSignInToView(t *testing.T) {
 	h := newResumeAPITestHarness(t)
 	created, err := h.resumes.Create(h.ctx, h.userID, "Recover sign-in", publishCompleteDocument(t))
@@ -367,10 +354,6 @@ func neverSluggedDeleteRecoveryResolver(h *resumeAPITestHarness, resumeID uuid.U
 	return mutationRecovery{pool: h.pool, identity: mutationIdentity{UserID: h.userID, Operation: operation, Key: key, RequestHash: hash}, plan: publicstate.Plan{Resumes: []publicstate.ResumeTarget{{ID: resumeID, ExpectedRevision: revision, Class: publicstate.NonDraining}}}, retire: true, delete: &deleteRecoveryProof{ResumeID: resumeID, PhotoKey: photoKey}}
 }
 
-// deleteRecoveryResolver builds the recovery resolver for a deleted resume
-// that released slug. The tombstone carries no account link (docs/design/product.md),
-// so the caller supplies the slug it published rather than looking it up by
-// owner.
 func deleteRecoveryResolver(t *testing.T, h *resumeAPITestHarness, resumeID uuid.UUID, revision, discovery int64, key uuid.UUID, slug, photoKey string) mutationRecovery {
 	t.Helper()
 	operation := hexDigest(operationHash(http.MethodDelete, "deleteResume", []string{"resume_id", resumeID.String()}))

@@ -1,4 +1,3 @@
-// Package publicformat encodes public-resume representations with fixed bytes.
 package publicformat
 
 import (
@@ -11,10 +10,8 @@ import (
 	"danny.vn/aboutme/apps/server/internal/publicresume"
 )
 
-// MarkdownFormatVersion identifies the public Markdown byte format.
 const MarkdownFormatVersion = 1
 
-// Markdown encodes a public resume as safe Markdown.
 func Markdown(resume publicresume.PublicResume) ([]byte, error) {
 	blocks := []string{"# " + plain(resume.Document.PersonalDetails.FullName)}
 	if line := plainPointer(resume.Document.PersonalDetails.Headline); line != "" {
@@ -211,8 +208,6 @@ func contactLabel(kind string) string {
 	}
 }
 
-// isLinkContact follows the renderer: a URL type or custom detail links only
-// when its value has the exact lowercase https:// prefix (ADR 0013).
 func isLinkContact(kind, value string) bool {
 	switch kind {
 	case "website", "linkedin", "github", "twitter", "custom":

@@ -50,24 +50,6 @@ func loadEnv(raw string) (string, error) {
 	return env, nil
 }
 
-// loadPublicOrigin validates raw as the server's public origin. Required,
-// like Env: there is no safe default (dev/staging/prod each serve from a
-// different origin), so Load fails fast rather than silently guessing.
-//
-// OAuth redirect and callback URLs concatenate PublicOrigin with a path.
-// Raw must therefore parse as scheme://host[:port] with no userinfo, path
-// (including a bare trailing slash, which parses as Path "/"), query, or
-// fragment. An unnoticed trailing slash or path would corrupt every absolute
-// URL this server builds from it, so this fails fast at startup rather
-// than surfacing as a broken redirect later.
-//
-// After validation, scheme and host are lowercased, and a scheme's default
-// port (":80" for http, ":443" for https) is stripped. This avoids common
-// mismatches because csrf.go compares PublicOrigin with the Origin header by
-// exact string equality, and OAuth URLs concatenate it verbatim. Operators
-// must still supply the browser-serialized form for representations this
-// function does not canonicalize, including internationalized domain names
-// and equivalent IPv6 spellings.
 func loadPublicOrigin(raw string) (string, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -96,7 +78,7 @@ func loadPublicOrigin(raw string) (string, error) {
 		port = ""
 	}
 	hostport := host
-	if strings.Contains(host, ":") { // IPv6 literal: re-add the brackets url.Hostname() strips.
+	if strings.Contains(host, ":") {
 		hostport = "[" + host + "]"
 	}
 	if port != "" {
@@ -105,20 +87,10 @@ func loadPublicOrigin(raw string) (string, error) {
 	return scheme + "://" + hostport, nil
 }
 
-// requiresProductionTrustBoundary reports whether env must satisfy
-// production's client-IP trust-boundary strictness: a loopback LISTEN_HOST
-// (loadListenHost) and a required, non-empty TRUSTED_PROXY_CIDRS
-// (loadTrustedProxyCIDRs). Both "prod" and "staging" require it.
 func requiresProductionTrustBoundary(env string) bool {
 	return env == "prod" || env == "staging"
 }
 
-// loadListenHost validates raw as an IP address to bind, defaulting to
-// defaultListenHost when unset. When env requires production trust-boundary
-// strictness (see requiresProductionTrustBoundary) it additionally requires
-// the result to be a loopback address: binding anything
-// else would make port 8080 reachable around Caddy's origin-secret boundary
-// entirely.
 func loadListenHost(raw, env string) (string, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {

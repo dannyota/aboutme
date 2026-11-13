@@ -35,9 +35,6 @@ type operatorFixture struct {
 	foreignID   uuid.UUID
 }
 
-// newOperatorFixture seeds an account with three resumes (one unpublished,
-// two live, each with a photo), two showcase rows, a session, and the cascade
-// rows of a full account, beside a second account that must stay untouched.
 func newOperatorFixture(t *testing.T) *operatorFixture {
 	t.Helper()
 	ctx := context.Background()
@@ -153,8 +150,6 @@ func TestAccountBySlugReadsOnlyIDAndSlugs(t *testing.T) {
 	}
 }
 
-// The operator deletion removes what a self-delete removes, and reports the
-// account's own slugs.
 func TestDeleteAccountBySlugMatchesSelfDelete(t *testing.T) {
 	f := newOperatorFixture(t)
 	before, err := f.queries.GetPublicState(f.ctx)
@@ -196,8 +191,6 @@ func TestDeleteAccountBySlugMatchesSelfDelete(t *testing.T) {
 	if err := f.pool.QueryRow(f.ctx, `SELECT count(*) FROM lifecycle_audit_events WHERE kind='account_deleted' AND media_job_id IS NULL AND occurred_at >= $1`, f.user.CreatedAt).Scan(&audits); err != nil || audits < 1 {
 		t.Fatalf("account deletion audit count = %d, %v", audits, err)
 	}
-	// The command runs outside the server process and leaves the durable
-	// discovery generation, which the server's in-memory fences track, alone.
 	if after, err := f.queries.GetPublicState(f.ctx); err != nil || after.DiscoveryGeneration != before.DiscoveryGeneration {
 		t.Fatalf("discovery state = (%+v, %v), want generation %d", after, err, before.DiscoveryGeneration)
 	}
@@ -251,8 +244,6 @@ func TestDeleteAccountBySlugRefusesUnknownAndTombstonedSlug(t *testing.T) {
 	f.assertNothingDeleted(t)
 }
 
-// A slug that moves to another account between the preflight and the
-// deletion transaction is caught by the owner check under the slug lock.
 func TestDeleteAccountBySlugRefusesSlugThatMovedBeforeCommit(t *testing.T) {
 	f := newOperatorFixture(t)
 	reported := f.slugs[0]
@@ -317,8 +308,6 @@ func equalStrings(a, b []string) bool {
 	return true
 }
 
-// A lost commit answer is not a rollback: when the follow-up read still finds
-// the user the result is unknown, not "nothing deleted".
 func TestDeleteAccountBySlugReportsUnknownCommitOutcome(t *testing.T) {
 	f := newOperatorFixture(t)
 	f.service.commitTx = func(ctx context.Context, tx pgx.Tx) error {
@@ -333,7 +322,6 @@ func TestDeleteAccountBySlugReportsUnknownCommitOutcome(t *testing.T) {
 	f.assertNothingDeleted(t)
 }
 
-// When the commit lands but its answer is lost, the absent user proves it.
 func TestDeleteAccountBySlugProvesCommitAfterLostAnswer(t *testing.T) {
 	f := newOperatorFixture(t)
 	f.service.commitTx = func(ctx context.Context, tx pgx.Tx) error {
@@ -351,8 +339,6 @@ func TestDeleteAccountBySlugProvesCommitAfterLostAnswer(t *testing.T) {
 	}
 }
 
-// One field decides the path: a request needs a session or a reported slug,
-// never both and never neither.
 func TestDeletionRequestNeedsExactlyOneAuthority(t *testing.T) {
 	f := newOperatorFixture(t)
 	for name, req := range map[string]deletionRequest{
@@ -372,7 +358,6 @@ func TestOperatorConfirmationDeletesResumesAddedAfterShow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The current resume set, rather than the earlier show result, controls deletion.
 	if _, err = f.pool.Exec(f.ctx, `DELETE FROM resumes WHERE slug=$1`, f.slugs[2]); err != nil {
 		t.Fatal(err)
 	}

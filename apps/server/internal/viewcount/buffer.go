@@ -7,14 +7,10 @@ import (
 	"github.com/google/uuid"
 )
 
-// FlushInterval is how often buffered counts reach the database. A crash
-// loses at most this much (docs/design/viewer-analytics/counting.md,
-// "Aggregation").
 const FlushInterval = 60 * time.Second
 
 const flushTimeout = 10 * time.Second
 
-// DayCell is one resume day's increments in resume_view_days.
 type DayCell struct {
 	ResumeID   uuid.UUID
 	Day        time.Time
@@ -26,8 +22,6 @@ type DayCell struct {
 	Crawler    int32
 }
 
-// SignalCell is one resume day platform's increment in
-// resume_share_signal_days.
 type SignalCell struct {
 	ResumeID uuid.UUID
 	Day      time.Time
@@ -46,7 +40,6 @@ type platformKey struct {
 	platform Platform
 }
 
-// buffer holds pending increments, bounded to limit cells in total.
 type buffer struct {
 	limit   int
 	days    map[dayKey]*DayCell
@@ -114,8 +107,6 @@ func (b *buffer) cells() ([]DayCell, []SignalCell) {
 	return days, signals
 }
 
-// Flush writes and clears the buffer. A failed write drops the batch, so a
-// store outage loses counts rather than holding memory without bound.
 func (c *Counter) Flush(ctx context.Context) error {
 	c.mu.Lock()
 	pending := c.buffer
@@ -134,17 +125,13 @@ func (c *Counter) Flush(ctx context.Context) error {
 	return nil
 }
 
-// Run flushes every FlushInterval until ctx ends, then flushes once more
-// with a fresh deadline, so a graceful shutdown keeps the last counts.
 func (c *Counter) Run(ctx context.Context) {
 	ticker := time.NewTicker(FlushInterval)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
-			// The final flush must outlive the canceled run context; Flush
-			// bounds it with its own timeout and logs a failure.
-			if err := c.Flush(context.WithoutCancel(ctx)); err != nil { //nolint:contextcheck // See above.
+			if err := c.Flush(context.WithoutCancel(ctx)); err != nil { //nolint:contextcheck // The final flush must outlive the canceled run context.
 				c.logger.Warn("viewcount: final flush dropped counts")
 			}
 			return

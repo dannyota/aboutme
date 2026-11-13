@@ -16,9 +16,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/resume"
 )
 
-// validDocForTest returns a document decoded straight from full.json --
-// schema-valid and store-valid -- for tests that just need "a fully valid
-// resume" without caring about its specific content.
 func validDocForTest(t *testing.T) schema.Resume {
 	t.Helper()
 	parts := splitFixture(t, "full.json")
@@ -28,8 +25,6 @@ func validDocForTest(t *testing.T) schema.Resume {
 	}
 	return doc
 }
-
-// --- Schema compiler conditions ---
 
 func TestResumeSchemaIDMatchesCurrentEmbeddedSchema(t *testing.T) {
 	var raw struct {
@@ -43,17 +38,8 @@ func TestResumeSchemaIDMatchesCurrentEmbeddedSchema(t *testing.T) {
 	}
 }
 
-// TestD1a_FormatAssertion_MatchesAjvPosture proves format assertion is
-// enabled and pinned to match packages/schema's ajv configuration
-// (addFormats(new Ajv2020({allErrors:true, strict:true})), which ASSERTS
-// format -- draft 2020-12 defaults jsonschema/v6 to annotation-only, so this
-// would otherwise silently accept a malformed uuid/uri.
 func TestD1a_FormatAssertion_MatchesAjvPosture(t *testing.T) {
 	doc := validDocForTest(t)
-	// Corrupt a uuid-format field (personalDetails.details[0].id) to a
-	// syntactically-invalid uuid. If format were merely annotated (the
-	// draft 2020-12 default), this would validate successfully; format
-	// assertion must reject it.
 	doc.PersonalDetails.Details[0].ID = "not-a-uuid"
 
 	err := resume.ValidateForStore(doc)
@@ -76,20 +62,10 @@ func TestD1a_FormatAssertion_MatchesAjvPosture(t *testing.T) {
 	}
 }
 
-// TestD1a_FormatAssertion_URI mirrors the uuid case for the "uri" format
-// (personalDetails.details[].value under a URL-constrained type, and
-// $defs/link), both of which ajv asserts.
 func TestD1a_FormatAssertion_URI(t *testing.T) {
 	doc := validDocForTest(t)
 	work := doc.Content["work"]
-	// The embedded newline is the load-bearing part: $defs/link's pattern
-	// (`^(https://|mailto:|tel:)`) is anchored at the START only, so it
-	// matches on the "https://" prefix regardless of what follows -- only
-	// format:uri (not pattern, not maxLength) rejects this value. A bare
-	// space would NOT be enough here: net/url.Parse (which jsonschema/v6's
-	// uri format validator uses) tolerates an unencoded space, so a
-	// same-shaped assertion using only a space would not actually isolate
-	// format the way this one does.
+	// jsonschema/v6's uri format uses net/url.Parse, which tolerates an unencoded space, so only the newline isolates format.
 	badLink := "https://a.example.com/\nnewline"
 	work.WorkEntries[0].EmployerLink = &badLink
 	doc.Content["work"] = work
@@ -114,9 +90,6 @@ func TestD1a_FormatAssertion_URI(t *testing.T) {
 	}
 }
 
-// TestD1b_NoURLLoader_RemoteRefFails proves the compiler this package uses
-// is configured with no URL loader: resolving any external (or file) $ref
-// must fail at compile time, never touching the network or filesystem.
 func TestD1b_NoURLLoader_RemoteRefFails(t *testing.T) {
 	c := resume.NewSchemaCompilerForTest()
 
@@ -136,11 +109,6 @@ func TestD1b_NoURLLoader_RemoteRefFails(t *testing.T) {
 	}
 }
 
-// TestD1b_NoURLLoader_FileRefFails proves the
-// library's own DEFAULT loader (absent any UseLoader call) is a FileLoader
-// that reads from the local filesystem for "file:" URLs. An empty
-// jsonschema.SchemeURLLoader{} must reject that scheme too -- resolving a
-// $ref must never depend on the filesystem either.
 func TestD1b_NoURLLoader_FileRefFails(t *testing.T) {
 	c := resume.NewSchemaCompilerForTest()
 
@@ -158,8 +126,6 @@ func TestD1b_NoURLLoader_FileRefFails(t *testing.T) {
 	}
 }
 
-// TestD1c_CompiledOnceAtPackageInit proves the embedded schema is compiled
-// exactly once, at package init -- never lazily, never per call.
 func TestD1c_CompiledOnceAtPackageInit(t *testing.T) {
 	if got := resume.CompileCountForTest(); got != 1 {
 		t.Fatalf("compile count = %d, want exactly 1 (compiled once at package init, before any test ran)", got)
@@ -182,12 +148,6 @@ func TestD1c_CompiledOnceAtPackageInit(t *testing.T) {
 	}
 }
 
-// --- ValidateForStore pipeline ---
-
-// pipelineFixture is one fixture the ValidateForStore choke-point test
-// drives: every packages/schema/fixtures/*.json (excluding the store/
-// subdirectory, which is walked separately below with its own store-layer
-// fixtures) plus every packages/schema/fixtures/store/*.json.
 func listJSONFixtures(t *testing.T, dir string) []string {
 	t.Helper()
 	entries, err := os.ReadDir(dir)
@@ -205,14 +165,6 @@ func listJSONFixtures(t *testing.T, dir string) []string {
 	return names
 }
 
-// loadFullDocument reads a full fixture document and decodes it via a plain
-// json.Unmarshal into schema.Resume (not this package's DecodeParts -- these
-// fixtures are single files, not split store columns). It returns the
-// decode error rather than failing the test: a handful of fixtures (the
-// "hostile sectiontype" ones) are deliberately unknown-sectionType payloads
-// that schema.Section.UnmarshalJSON itself rejects before ValidateForStore
-// is ever reached -- a decode failure is itself a rejection, and callers
-// below treat it as one.
 func loadFullDocument(t *testing.T, path string) (schema.Resume, error) {
 	t.Helper()
 	data, err := os.ReadFile(path)
@@ -224,12 +176,6 @@ func loadFullDocument(t *testing.T, path string) (schema.Resume, error) {
 	return doc, err
 }
 
-// TestValidateForStore_TopLevelFixtures drives every top-level fixture
-// (packages/schema/fixtures/*.json, not the store/ subdirectory) through
-// ValidateForStore: files named "invalid-*" must be rejected (whether by
-// failing to decode at all, or by ValidateForStore itself), every other
-// file must decode AND be accepted. This is the SAME naming convention
-// packages/schema/test/schema.test.ts already uses.
 func TestValidateForStore_TopLevelFixtures(t *testing.T) {
 	dir := schemaFixturesDir(t)
 	for _, name := range listJSONFixtures(t, dir) {
@@ -254,15 +200,7 @@ func TestValidateForStore_TopLevelFixtures(t *testing.T) {
 	}
 }
 
-// storeFixtureExpectations pins each packages/schema/fixtures/store/*.json
-// fixture's expected ValidateForStore verdict. Unlike the top-level
-// fixtures, plain "invalid-*" naming is not enough on its own here to prove
-// intent by itself (a few of these files also happen to trip the
-// JSON-Schema layer, e.g. an out-of-enum sectionType) -- but every one of
-// them is still invalid overall, so ValidateForStore's naming convention
-// still holds: this table exists to make the "why" explicit per file, not
-// to override the verdict.
-var storeFixtureExpectations = map[string]bool{ // name -> wantValid
+var storeFixtureExpectations = map[string]bool{
 	"invalid-duplicate-detail-id.json":                false,
 	"invalid-duplicate-entry-id.json":                 false,
 	"invalid-hostile-sectiontype-constructor.json":    false,
@@ -309,8 +247,6 @@ func TestValidateForStore_StoreFixtures(t *testing.T) {
 	}
 }
 
-// TestValidateForStore_IssuesDeterministic proves repeated calls over the
-// same invalid document report identical issues in identical order.
 func TestValidateForStore_IssuesDeterministic(t *testing.T) {
 	dir := filepath.Join(schemaFixturesDir(t), "store")
 	doc, decodeErr := loadFullDocument(t, filepath.Join(dir, "invalid-duplicate-entry-id.json"))
@@ -330,29 +266,15 @@ func TestValidateForStore_IssuesDeterministic(t *testing.T) {
 	}
 }
 
-// TestValidateForStore_IssuesSortedPathFirstAcrossLayers proves the
-// "path-first" claim in ValidationError's doc comment for real: a
-// STORE-layer issue at path "content.aaa...." must sort BEFORE a
-// SCHEMA-layer issue at path "content.zzz...", even though the schema
-// issue's own rendered text ("at '/content/zzz/...': ...") would sort
-// alphabetically before the store issue's rendered text ("duplicate-
-// entry-id (content.aaa...): ...") under a naive string sort -- 'a' < 'd'.
-// A plain sort.Strings on the rendered messages sorts by which layer produced
-// the message (schema issues render
-// "at '/...'", sorting before every rule name), not by path at all.
 func TestValidateForStore_IssuesSortedPathFirstAcrossLayers(t *testing.T) {
 	doc := validDocForTest(t)
 
-	// Store-layer issue (duplicate-entry-id) at content key "aaa".
 	dupID := "00000000-0000-0000-0000-000000000001"
 	aaa := schema.NewWorkSection(nil, nil, []schema.WorkEntry{
 		{ID: dupID},
 		{ID: dupID},
 	})
 
-	// Schema-layer issue (maxLength) at content key "zzz", alphabetically
-	// AFTER "aaa" -- so a genuinely path-first sort must place the "aaa"
-	// store issue(s) first.
 	tooLong := strings.Repeat("a", 161)
 	zzz := schema.NewWorkSection(nil, nil, []schema.WorkEntry{
 		{ID: "00000000-0000-0000-0000-000000000002", JobTitle: &tooLong},
@@ -383,15 +305,7 @@ func TestValidateForStore_IssuesSortedPathFirstAcrossLayers(t *testing.T) {
 	}
 }
 
-// TestValidateForStore_MatchingIssue spot-checks that specific known
-// fixtures report an issue that actually names the rule/field at fault, not
-// just "invalid" with no detail.
 func TestValidateForStore_MatchingIssue(t *testing.T) {
-	// Every fixtures/store/invalid-*.json fixture must name the rule or field
-	// at fault. valid-unique-entry-id.json
-	// is deliberately excluded: it is the one non-"invalid-*" fixture in
-	// this directory, and is covered separately by
-	// TestValidateForStore_StoreFixtures's accept-case assertion.
 	cases := []struct {
 		file      string
 		substring string
@@ -401,7 +315,7 @@ func TestValidateForStore_MatchingIssue(t *testing.T) {
 		{"invalid-layout-duplicate-across-arrays.json", "layout-exactly-once"},
 		{"invalid-layout-missing-content-key.json", "layout-missing-content-key"},
 		{"invalid-layout-orphan-content-key.json", "layout-orphan-content-key"},
-		{"invalid-missing-dates-start.json", "start"}, // JSON-Schema "required" violation: missing property 'start'
+		{"invalid-missing-dates-start.json", "start"},
 		{"invalid-oversize-richtext-bytes.json", "rich-text-byte-length"},
 		{"invalid-personal-detail-url-scheme.json", "personal-detail-url-scheme"},
 		{"invalid-reversed-date-range.json", "date-range-order"},
@@ -423,10 +337,6 @@ func TestValidateForStore_MatchingIssue(t *testing.T) {
 		})
 	}
 
-	// The three "hostile sectiontype" fixtures never reach ValidateForStore
-	// at all -- schema.Section.UnmarshalJSON rejects the unknown sectionType
-	// at DECODE time (see loadFullDocument's own doc comment). Their
-	// "matching issue" is the decode error naming the offending value.
 	decodeCases := []struct {
 		file      string
 		substring string
@@ -448,21 +358,14 @@ func TestValidateForStore_MatchingIssue(t *testing.T) {
 	}
 }
 
-// TestValidateForStore_SingleChokePoint proves ValidateForStore's three
-// layers -- JSON-Schema, MaxDocumentBytes, schema.ValidateDocument -- are
-// ALL exercised in one call: a document violating one rule from each layer
-// simultaneously must report an issue from each, not stop at the first.
 func TestValidateForStore_SingleChokePoint(t *testing.T) {
 	doc := validDocForTest(t)
 
-	// (1) JSON-Schema violation: an out-of-range skill level.
 	skill := doc.Content["skill"]
 	badLevel := int64(99)
 	skill.SkillEntries[0].Level = &badLevel
 	doc.Content["skill"] = skill
 
-	// (2) schema.ValidateDocument violation: duplicate entry ids across
-	// sections.
 	work := doc.Content["work"]
 	dupID := doc.Content["education"].EducationEntries[0].ID
 	work.WorkEntries[0].ID = dupID
@@ -492,8 +395,6 @@ func TestValidateForStore_ValidDocumentReturnsNil(t *testing.T) {
 }
 
 func TestValidateForStore_MaxDocumentBytes_Simple(t *testing.T) {
-	// A cheap (non-boundary-exact) sanity check that MaxDocumentBytes is
-	// wired at all; the exact limit/limit+1 boundary is bounds_test.go's job.
 	doc := validDocForTest(t)
 	profile := doc.Content["profile"]
 	huge := strings.Repeat("a", resume.MaxDocumentBytes)

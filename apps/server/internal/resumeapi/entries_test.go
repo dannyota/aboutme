@@ -136,7 +136,6 @@ func TestEntryUpsertPreservesDraftAndRejectsWrongShapeCollisionAndLimit(t *testi
 
 	doc := decodeEntryTestDocument(t, raw)
 	entries := make([]schema.WorkEntry, 64)
-	// Use stable valid UUIDs without sharing ids across sections.
 	for i := range entries {
 		entries[i].ID = fmt.Sprintf("10000000-0000-4000-8000-%012d", i)
 	}

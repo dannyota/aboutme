@@ -1,8 +1,5 @@
 package secondfactor
 
-// Passkey removal and the shared factor-change commit that every factor
-// enrollment, removal, and recovery-code regeneration finishes with.
-
 import (
 	"context"
 	"errors"
@@ -18,10 +15,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// RemovePasskey deletes one owned passkey. Final versus non-final comes only
-// from ActiveFactorCount after the delete: final removal deletes the recovery
-// codes and policy, clears the factor proof, and sends second_factor_disabled;
-// otherwise the policy, codes, and proof stay and passkey_removed is sent.
 func (s *Service) RemovePasskey(ctx context.Context, current store.Session, passkeyID uuid.UUID) (auth.SessionIssue, error) {
 	var issue auth.SessionIssue
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
@@ -69,11 +62,6 @@ func (s *Service) RemovePasskey(ctx context.Context, current store.Session, pass
 	return issue, nil
 }
 
-// commitFactorChange advances the epoch, replaces the current session and
-// revokes every other one, then revokes every live agent grant and its token
-// families, and enqueues the notification, all in the caller's transaction
-// under the user lock. Sessions come before grants, as the lock order in
-// docs/design/second-factor-authentication.md requires.
 func (s *Service) commitFactorChange(ctx context.Context, qtx *store.Queries, user store.User, sess store.Session, factorProof *time.Time, kind authmail.Kind, now time.Time) (auth.SessionIssue, error) {
 	if _, err := qtx.AdvanceUserAuthEpoch(ctx, user.ID); err != nil {
 		return auth.SessionIssue{}, fmt.Errorf("advance epoch: %w", err)

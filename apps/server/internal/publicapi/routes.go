@@ -29,7 +29,6 @@ const (
 	publicRouteProject
 )
 
-// Recognizes reports whether escapedPath belongs to a public route.
 func (s *Service) Recognizes(escapedPath string) bool {
 	return classifyPublicRoute(escapedPath) != publicRouteNone
 }
@@ -144,10 +143,6 @@ func classifyPublicRoute(path string) publicRoute {
 	return publicRouteNone
 }
 
-// classifyProjectRoute recognizes exactly /{slug}/projects and
-// /{slug}/projects/{project-slug}, with a valid resume slug and a valid
-// project slug (docs/design/projects-contract.md "Routes and dispatch").
-// The caller has already rejected any percent sign.
 func classifyProjectRoute(path string) publicRoute {
 	slug, rest, found := strings.Cut(strings.TrimPrefix(path, "/"), "/")
 	if !strings.HasPrefix(path, "/") || !found || !validPublicSlug(slug) {
@@ -162,8 +157,6 @@ func classifyProjectRoute(path string) publicRoute {
 	return publicRouteNone
 }
 
-// projectRouteSlugs splits a path classifyProjectRoute recognized into the
-// resume slug and the project slug, which is "" for the list.
 func projectRouteSlugs(path string) (slug, projectSlug string) {
 	slug, rest, _ := strings.Cut(strings.TrimPrefix(path, "/"), "/")
 	return slug, strings.TrimPrefix(strings.TrimPrefix(rest, "projects"), "/")

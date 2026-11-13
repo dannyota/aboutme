@@ -1,7 +1,5 @@
-// Package publicroots defines route ownership and public slug validation.
 package publicroots
 
-// ValidSlug accepts a non-reserved public resume slug.
 func ValidSlug(slug string) bool {
 	if len(slug) < 4 || len(slug) > 30 || Reserved(slug) || slug[0] == '-' || slug[len(slug)-1] == '-' {
 		return false

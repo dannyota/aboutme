@@ -5,9 +5,6 @@ import (
 	"testing"
 )
 
-// v4Document returns the v4 minimal fixture with every v3-only field
-// set, as v3Document does, plus a left header photo and a project section
-// with one subtitled entry and one without.
 func v4Document(t *testing.T) map[string]any {
 	t.Helper()
 	v4 := decodeFontTestMap(t, readFontV2Fixture(t, "packages", "schema", "fixtures", "v4", "minimal.json"))
@@ -35,7 +32,6 @@ func v4Document(t *testing.T) map[string]any {
 	return doc
 }
 
-// withoutV4Fields strips exactly what v3 cannot represent.
 func withoutV4Fields(t *testing.T, doc map[string]any) map[string]any {
 	t.Helper()
 	out := decodeFontTestMap(t, mustJSON(t, doc))
@@ -195,7 +191,6 @@ func TestProductionEmissionLossPolicyAllowsOnlyDeclaredV4Loss(t *testing.T) {
 		t.Fatalf("declared v4 loss rejected: %v", err)
 	}
 
-	// A v3 emission must keep the v3 fields; only photoPosition may go.
 	lostV3 := withoutV3Fields(t, withoutV4Fields(t, withoutV5Fields(t, withoutV6Fields(t, doc))))
 	lostV3["schemaVersion"] = float64(3)
 	if err := productionEmissionLossPolicy(current, mustJSON(t, lostV3), restored, 3); err == nil {

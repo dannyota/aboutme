@@ -20,57 +20,37 @@ const (
 	photoFormatVersion = 1
 )
 
-// ServiceDependencies are the public HTTP handlers' shared dependencies.
-// Composition constructs one Reader and one Coordinator before calling this
-// constructor, so every representation takes the same admission path.
 type ServiceDependencies struct {
-	Reader         *publicresume.Reader
-	DiscoveryStore store.PublicDiscoveryQueries
-	Coordinator    *publicstate.Coordinator
-	Cache          *publiccache.Cache
-	Renderer       *directrender.Client
-	PublicOrigin   publicresume.PublicOrigin
-	AppDigest      string
-	RendererDigest string
-	PrintQueue     RenderQueue
-	TrustedProxies api.TrustedProxies
-	Clock          func() time.Time
-	Live           http.Handler
-	// Logger receives closed, content-free diagnostics. Nil disables them.
-	Logger *slog.Logger
-	// Cards turns on stored preview cards (ADR 0014). Nil keeps the og.png
-	// share image, so the server can deploy before the web card renderer.
-	Cards PreviewCards
-	// Views records crawler and link-preview fetches of resume pages. Nil
-	// records nothing.
-	Views ViewObserver
-	// ViewPassKey seals and opens the __Host-view-pass cookie
-	// (docs/design/viewer-analytics/sign-in-to-view.md "Pass cookie").
-	ViewPassKey []byte
-	// GateProviders is the fixed subset of ["google","linkedin"] the gate
-	// offers (design "Gate"; ADR 0016).
-	GateProviders []string
-	// JoinInviteTarget is "/register" or "/login": the join invite's link
-	// for a sign-in-to-view resume's page (design "Join invite").
+	Reader           *publicresume.Reader
+	DiscoveryStore   store.PublicDiscoveryQueries
+	Coordinator      *publicstate.Coordinator
+	Cache            *publiccache.Cache
+	Renderer         *directrender.Client
+	PublicOrigin     publicresume.PublicOrigin
+	AppDigest        string
+	RendererDigest   string
+	PrintQueue       RenderQueue
+	TrustedProxies   api.TrustedProxies
+	Clock            func() time.Time
+	Live             http.Handler
+	Logger           *slog.Logger
+	Cards            PreviewCards
+	Views            ViewObserver
+	ViewPassKey      []byte
+	GateProviders    []string
 	JoinInviteTarget string
-	// Showcase serves the community showcase listing (docs/design/showcase.md).
-	// Nil leaves the route answering 404, so the server can deploy before it
-	// is wired.
-	Showcase ShowcaseListing
+	Showcase         ShowcaseListing
 }
 
 var _ store.PublicReadQueries = (*store.Queries)(nil)
 
-// Service is the public-route boundary consumed by api.New.
 type Service struct {
-	json  http.Handler
-	photo http.Handler
-	pdf   http.Handler
-	png   http.Handler
-	card  http.Handler
-	html  http.Handler
-	// projectList and project serve /{slug}/projects and
-	// /{slug}/projects/{project-slug}.
+	json        http.Handler
+	photo       http.Handler
+	pdf         http.Handler
+	png         http.Handler
+	card        http.Handler
+	html        http.Handler
 	projectList http.Handler
 	project     http.Handler
 	markdown    http.Handler
@@ -81,7 +61,6 @@ type Service struct {
 	showcase    http.Handler
 }
 
-// NewService creates the public-route dispatcher from its dependencies.
 func NewService(dependencies ServiceDependencies) (*Service, error) {
 	if dependencies.Reader == nil || dependencies.DiscoveryStore == nil || dependencies.Cache == nil || dependencies.Renderer == nil || dependencies.PublicOrigin.String() == "" || dependencies.AppDigest == "" || dependencies.RendererDigest == "" {
 		return nil, ErrUnavailableDependencies
@@ -160,9 +139,6 @@ func (s *Service) newJSONHandler(reader *publicresume.Reader, cache *publiccache
 			return
 		}
 		defer releaseAfterFlush(w, lease)
-		// The pass check runs after admission and before any public cache
-		// lookup (docs/design/viewer-analytics/sign-in-to-view.md "Gated
-		// routes"; AC-VIEW-003).
 		if snapshot.SignInToView && !hasValidPass(request, viewPassKey, snapshot.ResumeID, snapshot.ViewPassEpoch, clock) {
 			servePublicJSONError(w, request, http.StatusNotFound)
 			return

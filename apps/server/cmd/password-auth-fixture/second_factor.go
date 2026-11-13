@@ -95,7 +95,6 @@ func validateSecondFactorAccounts(doc secondFactorAccounts, proof string) error 
 	return nil
 }
 
-// Private files are run-scoped, never overwritten, and never follow links.
 func openSecondFactorFile(path string, create bool) (*os.File, error) {
 	invalid := errors.New("invalid private second-factor account file")
 	if !filepath.IsAbs(path) || filepath.Clean(path) != path {
@@ -221,8 +220,6 @@ func runSecondFactorFixture(ctx context.Context, cfg Config, cleanup bool) error
 	})
 }
 
-// The private credential handoff precedes commit so a failed commit can be
-// cleaned by exact identities; a collision never publishes that handoff.
 func seedSecondFactorAccounts(ctx context.Context, db *sql.DB, doc secondFactorAccounts, hashes []string, now time.Time, publish func() error) error {
 	if err := validateSecondFactorAccounts(doc, doc.Proof); err != nil || len(hashes) != len(doc.Accounts) {
 		return errors.New("invalid second-factor fixture accounts")

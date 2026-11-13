@@ -1,6 +1,3 @@
-// fs_test.go is an internal (package media) test file: the re-rooting
-// second defense is unexported, and proving it needs to bypass the public
-// key validation that normally makes it unreachable.
 package media
 
 import (
@@ -63,9 +60,6 @@ func TestNewFS_Rejections(t *testing.T) {
 	}
 }
 
-// TestFS_ReRootSecondDefense drives escaping paths directly at the
-// unexported path mapper, bypassing key validation, to prove re-rooting is
-// a real second defense and not dead code.
 func TestFS_ReRootSecondDefense(t *testing.T) {
 	t.Parallel()
 	b, _ := newFSBackend(t)
@@ -79,9 +73,6 @@ func TestFS_ReRootSecondDefense(t *testing.T) {
 	}
 }
 
-// TestFS_SymlinkCannotEscapeRoot proves the rooted I/O boundary, not only the
-// lexical objectPath check. A pre-existing directory symlink inside the media
-// root must not let Put, Get, or Delete reach an outside file.
 func TestFS_SymlinkCannotEscapeRoot(t *testing.T) {
 	t.Parallel()
 	b, root := newFSBackend(t)
@@ -116,8 +107,6 @@ func TestFS_SymlinkCannotEscapeRoot(t *testing.T) {
 	}
 }
 
-// TestFS_NoResidueAfterFailedPut: a Put whose body is shorter than size
-// leaves no partial object AND no temp-file residue anywhere under root.
 func TestFS_NoResidueAfterFailedPut(t *testing.T) {
 	t.Parallel()
 	b, root := newFSBackend(t)
@@ -143,8 +132,6 @@ func TestFS_NoResidueAfterFailedPut(t *testing.T) {
 	}
 }
 
-// TestFS_TempResidueFromCrashIsInvisible: a crash-orphaned temp file (the
-// only artifact a killed Put can leave) is never listed as an object.
 func TestFS_TempResidueFromCrashIsInvisible(t *testing.T) {
 	t.Parallel()
 	b, root := newFSBackend(t)
@@ -161,9 +148,6 @@ func TestFS_TempResidueFromCrashIsInvisible(t *testing.T) {
 	}
 }
 
-// TestFS_ListPageStopsAtBound proves the filesystem implementation does not
-// scan or retain an unbounded tail after it has enough entries to return one
-// page and determine that another page exists.
 func TestFS_ListPageStopsAtBound(t *testing.T) {
 	t.Parallel()
 	b, root := newFSBackend(t)
@@ -195,10 +179,6 @@ func TestFS_ListPageStopsAtBound(t *testing.T) {
 	}
 }
 
-// TestFS_ListPageWideDirectoryUsesBoundedIndexWork proves a page does not
-// enumerate a wide directory. The backend may build its ordered index once at
-// startup and maintain it on writes, but one page visits at most limit+1 index
-// records even when the cursor starts in the middle of 10,000 siblings.
 func TestFS_ListPageWideDirectoryUsesBoundedIndexWork(t *testing.T) {
 	t.Parallel()
 	b, _ := newFSBackend(t)
@@ -220,10 +200,6 @@ func TestFS_ListPageWideDirectoryUsesBoundedIndexWork(t *testing.T) {
 	}
 }
 
-// TestFS_ListPageUsesFullKeyLexicographicOrder covers the boundary where
-// directory traversal order differs from S3's full-key byte order. A cursor
-// taken from the wrong first page would otherwise skip the punctuation sibling
-// forever.
 func TestFS_ListPageUsesFullKeyLexicographicOrder(t *testing.T) {
 	t.Parallel()
 	b, _ := newFSBackend(t)
@@ -252,7 +228,6 @@ func TestFS_ListPageUsesFullKeyLexicographicOrder(t *testing.T) {
 	}
 }
 
-// mustPutForTest inserts a small valid object.
 func (b *fsBackend) mustPutForTest(t *testing.T, key string) {
 	t.Helper()
 	outcome, err := b.Put(context.Background(), key, "image/jpeg", bytes.NewReader([]byte("x")), 1)
@@ -261,8 +236,6 @@ func (b *fsBackend) mustPutForTest(t *testing.T, key string) {
 	}
 }
 
-// TestFS_ContentTypeSurvivesReopen: the stored content type is durable
-// state, not process memory — a new backend over the same root serves it.
 func TestFS_ContentTypeSurvivesReopen(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -292,10 +265,6 @@ func TestFS_ContentTypeSurvivesReopen(t *testing.T) {
 	}
 }
 
-// TestFS_PutUnderFileSegmentFails: FS cannot store both "k" and "k/child"
-// (a documented divergence from S3 that photo keys never reach); the failure
-// must be a clean proved non-create, never PutUnknown and never a partial
-// object.
 func TestFS_PutUnderFileSegmentFails(t *testing.T) {
 	t.Parallel()
 	b, _ := newFSBackend(t)
@@ -306,8 +275,6 @@ func TestFS_PutUnderFileSegmentFails(t *testing.T) {
 	}
 }
 
-// TestFS_GetDirectoryIsNotFound: a directory created for deeper keys is
-// not itself an object.
 func TestFS_GetDirectoryIsNotFound(t *testing.T) {
 	t.Parallel()
 	b, _ := newFSBackend(t)
@@ -317,8 +284,6 @@ func TestFS_GetDirectoryIsNotFound(t *testing.T) {
 	}
 }
 
-// TestFS_DeleteDirectoryIsNotFound: a directory created for deeper keys is
-// not an object and Delete must not remove storage structure.
 func TestFS_DeleteDirectoryIsNotFound(t *testing.T) {
 	t.Parallel()
 	b, _ := newFSBackend(t)

@@ -26,9 +26,6 @@ func loadMinimalDocument(t *testing.T) schema.Resume {
 	return doc
 }
 
-// TestRichTextPaths_ExactlyMatchCurrentSchema makes a schema change break at
-// the sanitizer boundary. The expected set is discovered from $defs whose
-// entry properties directly reference richText, not copied from production.
 func TestRichTextPaths_ExactlyMatchCurrentSchema(t *testing.T) {
 	t.Parallel()
 

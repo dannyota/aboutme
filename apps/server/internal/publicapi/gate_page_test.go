@@ -5,9 +5,6 @@ import (
 	"testing"
 )
 
-// TestGateHTMLRejection_ProjectPageLinksCarryThePage proves a gate standing
-// in for a project page expects each provider link to end in exactly
-// &page={page}, and that the resume page's gate is unchanged.
 func TestGateHTMLRejection_ProjectPageLinksCarryThePage(t *testing.T) {
 	origin := mustPublicOrigin(t)
 	resume := gateTestEnvelope()

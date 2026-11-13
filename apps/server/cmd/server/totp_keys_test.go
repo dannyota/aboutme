@@ -8,14 +8,8 @@ import (
 	"testing"
 )
 
-// testTOTPActiveKey is the unpadded base64url spelling of 32 zero bytes, a
-// valid TOTP_ACTIVE_KEY value (docs/design/totp-key-management.md "Key
-// ring").
 const testTOTPActiveKey = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
 
-// TestRunTOTPKeyReencrypt_RejectsArguments proves the command takes no
-// arguments (docs/design/totp-key-management.md "Rotation": the one-shot
-// path is a bounded command with no user-supplied parameters).
 func TestRunTOTPKeyReencrypt_RejectsArguments(t *testing.T) {
 	t.Parallel()
 	if err := runTOTPKeyReencrypt([]string{"--dry-run"}); err == nil {
@@ -23,13 +17,6 @@ func TestRunTOTPKeyReencrypt_RejectsArguments(t *testing.T) {
 	}
 }
 
-// TestExecuteTOTPKeyReencrypt_ReportsConfigurationFailureWithoutTheRawKey
-// proves a malformed TOTP_ACTIVE_KEY fails the command, writes one fixed
-// JSON report naming only the job and success, and never echoes the raw
-// value anywhere in its output
-// (docs/design/totp-key-management.md "Rotation": "It reports counts and
-// row IDs only, never keys, secrets, nonces, ciphertext, email, or account
-// IDs").
 func TestExecuteTOTPKeyReencrypt_ReportsConfigurationFailureWithoutTheRawKey(t *testing.T) {
 	t.Parallel()
 	const secretSentinel = "not-a-valid-totp-key-sentinel"
@@ -63,9 +50,6 @@ func TestExecuteTOTPKeyReencrypt_ReportsConfigurationFailureWithoutTheRawKey(t *
 	}
 }
 
-// TestExecuteTOTPKeyReencrypt_ReportsMissingDatabaseURL proves the command
-// fails closed, with the same fixed report shape, when the reduced
-// environment omits DATABASE_URL.
 func TestExecuteTOTPKeyReencrypt_ReportsMissingDatabaseURL(t *testing.T) {
 	t.Parallel()
 	getenv := func(key string) string {
@@ -93,12 +77,6 @@ func TestExecuteTOTPKeyReencrypt_ReportsMissingDatabaseURL(t *testing.T) {
 
 func TestDispatch_RoutesTOTPKeyReencryptCommand(t *testing.T) {
 	t.Parallel()
-	// No arguments beyond the command name is rejected by config loading
-	// (no DATABASE_URL in the test process environment is not guaranteed),
-	// so this proves only that dispatch reaches runTOTPKeyReencrypt's own
-	// argument check rather than runCommand's privacy-command parser, which
-	// would reject "totp-key-reencrypt" as an unknown privacy command with a
-	// different message.
 	err := dispatch([]string{totpKeyReencryptCommandName, "unexpected-arg"})
 	if err == nil || !strings.Contains(err.Error(), "usage: server totp-key-reencrypt") {
 		t.Fatalf("dispatch() error = %v, want runTOTPKeyReencrypt's usage rejection", err)

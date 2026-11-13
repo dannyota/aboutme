@@ -78,8 +78,6 @@ func convertFontFamily(doc json.RawMessage, target int32, mapping map[string]str
 	return out, nil
 }
 
-// v1FontFallbackPolicy permits only the catalog's declared v1 font fallback
-// between a v2-shaped current document and its v1 emission.
 func v1FontFallbackPolicy(current, emitted, restored json.RawMessage) error {
 	currentValue, err := decodeDocumentValue(current)
 	if err != nil {

@@ -14,7 +14,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// Worker scheduling bounds.
 const (
 	pollInterval       = 1 * time.Second
 	leaseDuration      = 30 * time.Second
@@ -29,37 +28,19 @@ const (
 	finishedJobRetain  = 7 * 24 * time.Hour
 )
 
-// WorkerOptions wires the worker to the store pool, transaction queries,
-// key ring, a Sender, and deterministic clock/jitter.
-// Production has no alternate store path; tests inject only package-private
-// begin/commit failure hooks and the same *store.Queries transaction binding.
 type WorkerOptions struct {
-	// Pool opens every lease, cleanup, claim, and send transaction.
-	Pool *store.Pool
-	// Queries is bound to each transaction with WithTx.
-	Queries *store.Queries
-	// KeyRing opens each leased job's sealed payload before a send.
-	KeyRing *KeyRing
-	// Sender delivers each authorized message.
-	Sender Sender
-	// FooterNote is added to every message body; an empty note adds nothing.
-	FooterNote string
-	// Clock supplies the time used for leases, cleanup cutoffs, and job state.
-	Clock func() time.Time
-	// Jitter maps a temporary failure's backoff cap to the retry delay.
-	Jitter func(time.Duration) time.Duration
-	// Logger receives tick errors and worker warnings.
-	Logger *slog.Logger
-	// WorkerID is the lease owner stamped on claimed jobs; uuid.Nil is rejected.
-	WorkerID uuid.UUID
-	// NoticeAuthority authorizes privacy notice jobs; nil disables them.
+	Pool            *store.Pool
+	Queries         *store.Queries
+	KeyRing         *KeyRing
+	Sender          Sender
+	FooterNote      string
+	Clock           func() time.Time
+	Jitter          func(time.Duration) time.Duration
+	Logger          *slog.Logger
+	WorkerID        uuid.UUID
 	NoticeAuthority NoticeAuthority
 }
 
-// Worker polls once per second, claims at most ten jobs, and sends at most two
-// at once. Every send is authorized and finalized inside one transaction that
-// locks the scope row first and the leased job second, holds both locks through
-// the at-most-ten-second sender call, and commits sent/terminal/requeue state.
 type Worker struct {
 	pool            poolBeginner
 	queries         *store.Queries
@@ -72,13 +53,9 @@ type Worker struct {
 	id              uuid.UUID
 	noticeAuthority NoticeAuthority
 
-	// package-private hooks tests use as deterministic barriers; nil in
-	// production.
 	hooks workerHooks
 }
 
-// poolBeginner is the narrow transaction-opening surface Worker needs. Both
-// *store.Pool and test fakes satisfy it.
 type poolBeginner interface {
 	Begin(context.Context) (pgx.Tx, error)
 }
@@ -90,8 +67,6 @@ type workerHooks struct {
 	afterSend  func(jobID uuid.UUID, outcome SendOutcome)
 }
 
-// NewWorker validates every option and returns a Worker. A nil pool, queries,
-// ring, sender, clock, jitter, logger, or nil worker ID is rejected.
 func NewWorker(opts WorkerOptions) (*Worker, error) {
 	if opts.Pool == nil || opts.Queries == nil || opts.KeyRing == nil || opts.Sender == nil {
 		return nil, ErrWorker
@@ -116,9 +91,6 @@ func NewWorker(opts WorkerOptions) (*Worker, error) {
 	}, nil
 }
 
-// Run polls once per second until ctx is canceled. A tick error is logged and
-// the loop continues; cancellation returns nil promptly after in-flight sends
-// join (each send has its own ten-second deadline).
 func (w *Worker) Run(ctx context.Context) error {
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
@@ -137,11 +109,6 @@ func (w *Worker) Run(ctx context.Context) error {
 	}
 }
 
-// RunOnce runs one full tick: requeue expired leases, run the three bounded
-// cleanups, claim at most ten jobs, and send each claimed job with at most two
-// concurrent sends. It joins every send before returning, so a canceled ctx
-// leaves in-flight jobs in a recoverable leased state rather than a partial
-// finalize.
 func (w *Worker) RunOnce(ctx context.Context) error {
 	now := w.clock()
 
@@ -185,9 +152,6 @@ func (w *Worker) RunOnce(ctx context.Context) error {
 	return nil //nolint:nilerr // a canceled ctx stops new sends but is not a tick error; Run observes ctx.Done() to stop.
 }
 
-// claim atomically transitions at most ten due pending jobs to leased in one
-// transaction, stamping the lease owner and a thirty-second expiry, and returns
-// them in (next_attempt_at, created_at, id) order.
 func (w *Worker) claim(ctx context.Context, now time.Time) ([]store.AuthEmailJob, error) {
 	tx, err := w.pool.Begin(ctx)
 	if err != nil {
@@ -220,5 +184,4 @@ func (w *Worker) claim(ctx context.Context, now time.Time) ([]store.AuthEmailJob
 	return jobs, nil
 }
 
-// compile-time assertion that a *store.Pool opens transactions as expected.
 var _ poolBeginner = (*store.Pool)(nil)

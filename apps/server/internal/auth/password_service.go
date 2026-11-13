@@ -1,15 +1,5 @@
 package auth
 
-// PasswordService implements the password-based register, verify, login,
-// forgot, reset, reauth, and change operations, and their transactional
-// fences. It holds the exact dependencies the handlers need: the store
-// pool/queries, the session manager (issue), the pending authentication
-// manager, the password policy and hasher, the encrypted outbox, and the rate
-// policies. It never opens a short
-// transaction around Argon2id hashing or HIBP lookups; those run before the
-// transaction, and only the user/credential/session lock-recheck-commit work
-// runs inside it.
-
 import (
 	"errors"
 	"io"
@@ -24,32 +14,23 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// PasswordServiceOptions is the full dependency set for the password service.
-// NewPasswordService fails on any nil or invalid dependency.
 type PasswordServiceOptions struct {
-	Pool           *store.Pool
-	Queries        *store.Queries
-	Sessions       *SessionManager
-	Policy         *password.Policy
-	Hasher         *password.Hasher
-	Outbox         *authmail.Outbox
-	Limits         *PasswordRatePolicies
-	PublicOrigin   string
-	Clock          func() time.Time
-	Entropy        io.Reader
-	Logger         *slog.Logger
-	TrustedProxies api.TrustedProxies
-	// RegistrationDisabled leaves POST /auth/password/register unregistered,
-	// so it returns the uniform not-found response. Pending registrations
-	// still verify, and every other password route is unchanged.
+	Pool                 *store.Pool
+	Queries              *store.Queries
+	Sessions             *SessionManager
+	Policy               *password.Policy
+	Hasher               *password.Hasher
+	Outbox               *authmail.Outbox
+	Limits               *PasswordRatePolicies
+	PublicOrigin         string
+	Clock                func() time.Time
+	Entropy              io.Reader
+	Logger               *slog.Logger
+	TrustedProxies       api.TrustedProxies
 	RegistrationDisabled bool
-	// Pending creates the pending authentication an enrolled account gets
-	// after password login or reauthentication. Nil builds one over Pool.
-	Pending *PendingAuthenticationManager
+	Pending              *PendingAuthenticationManager
 }
 
-// PasswordService is the password-based HTTP service. See the package
-// comment for the operation/lock-order contract.
 type PasswordService struct {
 	pool            *store.Pool
 	q               *store.Queries
@@ -66,16 +47,11 @@ type PasswordService struct {
 	trustedProxies  api.TrustedProxies
 	registrationOff bool
 
-	// Test-only probes, nil in production. See export_test.go.
 	userLockProbe               func()
 	loginPreTxProbe             func()
 	verifyRegistrationLockProbe func()
 }
 
-// NewPasswordService validates every dependency and returns the service. It
-// fails closed: a nil pool, queries, session manager, policy, hasher, outbox,
-// rate policies, clock, or entropy source, or an empty PublicOrigin, is an
-// error. Logger and TrustedProxies may be nil (dev defaults).
 func NewPasswordService(opts PasswordServiceOptions) (*PasswordService, error) {
 	switch {
 	case opts.Pool == nil:
@@ -121,9 +97,6 @@ func NewPasswordService(opts PasswordServiceOptions) (*PasswordService, error) {
 	}, nil
 }
 
-// RegisterRoutes attaches the seven password operations to mux, or six when
-// registration is disabled. The independent PasswordService owns these routes;
-// OAuth Service.RegisterRoutes is untouched.
 func (s *PasswordService) RegisterRoutes(mux *http.ServeMux) {
 	if !s.registrationOff {
 		mux.Handle(PasswordRegisterPath, route(http.MethodPost, s.handleRegister))
@@ -136,12 +109,6 @@ func (s *PasswordService) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle(PasswordMePath, route(http.MethodPut, s.passwordSessionChain(s.handleChange)))
 }
 
-// ---- shared transaction helpers ----
-
-// clientAddrFromString returns the canonical client IP as a netip.Addr for rate
-// keying. An empty/unparseable string returns the zero Addr, which keys to a
-// shared "invalid IP" bucket: the router's outer limiter already rejects
-// unresolvable client IPs before these handlers run, so this is defensive only.
 func clientAddrFromString(ip string) netip.Addr {
 	addr, err := netip.ParseAddr(ip)
 	if err != nil {
@@ -150,8 +117,6 @@ func clientAddrFromString(ip string) netip.Addr {
 	return addr
 }
 
-// clientIPString resolves the request's real client IP through the trusted-proxy
-// boundary, or "" when it cannot be determined.
 func (s *PasswordService) clientIPString(r *http.Request) string {
 	ip, ok := api.ClientIP(r, s.trustedProxies)
 	if !ok {
@@ -160,25 +125,15 @@ func (s *PasswordService) clientIPString(r *http.Request) string {
 	return ip
 }
 
-// errPasswordRateLimitedCarrier reports a rate-limit rejection together with the
-// Retry-After seconds. Handlers unwrap it with errors.As.
 type passwordRateLimitedError struct{ retryAfterSeconds int }
 
 func (e *passwordRateLimitedError) Error() string { return errPasswordRateLimited.Error() }
 func (e *passwordRateLimitedError) Unwrap() error { return errPasswordRateLimited }
 
-// errPasswordCredentialChanged marks a login whose credential hash changed
-// between the snapshot and the transaction. The caller re-verifies once outside
-// the transaction and retries.
 var errPasswordCredentialChanged = errors.New("auth: password credential changed")
 
-// errPasswordRegistrationRace marks a register whose registration insert lost a
-// unique-email race to a concurrent registration; the outcome is still the
-// generic 202.
 var errPasswordRegistrationRace = errors.New("auth: password registration raced")
 
-// recordLoginFailure records one wrong-password failure and returns the 401 or
-// 429 outcome.
 func (s *PasswordService) recordLoginFailure(now time.Time, canonicalEmail string) error {
 	state := s.limits.RecordLoginFailure(now, canonicalEmail)
 	if state.Exhausted {
@@ -187,15 +142,10 @@ func (s *PasswordService) recordLoginFailure(now time.Time, canonicalEmail strin
 	return errPasswordAuthFailed
 }
 
-// newEmailPayload builds the outbox plaintext for one email. Link is empty for
-// password_changed; verify/reset carry the canonical fragment link.
 func newEmailPayload(canonicalEmail string, link string) authmail.Payload {
 	return authmail.Payload{Version: 1, To: canonicalEmail, Link: link}
 }
 
-// verifyEmailLink and resetEmailLink build the verification and reset
-// fragment links. The origin is the canonical production origin, matching
-// authmail's link validation; it is not the configured PublicOrigin.
 func verifyEmailLink(rawToken string) string {
 	return canonicalEmailLinkOrigin + "/verify-email#token=" + rawToken
 }
@@ -204,7 +154,4 @@ func resetEmailLink(rawToken string) string {
 	return canonicalEmailLinkOrigin + "/reset-password#token=" + rawToken
 }
 
-// canonicalEmailLinkOrigin is the hard-coded origin used in verification and
-// reset links (authmail's canonicalLinkOrigin). It is a named placeholder, not
-// a sender identity.
 const canonicalEmailLinkOrigin = "https://aboutme.vn"

@@ -12,29 +12,15 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// BackfillResult is BackfillOne's outcome. It is meaningful only when the
-// accompanying error is nil.
 type BackfillResult int
 
 const (
-	// BackfillUnknown is the zero value and accompanies every non-nil error.
-	// It occupies 0 deliberately: this is a system job that rewrites personal
-	// data, so a caller that ignores the error and branches on the result
-	// must not read "applied" and mark a failed row done, never to retry it.
 	BackfillUnknown BackfillResult = iota
 
-	// BackfillApplied means the row was rewritten at the current version.
 	BackfillApplied
 
-	// BackfillSkippedCurrent means the row was already at the current
-	// version, so nothing was written at all.
 	BackfillSkippedCurrent
 
-	// BackfillLostRace means the observation the CAS was built from went
-	// stale between the read and the write, so zero rows were updated and
-	// nothing was written. It is RETRYABLE and never terminal: the row may
-	// still be behind. A title-only write bumps revision without touching
-	// schema_version, so this outcome does not imply the row became current.
 	BackfillLostRace
 )
 
@@ -53,31 +39,10 @@ func (r BackfillResult) String() string {
 	}
 }
 
-// BackfillOne migrates one stored row to the current document version: read,
-// project, decode, validate, then a CAS keyed on the observed schema_version
-// AND revision. It is a system job, not user-scoped, and it leaves revision
-// and updated_at alone so an editor holding a pre-backfill revision is
-// not forced into a conflict by a migration it cannot see.
-//
-// It returns ErrNotFound for an unknown id, and an error -- with no write --
-// when the stored document cannot be projected, decoded, or validated.
-//
-// See docs/adr/0004-resume-document-contract.md.
 func (s *Store) BackfillOne(ctx context.Context, id uuid.UUID) (BackfillResult, error) {
 	return s.backfillOne(ctx, id, nil)
 }
 
-// backfillOne is BackfillOne's core with a test-only pause seam between the
-// read and the CAS (export_test.go). There is deliberately no transaction
-// around the two statements: the CAS predicate IS the atomicity, so holding a
-// transaction open across the projection would only make a system job block
-// user writes.
-//
-// BackfillResumeDocumentCAS is the one document write that skips the project
-// link check of CreateTx, SaveDocumentTx and SaveMetadataAndDocumentTx. That
-// is safe because it rewrites only a row stored below the current version,
-// whose released schema cannot hold a projectId and whose up-conversion adds
-// none, and skips every current-version row.
 func (s *Store) backfillOne(ctx context.Context, id uuid.UUID, pause func()) (BackfillResult, error) {
 	row, err := s.q.GetResumeByID(ctx, id)
 	if err != nil {
@@ -87,9 +52,6 @@ func (s *Store) backfillOne(ctx context.Context, id uuid.UUID, pause func()) (Ba
 		return BackfillUnknown, fmt.Errorf("resume: backfill: read row: %w", err)
 	}
 
-	// The target is the version the parts are actually projected TO, exactly
-	// as projectRow decodes at that version rather than at the package
-	// constant. In production the two are the same value by construction.
 	target := s.proj.CurrentVersion()
 	if row.SchemaVersion == target {
 		return BackfillSkippedCurrent, nil
@@ -104,9 +66,6 @@ func (s *Store) backfillOne(ctx context.Context, id uuid.UUID, pause func()) (Ba
 		return BackfillUnknown, fmt.Errorf("resume: backfill: decode projected document: %w", err)
 	}
 
-	// encodeParts drops schemaVersion from all three jsonb parts, so
-	// this field decides only which schema ValidateForStore checks against:
-	// the compiled-in current one, as on every other write path.
 	doc.SchemaVersion = int64(docmigrate.CurrentVersion)
 	if err = ValidateForStore(doc); err != nil {
 		return BackfillUnknown, fmt.Errorf("resume: backfill: %w", err)
@@ -121,9 +80,6 @@ func (s *Store) backfillOne(ctx context.Context, id uuid.UUID, pause func()) (Ba
 		pause()
 	}
 
-	// Both CAS guards come from the observation above. A concurrent document
-	// or title write increments revision; a document write may also change
-	// schema_version. Either kind of user write invalidates this observation.
 	affected, err := s.q.BackfillResumeDocumentCAS(ctx, store.BackfillResumeDocumentCASParams{
 		PersonalDetails:   nextPD,
 		Content:           nextContent,

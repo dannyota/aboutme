@@ -17,9 +17,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// Recovery-code shape from docs/design/second-factor-authentication.md: ten
-// codes of 128 random bits, shown as "amr_" plus 26 Crockford Base32
-// characters in hyphen groups of 5, 5, 5, 5, 5, and 1.
 const (
 	recoveryCodeCount    = 10
 	recoveryCodeBytes    = 16
@@ -29,23 +26,16 @@ const (
 	crockfordAlphabet    = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 )
 
-// recoveryDigestDomain separates recovery-code digests from every other
-// SHA-256 use.
 var recoveryDigestDomain = []byte("aboutme.recovery-code.v1\x00")
 
 type recoveryValue [recoveryCodeBytes]byte
 
-// recoveryCredential is a canonical recovery code awaiting verification.
 type recoveryCredential struct {
 	value recoveryValue
 }
 
-// SecondFactorMethod names the recovery method.
 func (*recoveryCredential) SecondFactorMethod() string { return auth.SecondFactorMethodRecovery }
 
-// DecodeRecoveryCode canonicalizes a submitted code before any database work.
-// It accepts ASCII hyphens and spaces anywhere, any letter case, and the
-// Crockford aliases O for 0 and I or L for 1; every other shape is rejected.
 func (s *Service) DecodeRecoveryCode(code string) (auth.SecondFactorCredential, error) {
 	value, err := parseRecoveryCode(code)
 	if err != nil {
@@ -54,7 +44,6 @@ func (s *Service) DecodeRecoveryCode(code string) (auth.SecondFactorCredential, 
 	return &recoveryCredential{value: value}, nil
 }
 
-// generateRecoveryCodes draws a fresh set of distinct codes from entropy.
 func generateRecoveryCodes(entropy io.Reader) ([]recoveryValue, []string, error) {
 	values := make([]recoveryValue, 0, recoveryCodeCount)
 	display := make([]string, 0, recoveryCodeCount)
@@ -74,8 +63,6 @@ func generateRecoveryCodes(entropy io.Reader) ([]recoveryValue, []string, error)
 	return values, display, nil
 }
 
-// formatRecoveryCode encodes 128 bits as 26 Crockford characters. The 130-bit
-// character stream carries two leading zero bits.
 func formatRecoveryCode(value recoveryValue) string {
 	var b strings.Builder
 	b.WriteString(recoveryCodePrefix)
@@ -143,7 +130,6 @@ func parseRecoveryCode(input string) (recoveryValue, error) {
 	return value, nil
 }
 
-// recoveryCodeDigest binds a code to its account under a separate domain.
 func recoveryCodeDigest(userID uuid.UUID, value recoveryValue) []byte {
 	h := sha256.New()
 	h.Write(recoveryDigestDomain)
@@ -163,10 +149,6 @@ func insertRecoveryCodes(ctx context.Context, qtx *store.Queries, userID uuid.UU
 	return nil
 }
 
-// completeRecovery locks the user, deletes exactly one matching unused digest,
-// records the notification with the remaining count, and completes the
-// pending authentication in one transaction. A code that matches nothing is
-// one failed attempt.
 func (s *Service) completeRecovery(ctx context.Context, pendingToken string, sessionID *uuid.UUID, code *recoveryCredential, client auth.SecondFactorClient) (*auth.SessionIssue, error) {
 	var issue *auth.SessionIssue
 	_, err := s.pending.WithLivePending(ctx, pendingToken, sessionID, lockPolicyBeforePending,
@@ -199,10 +181,6 @@ func (s *Service) completeRecovery(ctx context.Context, pendingToken string, ses
 	return issue, nil
 }
 
-// RegenerateRecoveryCodes replaces every digest of an enrolled account, then
-// advances the epoch, revokes other sessions and agent grants, rotates the
-// current session, and records the notification in the same transaction. It
-// requires recent primary and factor proof.
 func (s *Service) RegenerateRecoveryCodes(ctx context.Context, current store.Session) (auth.SecondFactorRecoveryCodes, error) {
 	values, display, err := generateRecoveryCodes(s.entropy)
 	if err != nil {
@@ -238,9 +216,6 @@ func (s *Service) RegenerateRecoveryCodes(ctx context.Context, current store.Ses
 	return auth.SecondFactorRecoveryCodes{Codes: display, Session: issue}, nil
 }
 
-// finishPending consumes the pending row and grants its purpose. Login issues
-// a fresh session with both proof times set to now; reauth sets both on the
-// bound session.
 func (s *Service) finishPending(ctx context.Context, qtx *store.Queries, locked auth.PendingAuthenticationLocked, client auth.SecondFactorClient, now time.Time) (*auth.SessionIssue, error) {
 	if err := s.pending.ClaimTx(ctx, qtx, locked.Pending); err != nil {
 		return nil, err
@@ -273,12 +248,6 @@ func (s *Service) finishPending(ctx context.Context, qtx *store.Queries, locked 
 	return nil, nil
 }
 
-// failAttempt reports one failed verification. The fifth failure enqueues the
-// exhaustion notification, subject to the shared one-per-account-per-hour
-// cap, in the same transaction. TOTP's own cool-down-start mail shares the
-// same capped path, so both sources of one event can never send two mails
-// (docs/design/totp-second-factor-contract.md#per-account-totp-failure-budget;
-// AC-AUTH-028).
 func (s *Service) failAttempt(user store.User) error {
 	return auth.FailPendingVerification(auth.ErrSecondFactorVerificationFailed,
 		func(ctx context.Context, qtx *store.Queries, _ store.PendingAuthentication) error {
@@ -286,13 +255,6 @@ func (s *Service) failAttempt(user store.User) error {
 		})
 }
 
-// enqueueCappedAttemptMail enqueues the second_factor_attempts_exhausted
-// notification only when the account's attempt-mail window is null or at
-// least one hour old, atomically claiming that window under the policy lock
-// in the same transaction. A window still open suppresses the mail but never
-// the state change that triggered it
-// (docs/design/totp-second-factor-contract.md#per-account-totp-failure-budget;
-// AC-AUTH-028).
 func (s *Service) enqueueCappedAttemptMail(ctx context.Context, qtx *store.Queries, user store.User, now time.Time) error {
 	_, err := qtx.ClaimSecondFactorAttemptMailWindow(ctx, store.ClaimSecondFactorAttemptMailWindowParams{UserID: user.ID, Now: now})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -304,8 +266,6 @@ func (s *Service) enqueueCappedAttemptMail(ctx context.Context, qtx *store.Queri
 	return s.enqueueSecurityMail(ctx, qtx, user, authmail.KindSecondFactorAttemptsExhausted, now, nil)
 }
 
-// enqueueSecurityMail records one version 2 security notification that
-// expires 24 hours after the event, rounded down to whole UTC seconds.
 func (s *Service) enqueueSecurityMail(ctx context.Context, qtx *store.Queries, user store.User, kind authmail.Kind, now time.Time, remaining *int) error {
 	jobID, err := uuid.NewV7FromReader(s.entropy)
 	if err != nil {

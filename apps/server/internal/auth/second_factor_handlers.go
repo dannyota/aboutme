@@ -1,10 +1,5 @@
 package auth
 
-// Second-factor HTTP routes. Pending POSTs check media type, body size, strict
-// JSON, the pending cookie, Origin and pending CSRF, then rate admission before
-// work. Account routes check the session, Origin and CSRF, media type, body,
-// and rate first. The contract is docs/design/passkey-second-factor-contract.md.
-
 import (
 	"errors"
 	"io"
@@ -18,35 +13,17 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// Second-factor route paths.
 const (
-	// SecondFactorPendingPath reports the pending authentication's status
-	// (GET).
-	SecondFactorPendingPath = "/api/v1/auth/second-factor"
-	// SecondFactorPendingOptionsPath starts a passkey assertion for the
-	// pending authentication (POST).
-	SecondFactorPendingOptionsPath = "/api/v1/auth/second-factor/passkey/options"
-	// SecondFactorPendingPasskeyPath completes the pending authentication
-	// with a passkey assertion (POST).
-	SecondFactorPendingPasskeyPath = "/api/v1/auth/second-factor/passkey/verify"
-	// SecondFactorPendingRecoveryPath completes the pending authentication
-	// with a recovery code (POST).
+	SecondFactorPendingPath         = "/api/v1/auth/second-factor"
+	SecondFactorPendingOptionsPath  = "/api/v1/auth/second-factor/passkey/options"
+	SecondFactorPendingPasskeyPath  = "/api/v1/auth/second-factor/passkey/verify"
 	SecondFactorPendingRecoveryPath = "/api/v1/auth/second-factor/recovery/verify"
-	// SecondFactorStatePath reports the signed-in account's second-factor
-	// state (GET).
-	SecondFactorStatePath = "/api/v1/me/second-factor"
-	// SecondFactorPasskeyOptionsPath starts passkey registration (POST). It
-	// answers as an unregistered route while passkey enrollment is off.
-	SecondFactorPasskeyOptionsPath = "/api/v1/me/second-factor/passkeys/options"
-	// SecondFactorPasskeysPath completes passkey registration (POST);
-	// SecondFactorPasskeysPath+"/{id}" removes one passkey (DELETE).
-	SecondFactorPasskeysPath = "/api/v1/me/second-factor/passkeys"
-	// SecondFactorRecoveryCodesPath replaces the account's recovery codes
-	// (POST).
-	SecondFactorRecoveryCodesPath = "/api/v1/me/second-factor/recovery-codes"
+	SecondFactorStatePath           = "/api/v1/me/second-factor"
+	SecondFactorPasskeyOptionsPath  = "/api/v1/me/second-factor/passkeys/options"
+	SecondFactorPasskeysPath        = "/api/v1/me/second-factor/passkeys"
+	SecondFactorRecoveryCodesPath   = "/api/v1/me/second-factor/recovery-codes"
 )
 
-// Second-factor route bounds and rate budgets from docs/design/budgets.md.
 const (
 	secondFactorWebAuthnBodyBytes    = 32768
 	secondFactorRecoveryBodyBytes    = 4096
@@ -58,35 +35,18 @@ const (
 	secondFactorManagementWindow     = time.Hour
 )
 
-// SecondFactorHandlerOptions is the handler dependency set; Logger,
-// TrustedProxies, and TOTP may be nil. A nil TOTP makes every TOTP route
-// answer as an unregistered route.
 type SecondFactorHandlerOptions struct {
-	// Service runs the passkey and recovery-code operations. Required.
-	Service SecondFactorService
-	// TOTP runs the authenticator-app operations. Optional.
-	TOTP TOTPSecondFactorService
-	// Pending authenticates the pending-authentication cookie. Required.
-	Pending *PendingAuthenticationManager
-	// Sessions authenticates the session cookie. Required.
-	Sessions *SessionManager
-	// Limits holds the attempt and management rate budgets. Required.
-	Limits *SecondFactorRatePolicies
-	// PublicOrigin is the exact origin that pending POSTs and account
-	// mutations must carry. Required.
-	PublicOrigin string
-	// TrustedProxies selects the client address used in rate keys; nil
-	// trusts no proxy.
+	Service        SecondFactorService
+	TOTP           TOTPSecondFactorService
+	Pending        *PendingAuthenticationManager
+	Sessions       *SessionManager
+	Limits         *SecondFactorRatePolicies
+	PublicOrigin   string
 	TrustedProxies api.TrustedProxies
-	// Clock returns the current time for rate admission and session
-	// liveness checks. Required.
-	Clock func() time.Time
-	// Logger receives fixed, secret-free failure warnings. Optional.
-	Logger *slog.Logger
+	Clock          func() time.Time
+	Logger         *slog.Logger
 }
 
-// SecondFactorHandlers serves the pending, state, passkey, recovery-code,
-// and TOTP routes.
 type SecondFactorHandlers struct {
 	service        SecondFactorService
 	totp           TOTPSecondFactorService
@@ -99,8 +59,6 @@ type SecondFactorHandlers struct {
 	logger         *slog.Logger
 }
 
-// NewSecondFactorHandlers rejects a nil dependency or an empty origin. TOTP
-// is optional.
 func NewSecondFactorHandlers(opts SecondFactorHandlerOptions) (*SecondFactorHandlers, error) {
 	if opts.Service == nil || opts.Pending == nil || opts.Sessions == nil ||
 		opts.Limits == nil || opts.Clock == nil || opts.PublicOrigin == "" {
@@ -113,10 +71,6 @@ func NewSecondFactorHandlers(opts SecondFactorHandlerOptions) (*SecondFactorHand
 	}, nil
 }
 
-// RegisterRoutes attaches every passkey, recovery, and TOTP route. Passkey
-// registration options and TOTP enrollment start answer as an unregistered
-// route while their flag is off; every other route ignores it. A nil TOTP
-// dependency makes every TOTP route answer as unregistered too.
 func (h *SecondFactorHandlers) RegisterRoutes(mux *http.ServeMux) {
 	noStore := api.NoStoreCache()
 	mux.Handle(SecondFactorPendingPath, noStore(route(http.MethodGet, h.handlePendingStatus)))
@@ -131,11 +85,6 @@ func (h *SecondFactorHandlers) RegisterRoutes(mux *http.ServeMux) {
 	h.registerTOTPRoutes(mux, noStore)
 }
 
-// admitAccountMutation authenticates the session, checks Origin and CSRF,
-// then the media type, a body bounded to bodyLimit, and strict JSON, then
-// rate admission. It returns the decoded body. decode may be nil for a
-// bodiless route. When requireBody is false an absent body is accepted; a
-// present body must still decode.
 func (h *SecondFactorHandlers) admitAccountMutation(w http.ResponseWriter, r *http.Request, bodyLimit int64, decode func([]byte) (SecondFactorCredential, error), requireBody bool) (store.Session, SecondFactorCredential, bool) {
 	sess, ok := h.requireSession(w, r)
 	if !ok {
@@ -168,11 +117,6 @@ func (h *SecondFactorHandlers) admitAccountMutation(w http.ResponseWriter, r *ht
 	return sess, credential, true
 }
 
-// writeSecondFactorDecodeError maps a decode failure to its status code.
-// Every existing decode function returns exactly ErrSecondFactorRequestInvalid,
-// so this preserves prior behavior for passkey and recovery routes while
-// giving TOTP's enrollment-ID shape check its own enrollment_invalid code
-// ("Enrollment and replacement API").
 func writeSecondFactorDecodeError(w http.ResponseWriter, err error) {
 	if errors.Is(err, ErrTOTPEnrollmentInvalid) {
 		api.WriteError(w, http.StatusBadRequest, "enrollment_invalid", "the enrollment is invalid or expired")
@@ -181,7 +125,6 @@ func writeSecondFactorDecodeError(w http.ResponseWriter, err error) {
 	writePasswordRequestInvalid(w)
 }
 
-// checkSessionCSRF applies exact Origin and the session synchronizer token.
 func (h *SecondFactorHandlers) checkSessionCSRF(r *http.Request, sess store.Session) error {
 	token, ok := singletonSecurityHeader(r.Header, CSRFHeaderName)
 	if !originAllowed(r, h.publicOrigin) || !ok || !validCSRFToken(token, sess.CSRFSecret) {
@@ -193,8 +136,6 @@ func (h *SecondFactorHandlers) checkSessionCSRF(r *http.Request, sess store.Sess
 	return nil
 }
 
-// requireSession authenticates the session cookie and delivers any rotated
-// cookie. It writes the 401 or 503 response and returns false on failure.
 func (h *SecondFactorHandlers) requireSession(w http.ResponseWriter, r *http.Request) (store.Session, bool) {
 	sess, rotated, err := readAndAuthenticateSession(r, h.sessions)
 	if err != nil {
@@ -234,8 +175,6 @@ func (h *SecondFactorHandlers) writeAccountError(w http.ResponseWriter, err erro
 	}
 }
 
-// currentSessionID returns the browser's session row ID without rotating or
-// touching it. The pending manager locks and rechecks the row itself.
 func (h *SecondFactorHandlers) currentSessionID(r *http.Request) *uuid.UUID {
 	cookie, err := r.Cookie(sessionCookieName)
 	if err != nil || cookie.Value == "" {
@@ -256,7 +195,6 @@ func (h *SecondFactorHandlers) clientIP(r *http.Request) string {
 	return ip
 }
 
-// logFailure writes a fixed, secret-free warning.
 func (h *SecondFactorHandlers) logFailure(op string, err error) {
 	if h.logger != nil && err != nil {
 		h.logger.Warn("second factor request failed", "op", op)
@@ -271,8 +209,6 @@ func readPendingCookie(r *http.Request) (string, bool) {
 	return cookie.Value, true
 }
 
-// readSecondFactorBody optionally checks the media type, then reads at most
-// limit bytes. w may be nil.
 func readSecondFactorBody(w http.ResponseWriter, r *http.Request, limit int64, checkMediaType bool) ([]byte, error) {
 	if checkMediaType && !jsonContentTypeAllowed(r.Header) {
 		return nil, errSecondFactorMediaTypeRejected
@@ -301,7 +237,6 @@ func writeSecondFactorBodyError(w http.ResponseWriter, err error) {
 	}
 }
 
-// decodeEmptyObject accepts exactly one empty JSON object.
 func decodeEmptyObject(body []byte) (SecondFactorCredential, error) {
 	if err := decodeStrictStringObject(body, map[string]*string{}); err != nil {
 		return nil, ErrSecondFactorRequestInvalid

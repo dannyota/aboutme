@@ -9,55 +9,35 @@ import (
 	"golang.org/x/text/unicode/norm"
 )
 
-// Closed policy errors. Errors never contain input or dependency text.
 var (
-	// ErrPasswordLength rejects a password outside the input bounds.
-	ErrPasswordLength = errors.New("password length invalid")
-	// ErrPasswordCommon rejects a password on the bundled blocklist.
-	ErrPasswordCommon = errors.New("password is common")
-	// ErrPasswordBreached rejects a password found in the breach corpus.
+	ErrPasswordLength   = errors.New("password length invalid")
+	ErrPasswordCommon   = errors.New("password is common")
 	ErrPasswordBreached = errors.New("password is breached")
 )
 
-// Password input bounds (docs/design/budgets.md): at most 1024 raw UTF-8
-// bytes before NFC, then 15–128 Unicode code points after NFC. Controls,
-// spaces, and case are all preserved; normalization only folds
-// canonically-equivalent Unicode.
 const (
-	// MaxRawBytes is the raw UTF-8 byte limit before NFC.
-	MaxRawBytes = 1024
-	// MinCodePoints is the minimum code-point count after NFC.
+	MaxRawBytes   = 1024
 	MinCodePoints = 15
-	// MaxCodePoints is the maximum code-point count after NFC.
 	MaxCodePoints = 128
 )
 
-// BreachChecker reports whether a normalized password is in a breach corpus.
 type BreachChecker interface {
 	Breached(context.Context, string) (bool, error)
 }
 
-// Policy checks candidate new passwords: blocklist and breach lookup.
 type Policy struct {
 	blocklist *Blocklist
 	breach    BreachChecker
 }
 
-// CheckResult carries the NFC-normalized password on a successful check.
 type CheckResult struct {
-	// Normalized is the NFC form to hash.
 	Normalized string
 }
 
-// NewPolicy returns a policy with the given blocklist and breach checker.
-// Either may be nil to disable that stage (used by focused tests); production
-// supplies both.
 func NewPolicy(blocklist *Blocklist, breach BreachChecker) *Policy {
 	return &Policy{blocklist: blocklist, breach: breach}
 }
 
-// Normalize applies the shared password input bounds. Login normalizes and
-// bounds through this exact function but does not call the blocklist or HIBP.
 func Normalize(raw string) (string, error) {
 	if len(raw) > MaxRawBytes {
 		return "", ErrPasswordLength
@@ -69,9 +49,6 @@ func Normalize(raw string) (string, error) {
 	return normalized, nil
 }
 
-// CheckNew runs the full new-password check in order: raw byte cap, NFC and
-// code-point bounds, blocklist digest, then HIBP breach lookup. It returns the
-// normalized password only when every stage passes.
 func (p *Policy) CheckNew(ctx context.Context, raw string) (CheckResult, error) {
 	normalized, err := Normalize(raw)
 	if err != nil {

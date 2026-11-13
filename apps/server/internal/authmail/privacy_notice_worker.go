@@ -11,8 +11,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// NoticeAuthority reads host authority anew for each handoff. The worker never
-// writes host receipts and treats a missing authority as disabled notices.
 type NoticeAuthority interface {
 	AuthorizeSend(context.Context, *store.Queries) bool
 	ContentDigest() []byte
@@ -50,8 +48,6 @@ func (w *Worker) sendNoticeJob(ctx context.Context, claimed store.AuthEmailJob) 
 	if !w.noticeAllowed(ctx, q) {
 		return nil
 	}
-	// Read the ledger identity before acquiring locks so a reparented outbox
-	// cannot make the worker lock a different account from the notice obligation.
 	initial, err := q.GetPrivacyNoticeRecipient(ctx, claimed.ID)
 	if err != nil || initial.UserID == nil {
 		return ErrWorker

@@ -1,9 +1,3 @@
-// Package oauthsrv implements the first-party OAuth 2.1 authorization server
-// described in docs/adr/0018-mcp-agent-access.md and docs/design/security.md
-// ("Agent authorization and the bearer world"). This file holds the
-// authorization-code primitives; the package's other files hold the token
-// spellings, PKCE verification, the client registration grammar, and the
-// closed scope set.
 package oauthsrv
 
 import (
@@ -13,21 +7,13 @@ import (
 	"io"
 )
 
-// ErrCodeInvalid is the closed error for every malformed authorization-code
-// spelling. It never carries the presented value.
 var ErrCodeInvalid = errors.New("oauth code invalid")
 
 const (
-	// secretEntropyBytes is the entropy behind every code and token: 32
-	// random bytes.
 	secretEntropyBytes = 32
-	// secretBodyChars is secretEntropyBytes rendered as unpadded base64url.
-	secretBodyChars = 43
+	secretBodyChars    = 43
 )
 
-// NewCode returns a fresh authorization code and the SHA-256 digest that is
-// its only stored form. It reads exactly 32 bytes from entropy and returns no
-// code at all when the reader is short.
 func NewCode(entropy io.Reader) (raw string, digest [32]byte, err error) {
 	body, err := readSecretBody(entropy)
 	if err != nil {
@@ -36,10 +22,6 @@ func NewCode(entropy io.Reader) (raw string, digest [32]byte, err error) {
 	return body, sha256.Sum256([]byte(body)), nil
 }
 
-// ParseCode checks a presented code against the exact code spelling (43
-// canonical, unpadded base64url characters, no prefix) and returns its
-// digest. Shape decoding happens before hashing, so no malformed spelling
-// reaches a store lookup.
 func ParseCode(raw string) (digest [32]byte, err error) {
 	if len(raw) != secretBodyChars {
 		return [32]byte{}, ErrCodeInvalid
@@ -50,8 +32,6 @@ func ParseCode(raw string) (digest [32]byte, err error) {
 	return sha256.Sum256([]byte(raw)), nil
 }
 
-// readSecretBody reads exactly secretEntropyBytes from entropy and returns
-// their unpadded base64url spelling.
 func readSecretBody(entropy io.Reader) (string, error) {
 	var buf [secretEntropyBytes]byte
 	if _, err := io.ReadFull(entropy, buf[:]); err != nil {
@@ -60,10 +40,6 @@ func readSecretBody(entropy io.Reader) (string, error) {
 	return base64.RawURLEncoding.EncodeToString(buf[:]), nil
 }
 
-// isCanonicalSecretBody reports whether body is the one canonical unpadded
-// base64url spelling of secretEntropyBytes bytes. Strict decoding rejects
-// padding, the standard alphabet, and non-zero trailing bits, so two spellings
-// of one value can never both parse.
 func isCanonicalSecretBody(body string) bool {
 	decoded, err := base64.RawURLEncoding.Strict().DecodeString(body)
 	return err == nil && len(decoded) == secretEntropyBytes

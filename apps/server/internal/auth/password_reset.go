@@ -1,9 +1,5 @@
 package auth
 
-// Forgot-password and reset-password: issuing a reset token for an owned
-// password account, and turning a verified reset token into a new password
-// credential with every other session revoked.
-
 import (
 	"context"
 	"errors"
@@ -16,8 +12,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/password"
 	"danny.vn/aboutme/apps/server/internal/store"
 )
-
-// ---- forgot ----
 
 func (s *PasswordService) forgot(ctx context.Context, email, clientIP string) error {
 	now := s.clock()
@@ -33,8 +27,6 @@ func (s *PasswordService) forgot(ctx context.Context, email, clientIP string) er
 		return &passwordRateLimitedError{retryAfterSeconds: d.RetryAfterSeconds}
 	}
 
-	// Prepare the token and payload before the ownership lookup so the two
-	// account states are indistinguishable.
 	token, err := password.NewToken(s.entropy)
 	if err != nil {
 		return errPasswordUnavailable
@@ -51,7 +43,7 @@ func (s *PasswordService) forgot(ctx context.Context, email, clientIP string) er
 		preflight, uerr := qtx.GetUserByCanonicalEmail(ctx, canonicalEmail)
 		if uerr != nil {
 			if errors.Is(uerr, pgx.ErrNoRows) {
-				return nil // unknown: no-op
+				return nil
 			}
 			return uerr
 		}
@@ -64,7 +56,7 @@ func (s *PasswordService) forgot(ctx context.Context, email, clientIP string) er
 		}
 		if _, cerr := qtx.GetPasswordCredentialForUpdate(ctx, user.ID); cerr != nil {
 			if errors.Is(cerr, pgx.ErrNoRows) {
-				return nil // provider-only: no-op
+				return nil
 			}
 			return cerr
 		}
@@ -99,8 +91,6 @@ func (s *PasswordService) forgot(ctx context.Context, email, clientIP string) er
 	return nil
 }
 
-// ---- reset ----
-
 func (s *PasswordService) reset(ctx context.Context, rawToken, rawPassword, clientIP string) error {
 	now := s.clock()
 
@@ -123,7 +113,6 @@ func (s *PasswordService) reset(ctx context.Context, rawToken, rawPassword, clie
 		return errPasswordTokenInvalid
 	}
 
-	// Policy/hash/notification preparation runs before the transaction.
 	check, err := s.policy.CheckNew(ctx, rawPassword)
 	if err != nil {
 		if errors.Is(err, password.ErrBreachUnavailable) {

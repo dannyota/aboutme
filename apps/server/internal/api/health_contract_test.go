@@ -1,10 +1,3 @@
-// health_contract_test.go pins the /healthz and /readyz contract between
-// docs/api/openapi.yaml and the real Go handlers. It parses the document,
-// then drives api.New()'s real handlers over a real httptest.Server. A
-// ResponseRecorder cannot prove an empty HEAD body; see TestRouter_Healthz_
-// HeadRequest_ReturnsOKWithEmptyBody. The test fails if either
-// side disagrees on status code, Content-Type, or response body shape for
-// GET and HEAD on both endpoints.
 package api_test
 
 import (
@@ -26,18 +19,11 @@ import (
 	"danny.vn/aboutme/apps/server/internal/api"
 )
 
-// Schema component references the health responses must use, per
-// docs/api/openapi.yaml's components; this test asserts the document
-// points at these shared components rather than an inlined schema, and
-// that the real handler body actually satisfies the referenced shape.
 const (
 	envelopeSchemaRef = "#/components/schemas/Envelope"
 	errorSchemaRef    = "#/components/schemas/Error"
 )
 
-// oaDoc is the subset of the OpenAPI document this test needs: enough to
-// look up, per path and method, which status codes are documented, which
-// media type they use, and which component schema they reference.
 type oaDoc struct {
 	Paths map[string]oaPathItem `yaml:"paths"`
 }
@@ -64,12 +50,6 @@ type oaSchemaRef struct {
 	Ref string `yaml:"$ref"`
 }
 
-// findUpward walks from startDir toward the filesystem root looking for a
-// directory containing rel, returning the joined path at the first match.
-// This is used instead of a hardcoded "../../../../docs/api/openapi.yaml"
-// so the lookup doesn't silently break if this package ever moves relative
-// to the repo root; it only needs docs/api/openapi.yaml to still exist
-// somewhere above wherever this test runs from.
 func findUpward(t *testing.T, startDir, rel string) string {
 	t.Helper()
 
@@ -87,10 +67,6 @@ func findUpward(t *testing.T, startDir, rel string) string {
 	}
 }
 
-// loadHealthOpenAPIDoc locates and parses docs/api/openapi.yaml, walking up
-// from the running test's package directory (go test's working directory
-// is already the package directory; this only makes the ascent, rather
-// than a fixed depth, do the work of finding the repo root).
 func loadHealthOpenAPIDoc(t *testing.T) oaDoc {
 	t.Helper()
 
@@ -112,8 +88,6 @@ func loadHealthOpenAPIDoc(t *testing.T) oaDoc {
 	return doc
 }
 
-// operationFor returns the documented operation for method on path, or
-// fails the test if either the path or that method isn't documented.
 func operationFor(t *testing.T, doc oaDoc, path, method string) oaOperation {
 	t.Helper()
 
@@ -137,9 +111,6 @@ func operationFor(t *testing.T, doc oaDoc, path, method string) oaOperation {
 	return *op
 }
 
-// documentedJSONResponse returns the "application/json" media type entry
-// for status on op, failing the test if that status isn't documented at
-// all, or is documented under a different media type such as text/plain.
 func documentedJSONResponse(t *testing.T, op oaOperation, method, path string, status int) oaMediaType {
 	t.Helper()
 
@@ -160,8 +131,6 @@ func documentedJSONResponse(t *testing.T, op oaOperation, method, path string, s
 	return media
 }
 
-// healthContractCase is one (path, method, backend condition) combination
-// this test drives through both the OpenAPI document and the real router.
 type healthContractCase struct {
 	name       string
 	path       string
@@ -183,13 +152,6 @@ func healthContractCases() []healthContractCase {
 	}
 }
 
-// TestHealthContract_OpenAPIAndHandlerAgree is the contract test itself.
-// For every case it: (1) reads what docs/api/openapi.yaml documents for
-// that method/status (media type and referenced schema), then (2) sends a
-// real request of that method to api.New()'s router (wired exactly as
-// production wires it) and checks the actual status code, Content-Type,
-// and body shape match. A drift on either side, document or handler,
-// fails this test.
 func TestHealthContract_OpenAPIAndHandlerAgree(t *testing.T) {
 	t.Parallel()
 
@@ -254,9 +216,6 @@ func TestHealthContract_OpenAPIAndHandlerAgree(t *testing.T) {
 					t.Fatalf("%s %s: body = %q, want empty; openapi.yaml's HEAD description promises no response body",
 						tc.method, tc.path, body)
 				}
-				// Normalize whitespace (the YAML block literal wraps prose
-				// across lines) before searching, so the check isn't
-				// sensitive to exactly where the source text happens to wrap.
 				normalized := strings.Join(strings.Fields(strings.ToLower(op.Description)), " ")
 				if !strings.Contains(normalized, "no response body") && !strings.Contains(normalized, "no body") {
 					t.Errorf("openapi.yaml: HEAD %s description does not document that HEAD returns no body", tc.path)
@@ -269,11 +228,6 @@ func TestHealthContract_OpenAPIAndHandlerAgree(t *testing.T) {
 	}
 }
 
-// assertBodyMatchesSchema checks body against the shape the referenced
-// component schema requires: {"data":...} for a 200 (Envelope), or
-// {"error":{"code":...,"message":...}} for a non-200 (Error), the same
-// two shapes envelope.go's WriteData/WriteError produce and
-// docs/api/openapi.yaml's Envelope/Error components require.
 func assertBodyMatchesSchema(t *testing.T, method, path string, status int, body []byte) {
 	t.Helper()
 

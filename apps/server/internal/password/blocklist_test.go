@@ -10,8 +10,6 @@ import (
 	"golang.org/x/text/unicode/norm"
 )
 
-// testBlocklistData builds a valid digests.bin-style blob for the given
-// passwords, NFC-normalizing each exactly like the generator does.
 func testBlocklistData(passwords ...string) []byte {
 	digests := make([][32]byte, 0, len(passwords))
 	for _, p := range passwords {
@@ -69,7 +67,6 @@ func TestNewBlocklistRejectsCorruption(t *testing.T) {
 	t.Run("not increasing", func(t *testing.T) {
 		t.Parallel()
 		bad := append([]byte(nil), valid...)
-		// Swap the two digests to break ordering.
 		copy(bad[12:12+32], valid[12+32:12+64])
 		copy(bad[12+32:12+64], valid[12:12+32])
 		if _, err := NewBlocklist(bad); err == nil {

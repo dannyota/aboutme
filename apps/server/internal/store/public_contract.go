@@ -6,7 +6,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// PublicReadQueries is the read-only public publication storage contract.
 type PublicReadQueries interface {
 	GetPublicState(context.Context) (PublicState, error)
 	GetPublicResumeBySlug(context.Context, string) (GetPublicResumeBySlugRow, error)
@@ -16,13 +15,10 @@ type PublicReadQueries interface {
 	ListEligiblePublicSlugs(context.Context) ([]string, error)
 }
 
-// PublicDiscoveryQueries reads the durable discovery generation and its
-// eligible slug set from one PostgreSQL statement.
 type PublicDiscoveryQueries interface {
 	GetPublicDiscoverySnapshot(context.Context) (GetPublicDiscoverySnapshotRow, error)
 }
 
-// PublicMutationQueries adds transaction-scoped publication mutation primitives.
 type PublicMutationQueries interface {
 	PublicReadQueries
 	LockPublicState(context.Context) (PublicState, error)

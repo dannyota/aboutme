@@ -9,9 +9,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/publicresume"
 )
 
-// Sentinels sit only in fields the public snapshot must drop or the preview
-// must skip: hidden entries, hidden contacts, and a profile section outside
-// the layout (docs/design/link-previews.md, "Tests").
 var sentinels = []string{"SENTINEL-HIDDEN-CONTACT", "SENTINEL-HIDDEN-PROFILE", "SENTINEL-HIDDEN-WORK", "SENTINEL-OUTSIDE-LAYOUT"}
 
 type fixture struct {
@@ -31,8 +28,6 @@ func hiddenFlag() *bool {
 	return &hidden
 }
 
-// project builds the public snapshot the way a live page does, so hidden
-// entries and contacts are dropped by the same projection.
 func project(t *testing.T, f fixture) publicresume.PublicResume {
 	t.Helper()
 	details := append([]schema.PersonalDetail{{ID: "hidden", IsHidden: true, Type: schema.TypeCustom, Value: "SENTINEL-HIDDEN-CONTACT"}}, f.details...)

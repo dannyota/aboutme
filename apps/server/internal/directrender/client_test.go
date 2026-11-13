@@ -20,7 +20,6 @@ type roundTripFunc func(*http.Request) (*http.Response, error)
 func (f roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) { return f(request) }
 
 func TestClientPostsClosedRequestToDirectOrigin(t *testing.T) {
-	// This fails if the client follows a viewer route, forwards credentials, or changes the worker envelope.
 	origin, err := ParseRenderOrigin("http://127.0.0.1:20030", "development")
 	if err != nil {
 		t.Fatal(err)
@@ -65,7 +64,6 @@ func TestClientPostsClosedRequestToDirectOrigin(t *testing.T) {
 }
 
 func TestClientRejectsStatusTypeAndResponseLimit(t *testing.T) {
-	// This fails if a malformed worker result can become a public success.
 	origin, err := ParseRenderOrigin("http://127.0.0.1:20030", "development")
 	if err != nil {
 		t.Fatal(err)
@@ -100,7 +98,6 @@ func TestClientRejectsStatusTypeAndResponseLimit(t *testing.T) {
 }
 
 func TestClientCapsRequestBeforeTransportAndSetsFiveSecondDeadline(t *testing.T) {
-	// This fails if a caller can allocate an unbounded envelope or the renderer has no hard deadline.
 	origin, err := ParseRenderOrigin("http://127.0.0.1:20030", "development")
 	if err != nil {
 		t.Fatal(err)
@@ -135,7 +132,6 @@ func TestClientCapsRequestBeforeTransportAndSetsFiveSecondDeadline(t *testing.T)
 }
 
 func TestClientRequestAndResponseBoundaries(t *testing.T) {
-	// This fails if either inclusive byte limit changes independently of the configured literal budget.
 	buffer := &limitedBuffer{limit: 532_480}
 	if _, err := buffer.Write(bytes.Repeat([]byte("x"), 532_480)); err != nil {
 		t.Fatalf("exact request limit rejected: %v", err)
@@ -160,7 +156,6 @@ func TestClientRequestAndResponseBoundaries(t *testing.T) {
 }
 
 func TestClientCancellationJoin(t *testing.T) {
-	// This fails if canceling a viewer lets direct render continue after Render returns.
 	origin, err := ParseRenderOrigin("http://127.0.0.1:20030", "development")
 	if err != nil {
 		t.Fatal(err)
@@ -191,7 +186,6 @@ func TestClientCancellationJoin(t *testing.T) {
 }
 
 func TestClientStripsJarCookiesAndRejectsRedirects(t *testing.T) {
-	// This fails if injected HTTP client state can reach the renderer or redirect its request away from the direct listener.
 	origin, err := ParseRenderOrigin("http://127.0.0.1:20030", "development")
 	if err != nil {
 		t.Fatal(err)

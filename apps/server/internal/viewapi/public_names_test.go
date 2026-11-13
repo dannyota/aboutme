@@ -55,11 +55,6 @@ func TestStartRejectsAnyPropertyWithItsPath(t *testing.T) {
 	}
 }
 
-// TestCollectRejectsInexactChallengeParameters covers the challenge
-// parameters, which the ALTCHA library decodes with folded names, the last of
-// repeated keys, and unknown keys ignored. Each variant answers the route's
-// 400 before any counting layer runs, so it reveals no layer outcome and
-// records nothing; the exact body still counts once.
 func TestCollectRejectsInexactChallengeParameters(t *testing.T) {
 	f := newRouteFixture(t)
 	body := f.startAndSolve(t, nil)

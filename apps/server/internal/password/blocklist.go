@@ -2,33 +2,26 @@ package password
 
 import (
 	"bytes"
-	_ "embed" // required by the //go:embed directive below
+	_ "embed"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"sort"
 )
 
-// blocklistMagic is the ASCII magic prefix of the generated digests.bin.
 const blocklistMagic = "ABMEBL01"
 
 //go:embed blocklist/digests.bin
 var blocklistDigests []byte
 
-// Blocklist is the in-memory set of common-password SHA-256 digests, loaded
-// from the embedded generated artifact and kept sorted for binary search.
 type Blocklist struct {
 	digests [][32]byte
 }
 
-// LoadBlocklist parses the embedded generated digest artifact.
 func LoadBlocklist() (*Blocklist, error) {
 	return NewBlocklist(blocklistDigests)
 }
 
-// NewBlocklist parses a digests.bin artifact: ASCII magic, big-endian uint32
-// count, then that many strictly-increasing 32-byte SHA-256 digests. Any
-// structural corruption fails closed before any lookup happens.
 func NewBlocklist(data []byte) (*Blocklist, error) {
 	if len(data) < 12 {
 		return nil, errors.New("password: blocklist too short")
@@ -54,7 +47,6 @@ func NewBlocklist(data []byte) (*Blocklist, error) {
 	return &Blocklist{digests: digests}, nil
 }
 
-// Contains reports whether digest is in the blocklist.
 func (b *Blocklist) Contains(digest [32]byte) bool {
 	i := sort.Search(len(b.digests), func(i int) bool {
 		return bytes.Compare(b.digests[i][:], digest[:]) >= 0
@@ -62,5 +54,4 @@ func (b *Blocklist) Contains(digest [32]byte) bool {
 	return i < len(b.digests) && b.digests[i] == digest
 }
 
-// Len returns the number of digests in the blocklist.
 func (b *Blocklist) Len() int { return len(b.digests) }

@@ -1,8 +1,3 @@
-// Package previewmeta derives the link-preview text of a live resume page: the
-// preview title, the description, the Open Graph locale, and the image text.
-// Every value comes from the admitted public snapshot and the validated public
-// title, never from hidden fields. See docs/design/link-previews.md, "Text
-// rules", and docs/adr/0014-public-page-head-and-link-preview.md.
 package previewmeta
 
 import (
@@ -13,45 +8,24 @@ import (
 	"danny.vn/aboutme/apps/server/internal/publicresume"
 )
 
-// SiteName is the og:site_name value and the host shown in fallback text.
 const SiteName = "aboutme.vn"
 
 const (
-	// MaxTitleGraphemes bounds a preview title built from the full name.
-	MaxTitleGraphemes = 70
-	// MaxDescriptionGraphemes bounds the description.
+	MaxTitleGraphemes       = 70
 	MaxDescriptionGraphemes = 160
-	// MaxImageTextGraphemes bounds the image text.
-	MaxImageTextGraphemes = 200
-	// MaxDescriptionBytes bounds the UTF-8 size of a description whose
-	// grapheme clusters are unusually long, such as emoji sequences, so the
-	// render request stays inside its fixed byte limit. Ordinary Latin,
-	// Vietnamese, and CJK text reaches the grapheme limit first.
-	MaxDescriptionBytes = 1024
-	// MaxImageTextBytes bounds the UTF-8 size of the image text the same way.
-	MaxImageTextBytes = 1024
+	MaxImageTextGraphemes   = 200
+	MaxDescriptionBytes     = 1024
+	MaxImageTextBytes       = 1024
 )
 
-// Meta is the preview text for one live resume page. The renderer writes each
-// value into the page head, and the public HTML validator accepts exactly
-// these values.
 type Meta struct {
-	// Title is og:title.
-	Title string `json:"title"`
-	// Description is the description meta and og:description.
+	Title       string `json:"title"`
 	Description string `json:"description"`
-	// Locale is og:locale, or "" when the resume language maps to none.
-	Locale string `json:"locale"`
-	// ImageAlt is og:image:alt and twitter:image:alt.
-	ImageAlt string `json:"imageAlt"`
-	// ImageURL is the absolute URL of the current preview card version, set
-	// only while stored cards are on. When it is "", the page names the
-	// share image by its unversioned og.png alias.
-	ImageURL string `json:"imageUrl,omitempty"`
+	Locale      string `json:"locale"`
+	ImageAlt    string `json:"imageAlt"`
+	ImageURL    string `json:"imageUrl,omitempty"`
 }
 
-// For derives the preview text of resume. publicTitle is the owner's validated
-// public page title, or nil when none is set.
 func For(resume publicresume.PublicResume, publicTitle *string) Meta {
 	contacts := contactValues(resume.Document.PersonalDetails)
 	return Meta{
@@ -62,8 +36,6 @@ func For(resume publicresume.PublicResume, publicTitle *string) Meta {
 	}
 }
 
-// Title is the preview title: the public title as written when set, else the
-// scrubbed full name cut to MaxTitleGraphemes, else the site and slug.
 func Title(publicTitle *string, fullName, slug string, contacts []string) string {
 	if publicTitle != nil && *publicTitle != "" {
 		return *publicTitle
@@ -74,8 +46,6 @@ func Title(publicTitle *string, fullName, slug string, contacts []string) string
 	return siteSlug(slug)
 }
 
-// Description is the summary, or its fallback, as plain text cut to
-// MaxDescriptionGraphemes.
 func Description(resume publicresume.PublicResume, contacts []string) string {
 	document := resume.Document
 	if text := Scrub(summary(document), contacts); text != "" {
@@ -94,10 +64,6 @@ func Description(resume publicresume.PublicResume, contacts []string) string {
 	return "Resume on " + SiteName
 }
 
-// ImageText describes the share image: the name, plus a spaced middle dot and
-// the headline, cut to MaxImageTextGraphemes. A name or headline that loses a
-// scrubbed token is left out, as it is on the preview card. Without a name it
-// is the site and slug.
 func ImageText(person publicresume.PublicPersonalDetails, slug string, contacts []string) string {
 	name := cardField(person.FullName, contacts)
 	if name == "" {
@@ -110,9 +76,6 @@ func ImageText(person publicresume.PublicPersonalDetails, slug string, contacts 
 	return firstGraphemes(joinPresent(" · ", name, headline), MaxImageTextGraphemes, MaxImageTextBytes)
 }
 
-// CardText is the name and headline the preview card shows, each normalized
-// and left off ("") when scrubbing would change it. The headline is left off
-// too when there is no name, so the card and ImageText agree.
 func CardText(person publicresume.PublicPersonalDetails) (name, headline string) {
 	contacts := contactValues(person)
 	name = cardField(person.FullName, contacts)
@@ -122,9 +85,6 @@ func CardText(person publicresume.PublicPersonalDetails) (name, headline string)
 	return name, cardField(*person.Headline, contacts)
 }
 
-// Locale maps a BCP 47 resume language to an Open Graph locale: vi to vi_VN,
-// en to en_US, and language-REGION to language_REGION. Every other language,
-// including und, maps to "".
 func Locale(lng string) string {
 	switch lng {
 	case "vi":
@@ -139,8 +99,6 @@ func Locale(lng string) string {
 	return language + "_" + region
 }
 
-// cardField is a normalized name or headline, or "" when scrubbing would
-// change it.
 func cardField(value string, contacts []string) string {
 	normalized := Normalize(value)
 	if Scrub(normalized, contacts) != normalized {
@@ -149,8 +107,6 @@ func cardField(value string, contacts []string) string {
 	return normalized
 }
 
-// summary is the plain text of the first profile section in layout order,
-// main before sidebar. Sections outside the layout never count.
 func summary(document publicresume.PublicResumeDocument) string {
 	section, ok := firstSection(document, schema.Profile)
 	if !ok {
@@ -165,8 +121,6 @@ func summary(document publicresume.PublicResumeDocument) string {
 	return Normalize(strings.Join(parts, " "))
 }
 
-// latestRole is the first entry of the first work section in layout order, as
-// "<job title>, <employer>" or whichever field exists.
 func latestRole(document publicresume.PublicResumeDocument) string {
 	section, ok := firstSection(document, schema.Work)
 	if !ok || len(section.WorkEntries) == 0 {
@@ -196,8 +150,6 @@ func firstSection(document publicresume.PublicResumeDocument, sectionType schema
 	return publicresume.PublicSection{}, false
 }
 
-// contactValues lists the normalized visible contact values, longest first,
-// so a value that contains another is removed whole.
 func contactValues(person publicresume.PublicPersonalDetails) []string {
 	var values []string
 	if !person.Details.Present() {

@@ -11,9 +11,6 @@ import (
 	"golang.org/x/crypto/argon2"
 )
 
-// tinyPolicy is a fast Argon2id parameter set for tests; it stays inside the
-// global parse budget so encode/parse/verify all exercise the real code paths
-// without the production 64 MiB cost.
 func tinyPolicy(memory uint32) HashPolicy {
 	return HashPolicy{
 		Version:     argon2Version,
@@ -25,7 +22,6 @@ func tinyPolicy(memory uint32) HashPolicy {
 	}
 }
 
-// seqReader is a deterministic, error-free entropy source.
 type seqReader struct{ n byte }
 
 func (r *seqReader) Read(p []byte) (int, error) {
@@ -36,7 +32,6 @@ func (r *seqReader) Read(p []byte) (int, error) {
 	return len(p), nil
 }
 
-// limitedFailReader returns n bytes successfully and then the given error.
 type limitedFailReader struct {
 	n   int
 	err error
@@ -90,8 +85,6 @@ func TestParsePHCRejects(t *testing.T) {
 	salt := testSaltB64()
 	key := testKeyB64()
 
-	// valid assembles a canonical string from the m/t/p decimal spellings so
-	// malformed values (leading zeros, over-budget) can be injected.
 	valid := func(m, t, p string) string {
 		return "$argon2id$v=19$m=" + m + ",t=" + t + ",p=" + p + "$" + salt + "$" + key
 	}
@@ -146,9 +139,6 @@ func TestHashVerifyRoundTrip(t *testing.T) {
 		t.Fatalf("Hash error = %v", err)
 	}
 
-	// Independent Argon2 result: parse the encoding and recompute with the
-	// same salt and parameters, proving the PHC stores exactly what IDKey
-	// produced.
 	parsed, salt, want, err := parsePHC(encoded)
 	if err != nil {
 		t.Fatalf("parsePHC error = %v", err)
@@ -190,7 +180,6 @@ func TestVerifyMismatch(t *testing.T) {
 
 func TestVerifyNeedsRehash(t *testing.T) {
 	t.Parallel()
-	// Generate under a weaker policy, then verify under the current policy.
 	weak, err := NewHasher(tinyPolicy(32), &seqReader{}, NewAdmission())
 	if err != nil {
 		t.Fatalf("NewHasher(weak) error = %v", err)
@@ -249,7 +238,6 @@ func TestHashAdmissionFailure(t *testing.T) {
 		t.Fatalf("NewHasher error = %v", err)
 	}
 	ctx := context.Background()
-	// Two running plus sixteen waiting: Hash becomes the seventeenth waiter.
 	results := fillAdmission(ctx, t, admission)
 	if _, err := hasher.Hash(ctx, "correct horse battery staple"); !errors.Is(err, ErrHashAdmission) {
 		t.Errorf("Hash error = %v, want ErrHashAdmission", err)
@@ -265,7 +253,6 @@ func TestHashAdmissionFailure(t *testing.T) {
 
 func TestPHCFormatStringExact(t *testing.T) {
 	t.Parallel()
-	// The exact canonical form of the production encoding prefix and length.
 	policy := DefaultHashPolicy()
 	salt := bytes.Repeat([]byte{0x00}, 16)
 	key := bytes.Repeat([]byte{0x00}, 32)
@@ -278,9 +265,6 @@ func TestPHCFormatStringExact(t *testing.T) {
 	}
 }
 
-// BenchmarkHashDefaultPolicy measures the production 64 MiB / 3-iteration
-// Argon2id cost. Run it alone (it is not part of the normal test run) with
-// -benchtime=1x and record wall time and peak RSS.
 func BenchmarkHashDefaultPolicy(b *testing.B) {
 	hasher, err := NewHasher(DefaultHashPolicy(), &seqReader{}, NewAdmission())
 	if err != nil {

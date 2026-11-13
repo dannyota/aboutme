@@ -1,10 +1,5 @@
 package secondfactor
 
-// TOTP enrollment and replacement: starting an enrollment, proving its
-// secret to install or replace the active credential, and creating the
-// account's first factor policy handle. Both mutations follow the canonical
-// lock order in totp_service.go.
-
 import (
 	"context"
 	"crypto/sha256"
@@ -22,26 +17,14 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// errTOTPPolicyHandleExhausted reports that every policy-handle candidate
-// collided. It creates no policy, credential, recovery code, epoch change,
-// session, grant revocation, or mail ("Enrollment and replacement API").
 var errTOTPPolicyHandleExhausted = errors.New("secondfactor: totp policy handle candidates exhausted")
 
-// cleanupTOTPEnrollments makes the bounded best-effort expiry call before an
-// enrollment is created. A failure writes one fixed warning and never fails
-// the request.
 func (s *Service) cleanupTOTPEnrollments(ctx context.Context) {
 	if _, err := s.q.CleanupExpiredTOTPEnrollments(ctx, cleanupLimit); err != nil && s.logger != nil {
 		s.logger.Warn("totp enrollment cleanup failed")
 	}
 }
 
-// StartTOTPEnrollment begins TOTP enrollment or replacement. Under the user
-// lock it supersedes any existing enrollment, seals a fresh secret under the
-// active key, and stores it with a ten-minute expiry. It changes no active
-// credential, recovery code, enforcement, epoch, session, grant, or mail, so
-// abandoning replacement cannot lock out the user
-// ("Enrollment and replacement API", AC-AUTH-026, AC-AUTH-027).
 func (s *Service) StartTOTPEnrollment(ctx context.Context, current store.Session) (auth.TOTPEnrollmentStart, error) {
 	if !s.totpEnabled {
 		return auth.TOTPEnrollmentStart{}, auth.ErrSecondFactorEnrollmentDisabled
@@ -105,13 +88,6 @@ func (s *Service) StartTOTPEnrollment(ctx context.Context, current store.Session
 	return result, nil
 }
 
-// CompleteTOTPEnrollment proves the enrollment's secret and installs or
-// replaces the active credential. It locks user, session, policy, credential,
-// then enrollment, in that order; validates the enrollment binding before
-// rechecking the enrollment flag, so a disabled completion still consumes a
-// matching enrollment; and generates a fresh policy handle with up to three
-// candidates only for the account's first factor
-// ("Enrollment and replacement API", AC-AUTH-026, AC-AUTH-027).
 func (s *Service) CompleteTOTPEnrollment(ctx context.Context, current store.Session, credential auth.SecondFactorCredential) (auth.TOTPEnrollmentComplete, error) {
 	completion, ok := credential.(*totpEnrollmentCompletion)
 	if !ok {
@@ -173,13 +149,7 @@ func (s *Service) CompleteTOTPEnrollment(ctx context.Context, current store.Sess
 		}
 		first := policy == nil
 		if first {
-			// The account's shared policy identity only needs to exist; its
-			// value is not read again in this transaction
-			// ("First TOTP creates the shared policy identity").
 			if _, handleErr := s.createTOTPPolicyHandle(ctx, tx, user.ID, now); handleErr != nil {
-				// Reported through outcome after commit, the same pattern
-				// CompletePasskeyRegistration uses, so the ceremony-equivalent
-				// locks stay released without retrying the whole request.
 				outcome = handleErr
 				return nil //nolint:nilerr // the failure is returned through outcome after commit
 			}
@@ -244,12 +214,6 @@ func (s *Service) CompleteTOTPEnrollment(ctx context.Context, current store.Sess
 	return result, nil
 }
 
-// createTOTPPolicyHandle generates a fresh random WebAuthn user handle and
-// creates the account's first factor policy, retrying a unique collision
-// inside its own savepoint for up to three candidates total. Three
-// collisions exhaust the candidates and roll back to the caller, so nothing
-// is created ("Enrollment and replacement API": "When no policy exists...",
-// AC-AUTH-027).
 func (s *Service) createTOTPPolicyHandle(ctx context.Context, tx pgx.Tx, userID uuid.UUID, now time.Time) (*store.SecondFactorPolicy, error) {
 	for attempt := 0; attempt < totpHandleCandidates; attempt++ {
 		handle, err := s.random(userHandleBytes)

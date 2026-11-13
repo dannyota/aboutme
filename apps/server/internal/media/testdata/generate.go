@@ -1,8 +1,5 @@
 //go:build ignore
 
-// This program deterministically regenerates the locally-authored JPEG and PNG
-// normalization-budget fixtures. Run it from this directory with `go run
-// generate.go`; the benchmark manifest pins the resulting hashes.
 package main
 
 import (

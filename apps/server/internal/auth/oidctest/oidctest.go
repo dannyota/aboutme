@@ -1,6 +1,3 @@
-// Package oidctest serves real discovery, JWKS, and signed-token endpoints so
-// production go-oidc verification runs unchanged. Production code must not
-// import this test infrastructure.
 package oidctest
 
 import (
@@ -19,58 +16,35 @@ import (
 	"golang.org/x/oauth2"
 )
 
-// DefaultClientID is the provider and audience default.
 const DefaultClientID = "test-client"
 
-// signingKeyID remains fixed for signing-key overrides so bad-signature tests
-// reach cryptographic verification instead of failing key lookup.
 const signingKeyID = "oidctest-key"
 
-// Claims defaults to a valid token; tests set only the property they vary.
 type Claims struct {
-	// Subject is the stable provider identifier.
 	Subject string
 
-	// Empty Email omits the claim.
 	Email string
 
-	// Nil EmailVerified omits the claim and never means true.
 	EmailVerified *bool
 
-	// Non-nil EmailVerifiedRaw overrides EmailVerified and is marshaled as the
-	// email_verified claim verbatim, so a test can send a string ("true",
-	// "false", or a garbage value) or any other wire shape a provider might
-	// send in place of a JSON boolean.
 	EmailVerifiedRaw any
 
-	// Empty Nonce omits the claim; go-oidc does not validate it.
 	Nonce string
 
-	// Empty Audience defaults to Provider.ClientID.
 	Audience string
 
-	// Empty Issuer defaults to Provider.URL.
 	Issuer string
 
-	// Zero ExpiresAt defaults to one hour from now.
 	ExpiresAt time.Time
 
-	// Nil SigningKey uses the key published by the provider.
 	SigningKey *rsa.PrivateKey
 
-	// Non-empty CodeChallenge requires a matching S256 verifier and rejects a
-	// missing or mismatched verifier with invalid_grant.
 	CodeChallenge string
 }
 
-// Provider is an in-process OIDC server backed by an ephemeral RSA key.
 type Provider struct {
-	// URL is the server's own base URL. It is also the discovery issuer
-	// and the default for Claims.Issuer.
 	URL string
 
-	// ClientID is the OAuth2 client id this Provider is registered
-	// under. Claims.Audience defaults to this value.
 	ClientID string
 
 	t   *testing.T
@@ -78,40 +52,31 @@ type Provider struct {
 
 	mu                    sync.Mutex
 	codes                 map[string]Claims
-	discoveryBlock        func() // see BlockDiscoveryForTest; nil means discovery never blocks
+	discoveryBlock        func()
 	lastTokenRedirectURI  string
 	lastTokenRedirectSeen bool
 	lastTokenRequest      TokenRequest
 	tokenRequestCount     int
 }
 
-// TokenRequest is what the token endpoint received, so tests can prove how a
-// client authenticates and which parameters it sends.
 type TokenRequest struct {
-	// Form holds the decoded form body only, not URL query values.
 	Form url.Values
 
-	// Authorization is the raw Authorization header; empty when absent.
 	Authorization string
 }
 
-// LastTokenRequest returns the most recent token request and the number of
-// token requests served so far.
 func (p *Provider) LastTokenRequest() (req TokenRequest, count int) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return p.lastTokenRequest, p.tokenRequestCount
 }
 
-// LastTokenRedirectURI exposes the last token-exchange redirect URI so tests can
-// prove it came from the stored transaction.
 func (p *Provider) LastTokenRedirectURI() (redirectURI string, seen bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return p.lastTokenRedirectURI, p.lastTokenRedirectSeen
 }
 
-// NewProvider starts a server and registers its cleanup with t.
 func NewProvider(t *testing.T) *Provider {
 	t.Helper()
 
@@ -139,14 +104,12 @@ func NewProvider(t *testing.T) *Provider {
 	return p
 }
 
-// RegisterCode registers one single-use authorization code.
 func (p *Provider) RegisterCode(code string, claims Claims) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.codes[code] = claims
 }
 
-// takeCode atomically consumes a registered code.
 func (p *Provider) takeCode(code string) (Claims, bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -157,8 +120,6 @@ func (p *Provider) takeCode(code string) (Claims, bool) {
 	return claims, ok
 }
 
-// discoveryDocument is the subset of OpenID Connect discovery metadata
-// go-oidc's Provider parses (see providerJSON in the go-oidc source).
 type discoveryDocument struct {
 	Issuer                           string   `json:"issuer"`
 	AuthorizationEndpoint            string   `json:"authorization_endpoint"`
@@ -169,9 +130,6 @@ type discoveryDocument struct {
 	IDTokenSigningAlgValuesSupported []string `json:"id_token_signing_alg_values_supported"`
 }
 
-// BlockDiscoveryForTest exposes when discovery enters and blocks it until the
-// idempotent release. This supports deterministic lock tests without sleeps.
-// Call it before discovery; a later registration replaces the earlier one.
 func (p *Provider) BlockDiscoveryForTest() (entered <-chan struct{}, release func()) {
 	enteredCh := make(chan struct{})
 	releaseCh := make(chan struct{})
@@ -206,7 +164,6 @@ func (p *Provider) serveDiscovery(w http.ResponseWriter, _ *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(doc); err != nil {
-		// Errorf is safe from the server goroutine; Fatalf is not.
 		p.t.Errorf("oidctest: encoding discovery document: %v", err)
 	}
 }
@@ -228,8 +185,6 @@ func (p *Provider) serveJWKS(w http.ResponseWriter, _ *http.Request) {
 	}
 }
 
-// tokenResponse is the token endpoint's success body: the subset of RFC
-// 6749 §5.1 fields go-oidc/oauth2 consumes.
 type tokenResponse struct {
 	IDToken     string `json:"id_token"`
 	AccessToken string `json:"access_token"`
@@ -237,14 +192,10 @@ type tokenResponse struct {
 	ExpiresIn   int64  `json:"expires_in"`
 }
 
-// tokenErrorResponse is the token endpoint's RFC 6749 §5.2 error body:
-// {"error": "..."}.
 type tokenErrorResponse struct {
 	Error string `json:"error"`
 }
 
-// writeTokenError uses JSON so oauth2 populates RetrieveError.ErrorCode;
-// text/plain would be parsed as form data.
 func (p *Provider) writeTokenError(w http.ResponseWriter, status int, errorCode string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
@@ -253,8 +204,6 @@ func (p *Provider) writeTokenError(w http.ResponseWriter, status int, errorCode 
 	}
 }
 
-// The access-token lifetime stays independent of the ID token expiry so expired
-// ID-token tests reach OIDC verification.
 const accessTokenExpiresInSeconds = 3600
 
 func (p *Provider) serveToken(w http.ResponseWriter, r *http.Request) {
@@ -277,7 +226,6 @@ func (p *Provider) serveToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Consume the code before PKCE validation so a failed exchange still burns it.
 	if claims.CodeChallenge != "" {
 		verifier := r.PostFormValue("code_verifier")
 		if verifier == "" || oauth2.S256ChallengeFromVerifier(verifier) != claims.CodeChallenge {
@@ -304,8 +252,6 @@ func (p *Provider) serveToken(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// cloneValues copies v so a recorded request cannot change after the handler
-// returns.
 func cloneValues(v url.Values) url.Values {
 	out := make(url.Values, len(v))
 	for k, vals := range v {
@@ -314,7 +260,6 @@ func cloneValues(v url.Values) url.Values {
 	return out
 }
 
-// signIDToken applies defaults and returns a compact signed JWT.
 func (p *Provider) signIDToken(claims Claims) (token string, err error) {
 	issuer := claims.Issuer
 	if issuer == "" {

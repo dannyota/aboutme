@@ -1,9 +1,5 @@
 package auth_test
 
-// These tests pin GET /me's hasPassword field: a single existence probe that is
-// false without a credential and true with one, while identity order stays
-// deterministic and no provider subject or email beyond the user's own leaks.
-
 import (
 	"context"
 	"encoding/json"
@@ -19,7 +15,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// meUserBody is the user half of GET /me's envelope, including hasPassword.
 type meUserBody struct {
 	ID          string  `json:"id"`
 	Email       string  `json:"email"`
@@ -82,8 +77,6 @@ func TestGetMe_HasPasswordDoesNotLeakProviderEmail(t *testing.T) {
 	handler, q := newSessionAPITestService(t)
 	ctx := context.Background()
 
-	// A provider-only user with a linked identity; its user email is its own,
-	// but the identity's provider subject must never appear in /me.
 	userID := createTestUser(t, q)
 	subject := "g-sub-" + uuid.NewString()
 	if _, err := q.CreateIdentity(ctx, store.CreateIdentityParams{

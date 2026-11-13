@@ -14,8 +14,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// recordingSync records each showcase sync and what the transaction it runs in
-// can see.
 type recordingSync struct {
 	err      error
 	calls    int
@@ -43,8 +41,6 @@ func revisionOf(ctx context.Context, t *testing.T, pool *store.Pool, id uuid.UUI
 	return revision
 }
 
-// AC-SHOW-006: a document write runs the showcase sync inside its own
-// transaction, after the row update, so a failed sync rolls the write back.
 func TestDocumentWritesRunShowcaseSyncInTheSameTransaction(t *testing.T) {
 	t.Parallel()
 	_, q, pool, ctx := newIntegrationStore(t)
@@ -90,7 +86,6 @@ func TestDocumentWritesRunShowcaseSyncInTheSameTransaction(t *testing.T) {
 		t.Fatalf("SaveMetadataAndDocumentTx err=%v sync calls=%d, want one more sync", err, sync.calls)
 	}
 
-	// A title-only write cannot change what the listing shows.
 	current, err = s.Get(ctx, userID, created.ID)
 	if err != nil {
 		t.Fatalf("Get() error: %v", err)
@@ -99,12 +94,10 @@ func TestDocumentWritesRunShowcaseSyncInTheSameTransaction(t *testing.T) {
 		t.Fatalf("SaveTitle err=%v sync calls=%d, want no sync", saveErr, sync.calls)
 	}
 
-	// A stale write never reaches the sync.
 	if _, staleErr := s.SaveDocument(ctx, userID, created.ID, doc, created.Revision); staleErr == nil || sync.calls != 2 {
 		t.Fatalf("stale SaveDocument err=%v sync calls=%d, want a mismatch and no sync", staleErr, sync.calls)
 	}
 
-	// A failing sync rolls the document write back.
 	current, err = s.Get(ctx, userID, created.ID)
 	if err != nil {
 		t.Fatalf("Get() error: %v", err)
@@ -127,8 +120,6 @@ func insertTestShowcase(ctx context.Context, t *testing.T, pool *store.Pool, res
 	}
 }
 
-// AC-SHOW-001: the owner reads null without an opt-in and the listed state and
-// role with one, through Get, List, and the stale-revision winner.
 func TestStoreReadsCarryTheOwnersShowcase(t *testing.T) {
 	t.Parallel()
 	s, q, pool, ctx := newIntegrationStore(t)

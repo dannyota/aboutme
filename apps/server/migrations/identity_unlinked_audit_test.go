@@ -7,9 +7,6 @@ import (
 	"danny.vn/aboutme/apps/server/migrations"
 )
 
-// 00002's down path must delete identity_unlinked rows before it restores the
-// older constraints, keep every other audit row, and leave a schema that the up
-// path can migrate again.
 func TestIdentityUnlinkedAuditMigrationUpDownUp(t *testing.T) {
 	t.Parallel()
 

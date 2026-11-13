@@ -12,7 +12,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// Queries is the generated query subset PGStore uses.
 type Queries interface {
 	GetLiveViewResumeByID(ctx context.Context, id uuid.UUID) (store.GetLiveViewResumeByIDRow, error)
 	AddResumeViewDays(ctx context.Context, arg store.AddResumeViewDaysParams) error
@@ -21,12 +20,10 @@ type Queries interface {
 
 var _ Queries = (*store.Queries)(nil)
 
-// PGStore implements Store over the generated queries.
 type PGStore struct {
 	Queries Queries
 }
 
-// LiveResumeByID implements Store.
 func (s PGStore) LiveResumeByID(ctx context.Context, id uuid.UUID) (LiveResume, error) {
 	row, err := s.Queries.GetLiveViewResumeByID(ctx, id)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -38,7 +35,6 @@ func (s PGStore) LiveResumeByID(ctx context.Context, id uuid.UUID) (LiveResume, 
 	return LiveResume{ID: row.ID, Owner: row.UserID}, nil
 }
 
-// AddCounts implements Store.
 func (s PGStore) AddCounts(ctx context.Context, days []DayCell, signals []SignalCell) error {
 	if len(days) > 0 {
 		params := store.AddResumeViewDaysParams{}
@@ -71,7 +67,6 @@ func (s PGStore) AddCounts(ctx context.Context, days []DayCell, signals []Signal
 	return nil
 }
 
-// Date converts a Day value to a store date.
 func Date(day time.Time) pgtype.Date {
 	return pgtype.Date{Time: day, Valid: true}
 }

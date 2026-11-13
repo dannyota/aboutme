@@ -1,8 +1,5 @@
 package publicapi
 
-// Rules the project validators add to the shared resource checks: only the
-// two versioned stylesheets, and SVG only as static icons.
-
 import (
 	"regexp"
 	"strings"
@@ -10,17 +7,12 @@ import (
 	"golang.org/x/net/html"
 )
 
-// The two stylesheets the project pages load, each once, with one shared
-// content version. The pages carry no inline CSS.
 const (
 	printFontsStylesheet   = "/_nuxt/assets/print-fonts.css"
 	projectPagesStylesheet = "/_nuxt/assets/project-pages.css"
 	projectStylesheetCount = 2
 )
 
-// projectStylesheet records one stylesheet link and reports whether it is
-// one of the two the pages load, not seen before, with the same version as
-// the other.
 func (v *projectValidator) projectStylesheet(href string) bool {
 	for _, path := range []string{printFontsStylesheet, projectPagesStylesheet} {
 		if !versionedAsset(href, path) {
@@ -41,9 +33,6 @@ func (v *projectValidator) projectStylesheet(href string) bool {
 	return false
 }
 
-// staticIconRule returns "" for an SVG element of a static icon, or the rule
-// it breaks. Only drawing elements and presentation attributes are allowed,
-// none of which can embed, animate, or reference a resource.
 func staticIconRule(node *html.Node) string {
 	if !staticIconElement(node.Data) {
 		return "svg_element"
@@ -65,15 +54,9 @@ func staticIconRule(node *html.Node) string {
 	return ""
 }
 
-// staticIconTransform admits a transform list of rotate(a), rotate(a x y),
-// translate(x), translate(x y), scale(x) and scale(x y) with plain numbers
-// (an optional sign and decimals) separated by whitespace or a comma, so a
-// transform can only position a shape: no url(), var(), other function or
-// unit.
 var staticIconTransform = regexp.MustCompile(
 	`^\s*` + staticIconTransformFunction + `(?:\s*,?\s*` + staticIconTransformFunction + `)*\s*$`)
 
-// The number and argument patterns staticIconTransform is built from.
 const (
 	staticIconNumber            = `[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)`
 	staticIconSeparator         = `(?:\s*,\s*|\s+)`

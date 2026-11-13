@@ -1,9 +1,5 @@
 package resume
 
-// IdempotencyStore.Execute and the mutation-transaction helpers it uses:
-// bounded expired-record cleanup, retained-usage accounting, and the
-// capacity and insert-conflict backstops.
-
 import (
 	"bytes"
 	"context"
@@ -18,38 +14,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// Execute ensures that only one transaction's database effects and response
-// record commit per (userID, operation, key), with bounded retention. It
-// runs two explicit transactions in the same user-first lock order:
-//
-//  1. Cleanup transaction: lock the user's row, delete at most
-//     idempotencyCleanupBatch of the user's expired records —
-//     deterministically oldest first by (expires_at, id) — release their
-//     exact retained counters, and commit. A cleanup failure stops before
-//     the mutation transaction (CommitNotAttempted). A later mutation
-//     failure does not roll this committed cleanup back.
-//  2. Mutation transaction: lock the same user's row, delete this exact key
-//     if expired (releasing its counters), decide replay / key reuse /
-//     capacity, invoke mutate, normalize the response through jsonb,
-//     reserve usage within the 50,000-record / 1 GiB caps, insert the
-//     record, and commit.
-//
-// mutate MUST perform every database write through the supplied qtx and
-// MUST NOT perform non-transactional side effects (ADR 0006); external
-// media effects follow ADR 0009's compensation rules using the returned
-// CommitOutcome.
-//
-// Execute returns an ExecuteResult on every path. Failure before the
-// mutation transaction begins is CommitNotAttempted; callback failure, a
-// rejected decision, or a server-rejected commit is
-// CommitDefinitelyRolledBack; a successful commit or replay is
-// CommitCommitted; connection loss or another indeterminate commit result
-// is CommitUnknown.
-//
-// The unique constraint and post-conflict re-read remain a final database
-// backstop: if a conflicting record still wins the insert, the entire
-// mutation transaction rolls back, and Execute replays (Replayed=true,
-// CommitCommitted) or rejects from that committed record.
 func (s *IdempotencyStore) Execute(ctx context.Context, userID uuid.UUID,
 	operation string, key uuid.UUID, requestHash [32]byte,
 	mutate func(qtx *store.Queries) (StoredResponse, error),
@@ -68,9 +32,6 @@ func (s *IdempotencyStore) Execute(ctx context.Context, userID uuid.UUID,
 	committed := false
 	defer func() {
 		if !committed {
-			// WithoutCancel: the rollback must be attempted even when ctx
-			// was canceled mid-flight. After a failed or ambiguous commit
-			// this is a no-op on a closed transaction.
 			if rollbackErr := tx.Rollback(context.WithoutCancel(ctx)); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
 				return
 			}
@@ -111,24 +72,16 @@ func (s *IdempotencyStore) Execute(ctx context.Context, userID uuid.UUID,
 		case RecheckReuse:
 			return rolledBack(ErrIdempotencyKeyReuse)
 		case RecheckReplay:
-			// The replayed record is already durable; this transaction wrote
-			// nothing (a live record excludes the expired-key delete above), so
-			// its own commit result cannot change the replay.
 			if commitErr := s.commit(ctx, tx); commitErr == nil {
 				committed = true
 			}
 			return ExecuteResult{Response: decision.Response, Replayed: true, Outcome: CommitCommitted}, nil
 		case RecheckFresh:
-			// Execute has already removed an expired exact key; retain this
-			// branch as the helper's defensive full contract.
 		}
 	} else if !errors.Is(getErr, pgx.ErrNoRows) {
 		return rolledBack(fmt.Errorf("resume: idempotency: check existing record: %w", getErr))
 	}
 
-	// Lock (creating if needed) the usage row and reject on the
-	// record-count cap before running the callback at all: the mutation
-	// never runs when no insert could be admitted.
 	usage, usageErr := qtx.GetOrCreateIdempotencyUsageForUpdate(ctx, userID)
 	if usageErr != nil {
 		return rolledBack(fmt.Errorf("resume: idempotency: lock usage row: %w", usageErr))
@@ -183,10 +136,6 @@ func (s *IdempotencyStore) Execute(ctx context.Context, userID uuid.UUID,
 	})
 	if insErr != nil {
 		if isIdempotencyKeyConflict(insErr) {
-			// A conflicting record committed despite the user-row lock. Roll
-			// this transaction back in full (including anything mutate wrote
-			// through qtx), then decide replay vs. reuse from the committed
-			// winner.
 			if rollbackErr := tx.Rollback(context.WithoutCancel(ctx)); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
 				return rolledBack(fmt.Errorf("resume: idempotency: roll back insert conflict: %w", rollbackErr))
 			}
@@ -195,8 +144,6 @@ func (s *IdempotencyStore) Execute(ctx context.Context, userID uuid.UUID,
 		return rolledBack(fmt.Errorf("resume: idempotency: insert record: %w", insErr))
 	}
 	if int64(ins.StoredBytes) != int64(norm.StoredBytes) {
-		// Defensive: the reservation and the insert use the one canonical
-		// byte expression; a mismatch means the accounting would drift.
 		return rolledBack(fmt.Errorf(
 			"resume: idempotency: stored-byte accounting mismatch (reserved %d, inserted %d)",
 			norm.StoredBytes, ins.StoredBytes))
@@ -214,12 +161,8 @@ func (s *IdempotencyStore) Execute(ctx context.Context, userID uuid.UUID,
 				fmt.Errorf("resume: idempotency: commit outcome unknown: %w", commitErr)
 		}
 		if errors.Is(commitErr, pgx.ErrTxCommitRollback) || pgErr != nil {
-			// The server processed the COMMIT and rejected it: the
-			// transaction is definitely rolled back.
 			return rolledBack(fmt.Errorf("resume: idempotency: commit rejected: %w", commitErr))
 		}
-		// Connection loss or another indeterminate result: the commit may
-		// or may not have happened.
 		return ExecuteResult{Outcome: CommitUnknown},
 			fmt.Errorf("resume: idempotency: commit outcome unknown: %w", commitErr)
 	}
@@ -249,10 +192,6 @@ func bindTransactionDeadline(ctx context.Context, tx pgx.Tx) error {
 	return nil
 }
 
-// cleanupExpired is Execute's first, separately committed transaction: the
-// bounded, deterministic oldest-first cleanup of the calling user's expired
-// records, with their exact counters released under the same user-first
-// lock order the mutation transaction uses.
 func (s *IdempotencyStore) cleanupExpired(ctx context.Context, userID uuid.UUID, now time.Time) error {
 	tx, err := s.begin(ctx)
 	if err != nil {
@@ -289,9 +228,6 @@ func (s *IdempotencyStore) cleanupExpired(ctx context.Context, userID uuid.UUID,
 	return nil
 }
 
-// releaseUsage releases exactly the counters of deletedRecords physically
-// deleted rows. Zero deletions release nothing. A missing usage row while
-// records were deleted is a broken accounting invariant and fails closed.
 func releaseUsage(ctx context.Context, qtx *store.Queries, userID uuid.UUID, deletedRecords, deletedBytes int64) error {
 	if deletedRecords == 0 {
 		return nil
@@ -311,10 +247,6 @@ func releaseUsage(ctx context.Context, qtx *store.Queries, userID uuid.UUID, del
 	return nil
 }
 
-// capacityError builds the typed capacity rejection with its Retry-After
-// value, read inside the caller's still-healthy transaction. An exact-key
-// expiry deletion in this transaction will roll back with the capacity
-// rejection, so that row remains expired retained backlog for the caller.
 func (s *IdempotencyStore) capacityError(ctx context.Context, qtx *store.Queries,
 	userID uuid.UUID, now time.Time, expiredExactKeyWillRollback bool,
 ) error {
@@ -333,14 +265,9 @@ func (s *IdempotencyStore) capacityError(ctx context.Context, qtx *store.Queries
 			retryAfter = int64((until + time.Second - 1) / time.Second)
 		}
 	}
-	// While expired backlog remains, retry in one second: the next
-	// mutation's bounded cleanup frees space.
 	return &IdempotencyCapacityError{RetryAfterSeconds: retryAfter}
 }
 
-// afterInsertConflict re-reads the committed winner after the defensive
-// unique-violation backstop fired, outside the already rolled-back
-// transaction.
 func (s *IdempotencyStore) afterInsertConflict(ctx context.Context, userID uuid.UUID,
 	operation string, key uuid.UUID, requestHash [32]byte,
 ) (ExecuteResult, error) {

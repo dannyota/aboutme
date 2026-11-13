@@ -15,7 +15,6 @@ import (
 )
 
 func TestJSONLDDiscoverableGoldenAndCSP(t *testing.T) {
-	// This fails if JSON order, script bytes, sameAs filtering, or CSP hash changes.
 	origin, err := publicresume.ParsePublicOrigin("https://aboutme.example", "production")
 	if err != nil {
 		t.Fatal(err)
@@ -53,7 +52,6 @@ func TestJSONLDDiscoverableGoldenAndCSP(t *testing.T) {
 }
 
 func TestJSONLDNondiscoverableUsesBaseCSP(t *testing.T) {
-	// This fails if a nondiscoverable response gets an inline script or hash.
 	origin, err := publicresume.ParsePublicOrigin("https://aboutme.example", "production")
 	if err != nil {
 		t.Fatal(err)
@@ -83,9 +81,6 @@ func TestJSONLDSameAsUsesTheRendererExactHTTPSPrefix(t *testing.T) {
 	}
 }
 
-// The public HTML validator requires the renderer's JSON-LD to byte-equal
-// JSONLD's output, so the TS renderer must pick the same sameAs values. Both
-// suites read this corpus (apps/web/test/public-render/render.test.ts).
 func TestJSONLDSameAsMatchesTheSharedRendererCorpus(t *testing.T) {
 	raw, err := os.ReadFile(filepath.Join("testdata", "public-format", "sameas-parity.json"))
 	if err != nil {

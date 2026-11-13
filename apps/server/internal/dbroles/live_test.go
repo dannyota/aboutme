@@ -94,9 +94,6 @@ func TestEnsureLiveSerializesWithinDatabase(t *testing.T) {
 	}
 }
 
-// TestEnsureLiveGrantsExactDatabaseAndSchemaPrivileges checks the database
-// and schema privileges each role holds after Ensure. A role with no grants
-// stands in for PUBLIC.
 func TestEnsureLiveGrantsExactDatabaseAndSchemaPrivileges(t *testing.T) {
 	db := livePostgresDB(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
@@ -130,13 +127,11 @@ func TestEnsureLiveGrantsExactDatabaseAndSchemaPrivileges(t *testing.T) {
 		{"aboutme_app", "database", "", "TEMP", false},
 		{probe, "database", "", "CONNECT", false},
 		{probe, "database", "", "CREATE", false},
-		// db-setup revokes ALL from PUBLIC, including TEMP.
 		{probe, "database", "", "TEMP", false},
 		{"aboutme_migrator", "schema", "public", "USAGE", true},
 		{"aboutme_migrator", "schema", "public", "CREATE", true},
 		{"aboutme_app", "schema", "public", "USAGE", true},
 		{"aboutme_app", "schema", "public", "CREATE", false},
-		// db-setup keeps PUBLIC's default USAGE on schema public.
 		{probe, "schema", "public", "USAGE", true},
 		{probe, "schema", "public", "CREATE", false},
 	}
@@ -164,12 +159,7 @@ func TestEnsureLiveGrantsExactDatabaseAndSchemaPrivileges(t *testing.T) {
 	}
 }
 
-// TestEnsureLiveSerializesConcurrentCatalogWriters runs Ensure from several
-// goroutines while another writer repeatedly grants and revokes CONNECT on
-// the same database. Ensure rewrites the pg_database ACL row on every call
-// (grantDatabaseAndSchema), and PostgreSQL raises "tuple concurrently
-// updated" when two transactions update that row without the shared LockID
-// lock serializing them (ADR 0005). Every call must succeed.
+// PostgreSQL raises "tuple concurrently updated" when two unserialized transactions update the same pg_database ACL row.
 func TestEnsureLiveSerializesConcurrentCatalogWriters(t *testing.T) {
 	db := livePostgresDB(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -236,10 +226,6 @@ func TestEnsureLiveSerializesConcurrentCatalogWriters(t *testing.T) {
 	}
 }
 
-// TestSetLoginVerifiersLiveSerializesWithinDatabase mirrors
-// TestEnsureLiveSerializesWithinDatabase: SetLoginVerifiers must block while
-// another transaction holds the LockID advisory lock, and complete once it
-// is released.
 func TestSetLoginVerifiersLiveSerializesWithinDatabase(t *testing.T) {
 	db := livePostgresDB(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
@@ -257,7 +243,6 @@ func TestSetLoginVerifiersLiveSerializesWithinDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal("begin waiter")
 	}
-	// Roll back so the shared cluster's role passwords never change.
 	defer func() {
 		if rollbackErr := waiter.Rollback(); rollbackErr != nil {
 			t.Error(rollbackErr)
@@ -287,9 +272,6 @@ func TestSetLoginVerifiersLiveSerializesWithinDatabase(t *testing.T) {
 	}
 }
 
-// TestEnsureLiveSetsNoDefaultACLs asserts Ensure never runs ALTER DEFAULT
-// PRIVILEGES: every migration grants aboutme_app explicitly, so a future
-// object never inherits a standing default grant.
 func TestEnsureLiveSetsNoDefaultACLs(t *testing.T) {
 	db := livePostgresDB(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)

@@ -37,26 +37,21 @@ type resumeMediaDeletionQueue interface {
 }
 
 type resumeSummaryJSON struct {
-	ID              uuid.UUID `json:"id"`
-	Title           string    `json:"title"`
-	Lng             string    `json:"lng"`
-	Revision        string    `json:"revision"`
-	Live            bool      `json:"live"`
-	Slug            *string   `json:"slug"`
-	DownloadEnabled bool      `json:"downloadEnabled"`
-	SEOGeoEnabled   bool      `json:"seoGeoEnabled"`
-	PublicTitle     *string   `json:"publicTitle"`
-	FaviconEmoji    *string   `json:"faviconEmoji"`
-	// SignInToView is the sign-in-to-view publish switch
-	// (docs/design/viewer-analytics/sign-in-to-view.md "Setting"). The pass
-	// epoch never leaves the server.
-	SignInToView bool `json:"signInToView"`
-	// Showcase is the owner's community-showcase state, null while the resume
-	// is not opted in (docs/design/showcase.md "Opt-in").
-	Showcase      *resumeShowcaseJSON `json:"showcase"`
-	SchemaVersion int32               `json:"schemaVersion"`
-	CreatedAt     time.Time           `json:"createdAt"`
-	UpdatedAt     time.Time           `json:"updatedAt"`
+	ID              uuid.UUID           `json:"id"`
+	Title           string              `json:"title"`
+	Lng             string              `json:"lng"`
+	Revision        string              `json:"revision"`
+	Live            bool                `json:"live"`
+	Slug            *string             `json:"slug"`
+	DownloadEnabled bool                `json:"downloadEnabled"`
+	SEOGeoEnabled   bool                `json:"seoGeoEnabled"`
+	PublicTitle     *string             `json:"publicTitle"`
+	FaviconEmoji    *string             `json:"faviconEmoji"`
+	SignInToView    bool                `json:"signInToView"`
+	Showcase        *resumeShowcaseJSON `json:"showcase"`
+	SchemaVersion   int32               `json:"schemaVersion"`
+	CreatedAt       time.Time           `json:"createdAt"`
+	UpdatedAt       time.Time           `json:"updatedAt"`
 }
 
 type resumeShowcaseJSON struct {

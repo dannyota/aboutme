@@ -102,8 +102,6 @@ func TestAccountDeletion_RemovesProjectsAndSlugHolds(t *testing.T) {
 	}
 }
 
-// maximumProjectDocument returns a valid document whose stored JSON text is
-// exactly the project bound, filled with characters HTML escaping would grow.
 func maximumProjectDocument(t *testing.T, h *exportTestHarness) []byte {
 	t.Helper()
 	d := project.Document{
@@ -130,9 +128,6 @@ func maximumProjectDocument(t *testing.T, h *exportTestHarness) []byte {
 		}
 		return n
 	}
-	// A link is at most 2048 characters, so the rest of the bound is filled
-	// with description text: a backslash is one byte of the 16 KiB
-	// description bound and two bytes of stored JSON text.
 	d.RepositoryURL = "https://example.test/?"
 	d.RepositoryURL += strings.Repeat("&", project.MaxLinkCharacters-len(d.RepositoryURL))
 	padding := []string{"vi", "ja", "fr"}

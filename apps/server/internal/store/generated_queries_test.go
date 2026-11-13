@@ -11,14 +11,8 @@ import (
 	"testing"
 )
 
-// showcaseReviewObjects matches the showcase review columns and the approval
-// index that migration 00018 drops. A release whose statements name
-// none of them runs on the schema before and after that drop
-// (docs/design/release-floors.md "Schema floor").
 var showcaseReviewObjects = regexp.MustCompile(`\b(review_key|reviewed_key|review_outcome|reviewed_at|first_listed_at|resume_showcase_listing_idx)\b`)
 
-// generatedStatements returns every SQL statement sqlc generated in this
-// package, keyed by "file: constant".
 func generatedStatements(t *testing.T) map[string]string {
 	t.Helper()
 	paths, err := filepath.Glob("*.sql.go")
@@ -62,9 +56,6 @@ func generatedStatements(t *testing.T) map[string]string {
 	return statements
 }
 
-// Every generated statement, the showcase queries among them, names only the
-// showcase columns that stay, so the release keeps working once the review
-// columns and their index are dropped.
 func TestGeneratedQueries_NameNoShowcaseReviewColumns(t *testing.T) {
 	t.Parallel()
 	showcase := 0

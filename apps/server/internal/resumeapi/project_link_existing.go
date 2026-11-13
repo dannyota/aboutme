@@ -10,12 +10,6 @@ import (
 	schema "danny.vn/aboutme/packages/schema/gen/go"
 )
 
-// linkExistingEntry returns raw, a canonical current-version document, with
-// projectID set on the entry entryID and nothing else changed: the entry
-// keeps its text, position and visibility (docs/design/projects.md
-// "Selection"). The entry must be an unlinked entry of a project section.
-// Ownership and uniqueness of the link are left to the store's link check,
-// which every document write runs.
 func linkExistingEntry(raw json.RawMessage, entryID string, projectID uuid.UUID) (json.RawMessage, error) {
 	parts, err := decodeRawDocument(raw)
 	if err != nil {
@@ -47,8 +41,6 @@ func linkExistingEntry(raw json.RawMessage, entryID string, projectID uuid.UUID)
 	return nil, &clientError{Status: http.StatusNotFound, Code: "entry_not_found", Message: "entry not found"}
 }
 
-// withProjectID adds projectId to an unlinked entry, keeping every other
-// member's encoding.
 func withProjectID(entry json.RawMessage, projectID uuid.UUID) (json.RawMessage, error) {
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(entry, &fields); err != nil {

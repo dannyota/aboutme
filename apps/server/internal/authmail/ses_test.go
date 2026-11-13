@@ -19,8 +19,6 @@ import (
 	smithyhttp "github.com/aws/smithy-go/transport/http"
 )
 
-// fakeSESClient records every SendEmail call and returns the configured error
-// or success. It never constructs a real AWS client.
 type fakeSESClient struct {
 	mu    sync.Mutex
 	calls []*sesv2.SendEmailInput
@@ -43,7 +41,6 @@ func (f *fakeSESClient) callCount() int {
 	return len(f.calls)
 }
 
-// logBuffer is a concurrency-safe in-memory log sink.
 type logBuffer struct {
 	mu sync.Mutex
 	b  bytes.Buffer
@@ -112,8 +109,6 @@ func TestNewSESSenderRejectsBadOptions(t *testing.T) {
 }
 
 func TestNewSESClientRejectsWrongRegion(t *testing.T) {
-	// NewSESClient constructs a real client, so it must never be called with a
-	// non-production region and never be called in tests with the real region.
 	if _, err := NewSESClient(context.Background(), "us-east-1"); !errors.Is(err, ErrSES) {
 		t.Fatalf("err = %v, want ErrSES", err)
 	}
@@ -220,8 +215,6 @@ func TestNewSESSenderRejectsUnsafeDisplayName(t *testing.T) {
 	}
 }
 
-// sdkSendError wraps inner the way the SES v2 client returns a service error:
-// an operation error around an HTTP response error that carries a request ID.
 func sdkSendError(inner error) error {
 	return &smithy.OperationError{
 		ServiceID:     "SESv2",
@@ -273,7 +266,7 @@ func TestSESSendLogsOnlyTokenErrorCodes(t *testing.T) {
 	cases := []struct {
 		name string
 		err  error
-		want string // expected code field, or "" for none
+		want string
 	}{
 		{"access denied", sdkSendError(&smithy.GenericAPIError{Code: "AccessDeniedException", Fault: smithy.FaultClient}), "AccessDeniedException"},
 		{"validation", sdkSendError(&sesv2types.BadRequestException{}), "BadRequestException"},

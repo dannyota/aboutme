@@ -9,23 +9,13 @@ import (
 	"danny.vn/aboutme/apps/server/internal/publicresume"
 )
 
-// PublicRuntime is the validated public serving identity: the canonical and
-// render origins plus the build digests public responses report.
 type PublicRuntime struct {
-	// PublicOrigin is the parsed canonical PUBLIC_ORIGIN.
-	PublicOrigin publicresume.PublicOrigin
-	// RenderOrigin is the parsed PUBLIC_RENDER_ORIGIN of the direct render
-	// worker.
-	RenderOrigin directrender.RenderOrigin
-	// AppDigest is APP_BUILD_DIGEST: non-empty printable ASCII, no spaces.
-	AppDigest string
-	// RendererDigest is PUBLIC_RENDERER_BUILD_DIGEST: non-empty printable
-	// ASCII, no spaces.
+	PublicOrigin   publicresume.PublicOrigin
+	RenderOrigin   directrender.RenderOrigin
+	AppDigest      string
 	RendererDigest string
 }
 
-// ParsePublicRuntime validates the public and render origins for environment
-// and both build digests. Each error names only the rejected setting.
 func ParsePublicRuntime(publicOrigin, renderOrigin, environment, appDigest, rendererDigest string) (PublicRuntime, error) {
 	parsedPublicOrigin, err := publicresume.ParsePublicOrigin(publicOrigin, environment)
 	if err != nil {
@@ -56,10 +46,6 @@ func printableDigest(value string) bool {
 	return true
 }
 
-// DecodeViewPassKey returns the 32-byte view pass key. VIEW_PASS_KEY is
-// validated at config load as the canonical 43-character unpadded base64url
-// encoding of 32 bytes (docs/design/viewer-analytics/sign-in-to-view.md
-// "Pass cookie").
 func DecodeViewPassKey(cfg config.Config) ([]byte, error) {
 	return base64.RawURLEncoding.Strict().DecodeString(cfg.ViewPassKey)
 }

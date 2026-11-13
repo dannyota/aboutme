@@ -1,9 +1,5 @@
 package resumeapi
 
-// Bounded, strict JSON request-body decoding: size and depth limits, exact
-// property names, no unknown fields, no duplicate object keys, and no
-// trailing data.
-
 import (
 	"bytes"
 	"encoding/json"
@@ -27,8 +23,6 @@ func decodeJSONBody(r *http.Request, target any) (boundedInput, error) {
 	return decodeJSONBodyAs(r, target, api.JSONShapeOf(reflect.TypeOf(target)))
 }
 
-// decodeJSONBodyAs is decodeJSONBody against shape instead of the shape
-// derived from target, for a body that refuses a value target would accept.
 func decodeJSONBodyAs(r *http.Request, target any, shape *api.JSONShape) (boundedInput, error) {
 	if err := requireJSONContentType(r.Header); err != nil {
 		return boundedInput{}, err

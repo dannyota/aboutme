@@ -8,9 +8,7 @@ import (
 	"danny.vn/aboutme/apps/server/internal/publicresume"
 )
 
-// robotsAllowed evaluates path against rules the way RFC 9309 does: the
-// longest matching rule wins, Allow wins a tie, "*" matches any run, and a
-// trailing "$" anchors the end.
+// RFC 9309: the longest matching rule wins, Allow wins a tie, "*" matches any run, and a trailing "$" anchors the end.
 func robotsAllowed(t *testing.T, robots, path string) bool {
 	t.Helper()
 	best, allowed := -1, true
@@ -48,11 +46,8 @@ func TestRobotsKeepsPrivatePathsOutAndResumesIn(t *testing.T) {
 		{"/terms", true},
 		{"/ada", true},
 		{"/ada.md", true},
-		// A resume slug that only starts like a sign-in page stays crawlable.
 		{"/login-expert", true},
 		{"/registered-nurse", true},
-		// Social cards fetch the share image and the preview cards; nothing
-		// else under /api.
 		{"/api/v1/public/resumes/ada/og.png", true},
 		{"/api/v1/public/resumes/ada/pdf", false},
 		{"/api/v1/public/resumes/ada", false},

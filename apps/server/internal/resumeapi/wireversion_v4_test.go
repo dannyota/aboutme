@@ -10,11 +10,6 @@ import (
 	schema "danny.vn/aboutme/packages/schema/gen/go"
 )
 
-// Document v4 adds customization.header.photoPosition and a project entry
-// subtitle (docs/adr/0013-resume-header-and-contacts.md). A v1
-// to v3 client cannot express either, so its writes must keep the stored
-// values.
-
 const (
 	v4ProjectKept    = "018f0000-0000-7000-8000-0000000000d1"
 	v4ProjectDeleted = "018f0000-0000-7000-8000-0000000000d2"

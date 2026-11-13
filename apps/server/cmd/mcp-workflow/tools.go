@@ -17,7 +17,6 @@ var requiredTools = [...]string{
 	"upload_photo", "upsert_entry",
 }
 
-// maxToolListPages bounds untrusted tool-list pagination at 32 pages.
 const maxToolListPages = 32
 
 func discoverTools(ctx context.Context, client sdkToolClient) ([]string, error) {

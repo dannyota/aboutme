@@ -12,8 +12,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/api"
 )
 
-// RateConfig carries the frozen per-token, per-user, and per-user concurrency
-// budgets from process config.
 type RateConfig struct {
 	TokenRequests     int
 	TokenWindow       time.Duration
@@ -24,7 +22,6 @@ type RateConfig struct {
 	Clock             func() time.Time
 }
 
-// RatePolicies owns process-wide MCP tool-call and concurrency admission.
 type RatePolicies struct {
 	clock func() time.Time
 	token *api.BoundedRateLimiter
@@ -32,7 +29,6 @@ type RatePolicies struct {
 	slots *requestSlots
 }
 
-// NewRatePolicies validates and creates one MCP admission policy set.
 func NewRatePolicies(cfg RateConfig) (*RatePolicies, error) {
 	if cfg.TokenRequests <= 0 || cfg.TokenWindow <= 0 || cfg.UserRequests <= 0 || cfg.UserWindow <= 0 ||
 		cfg.ConcurrentPerUser <= 0 || cfg.MaxKeys <= 0 || cfg.Clock == nil {
@@ -54,8 +50,6 @@ func NewRatePolicies(cfg RateConfig) (*RatePolicies, error) {
 	}, nil
 }
 
-// AdmitTool composes per-token and per-user admission. Keys contain only
-// durable row IDs; bearer material never enters either store.
 func (p *RatePolicies) AdmitTool(principal Principal) (bool, int) {
 	now := p.clock()
 	allowed, retry := p.token.Admit(now, "token:"+principal.TokenID.String())
@@ -65,15 +59,10 @@ func (p *RatePolicies) AdmitTool(principal Principal) (bool, int) {
 	return p.user.Admit(now, "user:"+principal.UserID.String())
 }
 
-// AcquireRequest reserves one of the user's bounded in-flight request slots.
-// The returned release is idempotent.
 func (p *RatePolicies) AcquireRequest(userID uuid.UUID) (release func(), allowed bool) {
 	return p.slots.acquire(userID)
 }
 
-// ServeRequest applies the per-user concurrency guard around one authenticated
-// MCP request. defer guarantees release on normal return, panic unwinding, and
-// handlers that return after request-context cancellation.
 func (p *RatePolicies) ServeRequest(principal Principal, w http.ResponseWriter, r *http.Request, next http.Handler) {
 	release, allowed := p.AcquireRequest(principal.UserID)
 	if !allowed {
@@ -117,10 +106,6 @@ func (s *requestSlots) acquire(userID uuid.UUID) (func(), bool) {
 		s.mu.Unlock()
 		return s.releaseTracked(userID), true
 	}
-	// While any overflow request remains active, every untracked user stays
-	// on the shared overflow counter. This prevents one overflow user from
-	// migrating into a newly freed private slot and obtaining two concurrent
-	// budgets at once.
 	if s.overflow > 0 || len(s.entries) >= s.maxKeys {
 		if s.overflow >= s.limit {
 			s.mu.Unlock()

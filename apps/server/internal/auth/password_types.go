@@ -1,12 +1,5 @@
 package auth
 
-// Password authentication HTTP surface. This file owns the route paths, the
-// closed request/response vocabulary, the password-only strict JSON chain,
-// registration-name normalization, and every wire response the seven password
-// operations emit. The numeric budgets live in docs/design/budgets.md; the
-// exact bytes live in docs/api/openapi.yaml and docs/design/security.md
-// ("Password authentication").
-
 import (
 	"bytes"
 	"encoding/json"
@@ -24,44 +17,24 @@ import (
 	"danny.vn/aboutme/apps/server/internal/password"
 )
 
-// Password route paths. The mux serves every API route under /api/v1; these
-// match the docs/api/openapi.yaml operations (servers.url = .../api/v1).
 const (
-	// PasswordRegisterPath is the POST route that starts a password
-	// registration; it is not registered while password sign-up is off.
 	PasswordRegisterPath = "/api/v1/auth/password/register"
-	// PasswordVerifyPath is the POST route that consumes a registration
-	// token.
-	PasswordVerifyPath = "/api/v1/auth/password/verify"
-	// PasswordLoginPath is the POST route for email and password sign-in.
-	PasswordLoginPath = "/api/v1/auth/password/login"
-	// PasswordForgotPath is the POST route that requests a reset email.
-	PasswordForgotPath = "/api/v1/auth/password/forgot"
-	// PasswordResetPath is the POST route that consumes a reset token.
-	PasswordResetPath = "/api/v1/auth/password/reset"
-	// PasswordReauthPath is the session POST route that reauthenticates with
-	// the account password.
-	PasswordReauthPath = "/api/v1/auth/password/reauth"
-	// PasswordMePath is the session PUT route that adds or changes the
-	// account password.
-	PasswordMePath = "/api/v1/me/password"
+	PasswordVerifyPath   = "/api/v1/auth/password/verify"
+	PasswordLoginPath    = "/api/v1/auth/password/login"
+	PasswordForgotPath   = "/api/v1/auth/password/forgot"
+	PasswordResetPath    = "/api/v1/auth/password/reset"
+	PasswordReauthPath   = "/api/v1/auth/password/reauth"
+	PasswordMePath       = "/api/v1/me/password"
 )
 
-// passwordMaxBodyBytes is the exact per-route request-body cap
-// (docs/design/budgets.md). It is tighter than the router's default 256 KiB
-// limit and is enforced by the password-only strict JSON chain before any
-// policy or storage work.
 const passwordMaxBodyBytes = 4096
 
-// Registration and reset token lifetimes (docs/design/budgets.md), kept exact
-// against the baseline migration's expiry CHECK constraints.
 const (
 	passwordRegistrationTTL = 24 * time.Hour
 	passwordResetTokenTTL   = 30 * time.Minute
 	passwordNotificationTTL = 24 * time.Hour
 )
 
-// Closed wire error codes. Only these strings ever leave the password routes.
 const (
 	passwordCodeRequestInvalid            = "request_invalid"
 	passwordCodeCredentialTokenInvalid    = "credential_token_invalid"
@@ -76,7 +49,6 @@ const (
 	passwordCodeAuthenticationUnavailable = "authentication_unavailable"
 )
 
-// Closed wire messages paired with the codes above.
 const (
 	passwordMsgRequestInvalid            = "request is malformed"
 	passwordMsgCredentialTokenInvalid    = "credential token is invalid"
@@ -91,9 +63,6 @@ const (
 	passwordMsgAuthenticationUnavailable = "authentication is temporarily unavailable"
 )
 
-// Closed service sentinels. Handlers map only these to wire responses; raw
-// dependency errors never cross the boundary. Password policy and hash errors
-// arrive as the password package's own sentinels and are mapped in the service.
 var (
 	errPasswordEmailInvalid   = errors.New("auth: password email invalid")
 	errPasswordNameInvalid    = errors.New("auth: password name invalid")
@@ -106,9 +75,6 @@ var (
 	errPasswordUnavailable    = errors.New("auth: password unavailable")
 )
 
-// passwordPolicyIssueForError maps the password package's closed policy errors
-// to the details.issue value in docs/api/openapi.yaml. ok is false for any
-// error that is not a policy issue.
 func passwordPolicyIssueForError(err error) (issue string, ok bool) {
 	switch {
 	case errors.Is(err, password.ErrPasswordLength):
@@ -121,10 +87,6 @@ func passwordPolicyIssueForError(err error) (issue string, ok bool) {
 		return "", false
 	}
 }
-
-// Request bodies. Each password request is one closed JSON object of string
-// fields (strict JSON admits exactly one object, rejects duplicate and
-// unknown fields and trailing bytes, and checks scalar types before work).
 
 type passwordRegisterRequest struct {
 	Name     string
@@ -158,11 +120,6 @@ type passwordSetRequest struct {
 	Password string
 }
 
-// decodeStrictStringObject decodes body as exactly one JSON object whose fields
-// are all JSON strings, copying each into the string target it is mapped to in
-// fields. It rejects a non-object top level, duplicate keys, unknown keys,
-// non-string (or null) scalar values, and trailing data. A missing key leaves
-// its target at the zero value; the caller enforces required-ness.
 func decodeStrictStringObject(body []byte, fields map[string]*string) error {
 	dec := json.NewDecoder(bytes.NewReader(body))
 	dec.UseNumber()
@@ -199,8 +156,6 @@ func decodeStrictStringObject(body []byte, fields map[string]*string) error {
 		if decodeErr := dec.Decode(&raw); decodeErr != nil {
 			return errPasswordStrictJSON
 		}
-		// A JSON string always begins with '"'; null, numbers, booleans,
-		// objects, and arrays do not, so this rejects every wrong scalar shape.
 		if len(raw) == 0 || raw[0] != '"' {
 			return errPasswordStrictJSON
 		}
@@ -222,13 +177,8 @@ func decodeStrictStringObject(body []byte, fields map[string]*string) error {
 	return nil
 }
 
-// errPasswordStrictJSON is the closed strict-JSON failure. It maps to 400
-// request_invalid; it never carries the offending bytes or a parse detail.
 var errPasswordStrictJSON = errors.New("auth: password body is not strict JSON")
 
-// readPasswordBody enforces the 4,096-byte cap independently of the router's
-// default body limit. It returns the raw body on success, or the error mapped
-// from a too-large body (413) or a read failure (400).
 func readPasswordBody(w http.ResponseWriter, r *http.Request) ([]byte, error) {
 	limited := http.MaxBytesReader(w, r.Body, passwordMaxBodyBytes)
 	body, err := io.ReadAll(limited)
@@ -244,13 +194,8 @@ func readPasswordBody(w http.ResponseWriter, r *http.Request) ([]byte, error) {
 	return body, nil
 }
 
-// errPasswordBodyTooLarge is the closed sentinel returned by readPasswordBody
-// when the body exceeds passwordMaxBodyBytes.
 var errPasswordBodyTooLarge = errors.New("auth: password body too large")
 
-// normalizeRegistrationName applies the registration name bounds: at most 400
-// raw UTF-8 bytes, 1–100 Unicode code points after NFC, and no control
-// characters. It is not trimmed, collapsed, or case-folded.
 func normalizeRegistrationName(raw string) (string, error) {
 	if len(raw) > 400 {
 		return "", errPasswordNameInvalid
@@ -270,11 +215,6 @@ func normalizeRegistrationName(raw string) (string, error) {
 	return normalized, nil
 }
 
-// ---- response writers ----
-
-// writePasswordError maps a password service sentinel (or password-package
-// policy error) to its exact wire response. Unknown errors fall through to the
-// opaque 503; they must never reach here in production.
 func writePasswordError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, errPasswordEmailInvalid),
@@ -355,9 +295,6 @@ func writePasswordUnavailable(w http.ResponseWriter) {
 	api.WriteError(w, http.StatusServiceUnavailable, passwordCodeAuthenticationUnavailable, passwordMsgAuthenticationUnavailable)
 }
 
-// passwordPolicyErrorEnvelope writes the 422 password_invalid rejection with the
-// closed details.issue (length|common|breached), never the rejected value. The
-// field order is fixed by the struct so the body bytes are deterministic.
 type passwordPolicyErrorEnvelope struct {
 	Error passwordPolicyErrorBody `json:"error"`
 }
@@ -382,7 +319,6 @@ func writePasswordPolicy(w http.ResponseWriter, issue string) {
 			Details: passwordPolicyErrorDetail{Issue: issue},
 		},
 	}); err != nil {
-		// Status and headers are already sent; the client sees a truncated body.
 		api.WriteError(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
 	}
 }

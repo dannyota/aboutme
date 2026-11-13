@@ -1,5 +1,3 @@
-// Package devdb guards the local development commands that write to a
-// database: dev-seed and the browser-proof fixtures.
 package devdb
 
 import (
@@ -10,11 +8,7 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// ValidateURL accepts raw only when every host pgx would connect to is the
-// loopback address 127.0.0.1 and the database is exactly database. It parses
-// raw the way pgx does, so query parameters such as host= and dbname= cannot
-// move the connection elsewhere. Errors never echo raw, which may hold a
-// password.
+// pgx lets query parameters such as host= and dbname= override the URL, so the URL is parsed as pgx parses it.
 func ValidateURL(raw, database string) error {
 	if strings.TrimSpace(raw) == "" {
 		return errors.New("--database-url is required")

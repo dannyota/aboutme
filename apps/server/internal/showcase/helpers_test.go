@@ -26,7 +26,6 @@ import (
 
 const templatesDirectory = "../../../../packages/schema/templates"
 
-// templateFile is one committed template preset.
 type templateFile struct {
 	ID            string         `json:"id"`
 	Customization map[string]any `json:"customization"`
@@ -54,9 +53,6 @@ func readTemplateFiles(t *testing.T) []templateFile {
 	return files
 }
 
-// appliedCustomization is the stored customization a template apply produces
-// for file: the preset without its placement, plus the resume's own section
-// order.
 func appliedCustomization(t *testing.T, file templateFile, main, sidebar []string) schema.Customization {
 	t.Helper()
 	raw, err := json.Marshal(file.Customization)
@@ -85,7 +81,6 @@ func appliedCustomization(t *testing.T, file templateFile, main, sidebar []strin
 	return out
 }
 
-// baseCustomization is a valid-enough customization that matches no preset.
 func baseCustomization() schema.Customization {
 	return schema.Customization{
 		Colors: schema.Colors{Primary: "#1d4ed8", Text: "#111111", Background: "#ffffff"},
@@ -93,7 +88,6 @@ func baseCustomization() schema.Customization {
 	}
 }
 
-// rowSpec describes one test resume.
 type rowSpec struct {
 	slug          string
 	lng           string
@@ -132,7 +126,6 @@ func (s rowSpec) parts(t *testing.T) (personal, content, customization []byte) {
 	return mustMarshal(t, details), mustMarshal(t, contentMap), mustMarshal(t, s.customization)
 }
 
-// row is the in-memory resume row for projection tests.
 func (s rowSpec) row(t *testing.T, id uuid.UUID) store.Resume {
 	t.Helper()
 	personal, content, customization := s.parts(t)
@@ -202,7 +195,6 @@ func snapshotOf(t *testing.T, spec rowSpec) publicresume.Snapshot {
 	return snapshot
 }
 
-// env is a live-database fixture for the showcase service.
 type env struct {
 	ctx     context.Context
 	pool    *pgxpool.Pool
@@ -212,14 +204,11 @@ type env struct {
 	now     time.Time
 }
 
-// newEnv opens the shared test database. Its rows are shared with parallel
-// tests, so a test using it never counts rows it did not create.
 func newEnv(t *testing.T) *env {
 	t.Helper()
 	return openEnv(t, testutil.RequireMigratedTestDatabaseURL(t))
 }
 
-// newFreshEnv opens a private database, for tests that count listing rows.
 func newFreshEnv(t *testing.T) *env {
 	t.Helper()
 	dsn, _ := testutil.NewMigratedTestDatabase(t)
@@ -248,15 +237,12 @@ func openEnv(t *testing.T, dsn string) *env {
 	}
 }
 
-// fixture is one committed resume owned by its own throwaway user.
 type fixture struct {
 	id   uuid.UUID
 	slug string
 	user uuid.UUID
 }
 
-// addResume commits a resume for spec and removes its owner (and with it the
-// resume and any showcase row) when the test ends.
 func (e *env) addResume(t *testing.T, spec rowSpec) fixture {
 	t.Helper()
 	personal, content, customization := spec.parts(t)
@@ -284,7 +270,6 @@ func (e *env) addResume(t *testing.T, spec rowSpec) fixture {
 	return fixture{id: resumeID, slug: spec.slug, user: userID}
 }
 
-// optIn runs PublishTx the way a publish request does and commits it.
 func (e *env) optIn(t *testing.T, resumeID uuid.UUID, role *string) {
 	t.Helper()
 	e.publish(t, PublishChange{ResumeID: resumeID, Enabled: true, Role: role})
@@ -305,7 +290,6 @@ func (e *env) publish(t *testing.T, change PublishChange) {
 	}
 }
 
-// sync runs SyncTx the way a document write does and commits it.
 func (e *env) sync(t *testing.T, resumeID uuid.UUID) {
 	t.Helper()
 	tx, err := e.pool.Begin(e.ctx)
@@ -321,8 +305,6 @@ func (e *env) sync(t *testing.T, resumeID uuid.UUID) {
 	}
 }
 
-// listed adds a resume and opts it in. Nothing is reviewed, so it is listed at
-// once.
 func (e *env) listed(t *testing.T, spec rowSpec, role *string) fixture {
 	t.Helper()
 	f := e.addResume(t, spec)

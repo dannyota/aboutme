@@ -7,13 +7,10 @@ import (
 	"time"
 )
 
-// listedHandle reads a listed resume whose role is not yet known. It cannot
-// reach a mutation; only toolGuard.bindTarget produces a targetHandle.
 type listedHandle string
 
 func (h listedHandle) resumeID() string { return string(h) }
 
-// ownerRun carries one process's workflow state after OAuth succeeds.
 type ownerRun struct {
 	config   workflowConfig
 	deps     workflowDeps
@@ -27,9 +24,6 @@ type ownerRun struct {
 	grant    grantSnapshot
 }
 
-// grantSnapshot is the revocation authority captured before any create. It
-// lets completion journal a known-valid grant, so a create is never followed
-// by a failure that leaves no revocation state.
 type grantSnapshot struct {
 	accessToken  string
 	refreshToken string
@@ -37,10 +31,6 @@ type grantSnapshot struct {
 	latestDate   time.Time
 }
 
-// runOwnerWorkflow is the only normal path: SDK connect, exact tool
-// discovery, source reads, candidate handoff, one create intent, photo copy,
-// verification, durable completion, and revocation. See
-// docs/design/mcp-owner-workflow.md#workflow.
 func runOwnerWorkflow(ctx context.Context, config workflowConfig, deps workflowDeps, intent createIntent, intentPresent bool) (err error) {
 	defer func() {
 		if cleanupErr := removeOwnerContent(config.Run); cleanupErr != nil && err == nil {
@@ -53,8 +43,6 @@ func runOwnerWorkflow(ctx context.Context, config workflowConfig, deps workflowD
 	}
 	revoked := false
 	defer func() {
-		// After revocation the session close is itself refused by the server,
-		// so a close error matters only before the grant is revoked.
 		if closeErr := client.Close(); closeErr != nil && err == nil && !revoked {
 			err = errWorkflowBlocked
 		}
@@ -66,14 +54,6 @@ func runOwnerWorkflow(ctx context.Context, config workflowConfig, deps workflowD
 	if grantErr := owner.captureGrant(ctx); grantErr != nil {
 		return grantErr
 	}
-	// A failure between here and complete leaves no revocation journal, so
-	// nothing else would ever revoke this grant; complete owns revocation
-	// once the run reaches it. A live create intent means a mutation may
-	// still be pending server side, and a restart needs this same grant to
-	// reconcile it, so the revoke waits for that intent to clear first. The
-	// call is best effort and never touches err, so the runner still reports
-	// the one closed word its original failure named. See
-	// docs/design/mcp-owner-workflow.md#privacy-revocation-and-evidence.
 	defer func() {
 		if err == nil || revoked {
 			return
@@ -82,9 +62,6 @@ func runOwnerWorkflow(ctx context.Context, config workflowConfig, deps workflowD
 			return
 		}
 		if revokeErr := deps.Revocation.Revoke(context.WithoutCancel(ctx), owner.grant.refreshToken); revokeErr != nil {
-			// Best effort: a failed cleanup revoke still leaves err (and the
-			// closed word it reports) untouched, and a later run or the
-			// grant's own 30-day expiry still closes it eventually.
 			return
 		}
 	}()
@@ -117,9 +94,6 @@ func runOwnerWorkflow(ctx context.Context, config workflowConfig, deps workflowD
 	return owner.complete(ctx, confirmedAt)
 }
 
-// createFresh enforces the account shape, reads the source and photo, hands
-// the source to the manager, validates the reviewed candidate, re-reads the
-// source, persists the intent, and sends it once.
 func (r *ownerRun) createFresh(ctx context.Context) error {
 	listing, err := r.guard.list(ctx)
 	if err != nil {
@@ -188,15 +162,10 @@ func (r *ownerRun) createFresh(ctx context.Context) error {
 		}
 		return err
 	default:
-		// An unknown outcome is settled by reads only in this process. A later
-		// run may replay the same key before the cutoff.
 		return r.reconcileByReads(ctx, errors.Join(errRecovery, err))
 	}
 }
 
-// reconcile resumes an unresolved intent. It binds the account and source,
-// finds an exact target by reads, and otherwise replays the exact request
-// only inside the 12-hour window.
 func (r *ownerRun) reconcile(ctx context.Context, intent createIntent) error {
 	r.intent = intent
 	if sourceErr := r.guard.setSource(intent.SourceID); sourceErr != nil {
@@ -235,8 +204,6 @@ func (r *ownerRun) reconcile(ctx context.Context, intent createIntent) error {
 	return r.acceptCreated(state, reconcileReplayed)
 }
 
-// reconcileByReads settles an unknown create in the same process: exactly one
-// exact new target is accepted; anything else keeps the intent.
 func (r *ownerRun) reconcileByReads(ctx context.Context, cause error) error {
 	listing, err := r.guard.list(ctx)
 	if err != nil {
@@ -252,7 +219,6 @@ func (r *ownerRun) reconcileByReads(ctx context.Context, cause error) error {
 	return nil
 }
 
-// splitBaseline requires every baseline resume and at most one new resume.
 func splitBaseline(listing []resumeSummary, intent createIntent) ([]resumeSummary, []resumeSummary, error) {
 	if len(listing) > maxListedResumes || !distinctIDs(listing) {
 		return nil, nil, errRecovery
@@ -286,9 +252,6 @@ func sourceMatchesIntent(source sourceSnapshot, intent createIntent) bool {
 		digest(source.Canonical) == intent.SourceDigest && photoDigest == intent.PhotoDigest
 }
 
-// existingTarget reports any resume other than the source that is already
-// Vietnamese or carries the fixed target title. A fresh production run then
-// refuses, so a lost intent or another checkout cannot add a second target.
 func existingTarget(listing []resumeSummary, source sourceHandle) bool {
 	for _, item := range listing {
 		if item.ID == string(source) {
@@ -302,8 +265,6 @@ func existingTarget(listing []resumeSummary, source sourceHandle) bool {
 	return false
 }
 
-// captureGrant validates the revocation authority and its server-bound dates
-// before any create. A grant that cannot be journaled stops the run first.
 func (r *ownerRun) captureGrant(ctx context.Context) error {
 	accessToken, refreshToken, err := r.deps.Tokens(ctx)
 	if err != nil || !validBearerValue(accessToken) || !validBearerValue(refreshToken) || accessToken == refreshToken {

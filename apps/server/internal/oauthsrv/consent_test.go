@@ -81,9 +81,6 @@ func TestConsent_ContextAndDecisionRevalidateAndIssueBoundCode(t *testing.T) {
 	}
 }
 
-// This catches an approval or silent reuse that skips the recent-reauth gate
-// for an enrolled account, and confirms denial needs no recent proof at all.
-// See docs/design/second-factor-authentication.md.
 func TestConsent_ApprovalRequiresBothRecentProofsForEnrolledAccountDenialDoesNot(t *testing.T) {
 	s, q, client, user := newAuthorizeHarness(t)
 	enrollTestSecondFactor(t, q, user.ID, s.clock())
@@ -263,7 +260,7 @@ func TestConsent_QueuedRevocationWinsAfterInFlightApproval(t *testing.T) {
 		redirect, approveErr := s.ConsentDecision(ctx, sess, ConsentDecision{ConsentQuery: consentQuery(client.ID, "resumes:read"), Decision: "approve"})
 		approvalDone <- approvalResult{redirect, approveErr}
 	}()
-	<-entropy.started // approval has client → user → session → grant locks and is before code creation.
+	<-entropy.started
 
 	revokeDone := make(chan error, 1)
 	revokePID := make(chan int32, 1)

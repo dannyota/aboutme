@@ -6,9 +6,6 @@ import (
 	"os"
 )
 
-// linkedinProofEmails are the fixed addresses the local LinkedIn mock issues
-// (internal/uatmock linkedinAccounts). Only the LinkedIn browser proof creates
-// accounts with them.
 var linkedinProofEmails = []string{
 	"li-verified@example.invalid",
 	"li-unverified@example.invalid",
@@ -16,17 +13,10 @@ var linkedinProofEmails = []string{
 	"li-link@example.invalid",
 }
 
-// linkedinTestEmailPrefix reserves the runtime-random password accounts the
-// LinkedIn browser proof creates for linking.
 const linkedinTestEmailPrefix = "lnkd-test-"
 
-// linkedinSubjectPrefix matches every subject the local LinkedIn mock issues.
 const linkedinSubjectPrefix = "lnkd-"
 
-// runLinkedInCleanup removes every row the LinkedIn browser proof can leave
-// behind, so each run starts from the same state: the fixed mock emails, the
-// reserved runtime-random accounts, their pending registrations, and any
-// identity that holds a mock subject. It is idempotent.
 func runLinkedInCleanup(ctx context.Context, cfg Config) error {
 	db, err := open(ctx, cfg)
 	if err != nil {

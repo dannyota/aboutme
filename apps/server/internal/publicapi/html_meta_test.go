@@ -31,12 +31,8 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// previewTag is one preview meta element as the renderer writes it.
 type previewTag struct{ attribute, name, content string }
 
-// previewTags lists the preview meta elements for resume in the order of
-// docs/design/link-previews.md, "Page head", leaving out og:locale when the
-// language maps to none.
 func previewTags(resume publicresume.PublicResume, preview previewmeta.Meta, root string) []previewTag {
 	imageURL := preview.ImageURL
 	if imageURL == "" {
@@ -69,7 +65,6 @@ func (tag previewTag) html() string {
 	return `<meta ` + tag.attribute + `="` + tag.name + `" content="` + stdhtml.EscapeString(tag.content) + `">`
 }
 
-// previewHead is the preview part of the page head the renderer writes.
 func previewHead(resume publicresume.PublicResume, preview previewmeta.Meta, root string) string {
 	var out strings.Builder
 	for _, tag := range previewTags(resume, preview, root) {
@@ -78,9 +73,6 @@ func previewHead(resume publicresume.PublicResume, preview previewmeta.Meta, roo
 	return out.String()
 }
 
-// previewResume is a live Vietnamese resume with a summary, every contact
-// type, and sentinels in hidden entries, a hidden contact, and a profile
-// section outside the layout.
 func previewResume() schema.Resume {
 	name, headline := `Nguyễn "An" <Dev> & co`, "Kỹ sư phần mềm"
 	visible := "<p>Kỹ sư thanh toán. Email an@example.com.</p>"
@@ -117,8 +109,6 @@ func projectedPreviewResume(t *testing.T) publicresume.PublicResume {
 	return public
 }
 
-// pageWithHead is a valid page for public, with the credit in its language,
-// whose head holds head in place of its own preview elements.
 func pageWithHead(public publicresume.PublicResume, head string) string {
 	base := strings.Replace(validHTMLIn(public.Lng, "Ada", "https://aboutme.example/"+public.Slug, public.Revision, ""),
 		"Built with aboutme.vn", creditText(public.Lng), 1)
@@ -200,7 +190,6 @@ func TestPublicHTMLRejectsALocaleTheLanguageDoesNotMap(t *testing.T) {
 	}
 }
 
-// previewTestReader serves one stored row, like formatTestReader.
 func previewTestReader(t *testing.T, document schema.Resume, live bool, publicTitle *string) (string, *publicresume.Reader) {
 	t.Helper()
 	slug, lng := "ada", "vi"
@@ -280,8 +269,6 @@ func TestPublicHTMLSendsThePreviewAndServesItsHead(t *testing.T) {
 }
 
 func TestPublicHTMLExposesNoPreviewForAResumeThatIsNotLive(t *testing.T) {
-	// An unpublished or private resume has live = false; the page is the
-	// public 404 and the renderer never sees its text.
 	slug, reader := previewTestReader(t, previewResume(), false, nil)
 	handler := previewHandler(t, reader, func(*http.Request) (*http.Response, error) {
 		return nil, errors.New("renderer must not run")
@@ -298,9 +285,6 @@ func TestPublicHTMLExposesNoPreviewForAResumeThatIsNotLive(t *testing.T) {
 	}
 }
 
-// The render request with the largest valid document, the longest valid
-// public title, and preview text at its byte bounds stays inside the fixed
-// request limit (docs/design/link-previews.md, "Security and size").
 func TestPublicRenderRequestWithTheLargestDocumentFits(t *testing.T) {
 	document := largestPreviewDocument(t)
 	slug, lng := "ada", "vi"
@@ -336,8 +320,6 @@ func TestPublicRenderRequestWithTheLargestDocumentFits(t *testing.T) {
 	}
 }
 
-// largestPreviewDocument is a valid document of exactly the maximum canonical
-// size whose name, headline, and summary are dense emoji text.
 func largestPreviewDocument(t *testing.T) schema.Resume {
 	t.Helper()
 	source, err := os.ReadFile("../../../../packages/schema/fixtures/minimal.json")
@@ -392,8 +374,6 @@ func largestPreviewDocument(t *testing.T) schema.Resume {
 	return document
 }
 
-// With stored cards on, the page names the current card version, the render
-// request carries that URL, and a head naming the og.png alias is rejected.
 func TestPublicHTMLNamesTheCurrentCardVersion(t *testing.T) {
 	slug, reader := previewTestReader(t, previewResume(), true, nil)
 	public := projectedPreviewResume(t)

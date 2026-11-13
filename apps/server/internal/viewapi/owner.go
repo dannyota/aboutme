@@ -22,11 +22,6 @@ const (
 	detailMonth = 12
 )
 
-// OwnerQueries is the generated query subset the owner and public routes
-// read. GetLiveViewResumeBySlug is the public start route's live read; it
-// carries the sign-in-to-view pass check's columns
-// (docs/design/viewer-analytics/sign-in-to-view.md "Gated routes";
-// AC-VIEW-003).
 type OwnerQueries interface {
 	ListViewSummaries(ctx context.Context, arg store.ListViewSummariesParams) ([]store.ListViewSummariesRow, error)
 	GetOwnedViewResume(ctx context.Context, arg store.GetOwnedViewResumeParams) (store.GetOwnedViewResumeRow, error)
@@ -169,8 +164,6 @@ func (s *Service) handleDetail(w http.ResponseWriter, r *http.Request) {
 	api.WriteData(w, http.StatusOK, response)
 }
 
-// denseDays returns one entry per day from first for 90 days, zero where no
-// row exists.
 func denseDays(rows []store.ListResumeViewDaysRow, first time.Time) []viewDay {
 	byDay := make(map[string]store.ListResumeViewDaysRow, len(rows))
 	for _, row := range rows {
@@ -188,7 +181,6 @@ func denseDays(rows []store.ListResumeViewDaysRow, first time.Time) []viewDay {
 	return days
 }
 
-// months returns 12 monthly totals from first, oldest first.
 func months(rows []store.ListResumeViewDaysRow, first time.Time) []viewMonth {
 	out := make([]viewMonth, detailMonth)
 	index := make(map[string]int, detailMonth)
@@ -212,7 +204,6 @@ func writeResumeNotFound(w http.ResponseWriter) {
 	api.WriteError(w, http.StatusNotFound, "resume_not_found", "resume not found")
 }
 
-// writeInternal logs only fixed fields, never database error text.
 func (s *Service) writeInternal(w http.ResponseWriter, r *http.Request) {
 	if s.logger != nil {
 		s.logger.ErrorContext(r.Context(), "viewapi: owner read failed", "request_id", api.RequestIDFromContext(r.Context()))

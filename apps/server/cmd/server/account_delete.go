@@ -22,12 +22,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// The account-delete command answers a report against a showcase listing: the
-// operator deletes the account that owns the reported slug, through the same
-// deletion path as a self-delete from Settings (docs/design/showcase.md
-// "Report and account deletion", ADR 0003). Output and logs carry the user ID,
-// slugs, action, outcome, and time only.
-
 const (
 	accountDeleteCommandName = "account-delete"
 	accountDeleteTimeout     = 2 * time.Minute
@@ -41,8 +35,6 @@ const (
 
 const accountDeleteUsage = "usage: server account-delete {show <slug> | confirm <slug> <user-id> | status <user-id>}"
 
-// accountDeleteExitError carries a fixed exit status. Status 4 and 5 have
-// already written their result line; status 2 carries the usage text.
 type accountDeleteExitError struct {
 	code    int
 	message string
@@ -152,9 +144,6 @@ func executeAccountDelete(ctx context.Context, args accountDeleteArgs, getenv fu
 	return reportAccountDelete(output, logger, args, account, err)
 }
 
-// reportAccountDelete writes the result of one run and returns its exit
-// status. A lost commit answer exits 3 with no end line: the account may be
-// deleted. Reconcile by account ID after proving the attempt stopped.
 func reportAccountDelete(output io.Writer, logger *slog.Logger, args accountDeleteArgs, account accountapi.Account, err error) error {
 	action := "show"
 	if args.confirm {
@@ -186,9 +175,6 @@ func reportAccountDelete(output io.Writer, logger *slog.Logger, args accountDele
 	return accountDeleteResult(output, 0, line)
 }
 
-// accountDeleteResult writes the result line and the end marker that the
-// deploy script reads for, then returns the exit status as an error when it
-// is not zero.
 func accountDeleteResult(output io.Writer, code int, line string) error {
 	if _, err := fmt.Fprintf(output, "%s\n%s\n", line, accountDeleteEndLine); err != nil {
 		return errors.New("account-delete result could not be written")

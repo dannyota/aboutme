@@ -6,8 +6,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// Retire requires permanent collection disablement and revoked host receipts.
-// Unresolved obligations must first complete the permanent abort operation.
 func (s *Service) Retire(ctx context.Context) error {
 	return s.reviewed(ctx, func(q *store.Queries, campaign store.PrivacyNoticeCampaign) error {
 		if campaign.State == "retired" {
@@ -36,7 +34,6 @@ func (s *Service) Retire(ctx context.Context) error {
 	})
 }
 
-// PurgeRetired removes at most 200 recipient rows after reviewed retirement.
 func (s *Service) PurgeRetired(ctx context.Context) (int64, error) {
 	var removed int64
 	err := s.reviewed(ctx, func(q *store.Queries, campaign store.PrivacyNoticeCampaign) error {

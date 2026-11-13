@@ -70,7 +70,6 @@ func (r *recordingRedeemer) onlyCall(t *testing.T) renderjob.Redemption {
 }
 
 func TestMissingAuthorityNeverReachesRedemption(t *testing.T) {
-	// This fails if an ID-only request can consume or retrieve a private snapshot.
 	redeemer := &recordingRedeemer{snapshot: validSnapshot(t)}
 	handler := mustHandler(t, redeemer)
 	request := validRequest(t)
@@ -86,7 +85,6 @@ func TestMissingAuthorityNeverReachesRedemption(t *testing.T) {
 }
 
 func TestSuccessfulRedemptionReturnsExactFrozenPayload(t *testing.T) {
-	// This fails if the adapter reloads, reserializes, wraps, or changes the queue's frozen bytes.
 	snapshot := validSnapshot(t)
 	redeemer := &recordingRedeemer{snapshot: snapshot}
 	handler := mustHandler(t, redeemer)
@@ -120,7 +118,6 @@ func TestSuccessfulRedemptionReturnsExactFrozenPayload(t *testing.T) {
 }
 
 func TestRequestAuthorityAndTransportShapeFailClosed(t *testing.T) {
-	// Each case catches one way a broader HTTP surface could reach the one-use authority.
 	tests := []struct {
 		name   string
 		mutate func(*http.Request)
@@ -184,7 +181,6 @@ func TestRequestAuthorityAndTransportShapeFailClosed(t *testing.T) {
 }
 
 func TestRequestPathMethodAndQueryAreExact(t *testing.T) {
-	// This fails if the private handler grows aliases or parses an encoded near-match as authority.
 	for _, target := range []string{
 		"/internal-render/print/redeem/",
 		"/internal-render/print/redeem/extra",
@@ -226,7 +222,6 @@ func TestRequestPathMethodAndQueryAreExact(t *testing.T) {
 }
 
 func TestRequestBodyIsClosedAndBoundedBeforeRedemption(t *testing.T) {
-	// These cases catch permissive decoding, body smuggling, and reads above the 128-byte limit.
 	valid := `{"resumeId":"` + testResumeID + `","audience":"nuxt-print"}`
 	t.Run("exact limit", func(t *testing.T) {
 		request := requestWithBody(t, valid+strings.Repeat(" ", 128-len(valid)))
@@ -312,7 +307,6 @@ func TestRequestBodyIsClosedAndBoundedBeforeRedemption(t *testing.T) {
 }
 
 func TestQueueFailuresReplayAndPayloadBindingAreOpaque(t *testing.T) {
-	// This fails if errors or frozen binding mismatches disclose state or bytes.
 	base := validSnapshot(t)
 	otherID := uuid.MustParse(testOtherID)
 	mutations := []struct {
@@ -416,7 +410,6 @@ func TestQueueFailuresReplayAndPayloadBindingAreOpaque(t *testing.T) {
 }
 
 func TestDeadlineAndCancellationArePassedAndJoined(t *testing.T) {
-	// This fails if the adapter detaches redemption or omits the five-second request and socket bounds.
 	t.Run("deadline", func(t *testing.T) {
 		var contextDeadline time.Time
 		redeemer := redeemFunc(func(ctx context.Context, _ renderjob.Redemption) (renderjob.Snapshot, error) {
@@ -501,7 +494,6 @@ func TestDeadlineAndCancellationArePassedAndJoined(t *testing.T) {
 }
 
 func TestRealHTTPContractAndSlowBodyDeadline(t *testing.T) {
-	// This catches differences between direct handler calls and net/http's wire parsing.
 	snapshot := validSnapshot(t)
 	redeemer := &recordingRedeemer{snapshot: snapshot}
 	server := httptest.NewServer(mustHandler(t, redeemer))

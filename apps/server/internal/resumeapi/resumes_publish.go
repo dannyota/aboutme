@@ -1,8 +1,5 @@
 package resumeapi
 
-// Resume publish: validating and committing a publish mutation, and the
-// slug-tombstone and discovery-generation bookkeeping it requires.
-
 import (
 	"bytes"
 	"context"
@@ -30,7 +27,6 @@ type publishMutationPrepared struct {
 
 type publishOperation struct{ service *Service }
 
-// Run applies a validated publish mutation inside the idempotency transaction.
 func (op publishOperation) Run(ctx context.Context, qtx *store.Queries, mutation mutationContext, prepared preparedInput) (mutationRunResult, error) {
 	input, ok := prepared.Value.(publishMutationPrepared)
 	if !ok || mutation.ExpectedRevision == nil {
@@ -155,10 +151,6 @@ func (s *Service) publishTransition(ctx context.Context, current resume.Resume, 
 		return mutationTransition{}, err
 	}
 	discovery := publishChangesDiscovery(before, next.Effective)
-	// Turning sign-in-to-view on for an already-live resume revokes the old
-	// public state through the same fence as any other revoking publish
-	// change (docs/design/viewer-analytics/sign-in-to-view.md "Gated
-	// routes"; AC-VIEW-007).
 	revoking := (next.ChangedSlug && before.Slug != nil) || (before.Live && !next.Effective.Live) || (before.SEOGeoEnabled && !next.Effective.SEOGeoEnabled) || (before.DownloadEnabled && !next.Effective.DownloadEnabled) || (before.Live && next.Effective.Live && !before.SignInToView && next.Effective.SignInToView)
 	class := publicstate.NonDraining
 	if revoking {
@@ -212,12 +204,6 @@ func currentPublishOf(current resume.Resume) currentPublish {
 	}
 }
 
-// mergeSignInToView resolves the request's optional signInToView field
-// against the stored value: absent keeps it (docs/design/viewer-analytics/sign-in-to-view.md
-// "Setting"; AC-VIEW-001). It returns a copy of current with SignInToView set
-// to the merged result, which validatePublish's effective:=current copy
-// then carries through untouched, since validatePublish knows nothing about
-// this field.
 func mergeSignInToView(current currentPublish, input publishInput) currentPublish {
 	merged := current
 	if input.SignInToView.Present {
@@ -226,11 +212,6 @@ func mergeSignInToView(current currentPublish, input publishInput) currentPublis
 	return merged
 }
 
-// validateSignInToView adds the one sign-in-to-view publish issue
-// validatePublish cannot express: turning the switch on while
-// SIGN_IN_TO_VIEW_ENABLED is false. Turning it off, or leaving it on, is
-// always allowed regardless of the flag, because gating never depends on
-// the flag once a resume is already gated (design "Setting").
 func (s *Service) validateSignInToView(before currentPublish, prepared publishPrepared) publishPrepared {
 	if prepared.Effective.SignInToView && !before.SignInToView && !s.signInToViewEnabled {
 		prepared.Issues = sortedUniquePublishIssues(append(append([]publishIssue(nil), prepared.Issues...),
@@ -251,11 +232,6 @@ func slugTakenError() *clientError {
 	return &clientError{Status: http.StatusConflict, Code: "slug_taken", Message: "slug is unavailable"}
 }
 
-// publishChangesDiscovery reports whether this transition changes aggregate
-// discovery membership: an ordinary publish-state change, or the
-// sign-in-to-view switch flipping, which alone moves a resume in or out of
-// the sitemap and llms.txt (docs/design/viewer-analytics/delivery.md
-// "Schema"; AC-VIEW-010).
 func publishChangesDiscovery(before, after currentPublish) bool {
 	return before.Slug == nil != (after.Slug == nil) || (before.Slug != nil && after.Slug != nil && *before.Slug != *after.Slug) || before.Live != after.Live || before.SEOGeoEnabled != after.SEOGeoEnabled || before.SignInToView != after.SignInToView
 }

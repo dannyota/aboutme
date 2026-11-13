@@ -1,9 +1,5 @@
 package secondfactor
 
-// Passkey verification: the assertion ceremony start, the pending
-// completion dispatch by method, assertion completion, and the
-// non-increasing counter security event.
-
 import (
 	"bytes"
 	"context"
@@ -16,10 +12,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// StartPasskeyAssertion creates an assertion ceremony for a live pending
-// authentication. An account with no active passkey gets
-// ErrSecondFactorNotFound; that rolls back, so no ceremony is created and the
-// pending row and its failure count are unchanged.
 func (s *Service) StartPasskeyAssertion(ctx context.Context, pendingToken string, sessionID *uuid.UUID) (auth.SecondFactorOptions, error) {
 	s.cleanup(ctx)
 	var options auth.SecondFactorOptions
@@ -49,8 +41,6 @@ func (s *Service) StartPasskeyAssertion(ctx context.Context, pendingToken string
 	return options, nil
 }
 
-// CompletePending completes a live pending authentication with a passkey
-// assertion or a recovery code.
 func (s *Service) CompletePending(ctx context.Context, pendingToken string, sessionID *uuid.UUID, credential auth.SecondFactorCredential, client auth.SecondFactorClient) (*auth.SessionIssue, error) {
 	switch c := credential.(type) {
 	case *passkeyAssertion:
@@ -64,12 +54,6 @@ func (s *Service) CompletePending(ctx context.Context, pendingToken string, sess
 	}
 }
 
-// completeAssertion locks the user, bound session, policy, and the presented
-// credential before the pending row, then claims the ceremony. A failed
-// verification commits only the ceremony consumption, the counter security
-// event, the counted attempt, and the exhaustion mail; it never writes the
-// credential counter or a session. A failed event insert rolls every write
-// back.
 func (s *Service) completeAssertion(ctx context.Context, pendingToken string, sessionID *uuid.UUID, a *passkeyAssertion, client auth.SecondFactorClient) (*auth.SessionIssue, error) {
 	var (
 		policy *store.SecondFactorPolicy
@@ -132,8 +116,6 @@ func (s *Service) completeAssertion(ctx context.Context, pendingToken string, se
 	return issue, nil
 }
 
-// recordCounterEvent inserts the bounded non-increasing counter event. Logs
-// name only the event ID and fixed kind.
 func (s *Service) recordCounterEvent(ctx context.Context, qtx *store.Queries, credential store.WebauthnCredential, received uint32, now time.Time) error {
 	if s.counterEventProbe != nil {
 		if err := s.counterEventProbe(); err != nil {

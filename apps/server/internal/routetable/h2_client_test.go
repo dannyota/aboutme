@@ -13,8 +13,6 @@ import (
 	"golang.org/x/net/http2/hpack"
 )
 
-// h2EventKind names one frame, or the connection's end, as the stall test
-// sees it.
 type h2EventKind string
 
 const (
@@ -25,7 +23,6 @@ const (
 	h2Closed  h2EventKind = "connection closed"
 )
 
-// h2Event is one frame the client read, reduced to what the test checks.
 type h2Event struct {
 	kind      h2EventKind
 	streamID  uint32
@@ -40,14 +37,11 @@ func (e h2Event) String() string {
 	return fmt.Sprintf("%s stream=%d status=%q length=%d end_stream=%t code=%v err=%v", e.kind, e.streamID, e.status, e.length, e.endStream, e.code, e.err)
 }
 
-// h2Client is a hand-written HTTP/2 client over cleartext TCP with prior
-// knowledge. It advertises an initial stream window of 0 and sends no
-// WINDOW_UPDATE until openWindow, so the server can send response headers
-// but no body: an HTTP/2 viewer that stopped reading.
+// HTTP/2 flow control covers only DATA frames, so a zero stream window still lets the server send headers (RFC 9113 section 5.2).
 type h2Client struct {
 	conn   net.Conn
 	framer *http2.Framer
-	mu     sync.Mutex // guards framer writes
+	mu     sync.Mutex
 	events chan h2Event
 	stop   chan struct{}
 }
@@ -89,8 +83,6 @@ func (c *h2Client) writeFrame(write func(*http2.Framer) error) error {
 	return write(c.framer)
 }
 
-// readLoop reads every frame, acknowledges the server's SETTINGS and PING,
-// and reports the rest as events until the connection ends.
 func (c *h2Client) readLoop() {
 	for {
 		frame, err := c.framer.ReadFrame()
@@ -130,7 +122,6 @@ func (c *h2Client) report(event h2Event) {
 	}
 }
 
-// get opens stream 1 with a GET of path.
 func (c *h2Client) get(t *testing.T, authority, path string) {
 	t.Helper()
 	var block bytes.Buffer
@@ -159,8 +150,6 @@ func (c *h2Client) next(t *testing.T, timeout time.Duration) h2Event {
 	}
 }
 
-// awaitHeaders returns stream 1's response HEADERS. A body frame or a
-// stream end before them fails the test.
 func (c *h2Client) awaitHeaders(t *testing.T) h2Event {
 	t.Helper()
 	for {
@@ -174,9 +163,6 @@ func (c *h2Client) awaitHeaders(t *testing.T) h2Event {
 	}
 }
 
-// endWhileWindowZero waits up to wait for stream 1 or the connection to
-// end while the stream window is still 0, and reports the ending event. A
-// body frame fails the test: the server may not send one into a zero window.
 func (c *h2Client) endWhileWindowZero(t *testing.T, wait time.Duration) (h2Event, bool) {
 	t.Helper()
 	deadline := time.After(wait)
@@ -195,7 +181,6 @@ func (c *h2Client) endWhileWindowZero(t *testing.T, wait time.Duration) (h2Event
 	}
 }
 
-// openWindow lets the server send stream 1's body.
 func (c *h2Client) openWindow(t *testing.T) {
 	t.Helper()
 	c.write(t, func(framer *http2.Framer) error {
@@ -206,8 +191,6 @@ func (c *h2Client) openWindow(t *testing.T) {
 	})
 }
 
-// readStream counts stream 1's body bytes until the stream or connection
-// ends, and returns the count and the event that ended it.
 func (c *h2Client) readStream(t *testing.T) (int, h2Event) {
 	t.Helper()
 	received := 0

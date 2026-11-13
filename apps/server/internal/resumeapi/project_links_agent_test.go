@@ -10,9 +10,6 @@ import (
 	schema "danny.vn/aboutme/packages/schema/gen/go"
 )
 
-// A bearer grant cannot hold the project read scope yet, so an agent may keep
-// or remove a stored link but never add or change one
-// (docs/design/projects-contract.md "Agents").
 func TestProjectLinks_BearerMayKeepOrRemoveButNotAddOrChange(t *testing.T) {
 	h := newResumeAPITestHarness(t)
 	first := createLinkProject(t, h, h.userID, "atlas", linkProjectDocument("Atlas"))

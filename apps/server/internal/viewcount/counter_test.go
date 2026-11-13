@@ -15,9 +15,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// Tests follow docs/design/viewer-analytics/counting.md, "Layers" and
-// "Aggregation", and ADR 0022.
-
 type fakeStore struct {
 	mu      sync.Mutex
 	resumes map[string]LiveResume
@@ -56,7 +53,6 @@ type fixture struct {
 	owner   uuid.UUID
 }
 
-// start is 10:00 in Asia/Ho_Chi_Minh.
 var fixtureStart = time.Date(2026, time.September, 26, 3, 0, 0, 0, time.UTC)
 
 func newFixture(t *testing.T, mapLimit int) *fixture {
@@ -92,7 +88,6 @@ func solve(t *testing.T, challenge Challenge) Solution {
 	return *solution
 }
 
-// view runs start and, after wait, collect, and returns the outcome.
 func (f *fixture) view(viewer Viewer, wait time.Duration, labels EdgeLabels) Outcome {
 	f.t.Helper()
 	in := f.started(viewer)
@@ -131,11 +126,9 @@ func TestCollectCountsAValidViewOnce(t *testing.T) {
 	if got := f.view(anon("203.0.113.5"), 9*time.Second, EdgeLabels{}); got != OutcomeCounted {
 		t.Fatalf("first view = %q, want counted", got)
 	}
-	// Same network, same day: nothing.
 	if got := f.view(anon("203.0.113.5"), 9*time.Second, EdgeLabels{}); got != OutcomeNone {
 		t.Fatalf("second view = %q, want none", got)
 	}
-	// Another address on the same IPv6 /64 is the same network.
 	if got := f.view(anon("2001:db8:1:2::10"), 9*time.Second, EdgeLabels{}); got != OutcomeCounted {
 		t.Fatalf("ipv6 view = %q, want counted", got)
 	}
@@ -152,11 +145,11 @@ func TestCollectCountsAValidViewOnce(t *testing.T) {
 
 func TestCollectDedupeKeyRollsAtVietnamMidnight(t *testing.T) {
 	f := newFixture(t, 0)
-	f.now = time.Date(2026, time.September, 26, 16, 58, 0, 0, time.UTC) // 23:58 in Vietnam.
+	f.now = time.Date(2026, time.September, 26, 16, 58, 0, 0, time.UTC)
 	if got := f.view(anon("203.0.113.5"), 9*time.Second, EdgeLabels{}); got != OutcomeCounted {
 		t.Fatalf("before midnight = %q, want counted", got)
 	}
-	f.now = time.Date(2026, time.September, 26, 17, 0, 1, 0, time.UTC) // 00:00:01 the next day.
+	f.now = time.Date(2026, time.September, 26, 17, 0, 1, 0, time.UTC)
 	if got := f.view(anon("203.0.113.5"), 9*time.Second, EdgeLabels{}); got != OutcomeCounted {
 		t.Fatalf("after midnight = %q, want counted", got)
 	}
@@ -185,8 +178,6 @@ func TestCollectTokenAgeReplayAndProof(t *testing.T) {
 	}
 
 	wrong := f.started(anon("198.51.100.5"))
-	// Replace the first byte with one that differs from it, so the key is
-	// always wrong, including when the real key already starts with 00.
 	badByte := "00"
 	if wrong.Solution.DerivedKey[:2] == badByte {
 		badByte = "ff"
@@ -197,7 +188,6 @@ func TestCollectTokenAgeReplayAndProof(t *testing.T) {
 		t.Fatalf("wrong solution = %q, want invalid", got)
 	}
 
-	// A solved challenge from another token does not transfer.
 	first := f.started(anon("198.51.100.6"))
 	second := f.started(anon("198.51.100.6"))
 	first.Challenge, first.Solution = second.Challenge, second.Solution
@@ -232,7 +222,6 @@ func TestCollectEdgeLabels(t *testing.T) {
 	if got := f.view(anon("192.0.2.2"), 9*time.Second, EdgeLabels{Datacenter: true}); got != OutcomeDatacenter {
 		t.Fatalf("dc = %q, want datacenter", got)
 	}
-	// Each filtered outcome is recorded once per network per day.
 	if got := f.view(anon("192.0.2.2"), 9*time.Second, EdgeLabels{Datacenter: true}); got != OutcomeNone {
 		t.Fatalf("repeat dc = %q, want none", got)
 	}
@@ -248,11 +237,9 @@ func TestOwnerIsNeverCounted(t *testing.T) {
 	if err != nil || !result.Owner || result.Token != "" {
 		t.Fatalf("owner Start = %+v, %v; want owner flag and no token", result, err)
 	}
-	// The owner's later signed-out view from the same network.
 	if got := f.view(anon("203.0.113.9"), 9*time.Second, EdgeLabels{}); got != OutcomeNone {
 		t.Fatalf("owner network view = %q, want none", got)
 	}
-	// A collect carrying the owner's session from another network.
 	in := f.started(anon("203.0.113.10"))
 	f.now = f.now.Add(9 * time.Second)
 	ownerElsewhere := Viewer{Addr: netip.MustParseAddr("203.0.113.10"), Account: &f.owner}
@@ -383,8 +370,6 @@ func TestNetworkMapEvictsOldestWhenFull(t *testing.T) {
 	if got := f.view(anon("203.0.113.61"), 9*time.Second, EdgeLabels{}); got != OutcomeCounted {
 		t.Fatalf("second = %q", got)
 	}
-	// The first network was evicted, so it can count again: the design's
-	// accepted failure is a double count, never a lost view.
 	if got := f.view(anon("203.0.113.60"), 9*time.Second, EdgeLabels{}); got != OutcomeCounted {
 		t.Fatalf("evicted network = %q, want counted", got)
 	}

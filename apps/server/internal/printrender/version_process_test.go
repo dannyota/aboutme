@@ -26,7 +26,6 @@ func TestVersionCancellationJoinsStartedBrowser(t *testing.T) {
 		_, probeErr := version(probeCtx, executable)
 		result <- probeErr
 	}()
-	// The browser starts after the supervisor installs its cancellation handler.
 	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()
 	var line string

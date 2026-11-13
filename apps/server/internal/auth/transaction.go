@@ -1,5 +1,3 @@
-// Package auth implements the OAuth and session boundary described in
-// docs/design/security.md.
 package auth
 
 import (
@@ -18,85 +16,60 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// Provider values must match the database checks for transactions and identities.
 type Provider string
 
-// The supported OAuth/OIDC providers.
 const (
 	ProviderGoogle   Provider = "google"
 	ProviderGitHub   Provider = "github"
 	ProviderLinkedIn Provider = "linkedin"
 )
 
-// Purpose identifies why an OAuth transaction was started. Values match
-// the schema's CHECK (purpose IN (...)) on oauth_transactions exactly.
 type Purpose string
 
-// The reasons an OAuth transaction can be started.
 const (
 	PurposeLogin  Purpose = "login"
 	PurposeLink   Purpose = "link"
 	PurposeReauth Purpose = "reauth"
-	// PurposeView is the unauthenticated purpose that gates one public resume
-	// for sign in to view rather than any account (docs/design/viewer-analytics/
-	// sign-in-to-view.md "Sign-in flow"; AC-VIEW-004, AC-VIEW-005, AC-VIEW-006).
-	PurposeView Purpose = "view"
+	PurposeView   Purpose = "view"
 )
 
-// oauthTxTTL also governs the transaction cookie lifetime.
 const oauthTxTTL = 10 * time.Minute
 
-// randomTokenBytes gives handles, state, and nonces 256 bits of entropy.
 const randomTokenBytes = 32
 
 const defaultLoginReturnPath = "/app/resumes"
 
-// Transaction binds an authorization start to its callback.
 type Transaction struct {
 	Provider      Provider
 	Purpose       Purpose
-	LinkingUserID uuid.UUID // zero value iff Purpose == PurposeLogin
+	LinkingUserID uuid.UUID
 	State         string
 	PKCEVerifier  string
-	Nonce         string // empty for ProviderGitHub
+	Nonce         string
 	RedirectURI   string
 	ReturnPath    string
-	// ResumeID is set only for PurposeView (docs/design/viewer-analytics/
-	// sign-in-to-view.md "Sign-in flow"; AC-VIEW-004).
-	ResumeID uuid.UUID
+	ResumeID      uuid.UUID
 }
 
-// ErrTransactionInvalid collapses unknown, expired, replayed, and wrong-provider
-// handles into one no-oracle result.
 var ErrTransactionInvalid = errors.New("auth: oauth transaction invalid")
 
-// TransactionStore creates and atomically consumes OAuth transactions
-// backed by the oauth_transactions table.
 type TransactionStore struct {
 	q   *store.Queries
 	now func() time.Time
 }
 
-// NewTransactionStore builds a TransactionStore backed by q, using the
-// real wall clock.
 func NewTransactionStore(q *store.Queries) *TransactionStore {
 	return &TransactionStore{q: q, now: time.Now}
 }
 
-// NewTransactionStoreForTest injects a clock for deterministic expiry tests.
 func NewTransactionStoreForTest(q *store.Queries, now func() time.Time) *TransactionStore {
 	return &TransactionStore{q: q, now: now}
 }
 
-// Begin stores only the handle hash and returns the raw cookie handle. Handle,
-// state, and OIDC nonce are independent random values. GitHub has no nonce.
 func (s *TransactionStore) Begin(ctx context.Context, provider Provider, purpose Purpose, linkingUserID uuid.UUID, redirectURI string) (string, Transaction, error) {
 	return s.begin(ctx, provider, purpose, linkingUserID, redirectURI, defaultLoginReturnPath)
 }
 
-// begin stores a provider transaction with its server-validated login return
-// path. Direct callers use Begin's closed default; provider start handlers pass
-// the path they validated from the login page.
 func (s *TransactionStore) begin(ctx context.Context, provider Provider, purpose Purpose, linkingUserID uuid.UUID, redirectURI, returnPath string) (string, Transaction, error) {
 	handle, err := randomToken()
 	if err != nil {
@@ -144,10 +117,6 @@ func (s *TransactionStore) begin(ctx context.Context, provider Provider, purpose
 	return handle, transactionFromRow(row), nil
 }
 
-// Consume atomically claims one live transaction. Unknown, expired, replayed,
-// and wrong-provider handles return ErrTransactionInvalid. Provider validation
-// runs after the claim, so a mismatch also consumes the transaction and cannot
-// be retried against another callback.
 func (s *TransactionStore) Consume(ctx context.Context, handle string, expectedProvider Provider) (Transaction, error) {
 	now := s.now()
 	row, err := s.q.ConsumeOAuthTransaction(ctx, store.ConsumeOAuthTransactionParams{
@@ -168,7 +137,6 @@ func (s *TransactionStore) Consume(ctx context.Context, handle string, expectedP
 	return transactionFromRow(row), nil
 }
 
-// transactionFromRow converts the database shape to the auth shape.
 func transactionFromRow(row store.OAuthTransaction) Transaction {
 	tx := Transaction{
 		Provider:     Provider(row.Provider),
@@ -190,12 +158,6 @@ func transactionFromRow(row store.OAuthTransaction) Transaction {
 	return tx
 }
 
-// beginView stores an unauthenticated purpose-view transaction bound to
-// resumeID (docs/design/viewer-analytics/sign-in-to-view.md "Sign-in flow";
-// AC-VIEW-004). ReturnPath holds the project page suffix viewPage validated,
-// "/projects" or "/projects/{project-slug}"; the resume page keeps the same
-// closed default as every other transaction, which the view callback reads
-// as no suffix.
 func (s *TransactionStore) beginView(ctx context.Context, provider Provider, resumeID uuid.UUID, redirectURI, pageSuffix string) (string, Transaction, error) {
 	handle, err := randomToken()
 	if err != nil {
@@ -233,7 +195,6 @@ func (s *TransactionStore) beginView(ctx context.Context, provider Provider, res
 	return handle, transactionFromRow(row), nil
 }
 
-// randomToken returns an unpadded base64url random value.
 func randomToken() (string, error) {
 	b := make([]byte, randomTokenBytes)
 	if _, err := rand.Read(b); err != nil {
@@ -242,7 +203,6 @@ func randomToken() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
-// hashHandle returns the at-rest SHA-256 form of the bearer handle.
 func hashHandle(handle string) []byte {
 	sum := sha256.Sum256([]byte(handle))
 	return sum[:]

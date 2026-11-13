@@ -16,9 +16,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/authmail"
 )
 
-// Client is an authmail.Sender that POSTs messages to a local capture server
-// over authenticated loopback HTTP. It is used by development wiring, never in
-// production config, which rejects the capture sender outright.
 type Client struct {
 	baseURL string
 	secret  [32]byte
@@ -26,8 +23,6 @@ type Client struct {
 	logger  *slog.Logger
 }
 
-// NewClient validates the loopback base URL, the 32-byte secret, and the
-// logger, returning a Sender for the capture server.
 func NewClient(baseURL string, secret []byte, logger *slog.Logger) (*Client, error) {
 	if len(secret) != 32 {
 		return nil, ErrSecret
@@ -44,10 +39,6 @@ func NewClient(baseURL string, secret []byte, logger *slog.Logger) (*Client, err
 	return c, nil
 }
 
-// Send POSTs one message to POST /capture and classifies the HTTP result.
-// Transport failures are ambiguous and therefore temporary; a 413/400 is a
-// permanent rejection; anything else is temporary. No message field or secret
-// ever appears in a returned error or log line.
 func (c *Client) Send(ctx context.Context, m authmail.Message) (authmail.SendResult, error) {
 	if messageSize(m) > MaxMessageBytes {
 		return authmail.SendResult{Outcome: authmail.SendPermanentFailure}, nil
@@ -87,8 +78,6 @@ func (c *Client) Send(ctx context.Context, m authmail.Message) (authmail.SendRes
 	}
 }
 
-// decodeStrictJSON parses exactly one JSON object with no duplicate or unknown
-// fields, no trailing content, and exact string scalar types.
 func decodeStrictJSON(data []byte, out *authmail.Message) error {
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.UseNumber()
@@ -152,9 +141,6 @@ func decodeStrictJSON(data []byte, out *authmail.Message) error {
 	return nil
 }
 
-// validateMessage enforces the closed field set: a known kind and a non-empty,
-// structurally valid recipient. Subjects and bodies may be empty; the size cap
-// is enforced separately by the Store.
 func validateMessage(m authmail.Message) error {
 	switch m.Kind {
 	case authmail.KindVerify, authmail.KindReset, authmail.KindPasswordChanged:
@@ -167,8 +153,6 @@ func validateMessage(m authmail.Message) error {
 	return nil
 }
 
-// parseLoopbackBaseURL validates that baseURL is an http/https URL whose host
-// is loopback, returning it normalized without a trailing slash.
 func parseLoopbackBaseURL(baseURL string) (string, error) {
 	if baseURL == "" {
 		return "", ErrConfig

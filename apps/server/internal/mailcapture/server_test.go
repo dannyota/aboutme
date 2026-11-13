@@ -90,7 +90,7 @@ func TestMailCaptureNewClientRejectsBadInputs(t *testing.T) {
 func TestMailCaptureServerRejectsNonLoopback(t *testing.T) {
 	s := testServer(t)
 	r := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/capture", nil)
-	r.RemoteAddr = "203.0.113.9:12345" // non-loopback, never a real source
+	r.RemoteAddr = "203.0.113.9:12345"
 	r.Header.Set("Authorization", bearer(s))
 	rec := httptest.NewRecorder()
 	s.Handler().ServeHTTP(rec, r)
@@ -143,7 +143,6 @@ func TestMailCaptureServerCaptureEndToEnd(t *testing.T) {
 		t.Fatalf("capture code = %d, want 202; body=%s", rec.Code, rec.Body.String())
 	}
 
-	// GET returns the message newest-first.
 	r = authorizedRequest(t, s, http.MethodGet, "/api/messages", nil)
 	rec = httptest.NewRecorder()
 	s.Handler().ServeHTTP(rec, r)
@@ -167,7 +166,6 @@ func TestMailCaptureServerCaptureEndToEnd(t *testing.T) {
 		t.Fatalf("ID = %d, want 1", sm.ID)
 	}
 
-	// DELETE resets.
 	r = authorizedRequest(t, s, http.MethodDelete, "/api/messages", nil)
 	rec = httptest.NewRecorder()
 	s.Handler().ServeHTTP(rec, r)
@@ -235,7 +233,6 @@ func TestMailCaptureServerCaptureRejectsStrictJSON(t *testing.T) {
 
 func TestMailCaptureServerCaptureRejectsOversize(t *testing.T) {
 	s := testServer(t)
-	// A valid JSON body whose text_body alone exceeds 16 KiB.
 	big := strings.Repeat("x", MaxMessageBytes)
 	body := `{"kind":"verify","to":"a@b.c","text_body":"` + big + `"}`
 	r := authorizedRequest(t, s, http.MethodPost, "/capture", strings.NewReader(body))
@@ -340,7 +337,6 @@ func TestMailCaptureClientSendClassification(t *testing.T) {
 		})
 	}
 
-	// Oversized message is rejected locally as permanent without a request.
 	c, err := NewClient(srv.URL, secret, logger)
 	if err != nil {
 		t.Fatalf("NewClient: %v", err)
@@ -354,14 +350,12 @@ func TestMailCaptureClientSendClassification(t *testing.T) {
 		t.Fatalf("oversize outcome = %v, want permanent", res.Outcome)
 	}
 
-	// The secret must never appear in any log line.
 	if strings.Contains(logBuf.String(), base64.RawURLEncoding.EncodeToString(secret)) {
 		t.Fatalf("logs leak the bearer secret")
 	}
 }
 
 func TestMailCaptureClientSendTransportFailureIsTemporary(t *testing.T) {
-	// A closed listener port yields a transport error: ambiguous, so temporary.
 	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 	url := srv.URL
 	srv.Close()
@@ -384,7 +378,6 @@ func TestMailCaptureServerLogsNeverIncludeSecret(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Force a 401 and a 403; neither path may log the secret.
 	r := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/messages", nil)
 	r.RemoteAddr = "203.0.113.9:12345"
 	rec := httptest.NewRecorder()
@@ -399,7 +392,6 @@ func TestMailCaptureServerLogsNeverIncludeSecret(t *testing.T) {
 	}
 }
 
-// syncBuffer is a concurrency-safe bytes.Buffer used as a log sink.
 type syncBuffer struct {
 	mu  sync.Mutex
 	buf bytes.Buffer

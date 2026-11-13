@@ -27,7 +27,6 @@ const (
 	transitionDone
 )
 
-// Transition owns the close, commit, rollback, and recovery sequence for fences.
 type Transition struct {
 	mu          sync.Mutex
 	coordinator *Coordinator
@@ -35,7 +34,6 @@ type Transition struct {
 	state       transitionState
 }
 
-// Close stops new admissions and drains required active public requests.
 func (t *Transition) Close(ctx context.Context, deadline time.Time) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -75,7 +73,6 @@ func (t *Transition) Close(ctx context.Context, deadline time.Time) error {
 	return nil
 }
 
-// Commit opens fences for the durable state proven after Close.
 func (t *Transition) Commit(state CommittedState) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -85,7 +82,6 @@ func (t *Transition) Commit(state CommittedState) error {
 	return t.commit(state)
 }
 
-// Rollback releases a transition without changing its durable generation state.
 func (t *Transition) Rollback() error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -100,7 +96,6 @@ func (t *Transition) Rollback() error {
 	return nil
 }
 
-// Recover resolves a closed transition before it can admit public requests.
 func (t *Transition) Recover(ctx context.Context, resolver RecoveryResolver) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()

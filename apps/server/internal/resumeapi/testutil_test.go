@@ -82,8 +82,6 @@ func snapshotHTTPResponse(t *testing.T, response *http.Response) testHTTPRespons
 	return testHTTPResponse{status: response.StatusCode, header: response.Header.Clone(), body: raw}
 }
 
-// newResumeAPITestHarness is the shared live-database, selected-media, real
-// router fixture for this package and the endpoint tasks that follow it.
 func newResumeAPITestHarness(t *testing.T) *resumeAPITestHarness {
 	t.Helper()
 
@@ -236,7 +234,6 @@ func (h *resumeAPITestHarness) createResume(t *testing.T) resume.Resume {
 func (h *resumeAPITestHarness) snapshotUserTable(t *testing.T, table string) string {
 	t.Helper()
 	var snapshot string
-	// table is supplied only by package-private test constants.
 	query := "SELECT coalesce(string_agg(row_text, '|' ORDER BY row_text), '') FROM " +
 		"(SELECT value::text AS row_text FROM " + table + " value WHERE user_id = $1) rows"
 	if err := h.pool.QueryRow(h.ctx, query, h.userID).Scan(&snapshot); err != nil {

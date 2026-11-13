@@ -8,8 +8,6 @@ import (
 	"testing"
 )
 
-// TestViewPage_ClosedGrammar proves a view start accepts only an absent
-// page, projects, or projects/{project-slug}, written without any escape.
 func TestViewPage_ClosedGrammar(t *testing.T) {
 	t.Parallel()
 	slug40 := strings.Repeat("a", 40)
@@ -59,9 +57,6 @@ func TestViewPage_ClosedGrammar(t *testing.T) {
 	}
 }
 
-// TestViewReturnSuffix_RevalidatesTheStoredPage proves the callback appends
-// only a stored suffix of the two page shapes, and nothing for the resume
-// page's default or any other stored value.
 func TestViewReturnSuffix_RevalidatesTheStoredPage(t *testing.T) {
 	t.Parallel()
 	for stored, want := range map[string]string{

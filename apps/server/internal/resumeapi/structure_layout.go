@@ -1,28 +1,17 @@
 package resumeapi
 
-// Resume structure layout: the raw document's layout columns, the structure
-// commands applied to them in order, and the string slice helpers they use.
-
 import (
 	"encoding/json"
 	"fmt"
 )
 
-// rawLayout is a resume document decoded down to its layout columns, with
-// every other value kept as raw JSON.
 type rawLayout struct {
-	// Document is the decoded document and its content sections.
-	Document rawDocumentParts
-	// Customization is the document's customization object.
+	Document      rawDocumentParts
 	Customization map[string]json.RawMessage
-	// Layout is the customization layout object.
-	Layout map[string]json.RawMessage
-	// Sections is the layout's sections object that holds both columns.
-	Sections map[string]json.RawMessage
-	// Main is the main column's section keys in display order.
-	Main []string
-	// Sidebar is the sidebar column's section keys in display order.
-	Sidebar []string
+	Layout        map[string]json.RawMessage
+	Sections      map[string]json.RawMessage
+	Main          []string
+	Sidebar       []string
 }
 
 func decodeRawLayout(raw json.RawMessage) (rawLayout, error) {

@@ -28,14 +28,10 @@ import (
 	schema "danny.vn/aboutme/packages/schema/gen/go"
 )
 
-// gateTestKey is a fixed 32-byte VIEW_PASS_KEY for gate tests.
 var gateTestKey = bytes.Repeat([]byte{0x11}, 32)
 
 var gateTestResumeID = uuid.MustParse("00000000-0000-0000-0000-0000000000a1")
 
-// gateValidHTML builds gate HTML that passes gateHTMLRejection for envelope,
-// mirroring how Nuxt is expected to render it (design "Gate"). With no card
-// image URL the head carries no image element.
 func gateValidHTML(envelope directrender.GateRenderRequest, origin publicresume.PublicOrigin) string {
 	head := gatePreviewHead(envelope, origin)
 	favicon := ""
@@ -60,8 +56,6 @@ func gateValidHTML(envelope directrender.GateRenderRequest, origin publicresume.
 		`<main id="public-gate">` + anchors + "</main></body></html>"
 }
 
-// gatePreviewHead is the preview head Nuxt writes for the gate: every preview
-// element, less the image elements when the envelope has no card image URL.
 func gatePreviewHead(envelope directrender.GateRenderRequest, origin publicresume.PublicOrigin) string {
 	var out strings.Builder
 	for _, tag := range previewTags(publicresume.PublicResume{Slug: envelope.Slug}, envelope.Preview, origin.String()) {
@@ -91,9 +85,6 @@ func TestGateHTMLRejection_AcceptsValidGate(t *testing.T) {
 	}
 }
 
-// TestGateHTMLRejection_AcceptsRendererCorpus proves the validator accepts the
-// HTML the real renderer writes. The fixture is shared with a web test that
-// asserts the renderer produces exactly that HTML (design "Gate"; AC-VIEW-002).
 func TestGateHTMLRejection_AcceptsRendererCorpus(t *testing.T) {
 	raw, err := os.ReadFile("testdata/gate-render.json")
 	if err != nil {
@@ -169,9 +160,6 @@ func TestGateHTMLRejection_RejectsClosedViolations(t *testing.T) {
 	}
 }
 
-// TestGateHTMLRejection_ImageMetaNeedsCardURL proves a gate with no card
-// image URL may carry no og:image or twitter:image meta, and that a gate with
-// one carries exactly that URL (design "Gate"; AC-VIEW-002).
 func TestGateHTMLRejection_ImageMetaNeedsCardURL(t *testing.T) {
 	origin := mustPublicOrigin(t)
 	noCard := gateTestEnvelope()
@@ -205,9 +193,6 @@ func TestGateHTMLRejection_ImageMetaNeedsCardURL(t *testing.T) {
 	}
 }
 
-// replaceOnce replaces the first occurrence of old with new. old must be
-// present exactly once in the fixture, or the case is checking the wrong
-// baseline.
 func replaceOnce(s, old, replacement string) string {
 	if strings.Count(s, old) != 1 {
 		panic("replaceOnce: " + old + " must appear exactly once in the fixture")
@@ -267,13 +252,10 @@ func TestGateMessage_OnlyClosedValues(t *testing.T) {
 	}
 }
 
-// gateHTMLRenderer renders body for every RenderGate call, for the
-// integration tests below.
 type gateHTMLRoundTrip func(*http.Request) (*http.Response, error)
 
 func (f gateHTMLRoundTrip) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 
-// signInResumeReader builds a Reader over one live, sign-in-to-view resume.
 func signInResumeReader(t *testing.T, epoch int32) (*publicresume.Reader, string) {
 	t.Helper()
 	slug := "ada"
@@ -348,7 +330,6 @@ func TestServeGate_NoPassServesGateAndValidPassServesResume(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// No pass: the gate, never cached, private is moot since gate is no-store.
 	noPass := httptest.NewRecorder()
 	handler.ServeHTTP(noPass, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/"+slug, nil))
 	if noPass.Code != http.StatusOK {
@@ -364,8 +345,6 @@ func TestServeGate_NoPassServesGateAndValidPassServesResume(t *testing.T) {
 		t.Errorf("no-pass body = %q, want the gate markup", noPass.Body.String())
 	}
 
-	// A valid pass reaches the resume, with a private Cache-Control and the
-	// join-invite marker.
 	pass := viewpass.Seal(gateTestKey, gateTestResumeID, 1, time.Now().Add(time.Hour))
 	withPass := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/"+slug, nil)
 	withPass.AddCookie(&http.Cookie{Name: viewpass.CookieName, Value: pass})
@@ -384,8 +363,6 @@ func TestServeGate_NoPassServesGateAndValidPassServesResume(t *testing.T) {
 		t.Errorf("valid-pass body = %q, want the join-invite marker", passResp.Body.String())
 	}
 
-	// An old-epoch pass is rejected exactly like no pass, even once the
-	// resume-shaped response is cached.
 	oldPass := viewpass.Seal(gateTestKey, gateTestResumeID, 0, time.Now().Add(time.Hour))
 	oldReq := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/"+slug, nil)
 	oldReq.AddCookie(&http.Cookie{Name: viewpass.CookieName, Value: oldPass})

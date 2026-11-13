@@ -23,15 +23,8 @@ import (
 	"danny.vn/aboutme/apps/server/internal/viewpass"
 )
 
-// maxBodyBytes bounds start and collect bodies. A collect body with its
-// echoed challenge is under 1 KiB.
 const maxBodyBytes = 4 * 1024
 
-// Edge label headers. The CloudFront edge's WAF inserts them on the collect
-// path, Caddy passes only these two from its CloudFront listener, and Go
-// reads them only from a trusted proxy (docs/design/viewer-analytics/
-// counting.md, "Layers 2 and 3"). A viewer who sends them itself can only
-// move its own report out of the count.
 const (
 	botLabelHeader        = "X-Amzn-Waf-Aboutme-Bot"
 	datacenterLabelHeader = "X-Amzn-Waf-Aboutme-Dc"
@@ -39,15 +32,7 @@ const (
 
 var hexPattern = regexp.MustCompile(`^[0-9a-f]{2,128}$`)
 
-// preflight rejects a request that is not a same-origin JSON POST with a
-// bounded body, before any session or database work, and returns the body.
-// The public routes carry no CSRF token because they hold no session
-// authority; the exact Origin and JSON media type keep cross-site pages out,
-// since the origin never answers a CORS preflight.
 func (s *Service) preflight(w http.ResponseWriter, r *http.Request) ([]byte, bool) {
-	// The edge matches the collect path as sent, and the mux matches it
-	// decoded, so an escaped spelling could skip the edge labels. Only the
-	// plain spelling is served.
 	if strings.Contains(r.URL.EscapedPath(), "%") {
 		api.WriteError(w, http.StatusNotFound, "not_found", "no route for this path")
 		return nil, false
@@ -92,17 +77,12 @@ func jsonMediaType(header http.Header) bool {
 	return len(params) == 0
 }
 
-// invalidRequestMessage is the request_invalid message when no single field
-// is at fault.
 const invalidRequestMessage = "request is invalid"
 
 func writeInvalid(w http.ResponseWriter, message string) {
 	api.WriteError(w, http.StatusBadRequest, "request_invalid", message)
 }
 
-// decodeStrict checks body against shape, then decodes exactly one JSON value
-// into into with no unknown fields. On failure it returns the client message,
-// which names the failing field when there is one.
 func decodeStrict(body []byte, shape *api.JSONShape, into any) (string, bool) {
 	if err := api.CheckJSONShape(body, shape); err != nil {
 		var pathErr *api.JSONPathError
@@ -126,10 +106,7 @@ type startResponse struct {
 	Owner     bool                 `json:"owner"`
 	Token     string               `json:"token,omitempty"`
 	Challenge *viewcount.Challenge `json:"challenge,omitempty"`
-	// SignedIn is true when the request carries any valid account session,
-	// for the join invite; it authorizes nothing
-	// (docs/design/viewer-analytics/sign-in-to-view.md "Join invite").
-	SignedIn bool `json:"signedIn"`
+	SignedIn  bool                 `json:"signedIn"`
 }
 
 func (s *Service) handleStart(w http.ResponseWriter, r *http.Request, body []byte) {
@@ -147,11 +124,6 @@ func (s *Service) handleStart(w http.ResponseWriter, r *http.Request, body []byt
 		writeNotFound(w)
 		return
 	}
-	// One live read serves both the pass check and the token. A
-	// sign-in-to-view resume needs a pass before it is counted; the check
-	// runs before Start so a missing pass is never counted
-	// (docs/design/viewer-analytics/sign-in-to-view.md "Gated routes";
-	// AC-VIEW-003).
 	resume, err := s.queries.GetLiveViewResumeBySlug(r.Context(), slug)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
@@ -181,10 +153,6 @@ func (s *Service) handleStart(w http.ResponseWriter, r *http.Request, body []byt
 	api.WriteData(w, http.StatusOK, response)
 }
 
-// hasValidPass reports whether r carries a __Host-view-pass cookie with a
-// pass for resumeID at exactly passEpoch, not expired as of clock()
-// (docs/design/viewer-analytics/sign-in-to-view.md "Pass cookie", "Gated
-// routes"; AC-VIEW-003, AC-VIEW-007). A nil clock uses time.Now.
 func hasValidPass(r *http.Request, key []byte, resumeID uuid.UUID, passEpoch int32, clock func() time.Time) bool {
 	cookie, err := r.Cookie(viewpass.CookieName)
 	if err != nil {
@@ -210,7 +178,6 @@ type collectRequest struct {
 	} `json:"solution"`
 }
 
-// valid checks the shape the OpenAPI ViewCollectRequest schema states.
 func (c collectRequest) valid() bool {
 	if c.Token == nil || c.Challenge == nil || c.Solution == nil ||
 		c.Solution.Counter == nil || c.Solution.DerivedKey == nil {
@@ -226,8 +193,6 @@ func (c collectRequest) valid() bool {
 
 const tokenAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
 
-// handleCollect answers 204 for every outcome after the body is valid, so a
-// client cannot learn which check rejected it.
 func (s *Service) handleCollect(w http.ResponseWriter, r *http.Request, body []byte) {
 	var request collectRequest
 	message, ok := decodeStrict(body, collectShape(), &request)
@@ -249,8 +214,6 @@ func (s *Service) handleCollect(w http.ResponseWriter, r *http.Request, body []b
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// viewer returns the canonical client address and, when OptionalSession
-// authenticated one, the account. The account only recognizes the owner.
 func (s *Service) viewer(r *http.Request) viewcount.Viewer {
 	var viewer viewcount.Viewer
 	if raw, ok := api.ClientIP(r, s.trustedProxies); ok {
@@ -265,8 +228,6 @@ func (s *Service) viewer(r *http.Request) viewcount.Viewer {
 	return viewer
 }
 
-// edgeLabels reads the WAF label headers only when the socket peer is a
-// trusted proxy.
 func (s *Service) edgeLabels(r *http.Request) viewcount.EdgeLabels {
 	if !s.trustedProxies.TrustsPeer(r) {
 		return viewcount.EdgeLabels{}

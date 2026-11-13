@@ -1,9 +1,5 @@
 package publicapi
 
-// The two project page render requests, built from one admitted snapshot by
-// the rules in docs/design/projects-contract.md "Render envelope" and
-// docs/design/ui/project-pages.md "Head".
-
 import (
 	"errors"
 	"unicode/utf8"
@@ -17,12 +13,8 @@ import (
 	"danny.vn/aboutme/apps/server/internal/publicresume"
 )
 
-// maxListTechnologies is the number of technologies one list row shows.
 const maxListTechnologies = 6
 
-// The bounds of a project page's preview text, agreed with the renderer:
-// a title of a 120-character name, " · " and the longest owner name, and a
-// description of the longest summary. Nothing is cut to fit them.
 const (
 	maxProjectPreviewTitleRunes       = 683
 	maxProjectPreviewTitleBytes       = 2727
@@ -30,26 +22,17 @@ const (
 	maxProjectPreviewDescriptionBytes = 1200
 )
 
-// maxOutcomeDescriptionRunes is the number of code points of its outcome a
-// project page without a summary takes as its description.
 const maxOutcomeDescriptionRunes = 160
 
-// errProjectWithoutName reports a project with no name in the chosen or the
-// default language, which no stored project has.
 var errProjectWithoutName = errors.New("publicapi: project has no name")
 
-// projectPageInput is everything one project request is built from.
 type projectPageInput struct {
 	snapshot publicresume.Snapshot
 	pages    publicresume.ProjectPages
 	origin   publicresume.PublicOrigin
-	// imageURL is the resume's current preview card address, or "" while
-	// stored cards are off.
 	imageURL string
 }
 
-// buildProjectListRequest builds the request for /{slug}/projects. The list
-// has no description.
 func buildProjectListRequest(input projectPageInput) (directrender.ProjectListRenderRequest, error) {
 	resume := projectPageResume(input)
 	title := "Projects · " + resume.OwnerName
@@ -80,8 +63,6 @@ func buildProjectListRequest(input projectPageInput) (directrender.ProjectListRe
 	}, nil
 }
 
-// buildProjectRequest builds the request for /{slug}/projects/{project-slug}
-// from the one project input.pages holds.
 func buildProjectRequest(input projectPageInput) (directrender.ProjectRenderRequest, error) {
 	if len(input.pages.Projects) != 1 {
 		return directrender.ProjectRenderRequest{}, errors.New("publicapi: a project page needs exactly one project")
@@ -109,11 +90,6 @@ func buildProjectRequest(input projectPageInput) (directrender.ProjectRenderRequ
 	}, nil
 }
 
-// projectPageResume is what both pages show of their resume: the owner's
-// full name, or the effective page title when the name is blank, the
-// language, the color scheme ("light" when unset) and the date format. A
-// public title the renderer reads as blank gives way to the default title,
-// which never is.
 func projectPageResume(input projectPageInput) directrender.ProjectPageResume {
 	public := input.snapshot.Public
 	owner := public.Document.PersonalDetails.FullName
@@ -133,14 +109,11 @@ func projectPageResume(input projectPageInput) directrender.ProjectPageResume {
 	}
 }
 
-// projectPreview is this page's title and description, uncut, with the
-// resume's locale, card image and alt text.
 func projectPreview(input projectPageInput, title, description string) previewmeta.Meta {
 	resume := previewmeta.For(input.snapshot.Public, input.snapshot.PublicTitle)
 	return previewmeta.Meta{Title: title, Description: description, Locale: resume.Locale, ImageAlt: resume.ImageAlt, ImageURL: input.imageURL}
 }
 
-// projectFaviconHref is the resume's favicon, or "" when it has none.
 func projectFaviconHref(snapshot publicresume.Snapshot) string {
 	if snapshot.FaviconEmoji == nil || *snapshot.FaviconEmoji == "" {
 		return ""
@@ -148,9 +121,6 @@ func projectFaviconHref(snapshot publicresume.Snapshot) string {
 	return publicpage.FaviconHref(*snapshot.FaviconEmoji)
 }
 
-// chooseProjectText is project.ChooseText as an error. The reader leaves
-// out every project without a renderable name, so the error is only a
-// guard.
 func chooseProjectText(document project.Document, resumeLng string) (project.Text, string, error) {
 	text, lang, ok := project.ChooseText(document, resumeLng)
 	if !ok {
@@ -159,9 +129,6 @@ func chooseProjectText(document project.Document, resumeLng string) (project.Tex
 	return text, lang, nil
 }
 
-// presentText is an optional text as the request carries it: "", which the
-// request leaves out, when it is blank by the renderer's trim, so the
-// renderer's presence tests read it as absent.
 func presentText(text string) string {
 	if project.Blank(text) {
 		return ""
@@ -169,9 +136,6 @@ func presentText(text string) string {
 	return text
 }
 
-// projectDescription is the summary, else the first 160 code points of the
-// outcome, else "": the renderer's decoder computes the same text and
-// requires it exactly, so the cut may part a letter from its accent.
 func projectDescription(text project.Text) string {
 	if summary := presentText(text.Summary); summary != "" {
 		return summary

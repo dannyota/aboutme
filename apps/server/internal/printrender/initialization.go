@@ -14,7 +14,6 @@ import (
 
 const initializationOutputLimit = 4096
 
-// initializationError retains only closed diagnostics, never dependency text.
 type initializationError struct {
 	kind       error
 	stage      string
@@ -32,7 +31,6 @@ func (e *initializationError) Error() string {
 
 func (e *initializationError) Unwrap() error { return e.kind }
 
-// LogValue returns only closed diagnostic fields for structured logging.
 func (e *initializationError) LogValue() slog.Value {
 	return slog.GroupValue(
 		slog.String("stage", e.stage), slog.String("operation", e.operation),
@@ -81,7 +79,6 @@ func initializationReason(err error) string {
 	}
 	var errno syscall.Errno
 	if errors.As(err, &errno) {
-		// Errno text comes from the OS table and contains no path or input.
 		return errno.Error()
 	}
 	text := err.Error()
@@ -89,7 +86,6 @@ func initializationReason(err error) string {
 		text = text[:initializationOutputLimit]
 	}
 	text = strings.ToLower(text)
-	// Never log subprocess text. Match known causes and emit fixed words only.
 	for _, diagnostic := range []struct{ match, reason string }{
 		{"no usable sandbox", "no usable sandbox"},
 		{"failed to move to new namespace", "sandbox namespace creation failed"},
@@ -138,7 +134,6 @@ func checkBrowserVersion(ctx context.Context, executable string, probe func(cont
 			if errors.Is(ctx.Err(), context.Canceled) || errors.Is(err, context.Canceled) {
 				failure.stage, failure.reason = "version-probe", "operation canceled"
 			}
-			// The probe joins its browser before a fresh attempt can start.
 			retry := attempt == 0 && failure.stage == "timeout" && ctx.Err() == nil
 			cancel()
 			if retry {
@@ -158,7 +153,6 @@ func checkBrowserVersion(ctx context.Context, executable string, probe func(cont
 
 func probeBrowserVersion(ctx context.Context, executable string, supervisor supervisorCommand) (string, error) {
 	started := time.Now()
-	// executable is the configured absolute browser path that New checked and never request data
 	cmd := exec.CommandContext(ctx, executable, "--version")
 	configure, proof := newBrowserCommand(executable, supervisor.path, supervisor.prefix)
 	configure(cmd)

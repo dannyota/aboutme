@@ -11,8 +11,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/publicresume"
 )
 
-// TestProjectRequest_PreviewTextIsUncut proves the project preview carries
-// the page title and the summary whole, at their longest.
 func TestProjectRequest_PreviewTextIsUncut(t *testing.T) {
 	title := longestPublicTitle()
 	snapshot := projectTestSnapshot("en", " ", nil, schema.MmYyyy, false)
@@ -34,9 +32,6 @@ func TestProjectRequest_PreviewTextIsUncut(t *testing.T) {
 	}
 }
 
-// TestProjectValidators_AdmitExactlyThePreviewBounds proves both validators
-// accept a preview title of at most 683 code points and 2,727 bytes and a
-// description of at most 300 code points and 1,200 bytes, and refuse more.
 func TestProjectValidators_AdmitExactlyThePreviewBounds(t *testing.T) {
 	origin := mustPublicOrigin(t)
 	corpus := readProjectCorpus(t)
@@ -87,9 +82,6 @@ func TestProjectValidators_AdmitExactlyThePreviewBounds(t *testing.T) {
 	}
 }
 
-// withPreviewText replaces the preview title and description in a corpus
-// page's head: og:title, and the description pair, added when the page had
-// none.
 func withPreviewText(t *testing.T, source, oldTitle, oldDescription, title, description string) string {
 	t.Helper()
 	source = replaceOnce(source, `<meta property="og:title" content="`+stdhtml.EscapeString(oldTitle)+`">`,
@@ -105,9 +97,6 @@ func withPreviewText(t *testing.T, source, oldTitle, oldDescription, title, desc
 	return source
 }
 
-// TestProjectRequest_OmitsLinksTheRendererCannotParse proves a stored link
-// the renderer's URL parser refuses is left out of the request, so its page
-// still renders.
 func TestProjectRequest_OmitsLinksTheRendererCannotParse(t *testing.T) {
 	stored := publicresume.PublicProject{Slug: "ports", EntryLink: "https://example.123/notes", Document: project.Document{
 		DefaultLanguage: "en", RepositoryURL: "https://example.org:70000/code", DemoURL: "https://1.2.3.256/demo",
@@ -136,9 +125,6 @@ func TestProjectRequest_OmitsLinksTheRendererCannotParse(t *testing.T) {
 	}
 }
 
-// TestProjectRequests_BlankIsWhatTheRendererTrims proves the builder reads a
-// name as blank exactly when the renderer's trim does: U+FEFF alone is
-// blank there, U+0085 alone is not.
 func TestProjectRequests_BlankIsWhatTheRendererTrims(t *testing.T) {
 	bom, nel := string(rune(0xfeff)), string(rune(0x85))
 	document := project.Document{DefaultLanguage: "en", Text: map[string]project.Text{"en": {Name: "Engine"}, "vi": {Name: bom}}}

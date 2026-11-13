@@ -96,7 +96,6 @@ func TestClientGC_BoundsProtectsLiveAuthorityAndIsIdempotent(t *testing.T) {
 		return !errors.Is(getErr, pgx.ErrNoRows)
 	}
 	if exists(fresh.ID) {
-		// retained exactly inside the 24-hour boundary.
 	} else {
 		t.Error("client created 24h-1s ago was deleted")
 	}

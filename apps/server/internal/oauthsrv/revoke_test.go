@@ -19,7 +19,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// This catches an RFC 7009 existence oracle for malformed or unknown values.
 func TestRevoke_StrictFormAndUnknownTokenNoop(t *testing.T) {
 	now := time.Date(2026, 9, 3, 10, 0, 0, 0, time.UTC)
 	f := newRefreshFixture(t, now, now.Add(refreshFamilyTTL))
@@ -49,9 +48,6 @@ func TestRevoke_StrictFormAndUnknownTokenNoop(t *testing.T) {
 	}
 }
 
-// Both raw OAuth routes are bearer-world endpoints. This test compares the
-// complete no-oracle response rather than relying on a handler implementation
-// detail such as never calling r.Cookie.
 func TestRevoke_IgnoresHostSessionCookieByteIdentically(t *testing.T) {
 	now := time.Date(2026, 9, 3, 11, 0, 0, 0, time.UTC)
 	f := newRefreshFixture(t, now, now.Add(refreshFamilyTTL))
@@ -81,9 +77,6 @@ func TestRevoke_ClosedErrorsNeverEchoToken(t *testing.T) {
 	}
 }
 
-// This catches revoking just one row instead of the grant and all its families.
-// RFC 7009's hint is advisory, so both omission and a wrong known hint must
-// revoke the same refresh-token grant without exposing an oracle.
 func TestRevoke_ValidAccessOrRefreshRevokesGrantAndEveryAuthority(t *testing.T) {
 	now := time.Date(2026, 9, 3, 12, 0, 0, 0, time.UTC)
 	for _, tc := range []struct {
@@ -122,7 +115,7 @@ func TestRevoke_ValidAccessOrRefreshRevokesGrantAndEveryAuthority(t *testing.T) 
 			if err != nil {
 				t.Fatalf("NewCode: %v", err)
 			}
-			var epoch int64 // the fixture's new user is at epoch 0
+			var epoch int64
 			if _, err = f.q.CreateOAuthAuthorizationCode(ctx, store.CreateOAuthAuthorizationCodeParams{CodeDigest: codeDigest[:], ClientID: f.clientID, UserID: f.userID, Scopes: "resumes:read", CodeChallenge: base64.RawURLEncoding.EncodeToString(sum[:]), RedirectURI: "http://127.0.0.1/callback", CreatedAt: now, GrantID: f.grantID, AuthEpoch: epoch}); err != nil {
 				t.Fatalf("CreateOAuthAuthorizationCode: %v", err)
 			}
@@ -166,9 +159,6 @@ func TestRevoke_ValidAccessOrRefreshRevokesGrantAndEveryAuthority(t *testing.T) 
 	}
 }
 
-// This catches an epoch-change sweep missing a live grant or leaving its
-// token family live, and confirms it never touches another account's
-// authority. See docs/design/second-factor-authentication.md.
 func TestRevokeGrantsForEpochChangeTx_RevokesEveryLiveGrantAndTokenFamilyForOneUser(t *testing.T) {
 	now := time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC)
 	f := newRefreshFixture(t, now, now.Add(refreshFamilyTTL))
@@ -210,8 +200,6 @@ func TestRevokeGrantsForEpochChangeTx_RevokesEveryLiveGrantAndTokenFamilyForOneU
 		t.Fatalf("UpsertOAuthGrant untouched: %v", err)
 	}
 
-	// A real caller advances the epoch under the same user lock, in the same
-	// transaction, before sweeping grants; this mirrors that order.
 	err = pgx.BeginFunc(ctx, f.pool, func(tx pgx.Tx) error {
 		qtx := store.New(tx)
 		if _, lockErr := qtx.GetUserForUpdate(ctx, f.userID); lockErr != nil {
@@ -241,7 +229,6 @@ func TestRevokeGrantsForEpochChangeTx_RevokesEveryLiveGrantAndTokenFamilyForOneU
 		t.Fatalf("epoch-change sweep touched another account's grant: %#v, %v", untouched, err)
 	}
 
-	// A repeat sweep after the first commits is a no-op, never an error.
 	err = pgx.BeginFunc(ctx, f.pool, func(tx pgx.Tx) error {
 		qtx := store.New(tx)
 		if _, lockErr := qtx.GetUserForUpdate(ctx, f.userID); lockErr != nil {
@@ -254,12 +241,6 @@ func TestRevokeGrantsForEpochChangeTx_RevokesEveryLiveGrantAndTokenFamilyForOneU
 	}
 }
 
-// This catches a sweep that is unsafe to invoke twice at once -- for example
-// double-firing a factor-change event -- deadlocking or double-revoking
-// instead of converging on the same idempotent outcome. Two fixed goroutines
-// contend on the user-row lock with no artificial delay; there is no
-// meaningful interleaving to pin because both orderings converge on the same
-// result, so this needs no start-barrier probe.
 func TestRevokeGrantsForEpochChangeTx_ConcurrentSweepsConverge(t *testing.T) {
 	now := time.Date(2026, 9, 10, 13, 0, 0, 0, time.UTC)
 	f := newRefreshFixture(t, now, now.Add(refreshFamilyTTL))
@@ -327,9 +308,6 @@ func awaitRevokeStatus(t *testing.T, result <-chan int) int {
 	}
 }
 
-// These cases lock the user row, which is after the client lock in the frozen
-// protocol. PostgreSQL lock observation proves the desired order before the
-// blocker is released, rather than relying on scheduler sleeps.
 func TestToken_ConcurrentRefreshRotationAndRevokeCannotResurrectGrant(t *testing.T) {
 	now := time.Date(2026, 9, 8, 12, 0, 0, 0, time.UTC)
 	t.Run("queued revoke after in-flight rotation leaves no live token", func(t *testing.T) {

@@ -1,9 +1,5 @@
 package auth_test
 
-// These tests prove the subject-first provider identity rule: a returning subject never
-// depends on (or even fetches) the provider email, a new subject requires a
-// verified canonical email, and link resolves on subject alone.
-
 import (
 	"context"
 	"net/http"
@@ -15,8 +11,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// TestGoogleCallback_ReturningSubject_SkipsEmailRequirement proves a returning
-// Google subject logs in even when the id_token's email claim is unverified.
 func TestGoogleCallback_ReturningSubject_SkipsEmailRequirement(t *testing.T) {
 	t.Parallel()
 
@@ -54,8 +48,6 @@ func TestGoogleCallback_ReturningSubject_SkipsEmailRequirement(t *testing.T) {
 	}
 }
 
-// TestLinkedInCallback_ReturningSubject_SkipsEmailRequirement proves a returning
-// LinkedIn subject logs in even when the optional email claim is absent.
 func TestLinkedInCallback_ReturningSubject_SkipsEmailRequirement(t *testing.T) {
 	t.Parallel()
 
@@ -77,7 +69,7 @@ func TestLinkedInCallback_ReturningSubject_SkipsEmailRequirement(t *testing.T) {
 	p.RegisterCode("code-returning-no-email", oidctest.Claims{
 		Subject:       subject,
 		Email:         "",
-		EmailVerified: nil, // claim absent entirely
+		EmailVerified: nil,
 		Nonce:         nonce,
 	})
 
@@ -93,8 +85,6 @@ func TestLinkedInCallback_ReturningSubject_SkipsEmailRequirement(t *testing.T) {
 	}
 }
 
-// TestGitHubCallback_ReturningSubject_SkipsEmailsAPI proves a returning GitHub
-// subject never calls GET /user/emails.
 func TestGitHubCallback_ReturningSubject_SkipsEmailsAPI(t *testing.T) {
 	t.Parallel()
 
@@ -133,8 +123,6 @@ func TestGitHubCallback_ReturningSubject_SkipsEmailsAPI(t *testing.T) {
 	}
 }
 
-// TestGoogleCallback_LinkPurpose_IgnoresUnverifiedEmail proves link resolves on
-// subject alone and never rejects or reads the (unverified) provider email.
 func TestGoogleCallback_LinkPurpose_IgnoresUnverifiedEmail(t *testing.T) {
 	t.Parallel()
 

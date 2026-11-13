@@ -23,9 +23,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/viewcount"
 )
 
-// Route tests for docs/design/viewer-analytics/delivery.md, "API", and the
-// OpenAPI operations startPublicResumeView and collectPublicResumeView.
-
 const testOrigin = "https://aboutme.vn"
 
 type memoryStore struct {
@@ -63,9 +60,6 @@ func (noOwnerQueries) ListResumeShareSignals(context.Context, store.ListResumeSh
 	return nil, nil
 }
 
-// liveQueries answers the start route's live read from rows keyed by slug;
-// a slug without a row is not live. It counts the reads. The owner reads are
-// unused.
 type liveQueries struct {
 	noOwnerQueries
 	rows  map[string]store.GetLiveViewResumeBySlugRow
@@ -81,8 +75,6 @@ func (q *liveQueries) GetLiveViewResumeBySlug(_ context.Context, slug string) (s
 	return row, nil
 }
 
-// liveRow returns queries whose only live slug is "ada-lovelace", naming
-// resume with the given sign-in switch and pass epoch.
 func liveRow(resume viewcount.LiveResume, signInToView bool, passEpoch int32) *liveQueries {
 	return &liveQueries{rows: map[string]store.GetLiveViewResumeBySlugRow{
 		"ada-lovelace": {ID: resume.ID, UserID: resume.Owner, SignInToView: signInToView, ViewPassEpoch: passEpoch},
@@ -126,7 +118,6 @@ func newRouteFixture(t *testing.T) *routeFixture {
 	return f
 }
 
-// request sends a same-origin JSON POST through a trusted proxy for addr.
 func (f *routeFixture) request(method, path, body string, edit func(*http.Request)) *httptest.ResponseRecorder {
 	r := httptest.NewRequestWithContext(context.Background(), method, path, strings.NewReader(body))
 	r.RemoteAddr = "127.0.0.1:40000"
@@ -250,7 +241,6 @@ func TestStartAndCollectCountAView(t *testing.T) {
 	if w.Code != http.StatusNoContent || w.Body.Len() != 0 {
 		t.Fatalf("collect = %d %q, want 204 and no body", w.Code, w.Body.String())
 	}
-	// A replay still answers 204, so a client cannot tell what it hit.
 	if w = f.request(http.MethodPost, collectPath, body, nil); w.Code != http.StatusNoContent {
 		t.Fatalf("replay = %d, want 204", w.Code)
 	}
@@ -266,7 +256,6 @@ func TestEdgeLabelsAreReadOnlyFromTheTrustedProxy(t *testing.T) {
 	f.now = f.now.Add(9 * time.Second)
 	f.request(http.MethodPost, collectPath, body, labeled)
 
-	// The same header straight from a client socket is ignored.
 	direct := func(r *http.Request) {
 		r.RemoteAddr = "198.51.100.7:5000"
 		r.Header.Del("X-Real-IP")

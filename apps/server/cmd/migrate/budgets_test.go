@@ -1,7 +1,3 @@
-// Tests for the lock-wait/migration deadline split: the outer deadline
-// must exceed the lock-wait budget by at least the migration budget, so a
-// runner that waits the full lock-wait budget for a contended advisory
-// lock still has time left to actually apply or check migrations.
 package main
 
 import (
@@ -14,11 +10,6 @@ import (
 	"danny.vn/aboutme/apps/server/migrations"
 )
 
-// TestBudgets_OuterExceedsLockWaitAndMigrationBudgetsIndependently is a
-// hermetic, deterministic guard on the budgets arithmetic itself: no
-// database or timing involved, just the invariant that the outer deadline
-// must be strictly greater than both the lock-wait budget and the
-// migration budget on their own, not merely their sum.
 func TestBudgets_OuterExceedsLockWaitAndMigrationBudgetsIndependently(t *testing.T) {
 	t.Parallel()
 
@@ -34,8 +25,6 @@ func TestBudgets_OuterExceedsLockWaitAndMigrationBudgetsIndependently(t *testing
 	}
 }
 
-// TestBudgets_ValidateAcceptsDefaultBudgets guards against a validate()
-// that's too strict for the value actually shipped in production.
 func TestBudgets_ValidateAcceptsDefaultBudgets(t *testing.T) {
 	t.Parallel()
 
@@ -44,9 +33,6 @@ func TestBudgets_ValidateAcceptsDefaultBudgets(t *testing.T) {
 	}
 }
 
-// TestBudgets_ValidateRejectsSubSecondLockPeriod prevents integer division in
-// lockOpts from silently turning the period into zero while deadline accounting
-// still uses the untruncated duration.
 func TestBudgets_ValidateRejectsSubSecondLockPeriod(t *testing.T) {
 	t.Parallel()
 
@@ -60,11 +46,6 @@ func TestBudgets_ValidateRejectsSubSecondLockPeriod(t *testing.T) {
 	}
 }
 
-// TestBudgets_ValidateRejectsZeroValue guards the zero value specifically
-// (the review noted it fails closed today via a chain of downstream
-// errors — PingContext against an already-expired context, then goose's
-// own WithLockTimeout(0, 0) rejection — but validate() should reject it
-// directly and clearly instead of relying on that chain).
 func TestBudgets_ValidateRejectsZeroValue(t *testing.T) {
 	t.Parallel()
 
@@ -113,10 +94,6 @@ func TestBudgets_ValidateRejectsNegativeSlack(t *testing.T) {
 	}
 }
 
-// TestRun_InvalidBudgets_FailsFastWithoutDatabaseURL proves run() checks
-// budgets.validate() before even requiring DATABASE_URL/ENV: the cheapest,
-// dependency-free check goes first, so an invalid configuration reports
-// itself rather than hiding behind a connection error.
 func TestRun_InvalidBudgets_FailsFastWithoutDatabaseURL(t *testing.T) {
 	t.Setenv("DATABASE_URL", "")
 	t.Setenv("ENV", "")
@@ -134,13 +111,7 @@ func TestRun_InvalidBudgets_FailsFastWithoutDatabaseURL(t *testing.T) {
 	}
 }
 
-// waitForLockContention polls from a dedicated probe connection (a single
-// stable session — advisory locks are session-scoped, so a pooled *sql.DB
-// could observe a different underlying connection on each call) until
-// pg_try_advisory_lock(migrations.LockID) returns false, proving some
-// other session currently holds it. This is an observation loop over real
-// database state, not a fixed sleep used as a synchronization guess — the
-// same technique migrations/harness_test.go's concurrency test uses.
+// PostgreSQL advisory locks are session-scoped, so probe from one dedicated connection, not a pool.
 func waitForLockContention(ctx context.Context, t *testing.T, dsn string) {
 	t.Helper()
 
@@ -165,8 +136,6 @@ func waitForLockContention(ctx context.Context, t *testing.T, dsn string) {
 		if !locked {
 			return
 		}
-		// The probe itself acquired the lock (nobody else holds it yet):
-		// release immediately and retry shortly.
 		if _, err := probeConn.ExecContext(ctx, `SELECT pg_advisory_unlock($1)`, migrations.LockID); err != nil {
 			t.Fatalf("release probe lock: %v", err)
 		}
@@ -175,23 +144,14 @@ func waitForLockContention(ctx context.Context, t *testing.T, dsn string) {
 	t.Fatal("timed out waiting to observe the advisory lock held by another session")
 }
 
-// TestRun_DeadlineBudgets_ContenderSucceedsAfterApproachingLockWait is the
-// item-4 live-database regression test: a lock hold that approaches (but
-// stays under) the configured lock-wait budget must still leave the
-// contender enough of its separate migration budget to succeed.
 func TestRun_DeadlineBudgets_ContenderSucceedsAfterApproachingLockWait(t *testing.T) {
 	base := requireMigrateTestDatabaseURL(t)
 	dsn := newMigrateTestDatabase(t, base)
 
-	// Small budgets so the test runs in seconds, not five real minutes —
-	// the lock-wait/migration *split* under test doesn't depend on the
-	// production constants' exact values (see
-	// TestBudgets_OuterExceedsLockWaitAndMigrationBudgetsIndependently for
-	// that).
 	origBudgets := runBudgets
 	runBudgets = budgets{
 		lockPeriod:  1 * time.Second,
-		lockRetries: 6, // 6s lock-wait budget
+		lockRetries: 6,
 		migration:   10 * time.Second,
 		slack:       5 * time.Second,
 	}
@@ -218,10 +178,6 @@ func TestRun_DeadlineBudgets_ContenderSucceedsAfterApproachingLockWait(t *testin
 		t.Fatalf("acquire holder lock: %v", err)
 	}
 
-	// Hold for 4s of the 6s lock-wait budget (~67%): long enough that a
-	// broken outer()==lockWait() composition would leave the contender's
-	// Apply() call racing an already-near-exhausted context, short enough
-	// to keep the test fast.
 	const holdDuration = 4 * time.Second
 	released := make(chan struct{})
 	go func() {
@@ -233,10 +189,6 @@ func TestRun_DeadlineBudgets_ContenderSucceedsAfterApproachingLockWait(t *testin
 	}()
 	t.Cleanup(func() { <-released })
 
-	// Deterministically confirm the holder actually holds the lock before
-	// starting the contender, so the contender's wait genuinely starts
-	// from (close to) t=0 rather than after unpredictable goroutine
-	// scheduling.
 	waitForLockContention(ctx, t, dsn)
 
 	var buf bytes.Buffer
@@ -255,19 +207,8 @@ func TestRun_DeadlineBudgets_ContenderSucceedsAfterApproachingLockWait(t *testin
 	t.Logf("run() waited %s for a %s lock hold, then succeeded: %s", elapsed, holdDuration, buf.String())
 }
 
-// maxCheckElapsed bounds how long `run(true, ...)` (`-check`) may take
-// while another session holds migrations.LockID. Generous relative to a
-// real query round-trip, far below any plausible lock-wait retry interval
-// (goose's own default alone is 5s, and this test's own runBudgets
-// override below uses a 6s lock-wait budget) — so a regression that makes
-// -check contend for the lock even once, however briefly, fails this
-// bound.
 const maxCheckElapsed = 2 * time.Second
 
-// TestRun_Check_DoesNotBlockOnAdvisoryLock proves that -check stays usable as a
-// readiness probe while another runner holds the migration lock. The short
-// budget makes lock-taking regressions fail quickly; correct behavior does not
-// depend on the budget.
 func TestRun_Check_DoesNotBlockOnAdvisoryLock(t *testing.T) {
 	base := requireMigrateTestDatabaseURL(t)
 	dsn := newMigrateTestDatabase(t, base)
@@ -275,7 +216,7 @@ func TestRun_Check_DoesNotBlockOnAdvisoryLock(t *testing.T) {
 	origBudgets := runBudgets
 	runBudgets = budgets{
 		lockPeriod:  1 * time.Second,
-		lockRetries: 6, // 6s lock-wait budget: irrelevant to -check if the fix holds, load-bearing if it doesn't
+		lockRetries: 6,
 		migration:   10 * time.Second,
 		slack:       5 * time.Second,
 	}
@@ -288,13 +229,6 @@ func TestRun_Check_DoesNotBlockOnAdvisoryLock(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// Migrate to head first (no lock contention yet), so -check's only
-	// possible reason to report a non-nil error later is a genuine
-	// pending migration — not simply "this fresh database was never
-	// migrated" masking the lock-contention behavior under test. Opened
-	// through migrations.Open (not openMigrateTestDB), so the setup
-	// migration runs as aboutme_migrator, exactly like run(true, ...)'s
-	// own connection below and every real deploy.
 	setupDB, err := migrations.Open(dsn)
 	if err != nil {
 		t.Fatalf("open setup database: %v", err)
@@ -325,9 +259,6 @@ func TestRun_Check_DoesNotBlockOnAdvisoryLock(t *testing.T) {
 		t.Fatalf("acquire holder lock: %v", err)
 	}
 
-	// Deterministically confirm the holder actually holds the lock before
-	// measuring -check, so a pass can't be explained by the holder simply
-	// not having acquired it yet.
 	waitForLockContention(ctx, t, dsn)
 
 	var buf bytes.Buffer

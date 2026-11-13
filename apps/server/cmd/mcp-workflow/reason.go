@@ -10,11 +10,6 @@ import (
 	"strings"
 )
 
-// Failure words. A failed run prints exactly one line,
-// "mcp-workflow: <word>", to stderr. The vocabulary is closed and fixed, so
-// no path, host, URL, identifier, resume value, token, or error text can
-// reach the output. See
-// docs/design/mcp-owner-workflow.md#privacy-revocation-and-evidence.
 const (
 	reasonArguments     = "arguments"
 	reasonControlRoot   = "control-root"
@@ -58,7 +53,6 @@ const (
 	reasonInternal      = "internal"
 )
 
-// closedFailureWords is the complete output vocabulary.
 var closedFailureWords = map[string]bool{
 	reasonArguments: true, reasonControlRoot: true, reasonRunRoot: true, reasonEntrySet: true,
 	reasonArtifact: true, reasonTLS: true, reasonNetwork: true, reasonDiscovery: true,
@@ -73,9 +67,6 @@ var closedFailureWords = map[string]bool{
 	reasonSecondFactor: true,
 }
 
-// sdkPhrases classify the official SDK's own OAuth errors, which carry no
-// sentinel. Only the fixed phrase is matched; the error text never reaches the
-// output.
 var sdkPhrases = []struct {
 	phrase string
 	word   string
@@ -94,8 +85,6 @@ var sdkPhrases = []struct {
 	{"issuer", reasonIssuer},
 }
 
-// sentinelReasons maps every sentinel this package returns to one word, most
-// specific first.
 var sentinelReasons = []struct {
 	err  error
 	word string
@@ -138,8 +127,6 @@ var sentinelReasons = []struct {
 	{errTLSOverride, reasonTLS},
 }
 
-// genericReasons are the broad wrappers. They are consulted only after the
-// SDK phrases, so a wrapped registration or metadata failure keeps its stage.
 var genericReasons = []struct {
 	err  error
 	word string
@@ -149,11 +136,6 @@ var genericReasons = []struct {
 	{errWorkflowBlocked, reasonWorkflowState},
 }
 
-// failureReason returns the one word that names a failure. Transport
-// failures are classified before the workflow sentinels that wrap them, so a
-// rejected certificate reads as tls rather than as a generic connect failure.
-// The sentinels come first: cleanup errors joined onto a failure, such as
-// closing an already closed listener, must not outrank the cause.
 func failureReason(err error) string {
 	if err == nil {
 		return reasonInternal
@@ -180,8 +162,6 @@ func failureReason(err error) string {
 	return reasonInternal
 }
 
-// certificateFailure reports a trust or handshake rejection, which no cleanup
-// step can produce, so it is named before the SDK phase.
 func certificateFailure(err error) bool {
 	var verification *tls.CertificateVerificationError
 	var authority x509.UnknownAuthorityError
@@ -192,14 +172,11 @@ func certificateFailure(err error) bool {
 		errors.As(err, &recordHeader) || errors.As(err, &certificateInvalid)
 }
 
-// connectionFailure is the last resort: a closed or failed socket, which a
-// joined cleanup step also produces, so every named cause is tried first.
 func connectionFailure(err error) bool {
 	var network net.Error
 	return errors.As(err, &network)
 }
 
-// sdkPhaseWord names the OAuth phase of an SDK error from its fixed phrase.
 func sdkPhaseWord(err error) (string, bool) {
 	text := err.Error()
 	for _, mapping := range sdkPhrases {
@@ -210,8 +187,6 @@ func sdkPhaseWord(err error) (string, bool) {
 	return "", false
 }
 
-// reportFailure prints the single failure line. It stays silent once the run
-// left evidence, which already names the stage and revocation status.
 func reportFailure(out io.Writer, run privateArtifacts, err error) error {
 	if err == nil {
 		return nil

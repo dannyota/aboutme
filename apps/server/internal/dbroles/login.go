@@ -23,11 +23,8 @@ const (
 
 var verifierPattern = regexp.MustCompile(`^SCRAM-SHA-256\$[0-9]+:[A-Za-z0-9+/=]+\$[A-Za-z0-9+/=]+:[A-Za-z0-9+/=]+$`)
 
-// LoginPasswords holds the passwords for the aboutme_migrator and
-// aboutme_app login roles.
 type LoginPasswords struct{ Migrator, App string }
 
-// ScramVerifier returns the PostgreSQL SCRAM-SHA-256 verifier for password.
 func ScramVerifier(password string, salt []byte, iterations int) (string, error) {
 	if len(salt) < scramSaltBytes || iterations < scramIterations {
 		return "", errors.New("dbroles: weak SCRAM parameters")
@@ -49,9 +46,7 @@ func hmacSHA256(key []byte, message string) []byte {
 	return mac.Sum(nil)
 }
 
-// SetLoginVerifiers stores SCRAM verifiers for aboutme_migrator and
-// aboutme_app in one transaction. PostgreSQL keeps a pre-hashed value as the
-// verifier, so no plaintext password reaches the server or its logs.
+// PostgreSQL stores a password given as a SCRAM verifier as-is, so no plaintext reaches the server or its logs.
 func SetLoginVerifiers(ctx context.Context, db *sql.DB, p LoginPasswords, random io.Reader) error {
 	if err := ValidatePasswords(p); err != nil {
 		return err
@@ -73,9 +68,6 @@ func SetLoginVerifiers(ctx context.Context, db *sql.DB, p LoginPasswords, random
 	return nil
 }
 
-// ValidatePasswords checks the length and inequality rules SetLoginVerifiers
-// requires, without touching a database. Callers can run it before opening a
-// connection to fail fast on a bad password input.
 func ValidatePasswords(p LoginPasswords) error {
 	for _, value := range []string{p.Migrator, p.App} {
 		if len(value) < minPasswordBytes || len(value) > maxPasswordBytes {
@@ -106,16 +98,11 @@ func setLoginVerifiers(ctx context.Context, tx *sql.Tx, p LoginPasswords, random
 		if err != nil {
 			return err
 		}
-		// ALTER ROLE takes no bind parameters. The role name is a fixed
-		// literal and the verifier matches a closed pattern with no quote.
 		if !verifierPattern.MatchString(verifier) {
 			return errors.New("dbroles: malformed verifier")
 		}
 		verifiers = append(verifiers, roleVerifier{role.name, verifier})
 	}
-	// Every verifier is derived before any SQL runs. The lock then
-	// serializes the role writes with Ensure and other SetLoginVerifiers
-	// calls on this database (ADR 0005).
 	if err := lockCatalog(ctx, tx); err != nil {
 		return fmt.Errorf("dbroles: acquire lock: %w", err)
 	}

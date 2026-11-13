@@ -1,7 +1,3 @@
-// These tests drive the view-purpose start and callback for a project page:
-// the start accepts only the closed page grammar, and every redirect returns
-// to that page under the resume's current slug
-// (docs/design/projects-contract.md "Render envelope").
 package auth_test
 
 import (
@@ -19,8 +15,6 @@ func viewStartPagePath(base, slug, rawPage string) string {
 	return viewStartPath(base, slug) + "&page=" + rawPage
 }
 
-// requireExactRedirect fails unless Location is exactly the test origin plus
-// path and query.
 func requireExactRedirect(t *testing.T, resp *http.Response, pathAndQuery string) {
 	t.Helper()
 	if resp.StatusCode != http.StatusFound {
@@ -67,9 +61,6 @@ func TestViewStart_PageWithoutTheSwitch_RedirectsToThePage(t *testing.T) {
 	}
 }
 
-// TestGoogleViewCallback_ProjectPage_ReturnsUnderTheCurrentSlug proves the
-// callback returns to the project page under the resume's renamed slug and
-// sets the pass.
 func TestGoogleViewCallback_ProjectPage_ReturnsUnderTheCurrentSlug(t *testing.T) {
 	t.Parallel()
 	p := oidctest.NewProvider(t)
@@ -109,8 +100,6 @@ func TestLinkedInViewCallback_ProjectList_ReturnsToTheList(t *testing.T) {
 	assertValidPassCookie(t, resp, viewPassKeyBytes(t), f.id, 1)
 }
 
-// TestGoogleViewCallback_ProjectPage_FailureAndCancelReturnToThePage covers
-// both closed failure messages on a project page.
 func TestGoogleViewCallback_ProjectPage_FailureAndCancelReturnToThePage(t *testing.T) {
 	t.Parallel()
 	p := oidctest.NewProvider(t)

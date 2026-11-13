@@ -16,21 +16,8 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// grantRevocationSweepLimit bounds one epoch-change revocation pass to a
-// constant rather than a function of table size, matching the other bounded
-// sweeps in this package. The live-grant cap in docs/design/security.md
-// keeps one account's live grants well under this bound, so the pass always
-// covers every live grant.
 const grantRevocationSweepLimit = 200
 
-// RevokeGrantsForEpochChangeTx revokes every live OAuth grant and its token
-// families for userID inside qtx's transaction. The caller has already
-// advanced the account's authentication epoch under the user-row lock in the
-// same transaction (see auth.SessionManager.ReplaceAfterEpochChangeTx for the
-// session-side equivalent); calling this in the same transaction leaves no
-// live grant or token family at the old epoch, so a stale-epoch code, token,
-// or silent-reuse attempt from before the change authenticates nothing. See
-// docs/design/second-factor-authentication.md.
 func RevokeGrantsForEpochChangeTx(ctx context.Context, qtx *store.Queries, userID uuid.UUID, now time.Time) error {
 	rows, err := qtx.ListLiveOAuthGrantsForUser(ctx, store.ListLiveOAuthGrantsForUserParams{
 		UserID: userID, LimitRows: grantRevocationSweepLimit,
@@ -41,7 +28,7 @@ func RevokeGrantsForEpochChangeTx(ctx context.Context, qtx *store.Queries, userI
 	for _, row := range rows {
 		if _, err = qtx.GetOAuthGrantForUpdate(ctx, row.ID); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				continue // already revoked by a concurrent commit
+				continue
 			}
 			return fmt.Errorf("oauth: revoke grants for epoch change: lock grant: %w", err)
 		}
@@ -59,8 +46,6 @@ func RevokeGrantsForEpochChangeTx(ctx context.Context, qtx *store.Queries, userI
 	return nil
 }
 
-// HandleRevoke uses token possession alone to revoke its grant. Claimed client
-// IDs supply no authority; see docs/design/mcp-cimd-authorization.md#revocation.
 func (s *Service) HandleRevoke(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeOAuthError(w, http.StatusMethodNotAllowed)
@@ -93,7 +78,6 @@ func exactRevokeKeys(form url.Values) bool {
 	if _, supplied := form["client_id"]; supplied && form.Get("client_id") == "" {
 		return false
 	}
-	// Every hint value is advisory, including an empty or unsupported value.
 	return true
 }
 
