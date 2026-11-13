@@ -169,6 +169,7 @@ fence and its 60-second cache trade-off.
 - Deletion copy distinguishes immediate access revocation, private-media removal
   targeted within 24 hours, and expiry from the 30-day backup schedule. An
   overdue physical delete is audited and retried; it does not restore access.
+- Legal pages state only shipped behaviour or an owner decision.
 - The homepage, authentication pages, legal pages, template gallery, resume
   workspace, account settings, and agent consent support Vietnamese and English,
   with Vietnamese as the default. Interface language never changes resume data
