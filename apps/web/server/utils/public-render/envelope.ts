@@ -45,6 +45,11 @@ export interface PublicRenderPreview {
 /** The route the sign-in-to-view join invite links to (AC-VIEW-008). */
 type PublicRenderJoinInvite = '/register' | '/login';
 
+export interface PublicRenderEntryProjectLink {
+  entryId: string;
+  url: string;
+}
+
 export interface PublicRenderResumeRequest {
   publicResume: PublicResume;
   mode: 'continuous';
@@ -61,6 +66,8 @@ export interface PublicRenderResumeRequest {
    * (docs/design/viewer-analytics/sign-in-to-view.md#join-invite).
    */
   joinInvite?: PublicRenderJoinInvite;
+  projectLinks?: PublicRenderEntryProjectLink[];
+  projectsUrl?: string;
 }
 
 /** A provider offered on the sign-in gate, in envelope order. */

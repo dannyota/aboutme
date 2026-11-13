@@ -1,6 +1,7 @@
 package directrender
 
 import (
+	"bytes"
 	"encoding/json"
 	"testing"
 
@@ -29,6 +30,46 @@ func TestPublicRenderRequestHasOnlyTheClosedWireFields(t *testing.T) {
 		string(fields["pageTitle"]) != `"Ada — Resume"` || string(fields["faviconHref"]) != `""` ||
 		string(fields["preview"]) != `{"title":"Ada","description":"Resume on aboutme.vn","locale":"","imageAlt":"Ada"}` {
 		t.Fatalf("closed request = %s", body)
+	}
+}
+
+func TestPublicRenderRequestEntryPointsAreTwoOptionalFields(t *testing.T) {
+	body, err := json.Marshal(PublicRenderRequest{
+		PublicResume: publicresume.PublicResume{Slug: "ada"},
+		Mode:         PublicRenderMode,
+		ProjectLinks: []EntryProjectLink{
+			{EntryID: "e1", URL: "https://aboutme.example/ada/projects/atlas"},
+			{EntryID: "e2", URL: "https://aboutme.example/ada/projects/beacon"},
+		},
+		ProjectsURL: "https://aboutme.example/ada/projects",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fields map[string]json.RawMessage
+	if decodeErr := json.Unmarshal(body, &fields); decodeErr != nil {
+		t.Fatal(decodeErr)
+	}
+	if len(fields) != 9 ||
+		string(fields["projectLinks"]) != `[{"entryId":"e1","url":"https://aboutme.example/ada/projects/atlas"},{"entryId":"e2","url":"https://aboutme.example/ada/projects/beacon"}]` ||
+		string(fields["projectsUrl"]) != `"https://aboutme.example/ada/projects"` {
+		t.Fatalf("request with entry points = %s", body)
+	}
+
+	body, err = json.Marshal(PublicRenderRequest{Mode: PublicRenderMode, ProjectLinks: []EntryProjectLink{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(body, []byte("projectLinks")) || bytes.Contains(body, []byte("projectsUrl")) {
+		t.Fatalf("request without entry points = %s", body)
+	}
+
+	body, err = json.Marshal(PublicRenderRequest{Mode: PublicRenderMode, ProjectLinks: []EntryProjectLink{}, ProjectsURL: "https://aboutme.example/ada/projects"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(body, []byte("projectLinks")) || !bytes.Contains(body, []byte(`"projectsUrl":"https://aboutme.example/ada/projects"`)) {
+		t.Fatalf("request with entry points and no links = %s", body)
 	}
 }
 

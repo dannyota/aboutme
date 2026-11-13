@@ -34,7 +34,14 @@ type PublicRenderRequest struct {
 	// page, and omitted for every other public resume
 	// (docs/design/viewer-analytics/sign-in-to-view.md "Join invite"). It
 	// authorizes nothing; it only names the link the page's join invite uses.
-	JoinInvite string `json:"joinInvite,omitempty"`
+	JoinInvite   string             `json:"joinInvite,omitempty"`
+	ProjectLinks []EntryProjectLink `json:"projectLinks,omitempty"`
+	ProjectsURL  string             `json:"projectsUrl,omitempty"`
+}
+
+type EntryProjectLink struct {
+	EntryID string `json:"entryId"`
+	URL     string `json:"url"`
 }
 
 // GateRenderRequest contains the renderer inputs for the sign-in-to-view
