@@ -78,7 +78,12 @@ expiry, so no later than 90 days after the original sign-in; rotation and
 reissue never extend that expiry, so a redaction cannot be outrun by staying
 signed in. The two-day lead covers the daily sweep schedule plus one missed run.
 The privacy sweep deletes the session row, revoked or not, 7 days after its
-absolute expiry, when every token in its rotation chain is already dead.
+absolute expiry, when every token in its rotation chain is already dead. The
+delete never waits for a lock: it locks every row it reaches with `SKIP LOCKED`
+and leaves a session it cannot fully lock for a later page, so it takes no user
+lock and cannot deadlock with sign-in, rotation, revocation or account deletion.
+That holds because every path that creates a pending authentication, passkey
+ceremony or TOTP enrollment first locks its session and requires it live.
 Lifecycle events contain only a generated event ID, fixed kind, occurrence time
 and an optional media-job ID. Account deletion and media overdue/completion
 events are durable; audit insertion and the state they describe commit together.
