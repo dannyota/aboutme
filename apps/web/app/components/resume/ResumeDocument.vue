@@ -5,6 +5,7 @@ import { computed, type CSSProperties, provide } from 'vue';
 import { ResumeLngKey } from './formatDate';
 import LayoutColumns from './LayoutColumns.vue';
 import PagedResume from './PagedResume.vue';
+import { NO_PROJECT_LINKS, ProjectLinksKey } from './projectLinks';
 import {
   type RenderContext,
   resolveRenderModel,
@@ -18,6 +19,8 @@ const props = defineProps<{
 
 const model = computed(() => resolveRenderModel(props.document, props.context));
 provide(ResumeLngKey, computed(() => model.value.lng));
+provide(ProjectLinksKey, computed(() =>
+  props.context.projectLinks ?? NO_PROJECT_LINKS));
 const rootStyle = computed<CSSProperties>(() => ({
   ...model.value.styles.root,
   fontSynthesis: 'none',
@@ -234,10 +237,16 @@ body:has(> #public-resume) {
   }
 }
 
-/* The one action a reader takes on a shared resume: the application's
-   outline button at size sm (docs/design/public-page-theme.md), not a
-   filled button in the resume's own color. */
-.public-download {
+.public-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.public-download,
+.public-projects {
   box-sizing: border-box;
   display: inline-flex;
   flex-shrink: 0;
@@ -255,23 +264,38 @@ body:has(> #public-resume) {
   box-shadow: var(--toolbar-button-shadow);
 }
 
+.public-projects {
+  padding-inline: 12px;
+}
+
 .public-download svg {
   flex-shrink: 0;
 }
 
 @media (pointer: coarse) {
-  .public-download {
+  .public-download,
+  .public-projects {
+    position: relative;
     height: 40px;
+  }
+
+  .public-download::before,
+  .public-projects::before {
+    content: "";
+    position: absolute;
+    inset: -3px -1px;
   }
 }
 
 @media (hover: hover) {
-  .public-download:hover {
+  .public-download:hover,
+  .public-projects:hover {
     background: var(--toolbar-button-hover-fill);
   }
 }
 
-.public-download:focus-visible {
+.public-download:focus-visible,
+.public-projects:focus-visible {
   outline: 2px solid var(--toolbar-focus-ring);
   outline-offset: 2px;
 }
@@ -281,7 +305,8 @@ body:has(> #public-resume) {
     color: CanvasText;
   }
 
-  .public-download {
+  .public-download,
+  .public-projects {
     border-color: ButtonBorder;
   }
 }

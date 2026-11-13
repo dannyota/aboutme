@@ -19,7 +19,7 @@ import type {
   PublicRenderProjectRequest,
 } from './project-envelope';
 
-export const PUBLIC_RENDER_REQUEST_MAX_BYTES = 532_480;
+export const PUBLIC_RENDER_REQUEST_MAX_BYTES = 557_056;
 export const PUBLIC_RENDER_HTML_MAX_BYTES = 2_097_152;
 export const PUBLIC_RENDER_FAILURE = 'public render failed';
 
@@ -284,14 +284,16 @@ function decodeResumeEnvelope(
     'pageTitle',
     'publicResume',
   ];
-  // A server that predates link previews sends no preview object, and one
-  // that predates sign in to view sends no joinInvite marker.
   const hasPreview = keys.includes('preview');
   const hasJoinInvite = keys.includes('joinInvite');
+  const hasProjectsUrl = keys.includes('projectsUrl');
+  const hasProjectLinks = keys.includes('projectLinks');
   const expectedKeys = [
     ...baseKeys,
     ...(hasPreview ? ['preview'] : []),
     ...(hasJoinInvite ? ['joinInvite'] : []),
+    ...(hasProjectsUrl ? ['projectsUrl'] : []),
+    ...(hasProjectLinks ? ['projectLinks'] : []),
   ].sort().join(',');
   if (keys.join(',') !== expectedKeys) {
     fail();
@@ -300,6 +302,9 @@ function decodeResumeEnvelope(
     fail();
   }
   if (hasJoinInvite && !validJoinInvite(envelope.joinInvite)) {
+    fail();
+  }
+  if (hasProjectLinks && !hasProjectsUrl) {
     fail();
   }
   if (
@@ -324,7 +329,60 @@ function decodeResumeEnvelope(
   ) {
     fail();
   }
+  if (
+    Object.hasOwn(request.publicResume, 'projectLinks')
+    || (hasProjectsUrl && !validEntryPoints(request))
+  ) {
+    fail();
+  }
   return request;
+}
+
+const visibleProjectEntries = (
+  document: PublicResume['document'],
+): ReadonlySet<string> => {
+  const ids = new Set<string>();
+  const { main, sidebar } = document.customization.layout.sections;
+  for (const key of [...main, ...sidebar]) {
+    if (!Object.hasOwn(document.content, key)) continue;
+    const section = document.content[key]!;
+    if (section.sectionType !== 'project') continue;
+    for (const entry of section.entries) ids.add(entry.id);
+  }
+  return ids;
+};
+
+function validEntryPoints(request: PublicRenderResumeRequest): boolean {
+  const projectsUrl = [
+    request.canonicalOrigin, request.publicResume.slug, 'projects',
+  ].join('/');
+  if (request.projectsUrl !== projectsUrl) return false;
+  const links: unknown = request.projectLinks;
+  if (links === undefined) return true;
+  if (!Array.isArray(links) || links.length === 0) return false;
+  const visible = visibleProjectEntries(request.publicResume.document);
+  const seen = new Set<string>();
+  return links.every((link: unknown) => {
+    if (
+      link === null
+      || typeof link !== 'object'
+      || Object.keys(link).sort().join(',') !== 'entryId,url'
+    ) {
+      return false;
+    }
+    const { entryId, url } = link as Record<string, unknown>;
+    if (
+      typeof entryId !== 'string'
+      || !visible.has(entryId)
+      || seen.has(entryId)
+      || typeof url !== 'string'
+      || !url.startsWith(`${projectsUrl}/`)
+    ) {
+      return false;
+    }
+    seen.add(entryId);
+    return validProjectSlug(url.slice(projectsUrl.length + 1));
+  });
 }
 
 function decodeGateEnvelope(
