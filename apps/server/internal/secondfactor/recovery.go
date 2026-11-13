@@ -26,6 +26,8 @@ const (
 	crockfordAlphabet    = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 )
 
+const recoveryCodePaddingBits = recoveryCodeChars*5 - recoveryCodeBytes*8
+
 var recoveryDigestDomain = []byte("aboutme.recovery-code.v1\x00")
 
 type recoveryValue [recoveryCodeBytes]byte
@@ -73,7 +75,7 @@ func formatRecoveryCode(value recoveryValue) string {
 		var n byte
 		for bit := 0; bit < 5; bit++ {
 			n <<= 1
-			i := c*5 + bit - 2
+			i := c*5 + bit - recoveryCodePaddingBits
 			if i >= 0 && value[i/8]&(0x80>>(i%8)) != 0 {
 				n |= 1
 			}
@@ -118,7 +120,7 @@ func parseRecoveryCode(input string) (recoveryValue, error) {
 		}
 		for bit := 0; bit < 5; bit++ {
 			set := n&(0x10>>bit) != 0
-			i := c*5 + bit - 2
+			i := c*5 + bit - recoveryCodePaddingBits
 			switch {
 			case i < 0 && set:
 				return value, errRequestInvalid
