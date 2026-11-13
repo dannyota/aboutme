@@ -40,8 +40,9 @@ const stalledPhotoPath = "/api/v1/public/resumes/ada-lovelace/photo"
 // stalls mid-body while it holds the resume's lease. A revoking transition
 // must still drain within the five-second bound of
 // docs/adr/0010-public-artifact-revocation.md, and the viewer must never
-// receive the whole old photo: once it opens its window it gets what was in
-// flight and then a reset or a closed connection.
+// receive the whole old photo: its stream ends with a reset or a closed
+// connection, either while its window is still 0 or, once it opens the
+// window, after what was in flight.
 func TestRouteTable_RevocationEndsAPublicWriteStalledBehindCaddy(t *testing.T) {
 	bin := caddyBinary(t)
 	origin := newStalledPhotoOrigin(t)
@@ -86,8 +87,18 @@ func TestRouteTable_RevocationEndsAPublicWriteStalledBehindCaddy(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	client.openWindow(t)
-	received, end := client.readStream(t)
+	// Check for a reset while the window is still 0 first. Caddy's copy loop
+	// is blocked writing to this stream, so it may not see the origin's
+	// failure until the viewer reads; then open the window and read on.
+	received := 0
+	end, ended := client.endWhileWindowZero(t, time.Second)
+	if ended {
+		t.Logf("stream ended while the window was 0: %s", end)
+	} else {
+		t.Log("no reset within 1s while the window was 0: Caddy still holds the stream; opening the window")
+		client.openWindow(t)
+		received, end = client.readStream(t)
+	}
 	if received >= len(origin.photo) || (end.kind == h2Data && end.endStream) {
 		t.Fatalf("the viewer received %d of %d bytes ending with %s, want a truncated stream that never ends normally", received, len(origin.photo), end)
 	}

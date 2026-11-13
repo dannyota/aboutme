@@ -299,6 +299,12 @@ func servePublicRateError(w http.ResponseWriter, request *http.Request, retry in
 	}
 }
 
+// serveLeasedArtifact writes an artifact's 304, HEAD, or body while lease
+// stays live (writeWhileLeased): a revocation before the response is
+// committed gets the public 503, and one during the write or its final
+// flush sets the write deadline, so a write blocked on a slow reader ends.
+// A writer without deadline support leaves the handler and lease active, so
+// the mutation drain times out.
 func serveLeasedArtifact(w http.ResponseWriter, request *http.Request, lease *publicstate.Lease, response SelectedResponse) {
 	if serveCanceledLease(w, request, lease) {
 		return
@@ -313,38 +319,24 @@ func serveLeasedArtifact(w http.ResponseWriter, request *http.Request, lease *pu
 	if serveCanceledLease(w, request, lease) {
 		return
 	}
-	if present && tag == header.Get("ETag") {
+	status, body := response.Status, response.Body
+	switch {
+	case present && tag == header.Get("ETag"):
 		header.Del("Content-Length")
-		writeArtifactHeader(responseHeader, header)
-		w.WriteHeader(http.StatusNotModified)
-		return
+		status, body = http.StatusNotModified, nil
+	case request.Method == http.MethodHead:
+		body = nil
 	}
-	if request.Method == http.MethodHead {
+	err := writeWhileLeased(w, lease, func() {
 		writeArtifactHeader(responseHeader, header)
-		w.WriteHeader(response.Status)
-		return
-	}
-
-	controller := http.NewResponseController(w)
-	stop := make(chan struct{})
-	armed := make(chan struct{})
-	joined := make(chan struct{})
-	go func() {
-		defer close(joined)
-		close(armed)
-		select {
-		case <-lease.Context().Done():
-			// Unsupported deadline cancellation leaves the handler and lease active so the mutation drain times out.
-			_ = controller.SetWriteDeadline(time.Now()) //nolint:errcheck // There is no fallback that can interrupt this committed write.
-		case <-stop:
+		w.WriteHeader(status)
+		if len(body) != 0 {
+			_, _ = w.Write(body) //nolint:errcheck // The response is committed; a failed write leaves nothing to recover.
 		}
-	}()
-	<-armed
-	writeArtifactHeader(responseHeader, header)
-	w.WriteHeader(response.Status)
-	_, _ = w.Write(response.Body) //nolint:errcheck // The response is committed; cancellation and cleanup still require the join below.
-	close(stop)
-	<-joined
+	})
+	if err != nil {
+		servePublicJSONError(w, request, http.StatusServiceUnavailable)
+	}
 }
 
 func writeArtifactHeader(destination, source http.Header) {

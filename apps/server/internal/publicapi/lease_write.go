@@ -15,14 +15,20 @@ type cancelHooks interface {
 	OnCancel(hook func()) error
 }
 
-// writeWhileLeased runs write, which writes one response to w, for the life
-// of a lease. A revocation during the write sets w's write deadline to now,
-// so a write blocked on a reader that stopped reading returns, the handler
-// ends, and the lease it holds is released before the transition's drain
-// deadline (docs/adr/0010-public-artifact-revocation.md). The hook touches w
-// only while write runs; once write returns, a late revocation does
-// nothing. When the hook cannot be registered, writeWhileLeased returns the
-// error without calling write, so the caller can fail closed.
+// writeWhileLeased runs write, which writes one response to w, and then
+// flushes w, both for the life of a lease, so every byte of the response
+// leaves Go before its caller releases the lease. Without the flush Go's
+// server can hold a small body, a body's tail, or a HEAD or 304 header and
+// send it only after the handler returns. A revocation during the write or
+// the flush sets w's write deadline to now, so a write blocked on a reader
+// that stopped reading returns, the handler ends, and the lease it holds is
+// released before the transition's drain deadline
+// (docs/adr/0010-public-artifact-revocation.md). The hook touches w only
+// until the flush returns; a later revocation does nothing. When the hook
+// cannot be registered, writeWhileLeased returns the error without calling
+// write, so the caller can fail closed. A failed flush is not returned: the
+// response is committed by then, and the server closes a connection whose
+// write failed. A writer that cannot flush is taken to buffer nothing.
 func writeWhileLeased(w http.ResponseWriter, lease cancelHooks, write func()) error {
 	controller := http.NewResponseController(w)
 	var mu sync.Mutex
@@ -45,6 +51,7 @@ func writeWhileLeased(w http.ResponseWriter, lease cancelHooks, write func()) er
 		mu.Unlock()
 	}()
 	write()
+	_ = controller.Flush() //nolint:errcheck // A committed response cannot be replaced; see the comment above.
 	return nil
 }
 

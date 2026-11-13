@@ -174,6 +174,27 @@ func (c *h2Client) awaitHeaders(t *testing.T) h2Event {
 	}
 }
 
+// endWhileWindowZero waits up to wait for stream 1 or the connection to
+// end while the stream window is still 0, and reports the ending event. A
+// body frame fails the test: the server may not send one into a zero window.
+func (c *h2Client) endWhileWindowZero(t *testing.T, wait time.Duration) (h2Event, bool) {
+	t.Helper()
+	deadline := time.After(wait)
+	for {
+		select {
+		case event := <-c.events:
+			switch {
+			case event.kind == h2Data && event.streamID == 1:
+				t.Fatalf("got %s while the stream window was 0", event)
+			case event.kind == h2Reset && event.streamID == 1, event.kind == h2GoAway, event.kind == h2Closed:
+				return event, true
+			}
+		case <-deadline:
+			return h2Event{}, false
+		}
+	}
+}
+
 // openWindow lets the server send stream 1's body.
 func (c *h2Client) openWindow(t *testing.T) {
 	t.Helper()
