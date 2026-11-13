@@ -1,29 +1,12 @@
 # shellcheck shell=bash
-# Sourced by deploy.sh. Assumes the operator then deploy role and implements
-# the release fence protocol (docs/design/passkey-release-fence.md). Needs
-# $region, $site_alarm_region, $work, $tag, $candidate, $operation_kind,
-# $first, say(), and release_number() already set. Defines
-# task_def_release_number, the aws_*/aws_op_ callers, and the
-# fence_read/lock/checkpoint/release/raise functions deploy.sh calls.
 
 fence_table=aboutme-prod-release-fence
 operator_role=aboutme-prod-operator
 deploy_role=aboutme-prod-deploy
-# v0.4.2's own numeric release: the first fence-aware, passkey-capable tag.
 fence_epoch=4002
-# v0.4.7's own numeric release: the first TOTP-capable tag. See
-# docs/design/passkey-release-fence.md, "Authenticator-app key
-# re-encryption".
 fence_epoch_totp=4007
-# v0.6.26's own numeric release: the first tag that can turn
-# SIGN_IN_TO_VIEW_ENABLED on. See docs/design/viewer-analytics/sign-in-to-view.md,
-# "Release and rollback".
 fence_epoch_signin=6026
 
-# 0. The base identity assumes aboutme-prod-operator, which chains to
-# aboutme-prod-deploy for every mutation below. The profile chain is built
-# from the caller's own AWS config, not a bare replacement, so source_profile
-# still resolves the caller's own credentials.
 base_arn=$(aws sts get-caller-identity --query Arn --output text) ||
   { say "could not identify the base AWS caller"; exit 1; }
 [[ $base_arn =~ ^arn:aws:(iam::[0-9]+:(user|role)/|sts::[0-9]+:assumed-role/) ]] ||
@@ -45,10 +28,8 @@ aws_config=$work/aws-config
 } >"$aws_config" || true
 chmod 600 "$aws_config"
 
-# AWS_ACCESS_KEY_ID/SECRET/SESSION_TOKEN in the environment outrank a
-# profile's role_arn; unset them so an inherited static or session key can
-# never bypass the role chain.
-aws_dep_() { # region aws-args...
+# AWS CLI credential env vars outrank a profile's role_arn, so they are unset here (AWS CLI configuration docs, precedence).
+aws_dep_() {
   local r=$1
   shift
   env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN \
@@ -61,7 +42,7 @@ aws_op_() {
     AWS_CONFIG_FILE="$aws_config" AWS_PROFILE=fence-operator aws --region "$region" "$@"
 }
 
-verify_role() { # profile role-name
+verify_role() {
   local arn
   arn=$(env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN \
     AWS_CONFIG_FILE="$aws_config" AWS_PROFILE="$1" aws --region "$region" \
@@ -72,16 +53,12 @@ verify_role() { # profile role-name
 verify_role fence-operator "$operator_role"
 verify_role fence-deploy "$deploy_role"
 
-# The release fence: a durable minimum in $fence_table, item id
-# "application", and one nonexpiring operation lock.
 fence_min=0
 fence_min_tag=v0.0.0
 lock_held=0
 operation_id=""
 
-# Extracts DEPLOY_RELEASE_NUMBER from a task definition's server container
-# environment. Missing (an image from before this contract) reads as 0.
-task_def_release_number() { # task-definition ARN, family, or family:revision
+task_def_release_number() {
   local def n
   def=$(describe_task_def "$1") || return 1
   n=$(jq -r '.containerDefinitions[] | select(.name == "server")
@@ -89,11 +66,6 @@ task_def_release_number() { # task-definition ARN, family, or family:revision
   [[ $n =~ ^[0-9]+$ ]] && echo "$n" || echo 0
 }
 
-# Strongly reads the fence with the operator role, then proves the running
-# app service is consistent with it. A missing item is zero only on a
-# verified first deploy, or when the running app service proves passkey
-# enrollment off; a read error fails closed rather than open. Below the v0.4.2
-# floor, an app somehow already running enrollment true also fails closed.
 fence_read() {
   local item item_present release tag_ service running running_count desired_count deployed=1 enrolled totp_enrolled def
   item=$(aws_op_ dynamodb get-item --table-name "$fence_table" \
@@ -109,10 +81,6 @@ fence_read() {
       { say "the release fence item is malformed"; return 1; }
     fence_min=$release fence_min_tag=$tag_
   fi
-  # OpenTofu creates aboutme-prod-app with its own placeholder task
-  # definition at desired count 0, so a fresh host always has a real
-  # taskDefinition; only the absence of this script's own release stamp, with
-  # nothing running or wanted, proves no deploy has ever reached it.
   service=$(aws_ ecs describe-services --cluster "$cluster" --services aboutme-prod-app --output json) ||
     { say "could not read the running app service"; return 1; }
   running=$(jq -r '.services[0].taskDefinition // empty' <<<"$service")
@@ -166,11 +134,6 @@ fence_read() {
   fi
 }
 
-# Acquires the nonexpiring lock; a lower candidate or an existing operation
-# fails first. A retried write of this exact request can see its own success
-# as ConditionalCheckFailed, and a transport error is otherwise
-# indistinguishable from one; either way, one strong read for this run's
-# operation_id decides ownership. It never retries the write itself.
 fence_lock() {
   local now=$(date -u +%Y-%m-%dT%H:%M:%SZ) values item
   local oid=$(head -c32 /dev/urandom | base64 | tr '+/' '-_' | tr -d '=')
@@ -197,9 +160,6 @@ fence_lock() {
   return 1
 }
 
-# Reproves lock ownership and the release floor before an image start. A
-# transport error on this idempotent write gets one bounded retry;
-# ConditionalCheckFailed means stop immediately, never a retry.
 fence_checkpoint() {
   local now=$(date -u +%Y-%m-%dT%H:%M:%SZ) attempt=1
   while :; do
@@ -215,10 +175,6 @@ fence_checkpoint() {
   return 1
 }
 
-# Releases the four operation attributes if this is still the exact owner. A
-# retried release can see its own success as ConditionalCheckFailed; a strong
-# read tells that apart from a genuine foreign takeover, which the runbook's
-# manual clear then owns. A crash leaves the lock closed.
 fence_release() {
   local item
   if aws_ dynamodb update-item --table-name "$fence_table" --key '{"id":{"S":"application"}}' \
@@ -235,8 +191,6 @@ fence_release() {
   return 1
 }
 
-# The idempotent raise: an equal value succeeds, a lower fails. Runs only
-# while the activation operation holds the lock.
 fence_raise() {
   local now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
   aws_ dynamodb update-item --table-name "$fence_table" --key '{"id":{"S":"application"}}' \

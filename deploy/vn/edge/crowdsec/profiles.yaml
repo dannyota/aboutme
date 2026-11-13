@@ -4,8 +4,6 @@ filters:
 decisions:
   - type: ban
     duration: 15m
-# A first ban is short, since many customers can share one address; repeat
-# offenders with active decisions get one hour, then four.
 duration_expr: "let active = GetActiveDecisionsCount(Alert.GetValue()); active == 0 ? '15m' : (active == 1 ? '1h' : '4h')"
 on_success: break
 ---

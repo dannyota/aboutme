@@ -1,16 +1,9 @@
 #!/usr/bin/env bash
-# Versioned durable state and closed wire output for host operations.
 set -euo pipefail
 
-# The caller selects the request before saving its state.
 declare id
 
 operation_id_valid() { [[ $1 =~ ^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$ ]]; }
-# The laptop wrapper and the host share this release check. v0.7.9 (7009,
-# numbered as fence.sh does) first shipped this protocol. A lower bound is
-# enough: the wrapper requires the installed operation code to equal its
-# reviewed checkout, the host parses server replies strictly, and the closed
-# reply validator refuses protocol drift.
 operation_release_supported() {
   [[ $1 =~ ^v(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})$ ]] &&
     ((10#${BASH_REMATCH[1]} * 1000000 + 10#${BASH_REMATCH[2]} * 1000 + 10#${BASH_REMATCH[3]} >= 7009))
@@ -33,7 +26,7 @@ operation_initialize() {
   flock -s -w 30 "$operation_bundle_fd"
 }
 
-operation_state() { # mode id; payload through descriptor 3
+operation_state() {
   python3 - "$1" "${2:-}" "${operations_dir:-/srv/data/host-operations}" <<'PY'
 import datetime, fcntl, json, os, re, secrets, stat, sys, tempfile
 mode, request_id, root = sys.argv[1:]

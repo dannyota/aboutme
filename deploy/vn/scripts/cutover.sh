@@ -75,17 +75,17 @@ host_root() { ssh -p "$SSH_PORT" -o BatchMode=yes "$admin@$host" "sudo bash -c $
 host_fence() { ssh -p "$SSH_PORT" -o BatchMode=yes "$admin@$host" sudo /usr/local/lib/aboutme/fence.sh "$@"; }
 host_deploy_read() { ssh -p "$SSH_PORT" -o BatchMode=yes "$admin@$host" "sudo /usr/local/lib/aboutme/deploy-host.sh - - $1"; }
 host_deploy() { ssh -p "$SSH_PORT" -o BatchMode=yes "$admin@$host" sudo /usr/local/lib/aboutme/deploy-host.sh "$op" "$tag" "$1"; }
-host_psql() { # sql, as postgres on the aboutme database
+host_psql() {
   ssh -p "$SSH_PORT" -o BatchMode=yes "$admin@$host" \
     "sudo /usr/local/lib/aboutme/fence.sh checkpoint '$op' '$tag' >/dev/null && sudo -u postgres psql -X -q -At -v ON_ERROR_STOP=1 -d aboutme" <<<"$1"
 }
 
-mutation_start() { # kind
+mutation_start() {
   mutation_active=1
   host_fence mutation-start "$op" "$tag" "$1"
 }
 
-mutation_finish() { # kind
+mutation_finish() {
   host_fence mutation-clear "$op" "$1"
   mutation_active=0
 }
@@ -131,8 +131,6 @@ assert_cutover_quiescent() {
   host_deploy cutover-check || die "the Vietnam host is no longer quiescent"
 }
 
-# AWS must already serve maintenance with the app stopped and schedules off,
-# so no write lands in RDS after the dump.
 cmd_preflight() {
   assert_aws_quiescent
   mutation_start quiesce
@@ -142,8 +140,6 @@ cmd_preflight() {
   say "preflight: AWS and the Vietnam host are both in maintenance"
 }
 
-# The rehearsal database held fictional data only; the cutover restores into
-# a fresh one that db-setup prepared (roles, grants, logins).
 cmd_reset_db() {
   local answer
   assert_cutover_quiescent
@@ -199,8 +195,6 @@ cmd_dump_restore() {
   say "restored the dump on the host and deleted the dump and its key"
 }
 
-# Counts and ordered hashes per table on both sides, then the catalog grant
-# test on the host before serving traffic.
 cmd_verify() {
   local sql_tables sql_goose rds_out host_out
   assert_cutover_quiescent
@@ -208,13 +202,11 @@ cmd_verify() {
   sql_goose="SELECT max(version_id) FROM goose_db_version WHERE is_applied"
   sql_tables="SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY 1"
   [[ $(rds_psql "$sql_goose") == $(host_psql "$sql_goose") ]] || die "goose versions differ"
-  # Fixed session settings, so both sides print every value the same way.
   local per_table="SET TimeZone = 'UTC'; SET DateStyle = 'ISO, YMD'; SET IntervalStyle = 'postgres';
     SET extra_float_digits = 1; SET bytea_output = 'hex';" t
   while read -r t; do
     [[ $t =~ ^[a-z0-9_]+$ ]] || die "unexpected table name"
-    # COLLATE "C": RDS uses en_US.UTF-8 and the host C.UTF-8, and the hash must
-    # not depend on either side's sort order.
+    # RDS uses en_US.UTF-8 and the host C.UTF-8, so the hash sorts with COLLATE "C" (PostgreSQL collation docs).
     per_table+="SELECT '$t', count(*), md5(coalesce(string_agg(x::text, E'\\n' ORDER BY x::text COLLATE \"C\"), '')) FROM public.$t x;"
   done < <(rds_psql "$sql_tables")
   rds_out=$(rds_psql "$per_table")
@@ -233,15 +225,13 @@ cmd_verify() {
 # Media from S3 to vStorage, then a byte-for-byte check. The destination key
 # is a temporary second key on the media service account
 # (buckets.sh --rotate-key aboutme-media); delete it after this step.
-cmd_media() { # dest-key-file
+cmd_media() {
   local keyfile=$1 src_bucket
   assert_cutover_quiescent
   [[ -f $keyfile ]] || die "$keyfile is missing"
   src_bucket=${SOURCE_MEDIA_BUCKET:?set SOURCE_MEDIA_BUCKET to the AWS media bucket name}
   export RCLONE_CONFIG_SRC_TYPE=s3 RCLONE_CONFIG_SRC_PROVIDER=AWS RCLONE_CONFIG_SRC_ENV_AUTH=true \
     RCLONE_CONFIG_SRC_REGION=$region
-  # The destination reads only the key file's default profile; the source
-  # uses the owner's AWS session.
   export RCLONE_CONFIG_DST_TYPE=s3 RCLONE_CONFIG_DST_PROVIDER=Other \
     RCLONE_CONFIG_DST_ENDPOINT=https://hcm04.vstorage.vngcloud.vn RCLONE_CONFIG_DST_REGION=HCM04 \
     RCLONE_CONFIG_DST_FORCE_PATH_STYLE=true RCLONE_CONFIG_DST_ENV_AUTH=true \

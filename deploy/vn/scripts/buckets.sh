@@ -1,34 +1,11 @@
 #!/usr/bin/env bash
-# Creates the three vStorage buckets, each with its own service account, bucket
-# policy, and one S3 key (docs/design/vietnam-production.md, "Secrets and host
-# identity" and "Infrastructure code and state"). The recipe and the policy
-# template are the vngcloud wiki's Storage-Bucket-Policy.md.
-#
-#   buckets.sh --storage-project-id <id> [--rotate-key <bucket>]
-#
-# Buckets and service accounts: aboutme-media, aboutme-backups, aboutme-tfstate.
-# The policy allows object work on that one bucket and never uses s3:*.
-#
-# Key files, each created 0600, never overwritten, never printed:
-#   media and backups: ${XDG_RUNTIME_DIR}/aboutme-vn/<bucket>-s3-credentials
-#                      (tmpfs; secrets.sh moves them to the host)
-#   tfstate:           ~/.config/aboutme/vn/tfstate-s3-credentials
-#
-# Re-running changes nothing that already matches. --rotate-key <bucket> makes a
-# new key for that bucket's service account into a key file that must not exist
-# yet, then lists the older keys on the same account for the owner to delete
-# once the host uses the new one.
 set -euo pipefail
 
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=vng-lib.sh
 . "$here/vng-lib.sh"
 
-# required: create each bucket with `create-bucket --encryption` (CLI v0.66.0
-# or later: server-managed SSE-S3, AES256) and refuse an existing bucket whose
-# encryption reads off. Encryption covers only objects uploaded after it is
-# on, so it is set at create, before any upload. off: the owner's explicit
-# override.
+# vStorage encryption covers only objects uploaded after it is on (vngcloud wiki, Storage-Bucket-Policy.md).
 BUCKET_ENCRYPTION=${BUCKET_ENCRYPTION:-required}
 
 BUCKETS=(aboutme-media aboutme-backups aboutme-tfstate)
@@ -70,14 +47,12 @@ umask 077
 scratch=$(mktemp -d "$XDG_RUNTIME_DIR/aboutme-buckets.XXXXXX")
 trap 'rm -rf "$scratch"' EXIT
 
-# vst runs a storage command in the vStorage project.
 vst() {
   local cmd=$1
   shift
   vng storage "$cmd" --project-id "$project" "$@"
 }
 
-# key_file <bucket> prints where that bucket's key file goes.
 key_file() {
   if [[ $1 == aboutme-tfstate ]]; then
     say "$HOME/.config/aboutme/vn/tfstate-s3-credentials"
@@ -86,8 +61,6 @@ key_file() {
   fi
 }
 
-# normalize prints a policy document in a form that does not depend on key
-# order, array order, or one-element array versus string.
 normalize() {
   jq -S -c '
     def arr: if type == "array" then sort else [.] end;
@@ -97,10 +70,7 @@ normalize() {
       | sort_by(.Sid))'
 }
 
-# policy_for <principal-arn> <bucket> prints the wiki template. vStorage checks
-# a batch delete (POST ?delete) against the bucket, not its objects, so the
-# backups bucket, whose pgBackRest expire deletes in batches, also gets
-# s3:DeleteObject on the bucket; without it every expire fails with 403.
+# vStorage checks a batch delete against the bucket, so backups also need s3:DeleteObject on it (vngcloud wiki, Storage-Bucket-Policy.md).
 policy_for() {
   jq -n -c --arg p "$1" --arg b "$2" '
     {Version: "2012-10-17", Statement: [
@@ -115,7 +85,6 @@ policy_for() {
        Resource: ["arn:aws:s3:::" + $b + "/*"]}]}'
 }
 
-# encryption_on <bucket> succeeds when the bucket's default encryption reads on.
 encryption_on() {
   [[ $(vst get-bucket-encryption --bucket "$1" | jq -r '.Enabled') == true ]]
 }
@@ -126,7 +95,6 @@ for b in "${BUCKETS[@]}"; do
   grep -qx -- "$b" <<<"$existing_buckets" || missing+=("$b")
 done
 
-# Check encryption before changing anything.
 if [[ $BUCKET_ENCRYPTION == required ]]; then
   if ((${#missing[@]})); then
     vng_ro storage create-bucket --help 2>&1 | grep -q -e '--encryption' ||
@@ -147,12 +115,11 @@ ensure_bucket() {
   fi
   local extra=()
   [[ $BUCKET_ENCRYPTION == off ]] || extra=(--encryption)
-  # With --encryption the CLI succeeds only after encryption reads on.
+  # With --encryption the vngcloud CLI returns only after encryption reads on (vngcloud CLI).
   vst create-bucket --bucket "$b" "${extra[@]}" >/dev/null
   say "bucket $b: created${extra:+, encrypted}"
 }
 
-# ensure_service_account <name> prints the service account ID.
 ensure_service_account() {
   local name=$1 id
   id=$(vng iam list-service-accounts --name "$name" |
@@ -188,7 +155,6 @@ ensure_policy() {
   say "policy $b: written"
 }
 
-# attached_keys <sub-user-id> prints the UserKeyID of every key attached to it.
 attached_keys() {
   vst list-s3-keys |
     jq -r --arg s "$1" '.Items[]?
@@ -209,7 +175,7 @@ ensure_key() {
     die "key file $file exists; refusing to overwrite it"
   mkdir -p -- "$dir"
   chmod 0700 -- "$dir"
-  # The CLI attaches the key to the service account before it writes the file.
+  # The vngcloud CLI attaches the key before it writes the file (vngcloud CLI).
   out=$(vst create-s3-key --service-account-id "$sa_id" --secret-file "$file")
   say "key $b: created, written to $file"
   say "key $b: user key id $(jq -r '.UserKeyID // .userKeyId // "unknown"' <<<"$out")"

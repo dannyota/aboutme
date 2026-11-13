@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Exercise file copies, database epochs, and lease admission across service jobs.
 set -euo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 installer=${1:-$root/deploy/vn/host/install.sh}
@@ -14,7 +13,6 @@ FIXTURE_SUPPORT=$work/support.sh
 
 fail() { printf 'install-admission-test: %s\n' "$*" >&2; exit 1; }
 
-# Keep production admission; replace host paths, SQL responses, and fixture custody.
 python3 - "$root" "$installer" "$work" <<'PY'
 import pathlib,re,sys
 root,installer,work=map(pathlib.Path,sys.argv[1:])
@@ -247,7 +245,6 @@ else:
 PY
 }
 
-# Reapplying matching permissions may change ctime without changing admission.
 (
   export FIXTURE_CASE=$work/metadata
   mkdir -p "$FIXTURE_CASE/etc" "$FIXTURE_CASE/lib"
@@ -297,7 +294,6 @@ for mode in ordinary postgres; do
   sed "s|$work/run-placeholder|$FIXTURE_CASE/run|g" \
     "$work/lease-template.sh" >"$FIXTURE_CASE/lease.sh"
   bash "$work/$mode.sh"
-  # Pin file mtimes before the simulated last successful PostgreSQL reload.
   python3 - "$FIXTURE_CASE" <<'PY'
 import os,pathlib,sys
 root=pathlib.Path(sys.argv[1])
@@ -322,7 +318,6 @@ PY
   admit settled || fail 'lease admission failed after reinstall'
   printf 'PASS %s-unchanged-files-keep-admission-and-metadata\n' "$mode"
 
-  # Calibrate both real predicates against an exposed reload job.
   printf '42\n' >"$FIXTURE_CASE/job"
   if crowdsec_db_process >/dev/null; then fail 'database process admitted a reload job'; fi
   printf '42\n' >"$FIXTURE_CASE/job"
@@ -332,14 +327,12 @@ PY
   : >"$FIXTURE_CASE/job"
   admit calibrated || fail 'calibration did not restore lease admission'
 
-  # Keep the real age predicate, including its exact lower and upper bounds.
   FIXTURE_LEASE_NOW=1577836800 crowdsec_lease_file || fail 'lease refused its creation time'
   FIXTURE_LEASE_NOW=1577837160 crowdsec_lease_file || fail 'lease refused its maximum age'
   if (FIXTURE_LEASE_NOW=1577837161 crowdsec_lease_file); then fail 'lease admitted an expired timestamp'; fi
   if (FIXTURE_LEASE_NOW=1577836799 crowdsec_lease_file); then fail 'lease admitted a future timestamp'; fi
   crowdsec_lease_file || fail 'lease clock calibration did not restore admission'
 
-  # Real changes still need installation and a settled operation before admission.
   export FIXTURE_TICK=yes FIXTURE_DRIFT=yes
   for file in pg_hba.conf pg_ident.conf conf.d/90-aboutme.conf; do
     for fault in content mode missing ownership; do
@@ -369,7 +362,6 @@ mode=0o644 if sys.argv[1].endswith('90-aboutme.conf') else 0o640
 assert (entry.st_uid,entry.st_gid,stat.S_IMODE(entry.st_mode))==(int(sys.argv[2]),int(sys.argv[3]),mode)
 PY
       if [[ $mode == postgres ]]; then
-        # A restart changes the epoch. Existing leases must remain refused.
         if (crowdsec_lease_check); then fail 'restart retained an old lease'; fi
         crowdsec_db_ready || fail 'restarted database did not settle'
         fixture_lease "$crowdsec_db_epoch"

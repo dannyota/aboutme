@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 # shellcheck source-path=SCRIPTDIR
-# Explicit fresh-state boundary for the separate CrowdSec database.
 set -euo pipefail
 umask 077
 
@@ -26,7 +25,6 @@ SQL
     true\|true | true\|false) crowdsec_db_role || return 1 ;;
     *) return 1 ;;
   esac
-  # Protected settings precede the first connection by the CrowdSec role.
   crowdsec_db_admin postgres >/dev/null <<'SQL' || return 1
 SET statement_timeout = '10s';
 SET lock_timeout = '2s';
@@ -50,7 +48,6 @@ AND NOT EXISTS (SELECT FROM pg_stat_activity WHERE datname = 'crowdsec');
 COMMIT;"; } | crowdsec_db_admin postgres) || return 1
     [[ $safe == t ]] || return 1
     if [[ $1 == restore-reset ]]; then
-      # No FORCE option: an unaccounted consumer blocks replacement.
       crowdsec_db_admin postgres >/dev/null <<'SQL' || return 1
 SET statement_timeout = '10s';
 SET lock_timeout = '2s';

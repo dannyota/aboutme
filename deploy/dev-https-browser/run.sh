@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# The macOS host may have either BSD or GNU stat on PATH.
 browser_stat() {
   if [ "$(uname -s)" = Darwin ]; then
     python3 -I -c 'import os,stat,sys
@@ -43,7 +42,6 @@ mapfile -t SPEC_SOURCES <"$(dirname "${BASH_SOURCE[0]}")/spec-sources.txt"
 readonly -a SPEC_SOURCES
 
 validate_spec_dir() {
-  # validate_spec_dir <directory> <expected-owner-uid>
   local dir=$1 uid=$2 entries expected path
   [ -d "$dir" ] && [ ! -L "$dir" ] || fail 'spec input is not a real directory'
   [ "$(browser_stat u "$dir")" = "$uid" ] || fail 'spec input owner mismatch'
@@ -84,7 +82,6 @@ validate_capture_token_file() {
   [ "$(browser_stat a "$path")" = 600 ] || fail 'capture token mode must be 0600'
 }
 
-# mode_input_entries prints the sorted CA input filenames a mode requires.
 mode_input_entries() {
   case $1 in
   password-auth | sample-start | linkedin) printf 'caddy-root.crt\nmail-capture-token' ;;
@@ -99,7 +96,6 @@ mode_input_entries() {
   esac
 }
 
-# mode_input_diagnostic prints the rejection text for a wrong CA input set.
 mode_input_diagnostic() {
   case $1 in
   password-auth | sample-start | linkedin)
@@ -118,9 +114,6 @@ mode_input_diagnostic() {
   esac
 }
 
-# mode_is_totp_production reports whether mode is one of the three production
-# TOTP proof modes, which carry no CA root and validate against the image's
-# own system trust store instead (docs/runbooks/totp-keys.md "Production proofs").
 mode_is_totp_production() {
   case $1 in
   totp-prod-flag-off | totp-prod-enabled | totp-prod-cleanup) return 0 ;;
@@ -128,7 +121,6 @@ mode_is_totp_production() {
   esac
 }
 
-# add_shard_env <array-name> <flag> <mode>: for a sharded mode, validates its shard variable against the mode's shard names and appends KEY=value (--env KEY=value when <flag> is set) to the named array. The TOTP variable may list several distinct names, comma-separated; each runs as its own parallel test.
 add_shard_env() {
   local -n arr=$1; local flag=$2 key value names name seen=' ' more=
   local -a parts=()
@@ -148,8 +140,6 @@ add_shard_env() {
   arr+=(${flag:+--env} "$key=$value")
 }
 
-# validate_mode_input_files checks the extra per-mode input files after the
-# entry set already matched.
 validate_mode_input_files() {
   local mode=$1 dir=$2 uid=$3
   case $mode in
@@ -182,7 +172,6 @@ validate_factor_accounts_file() {
 }
 
 validate_account_file() {
-  # <path> <expected-owner-uid>; structural only, never opens or reads it.
   local path=$1 uid=$2
   [ -f "$path" ] && [ ! -L "$path" ] ||
     fail 'production account file is not a regular file'
@@ -191,7 +180,6 @@ validate_account_file() {
 }
 
 validate_mcp_credential_file() {
-  # <path> <expected-owner-uid>; structural only, never opens or reads it.
   local path=$1 uid=$2
   [ -f "$path" ] && [ ! -L "$path" ] ||
     fail 'MCP credential file is not a regular file'
@@ -199,7 +187,7 @@ validate_mcp_credential_file() {
   [ "$(browser_stat a "$path")" = 600 ] || fail 'MCP credential file mode must be 0600'
 }
 
-validate_evidence_file() { # <path> <uid> <size-limit> <fail-message-label>
+validate_evidence_file() {
   local path=$1 uid=$2 limit=$3 label=$4
   [ -f "$path" ] && [ ! -L "$path" ] || fail "$label is not a regular file"
   [ "$(browser_stat u "$path")" = "$uid" ] || fail "$label owner mismatch"
@@ -208,7 +196,6 @@ validate_evidence_file() { # <path> <uid> <size-limit> <fail-message-label>
 }
 
 validate_mcp_browser_dir() {
-  # validate_mcp_browser_dir <directory> <expected-owner-uid>
   local dir=$1 uid=$2 entries
   [ -d "$dir" ] && [ ! -L "$dir" ] ||
     fail 'MCP browser directory is not a real directory'
@@ -243,16 +230,8 @@ inside_container() {
     [ -z "$workflow_mode" ] || fail 'workflow mode is only accepted for mcp-sdk mode'
   fi
   [ "$(id -u)" -ne 0 ] || fail 'browser must run as non-root'
-  # Production browses the real public origin, which the image's own system
-  # trust store already validates. Trusting the local harness's Caddy root
-  # there would let the browser accept a self-signed certificate for a
-  # session that must rely on nothing but the public CA chain, so production
-  # mounts no CA input and the container never imports one.
   local production_sdk=0
   [ "$mode" = mcp-sdk ] && [ "$workflow_mode" = production ] && production_sdk=1
-  # The three production TOTP modes keep the /uat-input mount (it carries
-  # only the fictional account file) but never import a CA root, for the
-  # same reason as production_sdk above.
   local skip_ca_import=$production_sdk
   mode_is_totp_production "$mode" && skip_ca_import=1
 
@@ -386,24 +365,17 @@ inside_container() {
   totp) evidence_name=totp-second-factor-proof.json evidence_limit=8192 evidence_extra_name=totp-timing.json evidence_extra_limit=4096 proof_name='authenticator-app second factor' spec=totp.spec.ts ;;
   totp-disabled) evidence_name=totp-enrollment-disabled-proof.json evidence_limit=8192 proof_name='disabled authenticator-app enrollment' spec=totp.spec.ts ;;
   totp-prod-flag-off)
-    # No fixed /evidence schema: only fixed step names and outcomes reach
-    # the runner's own output (docs/runbooks/totp-keys.md "Production
-    # proofs"); the mounted evidence directory stays empty and unused.
     proof_name='production TOTP flag-off proof'
     spec=totp-production.spec.ts
     ;;
   totp-prod-enabled) proof_name='production TOTP enabled proof' spec=totp-production.spec.ts ;;
   totp-prod-cleanup) proof_name='production TOTP cleanup' spec=totp-production.spec.ts ;;
   mcp-sdk)
-    # No fixed /evidence schema: /mcp-browser carries the result instead.
     proof_name='MCP SDK owner workflow browser handoff'
     spec=mcp-sdk.spec.ts
     ;;
   esac
-  # Stage the mounted specs beside a node_modules symlink so module
-  # resolution finds the image's pinned dependencies. The image package.json
-  # supplies "type": "module"; without it Node loads the specs as CJS and
-  # import.meta fails.
+  # Without "type": "module" in package.json Node loads the specs as CommonJS (Node.js packages docs).
   install -d -m 0700 /tmp/spec
   local spec_file
   for spec_file in "${SPEC_SOURCES[@]}"; do
@@ -424,12 +396,7 @@ inside_container() {
     mode_env+=(ABOUTME_MCP_BROWSER_DIR=/mcp-browser ABOUTME_MCP_WORKFLOW_MODE="$workflow_mode")
   fi
   if [ "$mode" = mcp-ts-sdk ]; then
-    # Extends Node's default trust store for every fetch the pinned SDK
-    # client makes (registration, discovery, token, and MCP traffic) to the
-    # harness's own Caddy root, the same trust the other proofs establish
-    # through the browser's imported NSS database. Node reads this once at
-    # startup, so it must be set on the `env` invocation, never mutated by
-    # the spec after the process is running.
+    # Node reads NODE_EXTRA_CA_CERTS once at startup (Node.js CLI docs).
     mode_env+=(NODE_EXTRA_CA_CERTS=/uat-input/caddy-root.crt)
   fi
   add_shard_env mode_env '' "$mode"
@@ -438,16 +405,11 @@ inside_container() {
     --config "$config" "$spec" \
     >"$log_file" 2>&1 || status=$?
   if [ "$status" -ne 0 ]; then
-    # Every mode but these three prints stage lines.
     if [ "$mode" != auth ] && [ "$mode" != transport ] && [ "$mode" != password-auth ]; then
       local -a bounded_stages=() failed_stages=()
       mapfile -t bounded_stages < <(
         grep -E "^${mode}-stage:[a-z0-9-]+$" "$log_file" || true
       )
-      # A test that fails prints one bounded fail- line naming its stage.
-      # Print those first (at most six), since a later test can hide the
-      # failing one behind its own last stage line, and parallel TOTP shards
-      # interleave theirs.
       mapfile -t failed_stages < <(
         grep -E "^${mode}-stage:fail-[a-z0-9-]+$" "$log_file" | head -n 6 || true
       )
@@ -467,9 +429,6 @@ inside_container() {
   fi
 
   local -a expected_evidence=("$evidence_name" ${evidence_extra_name:+"$evidence_extra_name"})
-  # A sharded TOTP run writes each listed shard's evidence to its own
-  # /evidence/<shard>/ (totp.spec.ts "Enabled-proof sharding"); every other
-  # run writes to /evidence itself. add_shard_env already checked the names.
   local -a shards=('')
   local shard dir
   if [ "$mode" = totp ] && [ -n "${ABOUTME_TOTP_SHARD-}" ]; then
@@ -513,7 +472,6 @@ host_run() {
       [ -z "$container_name" ] ||
       fail 'workflow mode, MCP browser directory, MCP credential file, and MCP container name are only accepted for mcp-sdk mode'
   fi
-  # See inside_container for why production mode takes no CA input.
   local production_sdk=0
   [ "$mode" = mcp-sdk ] && [ "$workflow_mode" = production ] && production_sdk=1
   if [ "$production_sdk" -eq 1 ]; then
@@ -624,12 +582,7 @@ host_run() {
   [ "$production_sdk" -eq 1 ] ||
     mount_args+=("--mount=type=bind,src=$input,dst=/uat-input,ro=true")
   if [ "$mode" = linkedin-import ]; then
-    # WebKit does not read the NSS database certutil imports below for
-    # Chromium; it validates against the image's own system trust bundle at
-    # this fixed path. Overlaying that one file with the harness's exported
-    # root, read-only, makes WebKit trust it the same honest way Chromium
-    # does, without ignoring certificate errors, running as root, or a
-    # writable root filesystem (linkedin-import.spec.ts, the WebKit case).
+    # WebKit ignores the NSS database and validates against the system trust bundle at this path (Playwright WebKit on Linux).
     mount_args+=(
       "--mount=type=bind,src=$input/caddy-root.crt,dst=/etc/ssl/certs/ca-certificates.crt,ro=true"
     )
@@ -642,12 +595,7 @@ host_run() {
   fi
   local -a name_args=()
   [ "$mode" = mcp-sdk ] && name_args=("--name=$container_name")
-  # mcp-sdk (it shares the runner with scripts/mcp-owner-workflow.sh) and the
-  # production TOTP modes (docs/runbooks/totp-keys.md "Production proofs") are
-  # capped; a 2 GiB ceiling would starve other modes' long journeys (such as
-  # second-factor) on a runner busy with the stack. Chromium keeps its shared
-  # memory in /tmp (Playwright passes --disable-dev-shm-usage): at 256 MiB, dev
-  # web app module fetches failed with net::ERR_INSUFFICIENT_RESOURCES.
+  # Playwright passes --disable-dev-shm-usage, so Chromium keeps shared memory in /tmp (Playwright Chromium launch args).
   local -a resource_args=()
   local tmp_bytes=1073741824
   if [ "$mode" = mcp-sdk ] || mode_is_totp_production "$mode"; then
@@ -656,7 +604,6 @@ host_run() {
   fi
   local -a env_args=() listed=()
   add_shard_env env_args --env "$mode"
-  # Parallel TOTP shards each run a Chromium: one browser's /tmp per shard.
   if [ "$mode" = totp ] && [ -n "${ABOUTME_TOTP_SHARD-}" ]; then
     IFS=, read -ra listed <<<"$ABOUTME_TOTP_SHARD"
     tmp_bytes=$((tmp_bytes * ${#listed[@]}))

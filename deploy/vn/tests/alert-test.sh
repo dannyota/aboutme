@@ -28,7 +28,7 @@ STUB
 chmod +x "$work/bin/msmtp"
 export PATH=$work/bin:$PATH
 
-write_env() { # root sender-name [extra-line]
+write_env() {
   local root=$1 name=$2 extra=${3-}
   mkdir -p "$root/secrets"
   {
@@ -43,7 +43,7 @@ write_env() { # root sender-name [extra-line]
   printf 'password' >"$root/secrets/smtp-password"
 }
 
-run_alert() { # root capture [key subject]
+run_alert() {
   local root=$1 capture=$2 key=${3:-test-key} subject=${4:-test-subject}
   ABOUTME_ALERT_TEST_ROOT=$root ALERT_TEST_CAPTURE=$capture \
     "$alert" "$key" "$subject" </dev/null >"$capture.out" 2>"$capture.err"
@@ -97,7 +97,7 @@ for key in aboutme-server.service coraza coraza-other coraza-matches coraza-unpa
   fi
 done
 
-expect_rejected() { # label sender-name extra username-writer
+expect_rejected() {
   local label=$1 name=$2 extra=$3 username=$4 root capture
   root=$work/$label
   capture=$work/$label-capture

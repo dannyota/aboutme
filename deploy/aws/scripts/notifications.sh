@@ -1,14 +1,4 @@
-# Sourced by deploy.sh. Implements the notification-suppression protocol
-# around the app/maintenance handoff (docs/runbooks/production.md, "Deploy").
-# Needs $site_alarm_region, $work, say(), aws_(), aws_site_alarm_(),
-# fence_checkpoint, and the tracking variables site_alarm_restore,
-# task_stopped_rule_restore, site_up_epoch, signaled, and site_alarm_waited
-# already defined by deploy.sh.
-
-# The planned handoff stops the app and starts maintenance, so suppress only
-# the resulting site-down and stopped-task notifications. Database, capacity,
-# Scheduler, and host recovery alarms remain live throughout the deploy.
-restore_deploy_notifications() { # [1 to wait for the site-down alarm's post-recovery health first]
+restore_deploy_notifications() {
   local failed=0 actions state wait_for_alarm=${1:-0}
   if ((task_stopped_rule_restore)); then
     if ! aws_ events enable-rule --name aboutme-prod-task-stopped >/dev/null; then
@@ -25,10 +15,6 @@ restore_deploy_notifications() { # [1 to wait for the site-down alarm's post-rec
     fi
   fi
   if ((site_alarm_restore)); then
-    # A finished run passes 1 and waits, whether it finished by success or a
-    # later failure such as a warm-up or smoke check, unless this exit already
-    # ran the wait once. A signal during the wait stops it early and restores
-    # at once instead of blocking on the alarm's evaluation delay.
     if ((wait_for_alarm)); then
       wait_for_site_alarm_healthy || failed=1
     fi
@@ -62,8 +48,7 @@ pause_deploy_notifications() {
 
   if [[ $actions == True ]]; then
     fence_checkpoint || { say "fence checkpoint failed before pausing notifications"; return 1; }
-    # Mark first because AWS can accept a request even when the client loses its
-    # response. Cleanup must then treat the action as possibly disabled.
+    # AWS can accept a request after the client loses its response, so the action is marked first (AWS API retry behaviour).
     site_alarm_restore=1
     if ! aws_site_alarm_ cloudwatch disable-alarm-actions --alarm-names aboutme-prod-site-down >/dev/null; then
       say "could not disable site-down alarm actions"
@@ -96,35 +81,7 @@ pause_deploy_notifications() {
   fi
 }
 
-# Waits until the site-down alarm has fully reevaluated the recovery: its
-# StateValue reads OK, its shape matches this deploy's expectations
-# (ComparisonOperator LessThanThreshold, Statistic Minimum, from the same
-# describe read), and Route 53 has reported, for the alarm's own health
-# check, EvaluationPeriods + 1 healthy minutes among the newest datapoints
-# returned, all timestamped at or after the minute the site came back up
-# (site_up_epoch, rounded up). CloudWatch evaluates the alarm on a delay
-# behind Route 53, so after a short maintenance window StateValue can still
-# read OK while the window's unhealthy datapoints are not yet evaluated;
-# StateValue alone does not prove recovery, and the extra minute of margin
-# beyond EvaluationPeriods absorbs the evaluator's own lag behind the metric
-# read.
-#
-# Bounded by DEPLOY_ALARM_WAIT seconds total (default 900), polled every
-# DEPLOY_ALARM_POLL seconds (default 20): by attempt count, computed from
-# those two values so the stubbed test harness can bound it without a real
-# wait, and by wall clock, so a slow AWS call cannot stretch the wait far past
-# its bound. A describe or metric read error counts as not-yet-healthy rather
-# than failing the wait outright; its last stderr line is kept and, if
-# nothing later succeeds, named in the timeout message next to a shape
-# mismatch when one was seen. The wait logs the minute it treats as the
-# site's recovery start, so a caller can compare it against the metric read's
-# own start time.
-#
-# Runs a read command with fd 2 pointed at $work/alarm-read.err for its
-# duration only, so a failing call's stderr can be inspected without an
-# explicit redirection on the command itself. on_exit points fd 2 back at fd 9
-# in case a signal lands while the redirection is in place.
-read_capturing_stderr() { # out-var-name command...
+read_capturing_stderr() {
   local -n _out=$1
   shift
   exec 3>&2 2>"$work/alarm-read.err"
@@ -134,10 +91,6 @@ read_capturing_stderr() { # out-var-name command...
   return "$rc"
 }
 
-# cloudwatch:GetMetricStatistics is outside the deploy role's closed IAM list
-# (deploy/aws/modules/identity/main.tf), so the metric read runs under the
-# base caller's own credentials, the same way origin_ip uses them for
-# ec2:DescribeAddresses.
 wait_for_site_alarm_healthy() {
   local poll=${DEPLOY_ALARM_POLL:-20} wait_s=${DEPLOY_ALARM_WAIT:-900}
   local poll_for_count=$((poll > 0 ? poll : 1))
@@ -182,8 +135,6 @@ wait_for_site_alarm_healthy() {
               --period "$period" --start-time "$start_iso" --end-time "$end_iso" \
               --dimensions "Name=HealthCheckId,Value=$hc_id" --output json; then
             last_read_error=""
-            # Count the healthy datapoints at the end of the series: a healthy
-            # minute followed by an unhealthy one does not count.
             healthy=$(jq --argjson t "$threshold" --argjson n "$margin" \
               '[.Datapoints // [] | sort_by(.Timestamp) | reverse | .[] | (.Minimum >= $t)]
                | (index(false) // length) | if . > $n then $n else . end' <<<"$stats" 2>/dev/null) || healthy=0
@@ -203,8 +154,6 @@ wait_for_site_alarm_healthy() {
     else
       last_read_error=$(tail -n1 "$work/alarm-read.err" 2>/dev/null)
     fi
-    # A Ctrl-C can kill the read itself, so check before sleeping as well as
-    # at the top of the next attempt.
     if ((signaled)); then
       site_alarm_waited=1
       say "skipping the site-down alarm wait; re-enabling its actions now"

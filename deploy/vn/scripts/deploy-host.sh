@@ -1,38 +1,4 @@
 #!/usr/bin/env bash
-# The host half of deploy.sh (docs/design/vietnam-production.md, "Deploy").
-# Runs as root on the production host, installed at
-# /usr/local/lib/aboutme/deploy-host.sh. deploy.sh calls one step at a time
-# over SSH and decides the order and the recovery; this script only does what
-# one step names and proves its result.
-#
-#   deploy-host.sh <op> <tag> <step> [args]
-#
-# <op> is the operation id fence.sh lock printed, or "-" for read-only steps;
-# <tag> is "-" only for release-json.
-# Every step that starts an image first reproves the lock and the release
-# floor with fence.sh checkpoint (docs/design/passkey-release-fence.md,
-# "Serialized production operation"). Steps:
-#
-#   status                      release and unit state
-#   running-release             DEPLOY_RELEASE_NUMBER of the running server
-#   release-json                the installed release, shape-checked
-#   pull <server> <web> <caddy> [observer] pull digests; require linux/amd64
-#   backup                      pgBackRest incremental annotated with <tag>
-#   timers-stop | timers-start  the scheduled job timers
-#   fail-closed                 maintenance up; app and jobs stopped
-#   cutover-quiesce             stop job timers and wait for active jobs
-#   cutover-check               prove maintenance with server and jobs stopped
-#   cutover-fail-closed         enforce maintenance with app and jobs stopped
-#   maintenance-up <caddy>      render and start maintenance beside Caddy
-#   app-down                    stop Caddy and the server; prove both stopped
-#   render <server> <web> <caddy> [observer] write units; restart observer
-#   restore-previous [record]   render the saved release again
-#   secrets-check               every secret the next render names exists
-#   ban-test add|del <ip>       short CrowdSec decision for the outside smoke
-#   db-setup | migrate          run the one-shot unit; require success
-#   app-up                      web, then server (/readyz), then Caddy
-#   maintenance-down            stop maintenance; prove it stopped
-#   db-bootstrap                first install: owner role, database, stanza
 set -euo pipefail
 
 lib=/usr/local/lib/aboutme
@@ -47,8 +13,6 @@ repo=ghcr.io/dannyota/aboutme
 jobs=(idempotency-expiry-sweep media-deletion-sweep privacy-retention-sweep media-orphan-sweep)
 # shellcheck source=deploy-safety.sh
 source "$lib/deploy-safety.sh"
-# Floors from docs/design/passkey-release-fence.md and
-# docs/design/viewer-analytics/sign-in-to-view.md, "Release and rollback".
 fence_epoch=4002
 fence_epoch_totp=4007
 fence_epoch_signin=6026
@@ -64,7 +28,7 @@ release_number() {
   echo $((10#${BASH_REMATCH[1]} * 1000000 + 10#${BASH_REMATCH[2]} * 1000 + 10#${BASH_REMATCH[3]}))
 }
 
-image_ok() { # name ref
+image_ok() {
   [[ $2 =~ ^${repo//./\\.}-$1@sha256:[0-9a-f]{64}$ ]] || die "'$2' is not a $1 image pinned by digest"
 }
 
@@ -92,7 +56,7 @@ release_shape='
     and (.maintenance_tag | tag) and (.maintenance_number | num)
   then . else error("malformed release state") end'
 
-release_read() { # file
+release_read() {
   local doc
   [[ -f $1 && ! -L $1 ]] || die "$1 is missing"
   doc=$(jq -ce "$release_shape" "$1" 2>/dev/null) || die "$1 is malformed"
@@ -117,8 +81,7 @@ flags_json() {
 
 active() { systemctl is-active --quiet "$1"; }
 
-# Waits until a unit is inactive or failed, up to $2 seconds.
-wait_stopped() { # unit seconds
+wait_stopped() {
   local i
   for ((i = 0; i < $2; i++)); do
     active "$1" || return 0
@@ -127,7 +90,7 @@ wait_stopped() { # unit seconds
   return 1
 }
 
-http_ok() { # url seconds
+http_ok() {
   local i
   for ((i = 0; i < $2; i++)); do
     curl -fsS -o /dev/null -m 5 "$1" 2>/dev/null && return 0
@@ -136,12 +99,11 @@ http_ok() { # url seconds
   return 1
 }
 
-# Counts listening sockets on a port owned by a process named caddy.
-caddy_listeners() { # port
+caddy_listeners() {
   ss -Hltnp "sport = :$1" 2>/dev/null | grep -c '"caddy"' || true
 }
 
-render_unit() { # template output tag number server web caddy maintenance-image maintenance-tag maintenance-number
+render_unit() {
   local extra=$secrets_block
   sed -e "s|@RELEASE_TAG@|$3|g" -e "s|@RELEASE_NUMBER@|$4|g" \
     -e "s|@SERVER_IMAGE@|$5|g" -e "s|@WEB_IMAGE@|$6|g" -e "s|@CADDY_IMAGE@|$7|g" \
@@ -152,12 +114,10 @@ render_unit() { # template output tag number server web caddy maintenance-image 
   mv -f "$2.tmp" "$2"
 }
 
-flag() { # name
+flag() {
   jq -r --arg n "$1" '.[$n] // "false"' <<<"$flags"
 }
 
-# The secrets the server gets beyond the fixed set in its template: the TOTP
-# key ring slots and the login providers named in flags.env.
 server_secrets() {
   local active_slot previous_slot providers lines=()
   active_slot=$(jq -r '.TOTP_ACTIVE_KEY_SLOT // ""' <<<"$flags")
@@ -182,12 +142,10 @@ server_secrets() {
   printf '%s\n' "${lines[@]}"
 }
 
-# A flag may be on only once the fence reached its floor
-# (docs/design/passkey-release-fence.md, "Deployer order and task evidence").
-flags_check() { # candidate
+flags_check() {
   local minimum
   minimum=$("$fence" read | jq -er .minimum_release) || die "could not read the release fence"
-  check_floor() { # flag epoch tag
+  check_floor() {
     if [[ $(flag "$1") == true ]] && ((minimum < $2)); then
       die "flags.env turns $1 on while the release fence is below $3; run deploy.sh --activate first"
     fi
@@ -202,7 +160,7 @@ flags_check() { # candidate
   check_floor SIGN_IN_TO_VIEW_ENABLED "$fence_epoch_signin" v0.6.26
 }
 
-write_release_json() { # tag number server web caddy maintenance-image maintenance-tag maintenance-number
+write_release_json() {
   local tmp=$state/.release.json.tmp
   jq -n --arg t "$1" --argjson n "$2" --arg s "$3" --arg w "$4" --arg c "$5" \
     --arg mi "$6" --arg mt "$7" --argjson mn "$8" \
@@ -221,7 +179,7 @@ write_release_json() { # tag number server web caddy maintenance-image maintenan
   sync "$state"
 }
 
-render_all() { # tag number server web caddy maintenance-image maintenance-tag maintenance-number
+render_all() {
   local t name
   "$fence" check "$2" deploy-host-render >/dev/null || die "$1 ($2) is below the release fence"
   flags=$(flags_json)
@@ -260,7 +218,7 @@ step_release_json() {
   echo
 }
 
-step_pull() { # server web caddy [observer]
+step_pull() {
   local name ref arch names=(server web caddy)
   [[ -z ${4:-} ]] || names+=(observer)
   for name in "${names[@]}"; do
@@ -306,7 +264,7 @@ clear_stale_healthchecks() {
   say "cleared $count stale healthcheck units"
 }
 
-step_timers() { # stop|start
+step_timers() {
   local j
   if [[ $1 == stop ]]; then
     aboutme_stop_jobs 600 || die "job timers or active jobs did not stop"
@@ -343,12 +301,7 @@ step_cutover_fail_closed() {
   say "cutover host is fail closed"
 }
 
-# Maintenance is the Caddy image only: a static 503 page with no
-# authentication or database logic, so starting it needs no checkpoint
-# (docs/design/passkey-release-fence.md, "Serialized production operation").
-# It is rendered on its own so the app units keep the running release until
-# the app is stopped.
-step_maintenance_up() { # maintenance-image
+step_maintenance_up() {
   local image=$1 mtag mnumber
   image_ok caddy "$image"
   mtag=$tag
@@ -362,14 +315,11 @@ step_maintenance_up() { # maintenance-image
   aboutme_edge_start aboutme-maintenance
   sleep 3
   active aboutme-maintenance || die "aboutme-maintenance did not stay up"
-  # Both Caddy processes now share 443 with SO_REUSEPORT, or only maintenance
-  # holds it when the app Caddy is already down.
   (($(caddy_listeners 443) >= 1)) || die "nothing listens on 443 after maintenance started"
   say "maintenance up"
 }
 
 step_app_down() {
-  # On a first deploy neither unit exists yet; the checks below still hold.
   aboutme_edge_transition aboutme_stop_edge aboutme-caddy aboutme-server 2>/dev/null ||
     die "could not prove a stable stopped edge"
   wait_stopped aboutme-caddy 60 || die "aboutme-caddy did not stop"
@@ -378,7 +328,7 @@ step_app_down() {
   say "app down"
 }
 
-render_observer() { # observer image, or empty to keep the installed unit
+render_observer() {
   local ref=${1:-} output=$units/aboutme-observer.container
   if [[ -z $ref ]]; then
     say "observer image absent; keeping the installed observer unit"
@@ -394,13 +344,12 @@ render_observer() { # observer image, or empty to keep the installed unit
   active aboutme-observer || die "aboutme-observer did not start"
 }
 
-step_render() { # server web caddy [observer]
+step_render() {
   local number mimage mtag mnumber
   number=$(release_number "$tag") || die "'$tag' is not a release tag"
   image_ok server "$1"
   image_ok web "$2"
   image_ok caddy "$3"
-  # The maintenance unit keeps whatever maintenance-up rendered and recorded.
   mimage=$3 mtag=$tag
   if [[ -f $maintenance_json ]]; then
     mimage=$(jq -er '.image | strings' "$maintenance_json") || die "$maintenance_json is malformed"
@@ -415,8 +364,6 @@ step_render() { # server web caddy [observer]
   say "rendered $tag"
 }
 
-# Failed-deploy restoration: render the release that ran before this one.
-# It must still meet the fence, so an image below the floor never returns.
 step_restore_previous() {
   local p
   if (($#)); then
@@ -435,9 +382,6 @@ step_restore_previous() {
   say "rendered the previous release $(jq -r .release_tag <<<"$p")"
 }
 
-# Runs before the site changes: every secret the templates and flags.env will
-# name must already exist as a Podman secret, or the app would fail after the
-# migration (docs/design/single-host-production.md, "Release and deploy").
 step_secrets_check() {
   local name missing=0
   flags=$(flags_json)
@@ -455,11 +399,7 @@ step_secrets_check() {
   say "every referenced secret exists"
 }
 
-# The outside smoke's CrowdSec check: a short manual decision for the
-# operator's own address, which the Caddy bouncer must answer with 403
-# (docs/design/vietnam-production.md, "Deploy", step 10). The firewall
-# bouncer acts only on SSH scenarios, so SSH stays open.
-step_ban_test() { # add|del ip
+step_ban_test() {
   [[ $2 =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] || die "'$2' is not an IPv4 address"
   /usr/local/lib/aboutme/crowdsec-db.sh preflight-ready </dev/null >/dev/null 2>&1 ||
     die "CrowdSec database admission refused"
@@ -470,7 +410,7 @@ step_ban_test() { # add|del ip
   fi
 }
 
-step_oneshot() { # unit
+step_oneshot() {
   local result
   checkpoint
   /usr/local/lib/aboutme/workload-lock.sh 3600 \
@@ -489,9 +429,6 @@ step_app_up() {
   http_ok http://127.0.0.1:3000/ 120 || die "aboutme-web did not answer on 127.0.0.1:3000"
   checkpoint
   systemctl start aboutme-server
-  # From the host, not only from outside, so the answer does not depend on
-  # which Caddy takes the connection (docs/design/vietnam-production.md,
-  # "Deploy", step 8).
   http_ok http://127.0.0.1:8080/readyz 180 || die "aboutme-server did not become ready"
   aboutme_edge_start aboutme-caddy
   sleep 3
@@ -500,8 +437,7 @@ step_app_up() {
   say "app up"
 }
 
-# Parse one container environment file without returning unrelated values.
-cimd_env_mcp_flag() { # environment file
+cimd_env_mcp_flag() {
   jq -Rre -s '
     reduce (split("\n")[]) as $line ({seen: {}, value: "absent"};
       if ($line | test("^[[:space:]]*(#|$)")) then .
@@ -516,9 +452,8 @@ cimd_env_mcp_flag() { # environment file
   ' "$1" 2>/dev/null
 }
 
-# Container env files override each other in entry order; inline Environment
-# overrides all files. Read the unit used by render or startup, never secrets.
-cimd_effective_mcp_flag() { # optional container unit
+# Quadlet env files override in entry order and inline Environment overrides all files (podman-systemd.unit(5)).
+cimd_effective_mcp_flag() {
   local unit=${1:-$templates/aboutme-server.container.in} files file value effective=absent inline
   [[ -r $unit ]] || return 1
   # Refuse alternate environment mechanisms that this reader cannot prove.
@@ -560,7 +495,7 @@ cimd_serving_app_stopped() {
   esac
 }
 
-cimd_rollback_check() { # candidate release number
+cimd_rollback_check() {
   local candidate=$1 unit=${2:-$templates/aboutme-server.container.in} mcp rows
   [[ $candidate =~ ^[0-9]+$ ]] || die "invalid CIMD rollback candidate"
   cimd_serving_app_stopped || die "CIMD rollback check requires a proved stopped serving app"

@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Fixed diagnostics survive helper redirection, explicit exits, and unset names.
 set -euo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 work=$(mktemp -d)
@@ -29,7 +28,6 @@ for name in real-migration-switch real-migration-noop real-migration-rejects-all
 done
 printf 'PASS migration-case-and-stage-survive-hidden-helper-failures\n'
 
-# Exercise the same PID reader installed in the namespace service adapter.
 # shellcheck source=crowdsec-retention-fixture.sh
 source "$fixture"
 fixture=$work

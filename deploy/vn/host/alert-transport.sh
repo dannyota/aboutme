@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 # shellcheck source-path=SCRIPTDIR
-# Explicit SMTP staging and owner-confirmed Telegram activation.
 set +xv
 set -euo pipefail
 export LC_ALL=C
@@ -43,8 +42,6 @@ case "${1-}:$#" in
     identity=$(telegram_identity) || die
     [[ $(<"$telegram_proof") == "$identity" ]] || die
     [[ ! -L $telegram_active && ! -L $telegram_dropin && ! -L $telegram_approved ]] || die
-    # Rotation keeps Telegram selected. Automatic sends remain refused until
-    # this receipt approves the replacement credentials; SMTP is not a fallback.
     if [[ -e $telegram_active ]]; then
       telegram_private_file "$telegram_active" 600 && [[ $(<"$telegram_active") == telegram ]] || die
       approve || die

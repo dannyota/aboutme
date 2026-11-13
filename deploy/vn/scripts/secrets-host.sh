@@ -1,43 +1,20 @@
 #!/usr/bin/env bash
 # shellcheck source-path=SCRIPTDIR
-# The host half of secrets.sh (docs/design/vietnam-production.md, "Secrets and
-# host identity"). Runs as root on the production host, installed at
-# /usr/local/lib/aboutme/secrets-host.sh. Each secret is one root-owned 0400
-# file under /etc/aboutme/secrets, on the encrypted data volume, and a Podman
-# secret of the same name, except the host-only Telegram credentials.
-# Nothing here prints, logs, or echoes a value, and
-# nothing overwrites a value except an explicit --replace on a name that moves
-# from AWS at cutover or rotates.
-#
-#   secrets-host.sh generate                generate every missing value
-#   secrets-host.sh import <name> [--replace]  value on stdin
-#   secrets-host.sh import-s3 <media|backups> [--replace]
-#                                           AWS-format key file on stdin
-#   secrets-host.sh podman-sync [--replace <name>]
-#   secrets-host.sh bouncer-register        register the Caddy CrowdSec bouncer
-#   secrets-host.sh list                    names present, never values
-#   secrets-host.sh age-copy <recipient>    age ciphertext of every value on stdout
 set -euo pipefail
 set +xv
 
 dir=/etc/aboutme/secrets
 pgb_conf=/etc/pgbackrest/conf.d/secrets.conf
 
-# Values this host creates with openssl.
 generated=(db-admin-password db-migrator-password db-app-password
   auth-email-active-key-id auth-email-active-key password-rate-hmac-key
   view-pass-key totp-key-a pgbackrest-cipher-pass)
-# Values the owner pipes in.
 imported=(google-client-id google-client-secret linkedin-client-id linkedin-client-secret
   smtp-username smtp-password totp-key-b telegram-bot-token telegram-chat-id)
-# Values that move from AWS once at cutover and replace the rehearsal ones,
-# or rotate later (docs/design/vietnam-production.md, "Secrets and host
-# identity"): only these accept --replace.
 replaceable=(auth-email-active-key-id auth-email-active-key password-rate-hmac-key
   view-pass-key totp-key-a totp-key-b google-client-id google-client-secret
   linkedin-client-id linkedin-client-secret smtp-username smtp-password
   telegram-bot-token telegram-chat-id)
-# Values the containers read as Podman secrets.
 podman_names=(db-admin-password db-migrator-password db-app-password
   auth-email-active-key-id auth-email-active-key password-rate-hmac-key
   view-pass-key totp-key-a totp-key-b google-client-id google-client-secret
@@ -49,7 +26,7 @@ die() {
   say "$*"
   exit 1
 }
-member() { # word list...
+member() {
   local w=$1 x
   shift
   for x in "$@"; do [[ $x == "$w" ]] && return 0; done
@@ -61,13 +38,13 @@ member() { # word list...
 # with one rename (mv -T never follows a link at the target). No path is
 # checked and then written in a separate step under a directory another user
 # controls.
-require_root_dir() { # path mode
+require_root_dir() {
   [[ -d $1 && ! -L $1 ]] || die "$1 is not a directory"
   [[ $(stat -c '%u %a' -- "$1") == "0 $2" ]] || die "$1 must be owned by root with mode $2"
 }
 
 # Writes stdin to one secret file, so a reader never sees a partial value.
-store() { # name replace(0|1)
+store() {
   local name=$1 replace=$2 tmp size
   if [[ -e $dir/$name || -L $dir/$name ]] && ((!replace)); then
     say "kept $name"
@@ -132,7 +109,7 @@ write_pgbackrest_conf() {
   say "wrote $pgb_conf"
 }
 
-cmd_import() { # name [--replace]
+cmd_import() {
   local name=$1 replace=0
   [[ ${2-} == --replace ]] && replace=1
   member "$name" "${imported[@]}" "${replaceable[@]}" || die "$name is not an importable name"
@@ -149,7 +126,7 @@ cmd_import() { # name [--replace]
 
 # Telegram uses the final host file directly under the sender's exclusive
 # lock. No temporary plaintext file or Podman copy is made during rotation.
-store_telegram() { # name replace(0|1)
+store_telegram() {
   local name=$1 replace=$2 value pattern exists=no
   export -n value
   # shellcheck source=../host/telegram-state.sh
@@ -184,7 +161,7 @@ store_telegram() { # name replace(0|1)
 # The key file create-s3-key writes, in the AWS shared credentials format: one
 # [default] section with exactly the two keys. One awk program is the only
 # parser, and it refuses any other shape.
-cmd_import_s3() { # media|backups [--replace]
+cmd_import_s3() {
   local which=$1 replace=0 parsed id secret prefix
   [[ ${2-} == --replace ]] && replace=1
   case $which in
@@ -218,7 +195,7 @@ cmd_import_s3() { # media|backups [--replace]
   fi
 }
 
-cmd_podman_sync() { # [--replace name]
+cmd_podman_sync() {
   local name
   if [[ ${1-} == --replace ]]; then
     name=$2
@@ -257,8 +234,6 @@ cmd_bouncer_register() {
   jq -e 'type == "array"' <<<"$registrations" >/dev/null 2>&1 || die "invalid CrowdSec bouncer list"
   if jq -e '[.[]? | select(.name == "aboutme-caddy")] | length == 1' <<<"$registrations" >/dev/null; then
     [[ -s $dir/crowdsec-bouncer-key ]] || die "the registered bouncer has no local key"
-    # A registration interrupted before the key file moved leaves an older
-    # key here; refuse it rather than sync a key the local API rejects.
     bouncer_key_valid ||
       die "the local key does not match the registered aboutme-caddy bouncer; run 'cscli bouncers delete aboutme-caddy', then register again"
     cmd_podman_sync --replace crowdsec-bouncer-key
@@ -284,9 +259,7 @@ cmd_list() {
   find "$dir" -maxdepth 2 -type f ! -name '.*' -printf '%P\n' | sort
 }
 
-# The age copy for aboutme-infra: every value and the pgBackRest file, as one
-# tar encrypted on this host, so only ciphertext leaves it.
-cmd_age_copy() { # recipient
+cmd_age_copy() {
   [[ $1 =~ ^age1[0-9a-z]{58}$ ]] || die "'$1' is not an age X25519 recipient"
   command -v age >/dev/null || die "age is not installed"
   tar -C / -cf - "${dir#/}" "${pgb_conf#/}" 2>/dev/null | age -r "$1"

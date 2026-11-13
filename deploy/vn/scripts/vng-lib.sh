@@ -1,13 +1,4 @@
 # shellcheck shell=bash
-# Shared helpers for the laptop-side vngcloud scripts in deploy/vn/. Source it;
-# do not run it. Design: docs/design/vietnam-production.md, "Infrastructure
-# code and state" (the CLI covers service accounts, buckets, and the budget).
-#
-# Credentials come from the environment: the owner's setup account, loaded with
-# `set -a; . <env file>; set +a`. VNG_PROFILE, when set, names a profile in
-# ~/.vngcloud instead; an explicit profile ignores credentials in the
-# environment. These scripts never write credentials. Nothing here prints a
-# secret.
 
 VNG_PROFILE=${VNG_PROFILE:-}
 VNG_BIN=${VNG_BIN:-vngcloud}
@@ -26,20 +17,16 @@ need_tools() {
   done
 }
 
-# vng runs the CLI with JSON output, as VNG_PROFILE when it is set.
 vng() {
   local profile=()
   [[ -z $VNG_PROFILE ]] || profile=(--profile "$VNG_PROFILE")
   "$VNG_BIN" "${profile[@]}" --region "$VNG_REGION" --output json "$@"
 }
 
-# vng_ro is vng with the CLI's read-only guard, so it refuses any write.
 vng_ro() {
   vng --read-only "$@"
 }
 
-# require_price <what> <quoted-vnd> <max-vnd> fails when the quote is 0 (an
-# unpriced order), is not a number, or is above the maximum.
 require_price() {
   local what=$1 quoted=${2:-} max=${3:-}
   local num='^[0-9]+([.][0-9]+)?$'
@@ -54,9 +41,6 @@ require_price() {
   say "$what: $quoted VND a month (max $max)"
 }
 
-# json_id_by_name <name> reads a list command's JSON on stdin and prints the ID
-# of the item whose name is exactly <name>, or nothing. The CLI prints Go field
-# names; the lowercase alternatives guard against a casing change.
 json_id_by_name() {
   jq -r --arg n "$1" '
     [.Items[]?

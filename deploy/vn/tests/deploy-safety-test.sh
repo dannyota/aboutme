@@ -1,17 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# The signal cases need HUP trappable. A shell started with HUP ignored, as
-# under nohup or some job runners, cannot trap it, so restart once with the
-# default disposition.
+# A shell started with HUP ignored cannot trap it (bash manual, SIGNALS).
 if [[ -z ${ABOUTME_SAFETY_SIGNALS_RESET:-} ]]; then
   ABOUTME_SAFETY_SIGNALS_RESET=1 exec env --default-signal=HUP,INT,TERM "$BASH" "${BASH_SOURCE[0]}" "$@"
 fi
 
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 work=$(mktemp -d)
-# Release every fixture waiter and join the background jobs before removing
-# $work, so no stub keeps polling a deleted directory after a failure.
 cleanup() {
   touch "$work/state/command-release" "$work/state/failure-release" \
     "$work/state/admission-release" 2>/dev/null || true
@@ -24,18 +20,14 @@ cleanup() {
 }
 trap cleanup EXIT
 fail() { printf 'deployment safety: %s\n' "$*" >&2; exit 1; }
-# Every wait for a fixture's state ends as soon as the state appears, or after
-# this many seconds, so its length does not depend on how fast the host forks.
 export ABOUTME_TEST_WAIT_SECONDS=${ABOUTME_TEST_WAIT_SECONDS:-60}
-wait_for_file() { # path
+wait_for_file() {
   local deadline=$((SECONDS + ABOUTME_TEST_WAIT_SECONDS))
   while [[ ! -e $1 ]] && ((SECONDS < deadline)); do sleep 0.01; done
   [[ -e $1 ]]
 }
 
-# fence.sh's floor_tag and floor_release name one release, and a tree's schema
-# floor never sits above it (docs/design/release-floors.md).
-tracked_floor_check() { # root
+tracked_floor_check() {
   local fence=$1/deploy/vn/scripts/fence.sh schema=$1/apps/server/migrations/schema-floor
   local strict='^v(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})$' tag number raw floor
   tag=$(sed -n 's/^floor_tag=//p' "$fence")
@@ -53,7 +45,7 @@ tracked_floor_check() { # root
 }
 tracked_floor_check "$root"
 
-# macOS limits Unix socket paths to 104 bytes, even with a long TMPDIR.
+# macOS limits Unix socket paths to 104 bytes (unix(4)).
 control_path='ControlPath=\$ssh_dir/(ssh-%C|prod\.sock|drill\.sock)("| )'
 for script in deploy.sh restore-drill.sh; do
   path=$root/deploy/vn/scripts/$script
@@ -159,8 +151,6 @@ sed "s|/run/aboutme|$work/run|g" "$root/deploy/vn/scripts/deploy-safety.sh" >"$w
 # shellcheck source=/dev/null
 source "$work/deploy-safety.sh"
 
-# Edge mutations must join an admitted retention pass or watchdog tick.
-# Redirect only host paths; execute the production lock and command helper.
 sed -n '/^aboutme_edge_transition() (/,/^)/p' "$root/deploy/vn/scripts/deploy-safety.sh" |
   sed "s|/run/aboutme|$work/run|g" >"$work/edge-lock.sh"
 mkdir -p "$work/run"
@@ -183,8 +173,6 @@ for transition in maintenance-up app-down render restore-previous app-up mainten
   [[ -e $work/$transition ]] || fail "$transition did not resume after the pass joined"
 done
 
-# Interrupt the lock owner while its client waits on an unfinished manager job.
-# Repeated signals during shutdown must not release ownership before it joins.
 signal_edge_command() {
   printf '%s\n' "$BASHPID" >"$ABOUTME_TEST_STATE/edge-owner"
   systemctl start aboutme-caddy
@@ -232,8 +220,6 @@ for fault in timeout-malformed fail-inspection-after-stop raw-exit-two; do
     "$ABOUTME_TEST_STATE/inspection-failure" "$work/run/crowdsec-retention-failed"
 done
 
-# Pause deployment at edge admission, then complete watchdog shutdown. Resuming
-# the deployment must neither run startup retention nor remove its failure.
 real_flock=$(command -v flock)
 flock() {
   if [[ -e $ABOUTME_TEST_STATE/pause-admission && $* == '-x -w 65 '* ]]; then
@@ -284,7 +270,6 @@ done
 aboutme_fail_closed 1
 aboutme_assert_fail_closed
 
-# Retention failure owns both edge modes, including static maintenance.
 touch "$work/run/crowdsec-retention-failed"
 rm -f "$ABOUTME_TEST_STATE/active/aboutme-maintenance"
 if aboutme_fail_closed 1; then fail 'retention failure reopened maintenance'; fi
@@ -308,7 +293,6 @@ done
   exit 1
 }
 
-# A timer restarted by another process must make the cutover guard fail.
 : >"$ABOUTME_TEST_STATE/active/aboutme-job-media-orphan-sweep.timer"
 if aboutme_assert_cutover_quiescent; then
   echo "cutover guard accepted a restarted job timer" >&2
@@ -317,8 +301,6 @@ fi
 rm -f "$ABOUTME_TEST_STATE/active/aboutme-job-media-orphan-sweep.timer"
 aboutme_assert_cutover_quiescent
 
-# Exercise the actual stopped-app and Boolean database helpers with closed
-# command fixtures, then invoke the isolated candidate-release matrix.
 for helper in cimd_url_rows_exist cimd_serving_app_stopped; do
   sed -n "/^$helper() {/,/^}/p" "$root/deploy/vn/scripts/deploy-host.sh" >>"$work/cimd-helpers.sh"
 done
@@ -365,7 +347,6 @@ printf 'MCP_ENABLED=false\n' >"$work/cimd-flags.env"
 expect_mcp_flag false 'flags environment override'
 printf 'MCP_ENABLED=true\n' >>"$work/cimd-smtp.env"
 expect_mcp_flag true 'SMTP environment override'
-# The guard must refuse the pre-CIMD image under the actual effective flag.
 sed -n '/^cimd_rollback_check() {/,/^}/p' "$root/deploy/vn/scripts/deploy-host.sh" >"$work/cimd-guard.sh"
 (
   die() { exit 1; }
@@ -375,14 +356,12 @@ sed -n '/^cimd_rollback_check() {/,/^}/p' "$root/deploy/vn/scripts/deploy-host.s
 ) && { echo 'SMTP override allowed unsafe rollback' >&2; exit 1; }
 printf 'MCP_ENABLED=false\n' >"$work/cimd-smtp.env"
 expect_mcp_flag false 'SMTP environment disablement'
-# Only Container entries set the container's environment.
 for section in Service Install; do
   sed -i "/^\[$section\]$/a Environment=MCP_ENABLED=true" "$templates/aboutme-server.container.in"
   expect_mcp_flag false "inline $section environment"
   sed -i '/^Environment=MCP_ENABLED=/d' "$templates/aboutme-server.container.in"
 done
 sed -i '/^\[Container\]$/a Environment=MCP_ENABLED=true' "$templates/aboutme-server.container.in"
-# Inline container variables override every environment file.
 expect_mcp_flag true 'inline Container environment override'
 if (
   die() { printf '%s\n' "$*" >&2; exit 1; }
@@ -409,8 +388,6 @@ rm "$work/cimd-server.env"
 if cimd_effective_mcp_flag; then echo 'missing MCP configuration accepted' >&2; exit 1; fi
 bash "$root/deploy/vn/scripts/cimd-rollback-test.sh"
 
-# Account-writer and send quiescence needs positive stopped-state evidence.
-# A failed inspection cannot count as a joined server before revocation.
 unset -f systemctl
 : >"$ABOUTME_TEST_STATE/inspection-failure"
 if aboutme_assert_cutover_quiescent >"$work/notice-out" 2>&1; then

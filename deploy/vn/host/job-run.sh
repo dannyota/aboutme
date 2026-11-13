@@ -1,13 +1,4 @@
 #!/usr/bin/env bash
-# Runs one scheduled job with the current release's server image, for
-# aboutme-job@<name>.service (docs/design/vietnam-production.md, "Scheduled
-# jobs"). Installed at /usr/local/lib/aboutme/job-run.sh; runs as root.
-#
-# Database jobs get no network; media jobs join the aboutme bridge for
-# vStorage ("Host": only media jobs get outbound network). Every job reaches
-# PostgreSQL only through the mounted socket, as aboutme_app. All jobs get the
-# media settings because the server's configuration requires the key pair
-# whenever MEDIA_ENDPOINT is set; a job without network cannot use them.
 set -euo pipefail
 
 lib=/usr/local/lib/aboutme

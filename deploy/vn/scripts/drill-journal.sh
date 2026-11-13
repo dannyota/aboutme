@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# Create-only transport for secret-free restore-drill journal records.
-# Callers own record semantics, hashes, chains, and controller fencing.
 
 drill_journal_error() {
   printf 'drill journal: %s\n' "$*" >&2
@@ -74,7 +72,6 @@ drill_journal_put_conflict() {
       .operation == "storage.PutObject")' "$1" >/dev/null 2>&1
 }
 
-# drill_journal_get <record-path> <new-output-file>
 drill_journal_get() {
   local record=${1:-} output=${2:-} key parent temp_dir temp rc=0 size
   drill_journal_record_path_valid "$record" || {
@@ -120,7 +117,6 @@ drill_journal_get() {
   rm -rf -- "$temp_dir"
 }
 
-# drill_journal_put_create <record-path> <JSON-file>
 drill_journal_put_create() {
   local record=${1:-} file=${2:-} key errors readback snapshot rc=0
   drill_journal_record_path_valid "$record" || {

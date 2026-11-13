@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Laptop coordinator for the reviewed account deletion protocol.
 set -euo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 root=$(cd "$here/../../.." && pwd)
@@ -33,13 +32,11 @@ esac
 envelope=$(operation_envelope "$envelope" 2>/dev/null) || fail invalid_request 2
 [[ -n ${DEPLOY_HOST:-} && $DEPLOY_HOST =~ ^[A-Za-z0-9][A-Za-z0-9.:-]*$ ]] || fail invalid_request 2
 [[ -z ${DEPLOY_SITE:-} || $DEPLOY_SITE == https://aboutme.vn ]] || fail invalid_request 2
-# Prove a clean checkout of current main before SSH.
 bash "$root/scripts/release-eligibility.sh" --deploy-checkout >/dev/null 2>&1 || fail refused
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 ssh_opts=(-p "$SSH_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ForwardAgent=no -o ConnectTimeout=10)
 remote() { ssh "${ssh_opts[@]}" "aboutme-admin@$DEPLOY_HOST" "$@"; }
-# Check every installed source used by the operation, including generic jobs.
 files=(
   host/operation-run.sh host/operation-state.sh host/operation-account.sh
   host/workload-lock.sh host/job-run.sh scripts/fence.sh scripts/deploy-safety.sh scripts/deploy-host.sh

@@ -20,11 +20,9 @@ SSH_RESULT=1 bash "$root/deploy/vn/scripts/secrets.sh" import-s3 media --replace
 bash "$root/deploy/vn/scripts/secrets.sh" import-s3 media --replace >"$work/out" 2>&1
 [[ ! -e $key ]]
 grep -q 'import-s3 media --replace' "$SECRET_LOG"
-# Load only the bouncer functions; commands use synthetic values and temp paths.
 sed -n '/^bouncer_key_valid() {/,/^}/p;/^cmd_bouncer_register() {/,/^}/p' \
   "$root/deploy/vn/scripts/secrets-host.sh" |
   sed 's|/usr/local/lib/aboutme/crowdsec-db.sh|crowdsec_gate|g' >"$work/function"
-# The local API accepts only the key cscli generated; curl reads it on stdin.
 curl() {
   printf '%s\n' "$*" >>"$SECRET_LOG"
   if grep -q 'X-Api-Key: synthetic-bouncer-key' <&0; then printf 200; else printf 403; fi
@@ -63,13 +61,11 @@ if grep -qE 'synthetic-bouncer-key|old-key|--key' "$SECRET_LOG" "$work/out" "$wo
 cmd_bouncer_register >"$work/out" 2>"$work/err"
 [[ $(grep -c 'bouncers add' "$SECRET_LOG") == 1 ]]
 [[ $(grep -c -- '--replace crowdsec-bouncer-key' "$work/sync") == 2 ]]
-# A retry after an interrupted registration finds a stale local key and refuses.
 rm -f -- "$dir/crowdsec-bouncer-key"
 printf stale-key >"$dir/crowdsec-bouncer-key"
 if (cmd_bouncer_register) >"$work/out" 2>"$work/err"; then exit 1; fi
 grep -q 'does not match' "$work/err"
 if grep -qE 'synthetic-bouncer-key|stale-key' "$SECRET_LOG" "$work/out" "$work/err"; then exit 1; fi
-# Gate failure must stop even a read-only list before vendor initialization.
 : >"$work/admission"
 touch "$work/schema-invalid"
 if (cmd_bouncer_register) >"$work/out" 2>"$work/err"; then
@@ -79,7 +75,6 @@ fi
   echo 'FAIL registration-vendor-before-refusal' >&2; exit 1;
 }
 rm "$work/schema-invalid"
-# Corruption after the first call must prevent the following registration.
 rm "$work/registered" "$dir/crowdsec-bouncer-key"
 : >"$work/admission"
 cscli() {
@@ -95,7 +90,6 @@ fi
   echo 'FAIL registration-inter-call-admission' >&2; exit 1;
 }
 [[ ! -e $dir/crowdsec-bouncer-key && ! -e $work/registered ]]
-# An existing host key must refuse an unrequested replacement.
 sed -n '/^cmd_import_s3() {/,/^}/p' "$root/deploy/vn/scripts/secrets-host.sh" >"$work/import"
 # shellcheck disable=SC1091
 source "$work/import"

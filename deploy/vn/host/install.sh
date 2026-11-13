@@ -7,18 +7,8 @@
 # contents of /etc/aboutme/secrets.
 set -euo pipefail
 
-# Every package from outside the Ubuntu archive is pinned to one version and
-# verified against material written in this repository, never against a key
-# or checksum fetched from the same source at install time:
-# - apt repositories: the signing keys are committed under host/keys and must
-#   carry the fingerprints below; apt then verifies every package against
-#   them, and dpkg must report exactly the pinned version afterward.
-# PostgreSQL stays on one minor version (docs/design/vietnam-production.md,
-# "PostgreSQL"); unattended-upgrades does not touch these packages. Raising a
-# version is a reviewed change to this file.
 PGDG_SIGNER_FPR=B97B0AFCAA1A47F044F244A07FCC7D46ACCC4CF8
-# CrowdSec publishes no fingerprint in its documentation; this is the primary
-# key in host/keys/crowdsec.asc as served by packagecloud.io on 2026-10-10.
+# CrowdSec publishes no key fingerprint; this is the primary key in host/keys/crowdsec.asc as packagecloud.io served it on 2026-10-10.
 CROWDSEC_SIGNER_FPR=6A89E3C2303A901A889971D3376ED5326E93CD0C
 
 POSTGRESQL_COMMON_VERSION=293.pgdg24.04+1
@@ -33,18 +23,14 @@ die() {
 }
 say() { echo "install: $*"; }
 
-# ABOUTME_INSTALL_ONLY=postgres installs PostgreSQL and pgBackRest only.
 only=${ABOUTME_INSTALL_ONLY:-}
 case $only in "" | postgres) ;; *) die "invalid installation mode" ;; esac
 
 [ "$(id -u)" -eq 0 ] || die "run as root"
 [ $# -eq 1 ] || die "usage: install.sh <bundle-dir>"
 bundle=$(readlink -f "$1")
-# Steps run as other users (setpriv, runuser); they need a directory they can
-# enter, not the caller's home.
 cd /
 [ -d "$bundle/host/etc" ] || die "$bundle/host/etc not found"
-# Validate the incoming denial primitive before any persistent-state access.
 # shellcheck source=crowdsec-privacy-notice-host.sh
 source "$bundle/host/crowdsec-privacy-notice-host.sh"
 notice_mount_identity >/dev/null 2>&1 || die "invalid_state"
@@ -82,7 +68,6 @@ for operation in /srv/data/host-operations/*; do
   jq -e '.closureQuiescent==true and .fenceHeld==false and (.action.writeOutcome!="unknown") and (.phase=="closed" or .phase=="planned" or .phase=="serving")' <<<"$operation_record" >/dev/null || die "an operation remains unresolved"
 done
 
-# Adoption is explicit and precedes ordinary helper replacement on legacy hosts.
 if [[ -e /var/lib/aboutme/fence.json ]]; then
   jq -e '(.operation_id // null)==null' /var/lib/aboutme/fence.json >/dev/null 2>&1 || die "an operation remains owned"
 fi
@@ -124,10 +109,7 @@ timers=(
   aboutme-backup-verify.timer
 )
 
-# Installs a committed armored key after checking that it holds exactly one
-# primary key with the pinned fingerprint. gpg's machine-readable output is
-# the only thing parsed.
-install_key() { # committed-key fingerprint outfile
+install_key() {
   local fprs
   fprs=$(gpg --show-keys --with-colons "$1" | awk -F: '$1 == "pub" { want = 1; next } want && $1 == "fpr" { print $10; want = 0 }')
   [ "$fprs" = "$2" ] || die "$1 is not exactly one primary key with fingerprint $2"
@@ -136,14 +118,14 @@ install_key() { # committed-key fingerprint outfile
 
 # Installs packages at their pinned versions and proves dpkg holds exactly
 # those versions afterward.
-package_is_pinned() { # package=version
+package_is_pinned() {
   local spec=$1 state
   state=$(dpkg-query -W -f='${Status}\t${Version}' "${spec%%=*}" 2>/dev/null) || return 1
   [[ $state == $'install ok installed\t'"${spec#*=}" ||
     $state == $'hold ok installed\t'"${spec#*=}" ]]
 }
 
-install_pinned() { # package=version...
+install_pinned() {
   local spec pkg holds failure='' status=0
   local -a held_packages=()
   holds=$(apt-mark showhold) || die "cannot inspect package holds"
@@ -162,7 +144,7 @@ install_pinned() { # package=version...
     done
   fi
   if ((status != 0)); then
-    # Unpacking can clear a hold before apt or the version check fails.
+    # Unpacking can clear a dpkg hold before apt or the version check fails (apt-mark(8)).
     if ((${#held_packages[@]})); then
       apt-mark hold "${held_packages[@]}" >/dev/null || true
     fi
@@ -222,13 +204,13 @@ install_admission_transition() (
   exit "$result"
 )
 
-install_postgresql_config() { # source-directory reload-or-restart
+install_postgresql_config() {
   local src=$1 action=$2 changed='' file mode
   install -d -o postgres -g postgres -m 0755 /etc/postgresql/18/main/conf.d || return 1
   for file in pg_hba.conf pg_ident.conf conf.d/90-aboutme.conf; do
     mode=0640
     [[ $file != conf.d/90-aboutme.conf ]] || mode=0644
-    # GNU install prints only replaced files; matching files keep their mtimes.
+    # GNU install --compare --verbose prints only replaced files (install(1)).
     changed+=$(install --compare --verbose -o postgres -g postgres -m "$mode" \
       "$src/$file" "/etc/postgresql/18/main/$file") || return 1
   done
@@ -249,7 +231,7 @@ install_crowdsec_pending() {
   sync "$pending" /var/lib/aboutme
 }
 
-install_crowdsec_file() { # source destination
+install_crowdsec_file() {
   if [[ ! -f $2 || -L $2 ]] ||
     [[ $(stat -c '%u:%g:%a' "$2") != 0:0:644 ]] || ! cmp -s "$1" "$2"; then
     install_crowdsec_pending || return 1
@@ -333,12 +315,8 @@ copy_tree() {
   done < <(find "$src" -type f ! -name '*.example' -print0 | sort -z)
 }
 
-# 1. Keys and apt repositories.
 install -d -m 0755 /etc/apt/keyrings
 apt-get update -qq
-# age encrypts the secrets copy; msmtp sends staged SMTP alerts; catatonit is
-# the init process for units run with --init. All come from
-# the Ubuntu archive.
 alert_packages=(msmtp)
 if [[ -e /etc/aboutme/alert-transport || -L /etc/aboutme/alert-transport ]]; then
   [[ -f /etc/aboutme/alert-transport && ! -L /etc/aboutme/alert-transport &&
@@ -378,8 +356,6 @@ echo "deb [signed-by=/etc/apt/keyrings/crowdsec.gpg] https://packagecloud.io/cro
 say "CrowdSec repository in place"
 apt-get update -qq
 
-# 2. CrowdSec config goes in before the package starts the service, so its
-# local API never tries 127.0.0.1:8080, which Go owns.
 install -d -m 0755 /etc/crowdsec/acquis.d
 install_crowdsec_file "$bundle/edge/crowdsec/config.yaml.local" /etc/crowdsec/config.yaml.local
 install_crowdsec_file "$bundle/edge/crowdsec/config.yaml.local" /etc/crowdsec/config.yaml.postgresql
@@ -400,9 +376,6 @@ chown root:postgres /srv/data/pgbackrest-conf
 chmod 0750 /srv/data/pgbackrest-conf
 install_pinned "postgresql-18=$POSTGRESQL_VERSION" "postgresql-client-18=$POSTGRESQL_VERSION" \
   "libpq5=$POSTGRESQL_VERSION" "pgbackrest=$PGBACKREST_VERSION"
-# Install the persistent startup requirements before package scripts can
-# enable either service. Until step 4 installs the required gate and lease
-# check, a reboot during package installation fails closed.
 install -d -m 0755 /etc/systemd/system/crowdsec.service.d \
   /etc/systemd/system/crowdsec-firewall-bouncer.service.d
 install --compare -m 0644 "$bundle/host/etc/systemd/system/crowdsec.service.d/90-aboutme-alert.conf" \
@@ -411,13 +384,10 @@ install --compare -m 0644 \
   "$bundle/host/etc/systemd/system/crowdsec-firewall-bouncer.service.d/90-aboutme-alert.conf" \
   /etc/systemd/system/crowdsec-firewall-bouncer.service.d/90-aboutme-alert.conf
 install_admission_transition timeout --kill-after=1s 10 systemctl daemon-reload
-# Suppress package registration and startup until the migration provisions pgx.
 for package_pin in "crowdsec=$CROWDSEC_VERSION" "crowdsec-firewall-bouncer-nftables=$CROWDSEC_BOUNCER_VERSION"; do
   if ! package_is_pinned "$package_pin"; then
     if [[ $package_pin == crowdsec-firewall-bouncer-nftables=* ]]; then
       install -d -m 0700 /etc/crowdsec/bouncers
-      # The package needs a key to skip automatic registration. The migration
-      # replaces this unregistered private value before starting the bouncer.
       if [[ ! -s /etc/crowdsec/bouncers/crowdsec-firewall-bouncer.yaml.local ]]; then
         install --compare -m 0600 /dev/null /etc/crowdsec/bouncers/crowdsec-firewall-bouncer.yaml.local
         (umask 077
@@ -433,8 +403,6 @@ for package_pin in "crowdsec=$CROWDSEC_VERSION" "crowdsec-firewall-bouncer-nftab
 done
 
 
-# 4. Configuration files. PostgreSQL files belong to postgres; the firewall
-# bouncer file is built in step 5.
 systemctl stop aboutme-deployment-document.timer aboutme-deployment-document.service 2>/dev/null || true
 etc=$bundle/host/etc
 copy_tree "$etc" /etc \
@@ -459,8 +427,6 @@ for scenario in "$bundle"/edge/crowdsec/scenarios/*.yaml; do
   install_crowdsec_file "$scenario" "/etc/crowdsec/scenarios/$(basename "$scenario")"
 done
 
-# The startup retention gate must run before the first unmasked CrowdSec
-# start. Install its scripts early; matching copies must stay intact.
 lib=/usr/local/lib/aboutme
 install -d -m 0755 "$lib"
 for helper in crowdsec-db crowdsec-provision crowdsec-vacuum crowdsec-migrate; do
@@ -505,7 +471,6 @@ systemd-tmpfiles --create /etc/tmpfiles.d/aboutme.conf
 rm -f /var/log/crowdsec.log /var/log/crowdsec-firewall-bouncer.log
 say "configuration copied to /etc"
 
-# 6. Host scripts, quadlet templates, and environment files.
 install -d -m 0755 "$lib" /etc/aboutme
 copy_script() {
   if [ -f "$1" ]; then
@@ -571,7 +536,6 @@ else
   say "fence.sh not installed; skipping fence init"
 fi
 
-# Keep the reviewed detection and bouncer templates available to the host step.
 install -d -m 0755 "$lib/crowdsec"
 copy_tree "$bundle/edge/crowdsec" "$lib/crowdsec"
 ABOUTME_MIGRATE_BUNDLE_FD=$operation_bundle_fd "$lib/crowdsec-migrate.sh" || die "crowdsec_migrate_refused"
@@ -580,12 +544,8 @@ ABOUTME_MIGRATE_BUNDLE_FD=$operation_bundle_fd "$lib/crowdsec-migrate.sh" || die
 install_admission_transition --shared-fence install_crowdsec_activate || die "crowdsec_activation_refused"
 if ((${#edge_restart[@]})); then systemctl start "${edge_restart[@]}"; fi
 
-# 7. Apply settings and start units. The job timers start with the first
-# deploy (deploy-host.sh start-timers), since no release exists before it.
 systemd-tmpfiles --create /etc/tmpfiles.d/aboutme.conf
 sysctl --system >/dev/null
-# The journal lives on the data volume (data-volume.sh binds /var/log/journal);
-# flush moves early-boot entries there.
 systemctl restart systemd-journald
 journalctl --flush
 install_admission_transition timeout --kill-after=1s 10 systemctl daemon-reload

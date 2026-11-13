@@ -1,10 +1,3 @@
-# Current Compose route table. docs/design/system.md owns intended route
-# ownership; docs/api/openapi.yaml owns implemented HTTP contracts. This
-# listener is HTTP-only and does not satisfy the local-UAT HTTPS/443 contract
-# (docs/runbooks/local-uat.md).
-#
-# Generated fixed routes and valid public slugs go to their registry owner.
-# Denied and reserved roots never reach an upstream. Other paths go to Nuxt.
 {
 	admin off
 	# No site below turns on Caddy's access log, so an ordinary request is
@@ -27,17 +20,10 @@
 :80 {
 	encode zstd gzip
 
-	# Caddy is the client-IP trust boundary. Remove viewer forwarding headers
-	# before setting the sole header Go accepts. See docs/design/deployment.md.
-	# This direct-peer rule is for the current local deployment only.
 	request_header -X-Real-IP
 	request_header -X-Forwarded-For
 	request_header -Forwarded
 
-	# Only the CloudFront listener's edge WAF sets these
-	# (docs/design/viewer-analytics/counting.md, "Layers 2 and 3: edge
-	# labels"); no edge runs in front of this listener, so a viewer-forged
-	# value must never reach Go here.
 	request_header -x-amzn-waf-aboutme-bot
 	request_header -x-amzn-waf-aboutme-dc
 

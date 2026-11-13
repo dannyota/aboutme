@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Isolated rollback guard regression; uses no host, database, or secret files.
 set -euo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 work=$(mktemp -d)

@@ -9,7 +9,7 @@ groupby: evt.Meta.source_ip
 capacity: 300
 leakspeed: 250ms
 blackhole: 5m
-# CrowdSec stores at most 6 alert samples (cache_size + 1).
+# CrowdSec stores at most cache_size + 1 alert samples (CrowdSec scenario docs).
 cache_size: 5
 labels:
   remediation: true

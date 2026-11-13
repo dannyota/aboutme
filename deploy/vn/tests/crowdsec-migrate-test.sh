@@ -1,10 +1,8 @@
 #!/usr/bin/env bash
-# Fake commands prove migration order without touching host state.
 set -euo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 work=$(mktemp -d)
 trap 'rm -rf -- "$work"' EXIT
-# Redirect configuration paths; exercise the production predicates and activation.
 sed -e "s|/etc/crowdsec/local_api_credentials.yaml|$work/local_api_credentials.yaml|g" \
   -e "s|/etc/crowdsec/|$work/config/|g" \
   -e "s|/run/aboutme|$work/runtime|g" \
@@ -12,7 +10,6 @@ sed -e "s|/etc/crowdsec/local_api_credentials.yaml|$work/local_api_credentials.y
   "$root/deploy/vn/host/crowdsec-migrate.sh" >"$work/crowdsec-migrate.sh"
 # shellcheck source=../host/crowdsec-migrate.sh
 source "$work/crowdsec-migrate.sh"
-# Keep the real lock implementation for descriptor and contention proofs.
 eval "$(declare -f migrate_lock | sed '1s/migrate_lock/real_migrate_lock/')"
 eval "$(declare -f migrate_firewall_register | sed '1s/migrate_firewall_register/real_firewall_register/')"
 eval "$(declare -f migrate_activate | sed '1s/migrate_activate/real_migrate_activate/')"
@@ -79,7 +76,6 @@ migrate_activate() {
 migrate_remove_sqlite() { [[ ${MIGRATE_FAIL:-} != discard ]] || return 1; printf 'discard\n' >>"$MIGRATE_CALLS"; }
 migrate_firewall_register() { [[ ${MIGRATE_FAIL:-} != firewall ]] || return 1; printf 'firewall-register\n' >>"$MIGRATE_CALLS"; }
 migrate_firewall_ready() { [[ ${MIGRATE_FAIL:-} != rebuild ]] || return 1; printf 'firewall-ready\n' >>"$MIGRATE_CALLS"; }
-# Admission doubles keep the fixture away from host paths.
 migrate_lock() { [[ ${lock_busy:-no} == no ]]; }
 migrate_idle() { [[ ${owned:-no} == no ]]; }
 migrate_notice() { [[ ${notice:-yes} == yes ]]; }
@@ -192,7 +188,6 @@ MIGRATE_FAIL=provision refused provision
 migrate_run
 grep -qxF 'provision fresh' "$MIGRATE_CALLS"
 printf 'PASS pre-schema-retry\n'
-# Inject failures across provisioning, registration, startup, and final checks.
 for fault in provision:provision activate:activate discard:discard-sqlite machine:machine \
   startup:startup-retention timers:maintenance-timers unmask:unmask enable:enable \
   engine:engine caddy:caddy-register firewall:firewall-register bouncer:firewall-start \
@@ -215,15 +210,12 @@ grep -qxF crowdsec_migrate_no_edge "$work/err"
 sed -e 's/provision fresh/provision restore-reset/' -e '/^unit start aboutme-caddy.service$/d' "$work/expected" >"$work/reset-expected"
 cmp "$work/reset-expected" "$MIGRATE_CALLS"
 printf 'PASS stopped-edge-reset-preserves-edge-state\n'
-# The real stop set includes the watcher, and the shared bounded helper verifies it.
 # shellcheck disable=SC2154 # The sourced migration defines this stop set.
 [[ " ${migrate_consumers[*]} " == *' aboutme-watch.timer '* ]]
 [[ " ${migrate_consumers[*]} " == *' aboutme-watch.service '* ]]
 grep -q 'retention_stop' "$root/deploy/vn/host/crowdsec-migrate.sh"
 printf 'PASS complete-stop-set\n'
 
-# Verify the shared shutdown code detects a surviving job, kills it, and checks
-# every unit again. All commands and state live in this fixture.
 # shellcheck source=../host/crowdsec-retention-fail.sh
 source "$root/deploy/vn/host/crowdsec-retention-fail.sh"
 mkdir -p "$work/bin"
@@ -264,7 +256,6 @@ exec {held_fd}>&-
 (real_migrate_lock)
 printf 'PASS bundle-lock-busy-and-inherited-descriptor\n'
 
-# Exercise activation's real command boundaries with private fixture paths.
 (
   migrate_activate() { real_migrate_activate; }
   mkdir -p "$work/config/acquis.d" "$lib/crowdsec/acquis.d"
@@ -296,8 +287,6 @@ SH
 )
 printf 'PASS activation-boundaries-hide-command-output\n'
 
-# A stopped trigger can leave an already queued or running failure response.
-# Join that response separately before provisioning or clearing startup denial.
 (
   cp "$root/deploy/vn/host/crowdsec-retention-fail.sh" "$lib/crowdsec-retention-fail.sh"
   cat >"$work/bin/systemctl" <<'SH'
@@ -355,7 +344,6 @@ SH
 )
 printf 'PASS reset-joins-failure-response-after-triggers\n'
 
-# Gate each schema-capable bouncer command even when the prior list passed.
 cat >"$lib/crowdsec-db.sh" <<'SH'
 #!/usr/bin/env bash
 count=0

@@ -67,8 +67,6 @@ jq -e '
 ' "$doc" >/dev/null || fail 'running state or evidence is wrong'
 [[ $(stat -c %a "$doc") == 644 ]] || fail 'document is not public-readable'
 [[ ! -s $work/out && ! -s $work/err ]] || fail 'successful generator printed output'
-# The running digest differs from the intended release; release.json must not
-# be read. A canary elsewhere in the directory must never enter the document.
 cp "$doc" "$work/previous"
 for PODMAN_CASE in error inspect-error malformed bad-time extra-field; do
   export PODMAN_CASE
@@ -85,8 +83,6 @@ for PODMAN_CASE in missing stopped; do
   generate
   jq -e '.summary == "mismatch" and .components[1].running_images == []' "$doc" >/dev/null
 done
-# Without its repository digest on the running image, the pin is not
-# reported; the image's own first digest is.
 PODMAN_CASE=pin-unlisted generate
 jq -e 'all(.components[].running_images[]; .digest == ("sha256:" + ("0" * 63) + "7"))' "$doc" >/dev/null ||
   fail 'reported a pin the running image does not list'
@@ -163,7 +159,6 @@ for setting in 'Type=oneshot' 'RemainAfterExit=yes' 'Before=aboutme-observer.ser
   'ExecStart=/usr/sbin/nft -f /etc/aboutme/observer-firewall.nft' 'WantedBy=multi-user.target'; do
   grep -qxF -- "$setting" "$unit" || fail "observer firewall unit lacks $setting"
 done
-# Run the network installation with real copies and an isolated manager boundary.
 export FIXTURE_BUNDLE=$root/deploy/vn FIXTURE_NETWORK_DIR=$work/networks
 export FIXTURE_NETWORK_CALLS=$work/network-calls FIXTURE_INSTALL
 FIXTURE_INSTALL=$(command -v ginstall || command -v install)

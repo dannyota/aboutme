@@ -30,7 +30,6 @@ fi
 [ -b "$dev" ] || die "$dev is not a block device"
 dev=$(readlink -f "$dev")
 
-# source directory, owner, mode, bind target
 dirs=(
   "secrets root:root 0700 /etc/aboutme/secrets"
   "podman-secrets root:root 0700 /var/lib/containers/storage/secrets"
@@ -63,7 +62,6 @@ if [ "$already_ours" = no ]; then
   [ "$(readlink -f "$root_src")" != "$dev" ] || die "$dev is the root device"
 fi
 
-# Filesystem.
 if [ "$already_ours" = yes ]; then
   kept "$dev is mounted at $mnt"
 else
@@ -83,7 +81,6 @@ else
   fi
 fi
 
-# fstab line for the volume.
 vol_line="LABEL=$label $mnt ext4 defaults,nofail,x-systemd.device-timeout=30s 0 2"
 mkdir -p "$mnt"
 if grep -qxF "$vol_line" "$fstab"; then
@@ -100,7 +97,6 @@ else
   changed "mounted $mnt"
 fi
 
-# Source directories, bind lines, and bind mounts.
 for entry in "${dirs[@]}"; do
   read -r name owner mode target <<<"$entry"
   src=$mnt/$name
@@ -112,9 +108,6 @@ for entry in "${dirs[@]}"; do
     new=yes
     changed "created $src"
   fi
-  # The PostgreSQL and pgBackRest directories get their final owner from
-  # install.sh once the postgres user exists, so they are set here only when
-  # just created; the others are set every run.
   case "$name" in
   postgresql | pgbackrest-conf)
     if [ "$new" = yes ]; then

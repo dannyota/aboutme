@@ -1,6 +1,3 @@
-# Sends host metadata once a day per failed unit; every aboutme unit and
-# the packaged services name it in OnFailure= (docs/design/vietnam-production.md,
-# "Logs, metrics, and alarms").
 [Unit]
 Description=aboutme alert for %i
 Wants=network-online.target

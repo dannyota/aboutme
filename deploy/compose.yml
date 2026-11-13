@@ -1,64 +1,14 @@
-# General Compose and self-hosting stack. Its edge is HTTP-only, so it does
-# not satisfy the local-UAT HTTPS/443 contract (docs/runbooks/local-uat.md).
-# See deploy/README.md.
-#
-# Caddy fronts one origin and the route table in deploy/caddy/Caddyfile.
-#
-# Before first run: `cp .env.example .env` (repo root) and set
-# POSTGRES_PASSWORD, MEDIA_ACCESS_KEY_ID, and MEDIA_SECRET_ACCESS_KEY — there
-# are no baked-in credential defaults (see deploy/README.md).
-#
-# Run with `podman compose`, never `docker`, from the repo root so the
-# root .env is picked up:
-#   podman compose --env-file .env -f deploy/compose.yml up -d --build
-#   podman compose --env-file .env -f deploy/compose.yml down
-#
-# All images are pinned to an exact version tag or digest (no floating
-# :latest).
-# Third-party images are fully qualified (docker.io/library/...) to avoid
-# short-name ambiguity. Locally-built images are qualified `localhost/...`
-# so a stale/missing local tag can never be silently satisfied by pulling an
-# identically-named image from the public docker.io/aboutme/* namespace,
-# which this project does not own (podman's unqualified-search-registries
-# includes docker.io by default).
-#
-# Five disjoint networks enforce the trust boundaries in
-# docs/design/deployment.md.
-#   - db:       postgres, db-setup, migrate, server — the only peers allowed to reach
-#     Postgres.
-#   - edge:     caddy, server ONLY, on a small fixed subnet. This is the
-#     server's entire TRUSTED_PROXY_CIDRS (see server.environment below):
-#     only a container on this specific network can ever assert a
-#     client-IP header the Go server honors. Neither postgres/migrate nor
-#     web ever join it, so a compromise of either (e.g. an SSRF/RCE in the
-#     Nuxt SSR container) cannot reach the server on this network at all,
-#     let alone spoof a trusted peer.
-#   - frontend: caddy, web — public-page routing only; never shares a
-#     subnet with `edge`, so web is never a trusted proxy of the Go server.
-#   - media:    minio, media-init, server — private object storage is not
-#     reachable from Caddy, Nuxt, or Postgres and is never host-published.
-#   - render:   server, web — Go requests Nuxt pages/assets; Nuxt redeems
-#     one-use print capabilities on the private Go listener. This subnet is
-#     never trusted for client-IP headers or host-published.
-
 name: aboutme
 
 services:
   postgres:
-    # Matches production RDS's engine version. Digest pins the multi-arch
-    # index so the same reference resolves on amd64 and arm64.
     image: docker.io/library/postgres:18.6-alpine3.24@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-aboutme}
-      # No baked-in default: this file also serves as the self-hosting
-      # artifact (docs/design/deployment.md), so a known password must
-      # never ship. Set POSTGRES_PASSWORD in .env — see deploy/README.md.
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required — copy .env.example to .env, set it, then re-run (see deploy/README.md)}
       POSTGRES_DB: ${POSTGRES_DB:-aboutme}
-    # Postgres 18+ images store data under a major-version-specific
-    # subdirectory and expect the volume mounted at /var/lib/postgresql
-    # (not .../data) — see https://github.com/docker-library/postgres/pull/1259.
+    # Postgres 18+ images expect the volume at /var/lib/postgresql (https://github.com/docker-library/postgres/pull/1259).
     volumes:
       - postgres-data:/var/lib/postgresql
     healthcheck:
@@ -74,8 +24,6 @@ services:
     networks:
       - db
 
-  # Creates or verifies the fixed aboutme_migrator/aboutme_app roles and
-  # grants their database and schema privileges (cmd/db-setup; ADR 0005).
   db-setup:
     build:
       context: ..
@@ -94,13 +42,6 @@ services:
     networks:
       - db
 
-  # One-shot migration runner: applies embedded goose migrations (cmd/migrate;
-  # docs/design/deployment.md) once Postgres is reachable, and exits. Same
-  # image as `server` (shared build + image tag, built once —
-  # see the `image:` field on both services), just a different entrypoint.
-  # Without this, a fresh or outdated database volume reports healthy at the
-  # Postgres level while the server 500s on every request for missing
-  # relations — see `server`'s depends_on below.
   migrate:
     build:
       context: ..
@@ -114,44 +55,21 @@ services:
       db-setup:
         condition: service_completed_successfully
     environment:
-      # DATABASE_URL carries no password. POSTGRES_PASSWORD goes in
-      # PGPASSWORD, which pgx honors, so URI delimiters in the password
-      # cannot corrupt the DSN.
+      # pgx honors PGPASSWORD, so the password stays out of the DSN (pgx connection docs).
       DATABASE_URL: postgres://${POSTGRES_USER:-aboutme}@postgres:5432/${POSTGRES_DB:-aboutme}?sslmode=disable
       PGPASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required — copy .env.example to .env, set it, then re-run (see deploy/README.md)}
-    # migrate is a one-shot binary with no HTTP server, so it can never
-    # satisfy the HTTP healthcheck it would otherwise silently inherit from
-    # server.Dockerfile's image-level HEALTHCHECK (both `server` and `web`
-    # below explicitly re-declare theirs for the same reason — see their
-    # comments). Podman drops HEALTHCHECK from OCI images entirely, but
-    # compose.yml is also the self-hosting artifact for Docker users, where
-    # an inherited, permanently-failing healthcheck would mark this
-    # container unhealthy for its whole (brief) lifetime.
+    # Docker keeps an image HEALTHCHECK that Podman drops from OCI images, so migrate overrides it (podman-build(1)).
     healthcheck:
       disable: true
     networks:
       - db
 
   media:
-    # MinIO stores media for self-hosters and stands in for production
-    # vStorage (S3) in local deployments.
-    # MinIO stopped publishing the community edition to Docker Hub and
-    # quay.io (both now answer unauthorized for every tag, including
-    # :latest); these are Chainguard's images, built from the same upstream
-    # MinIO/mc source, so the S3 API — including If-None-Match conditional
-    # writes and ListObjectsV2 paging — matches unchanged. Pinned by digest
-    # for both amd64 and arm64.
+    # MinIO stopped publishing community images to Docker Hub and quay.io; these Chainguard images build the same source (Chainguard minio image).
     image: cgr.dev/chainguard/minio@sha256:bd014394a80898e68c149f2311fdf8d5a2c2f3bb2c33b9327ae6d02b4b065ae1
     restart: unless-stopped
     command: ["server", "/data"]
-    # The image's default non-root UID (65532) cannot take ownership of a
-    # freshly created named volume: Podman's per-mount ":U" ownership fix-up
-    # is not reliably applied when it comes from a Compose file (podman/podman
-    # issue #16477, podman-compose issue #376), and unlike the ephemeral test
-    # container in scripts/test-media-s3.sh, this service always has media-data
-    # mounted over /data, which shadows the image's own pre-created
-    # world-writable data directory. Running as root is the same fix a prior
-    # MinIO-to-Chainguard migration used for this exact case.
+    # Podman's ":U" fix-up is not reliably applied from a Compose file (podman issue #16477, podman-compose issue #376).
     user: "0:0"
     environment:
       MINIO_ROOT_USER: ${MEDIA_ACCESS_KEY_ID:?MEDIA_ACCESS_KEY_ID is required — copy .env.example to .env, set it, then re-run (see deploy/README.md)}
@@ -159,10 +77,7 @@ services:
     volumes:
       - media-data:/data
     healthcheck:
-      # The image has no curl/wget; probe with bash's /dev/tcp instead (a
-      # real HTTP/1.0 request, not just a TCP connect, since the socket
-      # accepts a connection immediately but the health endpoint answers
-      # 200 only once minio is actually ready).
+      # The MinIO image has no curl or wget, so the probe uses bash /dev/tcp (Chainguard minio image).
       test:
         - CMD-SHELL
         - >-
@@ -178,9 +93,8 @@ services:
       - media
 
   media-init:
-    # Same Chainguard source and digest rationale as `media` above.
     image: cgr.dev/chainguard/minio-client@sha256:b8b144ab34694ecea25aa352c4be9de4c26ee2a02701521dce02ee5593c57338
-    # The image has no /bin/sh; bash is present.
+    # The minio-client image has no /bin/sh (Chainguard minio-client image).
     entrypoint: ["/usr/bin/bash", "-c"]
     command:
       - >-
@@ -195,9 +109,7 @@ services:
       MINIO_ROOT_USER: ${MEDIA_ACCESS_KEY_ID:?MEDIA_ACCESS_KEY_ID is required — copy .env.example to .env, set it, then re-run (see deploy/README.md)}
       MINIO_ROOT_PASSWORD: ${MEDIA_SECRET_ACCESS_KEY:?MEDIA_SECRET_ACCESS_KEY is required — copy .env.example to .env, set it, then re-run (see deploy/README.md)}
       MEDIA_BUCKET: ${MEDIA_BUCKET:-aboutme-media}
-      # The image runs as a fixed non-root UID with no home directory entry,
-      # so mc's default $HOME/.mc config path cannot be resolved; /tmp is
-      # writable regardless of UID.
+      # The mc image runs as a UID with no home directory, so mc cannot resolve $HOME/.mc (Chainguard minio-client image).
       MC_CONFIG_DIR: /tmp/.mc
     healthcheck:
       disable: true
@@ -220,14 +132,10 @@ services:
         condition: service_completed_successfully
     environment:
       PORT: "8080"
-      # See migrate's DATABASE_URL/PGPASSWORD comment above: no credential
-      # is spliced into this URI.
       DATABASE_URL: postgres://${POSTGRES_USER:-aboutme}@postgres:5432/${POSTGRES_DB:-aboutme}?sslmode=disable
       PGPASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required — copy .env.example to .env, set it, then re-run (see deploy/README.md)}
       LOG_LEVEL: ${LOG_LEVEL:-info}
-      # Go binds to the private network; only Caddy publishes a host port.
       LISTEN_HOST: "10.90.0.2"
-      # Trust exactly the fixed edge subnet shared only by Caddy and Go.
       TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:-10.90.0.0/28}
       # Origin the browser reaches the stack on — auth cookie scope, OAuth
       # redirect URIs, and CSRF Origin checks all derive from it. The
@@ -297,8 +205,6 @@ services:
       - render
 
   caddy:
-    # Digest pins the multi-arch index so the same reference resolves on
-    # amd64 and arm64.
     image: docker.io/library/caddy:2.11.9-alpine@sha256:0bbb055bda6793c999bde78b1b5ce3e89f829fb031af2cf50056ea1246559fee
     restart: unless-stopped
     depends_on:
@@ -307,14 +213,9 @@ services:
       web:
         condition: service_healthy
     ports:
-      # Configurable for rootless Podman hosts that cannot bind privileged
-      # ports without a one-time `sysctl net.ipv4.ip_unprivileged_port_start`
-      # (needs root once, not at container-run time). Defaults to 80.
       - "${CADDY_HTTP_PORT:-80}:80"
     volumes:
-      # :Z relabels the bind mount for this container under SELinux
-      # (enforcing on Fedora hosts); without it, rootless Podman denies the
-      # container read access to a host-owned file.
+      # :Z relabels the bind mount for SELinux; rootless Podman denies access without it (podman-run(1), --volume).
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro,Z
       - ./caddy:/etc/caddy/generated:ro,Z
     networks:
@@ -326,24 +227,13 @@ volumes:
   media-data:
 
 networks:
-  # postgres, migrate, server: the only peers ever allowed to reach the
-  # database.
   db: {}
-  # caddy, server ONLY — see the file-header comment and server's
-  # TRUSTED_PROXY_CIDRS above. A fixed, deliberately small subnet (16
-  # addresses) so it reads as an intentional, auditable boundary rather
-  # than an incidental compose-assigned range.
   edge:
     ipam:
       config:
         - subnet: 10.90.0.0/28
-  # caddy, web — public-page routing only; never a trusted Go proxy.
   frontend: {}
-  # minio, media-init, server — private object storage only. No edge or
-  # frontend peer can reach it, and no media port is published to the host.
   media: {}
-  # server and web only. Go requests Nuxt pages/assets; Nuxt calls the private
-  # Go redemption listener. No render port is host-published or trusted for IP.
   render:
     internal: true
     ipam:

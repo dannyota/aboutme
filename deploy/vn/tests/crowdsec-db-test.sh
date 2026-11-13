@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Hosted-only catalog derivation and regressions for the inactive database gate.
 set -euo pipefail
 umask 077
 trap 'printf "FAIL harness-command\n"' ERR
@@ -77,7 +76,6 @@ cleanup() {
       exit 1
     fi
   fi
-  # Only the exact mktemp mount created by this process can be removed.
   if [[ $scratch == /run/crowdsec-db-test.* ]]; then
     if [[ -n $loop_device ]]; then
       umount /var/lib/aboutme /srv/data
@@ -103,7 +101,6 @@ start_harness() {
   [[ ${GITHUB_ACTIONS:-} == true && $EUID == 0 ]] || {
     printf 'FAIL hosted-root-required\n'; exit 1;
   }
-  # The caller supplies a private mount namespace. Never hide a live host socket.
   [[ $(readlink /proc/self/ns/mnt) != "$(readlink /proc/1/ns/mnt)" ]] || {
     printf 'FAIL private-mount-required\n'; exit 1;
   }
@@ -154,7 +151,6 @@ ALTER SCHEMA public OWNER TO crowdsec;
 REVOKE ALL ON SCHEMA public FROM PUBLIC;
 SQL
   install -d -m 0700 "$scratch/config" "$scratch/engine-data"
-  # No installed credentials or acquisition sources enter this test config.
   python3 - "$scratch" <<'PY'
 import pathlib
 import sys
@@ -183,7 +179,6 @@ config = {
      "share_manual_decisions": False, "share_context": False}))
 (root / "config/config.yaml").write_text(yaml.safe_dump(config))
 PY
-  # This exception belongs only to the disposable, verified-empty derivation DB.
   [[ $(admin <<<'BEGIN READ ONLY; SELECT count(*) FROM pg_class WHERE relnamespace = '\''public'\''::regnamespace; COMMIT;') == 0 ]]
   timeout 60 cscli -c "$scratch/config/config.yaml" bouncers list -o json >/dev/null 2>&1
   [[ $(admin <<<'SELECT count(*) FROM pg_class WHERE relnamespace = '\''public'\''::regnamespace AND relkind = '\''r'\'';') -gt 0 ]]
@@ -191,7 +186,6 @@ PY
 }
 
 catalog() {
-  # This allowlist selects catalog metadata only. It never scans user tables.
   admin <<'SQL'
 BEGIN READ ONLY;
 SELECT 'database' || E'\t' || datname || E'\t' || pg_get_userbyid(datdba) || E'\t' || coalesce(datacl::text, '')
@@ -490,8 +484,6 @@ ordinary_vacuum_private() {
   gate preflight-ready </dev/null
 }
 contamination_rejected() {
-  # The disposable fixture deliberately contaminates planner state to prove
-  # the production boundary requires database replacement, never catalog edits.
   admin <<<'ALTER TABLE public.events ALTER COLUMN serialized SET STATISTICS 100; ANALYZE public.events; ALTER TABLE public.events ALTER COLUMN serialized SET STATISTICS 0;' >/dev/null
   ! gate preflight-ready </dev/null || return 1
   ! gate apply-policy || return 1

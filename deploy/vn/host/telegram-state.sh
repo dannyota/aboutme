@@ -1,13 +1,11 @@
 # shellcheck shell=bash
 # shellcheck disable=SC2034
-# Shared host paths and admission for Telegram delivery, imports, and cutover.
-# The lock keeps credential replacement outside sends and receipt confirmation.
 
-telegram_private_file() { # path mode
+telegram_private_file() {
   [[ -f $1 && ! -L $1 && $(stat -c '%u:%a' -- "$1" 2>/dev/null) == "$EUID:$2" ]]
 }
 
-telegram_init() { # shared|exclusive
+telegram_init() {
   if [[ -n ${ABOUTME_ALERT_TEST_ROOT:-} ]]; then
     ((EUID != 0)) || return 1
     telegram_base=$ABOUTME_ALERT_TEST_ROOT
@@ -44,7 +42,7 @@ telegram_init() { # shared|exclusive
   esac
 }
 
-telegram_secret_valid() { # name value byte-size
+telegram_secret_valid() {
   [[ ${#2} == "$3" ]] || return 1
   case $1 in
     telegram-bot-token) ((${#2} <= 256)) && [[ $2 =~ ^[0-9]+:[A-Za-z0-9_-]+$ ]] ;;
@@ -75,7 +73,6 @@ telegram_identity() {
   local telegram_token telegram_chat digest
   export -n telegram_token telegram_chat digest
   telegram_credentials 2>/dev/null || return 1
-  # Validated values contain no newlines. Only the pipe carries their bytes.
   digest=$(builtin printf '%s\n%s\n' "$telegram_token" "$telegram_chat" | sha256sum 2>/dev/null) || return 1
   digest=${digest%% *}
   [[ $digest =~ ^[0-9a-f]{64}$ ]] || return 1

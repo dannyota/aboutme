@@ -208,14 +208,12 @@ if run_sender unconfirmed diagnostic </dev/null; then fail 'unconfirmed delivery
 grep -qxF 'alert-telegram: invalid_secret unconfirmed' "$work/err" || fail 'unconfirmed delivery did not report invalid_secret'
 [[ $(count_requests) == 0 && ! -e $work/state/alerts ]] || fail 'unconfirmed delivery sent or created stamps'
 telegram_token=inherited telegram_chat=inherited digest=inherited run_sender --test </dev/null || fail 'initial test delivery failed'
-# Metadata changes between test delivery and receipt keep the same credentials.
 touch -d '2030-01-01 00:00:00 UTC' "$work/state/secrets/telegram-bot-token"
 telegram_token=inherited telegram_chat=inherited digest=inherited \
   bash "$transport" confirm-receipt --received >"$work/cutover.out" 2>&1 || fail 'receipt rejected unchanged credentials after a metadata change'
 [[ -s $work/hash-argv ]] || fail 'credential identity did not use the hash pipe'
 grep -qxE '[0-9a-f]{64}' "$work/state/telegram-approved" || fail 'approval did not store a credential digest'
 [[ $(stat -c %a "$work/state/telegram-approved") == 400 ]] || fail 'credential digest was not private'
-# A matching approval without its selector cannot authorize a cached caller.
 mv "$work/state/alert-transport" "$work/selector"
 if run_sender missing-selector diagnostic </dev/null; then fail 'delivery without a selector was accepted'; fi
 grep -qxF 'alert-telegram: invalid_secret missing-selector' "$work/err" || fail 'missing selector did not report invalid_secret'
@@ -252,7 +250,6 @@ TG_TEST_DAY=2030-01-03 run_sender host-check diagnostic </dev/null || fail 'next
 chmod 0600 "$work/state/alerts/smtp-stamp.2030-01-02"
 run_sender smtp-stamp diagnostic </dev/null || fail 'SMTP stamp suppression failed'
 [[ $(count_requests) == 2 ]] || fail 'existing SMTP stamp allowed another request'
-# Normal delivery creates no request or response files.
 [[ -z $(find "$work/state" -type f ! -path '*/secrets/*' ! -path '*/alerts/*' ! -path '*/systemd/*' \
   ! -name '.telegram.lock' ! -name 'telegram-approved' ! -name 'alert-transport' -print) ]] || fail 'delivery left unexpected state files'
 grep -qxF -- '-q' "$work/argv" || fail 'curl config suppression option missing'
@@ -273,7 +270,6 @@ for option in --connect-timeout --max-time --proto --proto-redir --max-redirs --
 done
 if grep -qE -- '(^-L$|^--location|^--insecure$|^--verbose$|^--trace)' "$work/argv"; then fail 'unsafe curl option used'; fi
 
-# Approval follows credential contents across permission, timestamp, and inode changes.
 for change in mode timestamp restore; do
   case $change in
     mode)
@@ -292,7 +288,6 @@ for change in mode timestamp restore; do
   private_output
 done
 
-# Each member of the credential pair must match the approved content.
 for name in telegram-bot-token telegram-chat-id; do
   original=$(<"$work/state/secrets/$name")
   chmod 0600 "$work/state/secrets/$name"
@@ -313,7 +308,6 @@ for name in telegram-bot-token telegram-chat-id; do
   private_output
 done
 
-# Failed creation is an error, while only a private empty regular stamp dedups.
 before=$(count_requests)
 if TG_STAMP_CREATE_FAIL=1 run_sender stamp-create diagnostic </dev/null; then fail 'stamp creation failure was accepted'; fi
 grep -qxF 'alert-telegram: stamp_failed stamp-create' "$work/err" || fail 'stamp creation failure did not report stamp_failed'
@@ -439,8 +433,6 @@ if ABOUTME_ALERT_TEST_ENDPOINT=https://example.test run_sender invalid-endpoint 
   fail 'invalid endpoint was accepted'
 fi
 
-# Unsafe files fail before transport, including values whose trailing newline
-# would otherwise be hidden by command substitution.
 cp "$work/state/secrets/telegram-bot-token" "$work/token-copy"
 for bad in '' 'bad token' $'123:abc\n' "$(printf '%0257d' 1):abc"; do
   chmod 0600 "$work/state/secrets/telegram-bot-token"
@@ -475,7 +467,6 @@ done
 chmod 0600 "$work/state/secrets/telegram-chat-id"
 cp "$work/chat-copy" "$work/state/secrets/telegram-chat-id"
 chmod 0400 "$work/state/secrets/telegram-chat-id"
-# A foreign owner is refused without needing chown privileges in the fixture.
 (
   # shellcheck source=../host/telegram-state.sh
   source "$repo/deploy/vn/host/telegram-state.sh"
@@ -483,7 +474,6 @@ chmod 0400 "$work/state/secrets/telegram-chat-id"
   if telegram_private_file "$work/state/secrets/telegram-bot-token" 400; then fail 'foreign-owned token was accepted'; fi
 )
 
-# Restoring the approved pair after invalid-file checks preserves approval.
 before=$(count_requests)
 run_sender restored-approved diagnostic </dev/null || fail 'restored credentials lost approval'
 grep -qxF 'alert-telegram: sent restored-approved' "$work/err" || fail 'restored credentials did not report sent'
@@ -528,7 +518,6 @@ kill -TERM "$interrupted" || fail 'interrupted sender could not be signaled'
 if wait "$interrupted"; then fail 'interrupted sender reported success'; fi
 if compgen -G "$work/state/alerts/interrupted.*" >/dev/null; then fail 'interrupted sender retained its stamp'; fi
 
-# Staging never switches callers. A test is stamp-free and receipt is explicit.
 printf success >"$work/scenario"
 bash "$transport" stage || fail 'SMTP staging failed'
 if bash "$transport" confirm-receipt --received >"$work/cutover.out" 2>&1; then fail 'cutover without a test proof was accepted'; fi
@@ -553,7 +542,6 @@ run_sender --test </dev/null || fail 'test delivery after failed reload failed'
 bash "$transport" confirm-receipt --received || fail 'receipt after failed reload was rejected'
 grep -qxF telegram "$work/state/alert-transport" || fail 'receipt did not select Telegram'
 grep -qxF 'ExecStart=/usr/local/lib/aboutme/alert-telegram.sh unit-%i "unit %i failed"' "$work/state/systemd/telegram.conf" || fail 'systemd did not select the Telegram sender'
-# Retention and vacuum still enter through alert.sh after activation.
 cp "$repo/deploy/vn/host/bin/alert.sh" "$work/state/alert.sh"
 cp "$sender" "$work/state/alert-telegram.sh"
 cp "$repo/deploy/vn/host/telegram-state.sh" "$work/state/telegram-state.sh"
@@ -565,7 +553,6 @@ if bash "$work/state/alert.sh" no-fallback diagnostic </dev/null >"$work/out" 2>
 grep -qxF 'alert-telegram: rejected no-fallback' "$work/err" || fail 'direct caller rejection outcome missing'
 [[ -e $work/state/alert-transport ]] || fail 'Telegram rejection cleared the selector'
 printf success >"$work/scenario"
-# Replacing destination files cannot approve automatic delivery implicitly.
 chmod 0600 "$work/state/secrets/telegram-chat-id"
 printf '%s' '-1008888888888' >"$work/state/secrets/telegram-chat-id"
 chmod 0400 "$work/state/secrets/telegram-chat-id"

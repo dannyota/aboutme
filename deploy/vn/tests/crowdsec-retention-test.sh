@@ -8,7 +8,6 @@ if [[ ${1:-} == postgresql ]]; then
   # shellcheck source=crowdsec-retention-fixture.sh
   source "$repo_root/deploy/vn/tests/crowdsec-retention-fixture.sh"
   retention_fixture_case=retention-postgresql-command
-  # Keep fixed diagnostics visible when a failing command discards stderr.
   exec {retention_error_fd}>&2
   trap 'printf "FAIL %s\n" "$retention_fixture_case" >&"$retention_error_fd"' ERR
   retention_fixture=''
@@ -16,8 +15,6 @@ if [[ ${1:-} == postgresql ]]; then
   : "${retention_fixture:?fixture initialization failed}"
   run_retention() { /usr/local/lib/aboutme/crowdsec-retention.sh "$1"; }
   recover_retention() {
-    # Independent corruption cases restore fixture admission between assertions.
-    # Production recovery and its provisioning gates use the migration suites.
     rm -f /run/aboutme/crowdsec-retention-failed
     run_retention startup
   }
@@ -162,7 +159,6 @@ SQL
   [[ $(grep -c '^stop ' "$retention_fixture/control-log") == 1 ]]
   [[ $(grep -c '^nft-init$' "$retention_fixture/control-log") == 1 ]]
 
-  # Each occurrence clock independently makes a graph due, including equality.
   for field in alerts.created_at alerts.updated_at alerts.started_at alerts.stopped_at \
     decisions.created_at decisions.updated_at events.created_at events.updated_at events.time meta.created_at meta.updated_at; do
     seed_batch_graph
@@ -217,7 +213,6 @@ SQL
   retention_fixture_sql <<<'DELETE FROM public.decisions; UPDATE public.events SET time='\''2026-01-01 17:00Z'\'';' >/dev/null
   retention_fixture_time 2026-01-02T19:00:00Z
   touch "$retention_fixture/paused-ingestion"
-  # The writer owns decisions before it inserts its parent, like the engine.
   retention_fixture_sql >"$retention_fixture/ingestion-ready" <<SQL &
 BEGIN;
 INSERT INTO public.decisions (id,created_at,updated_at,until,scenario,type,scope,value,origin)
@@ -703,8 +698,6 @@ grep -qF 'kill --kill-whom=all --signal=SIGKILL' "$work/systemctl.log" || {
   echo "FAIL retention-confirms-quiescence-before-feed-removal" >&2; exit 1;
 }
 
-# Shorten only fixture clocks. A stuck manager call must not consume several
-# independent timeout budgets, and alert dispatch cannot retain safety locks.
 sed -e 's/--kill-after=2s 58 /--kill-after=0.1s 0.2 /' \
   -e 's/--kill-after=1s 5 /--kill-after=0.1s 0.2 /' \
   "$host/crowdsec-retention-fail.sh" >"$work/bounded-failure.sh"
@@ -714,7 +707,6 @@ if ABOUTME_TEST_HUNG_STOP=1 bash "$work/bounded-failure.sh"; then
 fi
 ((SECONDS - before < 3)) || { echo 'FAIL consumer-stop-whole-deadline' >&2; exit 1; }
 [[ -s $work/feed/serving.json ]] || { echo 'FAIL stuck-stop-removed-live-feed' >&2; exit 1; }
-# A healthy stop keeps its production budget while only dispatch is shortened.
 sed 's/--kill-after=1s 5 /--kill-after=0.1s 0.2 /' \
   "$host/crowdsec-retention-fail.sh" >"$work/bounded-alert.sh"
 before=$SECONDS

@@ -1,30 +1,14 @@
 #!/usr/bin/env bash
-# Host fact probe for the production host (docs/design/vietnam-production.md,
-# "Host" and "PostgreSQL"; prerequisites in deploy/vn/README.md,
-# "Cutover prerequisites"). Run it as root
-# on the host after install.sh and before the first deploy:
-#
-#   ssh -p "${SSH_PORT:-22922}" aboutme-admin@HOST \
-#     sudo env SSH_PORT="${SSH_PORT:-22922}" bash -s < deploy/vn/probe/probe.sh
-#
-# It prints one PASS or FAIL line per fact and exits 1 if any fails. It changes
-# nothing that lasts: every throwaway container is named aboutme-probe-<x> and
-# runs with --rm, and a trap removes leftovers and the temporary listener.
-# Nothing here reads or prints a secret.
 set -euo pipefail
 
-# A small public image, pinned by digest. Alpine's busybox provides the
-# `unshare` applet used by the user namespace check, so nothing is installed
-# inside the container.
+# Alpine's busybox provides the unshare applet (BusyBox).
 IMAGE=docker.io/library/alpine:3.24@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6
 PREFIX=aboutme-probe-
 GATEWAY=172.17.0.1
 SSH_PORT=${SSH_PORT:-22922}
-# Free ports for the throwaway listeners; the server uses 8080, 8081 and 3000.
 HOST_PORT=18081
 PUB_PORT=18082
 
-# The bind targets host/data-volume.sh mounts from /srv/data.
 TARGETS=(
   /etc/aboutme/secrets
   /var/lib/containers/storage/secrets
@@ -60,8 +44,6 @@ trap cleanup EXIT
 }
 work=$(mktemp -d)
 
-# check <fact> <function>: the function prints a short detail and returns 0 on
-# success. Its output becomes the text after PASS or FAIL.
 check() {
   local fact=$1 fn=$2 out rc=0
   out=$("$fn" 2>&1 </dev/null) || rc=$?
@@ -73,8 +55,6 @@ check() {
     failed=1
   fi
 }
-
-# ---- Podman and Quadlet --------------------------------------------------
 
 c_podman() {
   local rootless
@@ -98,8 +78,6 @@ c_quadlet() {
   }
   echo "$gen"
 }
-
-# ---- Disks and memory ----------------------------------------------------
 
 c_data_volume() {
   local src label t
@@ -158,8 +136,6 @@ c_journald() {
   echo "SystemMaxUse=$v"
 }
 
-# ---- Kernel settings -----------------------------------------------------
-
 c_sysctls() {
   local bad=0 key want got
   for pair in net.ipv4.ip_unprivileged_port_start=80 \
@@ -186,9 +162,6 @@ ensure_image() {
   podman image exists "$IMAGE" || podman pull -q "$IMAGE" >/dev/null
 }
 
-# The Chromium sandbox in the server container needs an unprivileged user
-# namespace inside a container that runs as a non-root user and holds
-# SYS_ADMIN (design "Host", last bullet of the trust boundaries).
 c_userns() {
   ensure_image || return 1
   podman run --rm --name "${PREFIX}userns" --user 1000:1000 \
@@ -200,10 +173,6 @@ c_userns() {
   echo "busybox unshare -U -r works as uid 1000"
 }
 
-# ---- Listeners -----------------------------------------------------------
-
-# Non-loopback listeners are limited to SSH, 80, 443, and 172.17.0.1:8081.
-# Run before the probe starts its own listener.
 c_listeners() {
   local bad out addr port
   bad=()
@@ -244,17 +213,12 @@ c_postgres_socket() {
   echo "no TCP listener, socket exists"
 }
 
-# ---- Container networking ------------------------------------------------
-
 ensure_network() {
   podman network exists aboutme && return 0
   systemctl start aboutme-network.service
   podman network exists aboutme
 }
 
-# A bridge container must reach a host listener on the bridge gateway, where
-# the server binds its print listener. The gateway address exists while a
-# container is attached, and ip_nonlocal_bind lets the host bind it before.
 c_bridge_to_host() {
   local body=
   ensure_image || return 1
@@ -281,7 +245,6 @@ c_bridge_to_host() {
   echo "container on aboutme reached $GATEWAY:$HOST_PORT"
 }
 
-# The host (Caddy, Go) must reach Nuxt, published on loopback only.
 c_host_to_bridge() {
   local body=
   ensure_image || return 1
@@ -302,8 +265,6 @@ c_host_to_bridge() {
   echo "host reached a container port published on 127.0.0.1"
 }
 
-# ---- Outbound reachability -----------------------------------------------
-
 c_https() {
   local host=$1
   curl -sS -o /dev/null --max-time 10 "https://$host/" 2>&1 || {
@@ -315,8 +276,6 @@ c_https() {
 c_vstorage() { c_https hcm04.vstorage.vngcloud.vn; }
 c_ghcr() { c_https ghcr.io; }
 
-# The journal is the log store and lives on the data volume, and alert.sh
-# needs msmtp (design "Logs, metrics, and alarms").
 c_journal_alerts() {
   mountpoint -q /var/log/journal || {
     echo "/var/log/journal is not bound from the data volume"
@@ -333,8 +292,6 @@ c_journal_alerts() {
   echo "journal on the data volume, msmtp present, watch timer enabled"
 }
 
-# ---- CrowdSec and the fence ----------------------------------------------
-
 c_crowdsec_lapi() {
   local code
   code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 \
@@ -346,8 +303,6 @@ c_crowdsec_lapi() {
   echo "local API answers on 127.0.0.1:8095"
 }
 
-# Prove the effective local files cannot configure the central API. A network
-# status check cannot distinguish an opt-out from a registered offline host.
 c_crowdsec_capi() {
   local helper=/usr/local/lib/aboutme/crowdsec-offline.sh
   if [[ ! -r $helper || -L $helper ]]; then

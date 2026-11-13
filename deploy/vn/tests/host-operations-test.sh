@@ -25,11 +25,9 @@ for envelope in \
   "{\"verb\":\"run\",\"requestId\":\"$valid_id\"}" \
   "{\"verb\":\"apply\",\"requestId\":\"$valid_id\",\"confirmation\":\"delete-account:$valid_id:$valid_uuid:other-slug\"}"; do
   if operation_envelope "$envelope" >/dev/null 2>&1; then
-    # A different valid slug is syntax-valid; binding is checked against saved state.
     [[ $envelope == *other-slug* ]] || fail 'invalid envelope accepted'
   fi
 done
-# Invocation controls must stay outside generic jobs and their media secrets.
 ! grep -qE 'account-delete|media-deletion-status' "$here/host/job-run.sh" || fail 'generic job allowlist expanded'
 grep -qF -- '--no-healthcheck' "$here/host/job-run.sh" || fail 'scheduled jobs inherit image healthchecks'
 for text in '--no-healthcheck' '--network none' '--memory-swap 256m' '--log-driver none' '--ulimit core=0:0' '--cap-drop ALL' '--read-only' '--security-opt no-new-privileges'; do
@@ -37,7 +35,6 @@ for text in '--no-healthcheck' '--network none' '--memory-swap 256m' '--log-driv
 done
 ! grep -qE 'secret (media-|smtp-|google-|linkedin-)' "$here/host/operation-account.sh" || fail 'credential overreach'
 ! grep -qE -- '--deploy-checkout v[0-9]' "$here/scripts/operations.sh" || fail 'checkout proof pinned to a fixed release'
-# The wrapper and the host share one release check; neither pins its own.
 [[ $(grep -c '^operation_release_supported() {' "$here/host/operation-state.sh") == 1 ]] || fail 'shared release check missing'
 grep -qxF 'operation_release_supported "$tag" || fail refused' "$here/scripts/operations.sh" || fail 'wrapper skips the shared release check'
 grep -qxF '  operation_release_supported "$tag" || return 1' "$here/host/operation-account.sh" || fail 'host skips the shared release check'
@@ -49,7 +46,6 @@ grep -qF 'KillMode=control-group' "$here/host/etc/systemd/system/aboutme-operati
 grep -qF 'Restart=no' "$here/host/etc/systemd/system/aboutme-operation@.service" || fail 'unit automatic replay'
 echo 'host operation grammar and isolation passed'
 
-# Bound input before looking at a target or calling a remote command.
 for verb in show apply status resume verify abort proof; do
   if operation_envelope "{\"verb\":\"$verb\",\"requestId\":\"$valid_id\",\"extra\":true}" >/dev/null 2>&1; then fail 'extra fields accepted'; fi
 done
@@ -60,7 +56,6 @@ for envelope in \
   '{"verb":"show","kind":"account-delete","slug":"UPPER"}'; do
   if operation_envelope "$envelope" >/dev/null 2>&1; then fail 'invalid target binding accepted'; fi
 done
-# The host must not accept an arbitrary supported command over the generic unit.
 for text in 'operation-run.sh run %i' 'TimeoutStartSec=45min' 'TimeoutStopSec=60s' 'LimitCORE=0' 'StandardOutput=null' 'StandardError=null'; do
   grep -qF "$text" "$here/host/etc/systemd/system/aboutme-operation@.service" || fail "missing unit limit: $text"
 done
@@ -75,8 +70,6 @@ grep -qF 'key-change.json' "$here/scripts/fence.sh" || fail 'marker not checked'
 grep -qF 'operation_release_guard' "$here/scripts/fence.sh" || fail 'direct release bypass'
 echo 'host operation bounds and bundle checks passed'
 
-# Run the real wrapper in a private checkout with fixed synthetic eligibility,
-# provenance, registry and SSH replies. No network or host state is accessed.
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/client/deploy/vn" "$work/client/deploy/aws/scripts" "$work/client/scripts" "$work/bin"
@@ -131,7 +124,7 @@ STUB
 chmod +x "$work/bin/"* "$work/client/scripts/release-eligibility.sh"
 export CLIENT_FIXTURE=$work
 export PATH=$work/bin:$PATH DEPLOY_HOST=fixture.example SSH_PORT=22922
-release_fixture() { # tag number
+release_fixture() {
   jq -cn --arg tag "$1" --argjson number "$2" '{release_tag:$tag,release_number:$number,maintenance_tag:$tag,maintenance_number:$number,
    server_image:("ghcr.io/dannyota/aboutme-server@sha256:"+("0"*64)),web_image:("ghcr.io/dannyota/aboutme-web@sha256:"+("0"*64)),
    caddy_image:("ghcr.io/dannyota/aboutme-caddy@sha256:"+("0"*64)),maintenance_image:("ghcr.io/dannyota/aboutme-caddy@sha256:"+("0"*64))}' >"$work/release"
@@ -154,8 +147,6 @@ for loss in before after; do
 done
 echo 'host operation eligibility, hash and SSH-loss cases passed'
 
-# Remote command failures keep their closed diagnostic. SSH errors alone use
-# transport_failed; malformed remote errors never expose raw diagnostics.
 : >"$work/reply"
 for verb in status resume verify abort apply; do
   args=("$verb" "$valid_id")
@@ -209,8 +200,6 @@ bash "$wrapper" status "$valid_id" >"$work/output" 2>"$work/error" || fail 'know
 [[ ! -s $work/error && $(jq -cS . "$work/output") == "$(jq -cS . "$work/reply")" ]] || fail 'known status reply changed'
 echo 'host operation remote errors and known status passed'
 
-# The checkout proof names no tag and precedes SSH; eligibility then binds the
-# release the host reports. Every release from v0.7.9 on passes the gate.
 call_order() { uniq "$work/calls" | tr '\n' ' '; }
 known_reply() { [[ ! -s $work/error && $(jq -cS . "$work/output") == "$(jq -cS . "$work/known-reply")" ]]; }
 cp "$work/reply" "$work/known-reply"
@@ -233,8 +222,7 @@ for tag in v0.7.8 v0.6.999 v0.0.0 '' v0.8 v0.8.29.1 v0.8.29-rc1 v0.8.29+build 'v
 done
 release_fixture v0.8.29 8029
 
-# Every check after the host reports its release still refuses before dispatch.
-post_ssh_refused() { # case expected-error
+post_ssh_refused() {
   local rc=0
   rm -f "$work/calls" "$work/envelope"
   bash "$wrapper" status "$valid_id" >"$work/output" 2>"$work/error" || rc=$?
@@ -256,8 +244,6 @@ bash "$wrapper" status "$valid_id" >"$work/output" 2>"$work/error" || rc=$?
 cp "$work/known-reply" "$work/reply"
 echo 'host operation release gate and post-SSH checks passed'
 
-# The real eligibility gate checks a private copy of the release repository.
-# It must refuse an unclean, off-main or stale checkout before any SSH.
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_COMMON_DIR
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_COUNT=1 \
   GIT_CONFIG_KEY_0="url.$work/release.git.insteadOf" GIT_CONFIG_VALUE_0=https://github.com/dannyota/aboutme.git \
@@ -280,7 +266,7 @@ client tag v0.8.29
 git init -q --bare "$work/release.git"
 client push -q "$work/release.git" main v0.8.29
 reviewed=$(client rev-parse HEAD)
-checkout_refused() { # case
+checkout_refused() {
   local rc=0
   rm -f "$work/calls" "$work/envelope"
   bash "$wrapper" status "$valid_id" >"$work/output" 2>"$work/error" || rc=$?
@@ -299,7 +285,6 @@ client checkout -q main
 client checkout -q --detach
 checkout_refused detached
 client checkout -q main
-# A stale local origin/main equal to HEAD must not pass once main moves on.
 client update-ref refs/remotes/origin/main HEAD
 release_repo update-ref refs/heads/main "$(release_repo commit-tree -p "$reviewed" -m next "$reviewed^{tree}")"
 checkout_refused 'behind origin/main'
@@ -307,7 +292,6 @@ release_repo update-ref refs/heads/main "$reviewed"
 rm -f "$work/calls"
 bash "$wrapper" status "$valid_id" >"$work/output" 2>"$work/error" || fail 'clean current main checkout refused'
 known_reply || fail 'clean current main reply changed'
-# The real gate still checks the deployed tag after SSH.
 release_repo update-ref refs/tags/v0.8.30 "$(release_repo commit-tree -m off-main "$reviewed^{tree}")"
 release_fixture v0.8.30 8030
 post_ssh_refused 'off-main deployed tag' refused
@@ -315,7 +299,6 @@ release_fixture v0.8.29 8029
 CI_CONCLUSION=failure post_ssh_refused 'red deployed tag CI' refused
 echo 'host operation checkout proof passed'
 
-# Exercise the installer's unit inventory guard without touching host paths.
 install_guard=$(sed -n '/^operation_units=/,/^# Validate the saved protocol/p' "$here/host/install.sh" | sed '$d')
 for unit_state in inactive failed active activating deactivating unknown; do
   (
@@ -329,7 +312,6 @@ for unit_state in inactive failed active activating deactivating unknown; do
   esac
 done
 
-# The real HTTPS proof submits a fixed receipt against synthetic discovery.
 cp "$here/../../scripts/host-operations-proof.sh" "$work/client/scripts/"
 cat >"$work/client/deploy/vn/scripts/operations.sh" <<'STUB'
 #!/usr/bin/env bash

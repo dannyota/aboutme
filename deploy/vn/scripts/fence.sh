@@ -1,32 +1,10 @@
 #!/usr/bin/env bash
-# The release fence on the production host (docs/design/vietnam-production.md,
-# "Release fence"; protocol in docs/design/passkey-release-fence.md). Runs as
-# root on the host, installed at /usr/local/lib/aboutme/fence.sh. Every change
-# to /var/lib/aboutme/fence.json happens under an exclusive flock and is
-# written to a temporary file, synced, then renamed, so a crash leaves either
-# the old or the new document and never a torn one.
-#
-#   fence.sh init                      create the file at the tracked floor
-#   fence.sh read                      print the document
-#   fence.sh lock <kind> <tag>         take the operation lock; prints its id
-#   fence.sh checkpoint <id> <tag>     reprove the lock and floor before a start
-#   fence.sh mutation-start <id> <tag> <kind>  mark a cutover write active
-#   fence.sh mutation-clear <id> <kind>        clear its completed marker
-#   fence.sh raise <id> <tag>          raise the minimum to <tag>, up to the tracked floor
-#   fence.sh release <id>              release the lock this id owns
-#   fence.sh check <release> <unit>    ExecStartPre: refuse an unsafe start
-#   fence.sh clear <reason>            privileged manual clear of a stale lock
-#
-# There is no time-based takeover: a crash leaves the lock closed until a
-# manual clear. A missing or malformed file fails every command but init.
 set -euo pipefail
 
 dir=${FENCE_DIR:-/var/lib/aboutme}
 file=$dir/fence.json
 lockfile=$dir/fence.lock
 mutation_file=$dir/cutover-mutation.json
-# The tracked floor (docs/design/release-floors.md): a rebuilt host starts
-# here, and raise never goes above it. Never below production's floor.
 floor_tag=v0.9.2
 floor_release=9002
 
@@ -36,8 +14,6 @@ die() {
   exit 1
 }
 
-# A strict vMAJOR.MINOR.PATCH tag, no leading zero, components 0 through 999,
-# maps to MAJOR*1000000 + MINOR*1000 + PATCH.
 release_number() {
   [[ $1 =~ ^v(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})$ ]] || return 1
   echo $((10#${BASH_REMATCH[1]} * 1000000 + 10#${BASH_REMATCH[2]} * 1000 + 10#${BASH_REMATCH[3]}))
@@ -45,7 +21,6 @@ release_number() {
 
 now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 
-# Reads and validates the document into $doc, $minimum, and $owner.
 load() {
   [[ -f $file && ! -L $file ]] || die "$file is missing; run fence.sh init on a rebuilt host"
   doc=$(<"$file")
@@ -65,7 +40,7 @@ load() {
   fi
 }
 
-store() { # new document on stdin
+store() {
   local tmp
   tmp=$(mktemp "$dir/.fence.XXXXXX")
   if ! jq 'if type == "object" and (.minimum_release | type) == "number" then . else error("malformed") end' >"$tmp"; then
@@ -78,11 +53,11 @@ store() { # new document on stdin
   sync "$dir"
 }
 
-candidate_of() { # tag
+candidate_of() {
   release_number "$1" || die "'$1' is not a strict vMAJOR.MINOR.PATCH tag"
 }
 
-with_lock() { # mode command...
+with_lock() {
   local mode=$1
   shift
   exec {fd}>>"$lockfile"
@@ -125,7 +100,7 @@ cmd_read() {
   jq . <<<"$doc"
 }
 
-cmd_lock() { # kind tag
+cmd_lock() {
   local kind=$1 candidate oid ts
   case $kind in
     deploy | rollback | activate | totp_reencrypt | account_delete | view_pass_rotate | cutover | notice_restore) ;;
@@ -143,7 +118,7 @@ cmd_lock() { # kind tag
   printf '%s\n' "$oid"
 }
 
-cmd_lock_for() { # kind tag request id
+cmd_lock_for() {
   local kind=$1 tag=$2 id=$3 candidate ts
   case $kind in account_delete | totp_reencrypt | view_pass_rotate) ;; *) die "unsupported bound operation" ;; esac
   [[ $id =~ ^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$ ]] || die "invalid request id"
@@ -172,13 +147,13 @@ operation_release_guard() {
   fi
 }
 
-owned_or_die() { # id
+owned_or_die() {
   load
   [[ -n $owner ]] || die "no operation holds the lock"
   [[ $owner == "$1" ]] || die "the lock belongs to another operation"
 }
 
-cmd_checkpoint() { # id tag
+cmd_checkpoint() {
   local candidate
   candidate=$(candidate_of "$2")
   owned_or_die "$1"
@@ -189,7 +164,7 @@ cmd_checkpoint() { # id tag
   jq --arg s "$(now)" '.operation_checked_at = $s' <<<"$doc" | store
 }
 
-cmd_raise() { # id tag
+cmd_raise() {
   local candidate
   candidate=$(candidate_of "$2")
   ((candidate <= floor_release)) ||
@@ -215,7 +190,7 @@ load_mutation() {
     then . else error("malformed") end' "$mutation_file" 2>/dev/null) || die "$mutation_file is malformed"
 }
 
-store_mutation() { # document on stdin
+store_mutation() {
   local tmp
   tmp=$(mktemp "$dir/.cutover-mutation.XXXXXX")
   cat >"$tmp"
@@ -225,7 +200,7 @@ store_mutation() { # document on stdin
   sync "$dir"
 }
 
-assert_cutover_owner() { # id
+assert_cutover_owner() {
   owned_or_die "$1"
   [[ $(jq -r '.operation_kind // empty' <<<"$doc") == cutover ]] || die "the operation is not a cutover"
 }
@@ -247,7 +222,7 @@ assert_cutover_quiescent() {
   aboutme_assert_cutover_quiescent || die "the host is not quiescent"
 }
 
-cmd_mutation_start() { # id tag kind
+cmd_mutation_start() {
   local candidate
   mutation_kind_or_die "$3"
   candidate=$(candidate_of "$2")
@@ -258,7 +233,7 @@ cmd_mutation_start() { # id tag kind
     '{operation_id: $o, mutation_kind: $k, state: "active", started_at: $s}' | store_mutation
 }
 
-cmd_mutation_clear() { # id kind
+cmd_mutation_clear() {
   mutation_kind_or_die "$2"
   assert_cutover_owner "$1"
   load_mutation
@@ -271,7 +246,7 @@ cmd_mutation_clear() { # id kind
 
 # Releasing an already released lock succeeds, so a retried release after a
 # lost SSH reply settles the same way the first one did.
-cmd_release() { # id
+cmd_release() {
   load
   if [[ -z $owner ]]; then
     return 0
@@ -285,10 +260,7 @@ cmd_release() { # id
   jq 'del(.operation_id, .operation_kind, .operation_tag, .operation_started_at, .operation_checked_at)' <<<"$doc" | store
 }
 
-# ExecStartPre for every production-image start. Takes a shared lock so it
-# never reads a half-replaced file. A retained cutover lock or marker blocks
-# every start except the owning reset-db operation's db-setup.
-cmd_check() { # release unit
+cmd_check() {
   local release=$1 unit=$2
   [[ $release =~ ^[0-9]+$ ]] || die "release '$release' is not a number"
   load
@@ -328,10 +300,7 @@ cmd_check() { # release unit
   exit 1
 }
 
-# The privileged manual clear (docs/design/passkey-release-fence.md,
-# "Serialized production operation"): refuses while a deploy-host.sh process
-# runs, and records who cleared what and why in the journal.
-cmd_clear() { # reason
+cmd_clear() {
   local reason=$1
   [[ -n $reason ]] || die "clear needs a reason"
   if pgrep -f /usr/local/lib/aboutme/deploy-host.sh >/dev/null; then
@@ -350,7 +319,7 @@ cmd_clear() { # reason
   say "cleared"
 }
 
-recover_processes_stopped() { # kind
+recover_processes_stopped() {
   ! pgrep -f '[/]usr/local/lib/aboutme/deploy-host.sh' >/dev/null || die "a deploy-host.sh process is running"
   case $1 in
     quiesce) ;;
@@ -362,7 +331,7 @@ recover_processes_stopped() { # kind
   esac
 }
 
-recover_marker() { # id kind reason [attestation]
+recover_marker() {
   local id=$1 kind=$2 reason=$3 attestation=${4-}
   [[ -n $reason ]] || die "recovery needs a reason"
   assert_cutover_owner "$id"
@@ -377,12 +346,12 @@ recover_marker() { # id kind reason [attestation]
   say "cleared the cutover mutation marker; the operation lock remains"
 }
 
-cmd_recover_cutover() { # id kind reason
+cmd_recover_cutover() {
   case $2 in quiesce | reset-db | dump-restore) ;; *) die "unknown host cutover mutation kind '$2'" ;; esac
   recover_marker "$1" "$2" "$3"
 }
 
-cmd_recover_cutover_media() { # id attestation reason
+cmd_recover_cutover_media() {
   [[ $2 == media-writer-stopped-and-result-inspected ]] || die "media recovery needs the exact stop-and-inspect attestation"
   recover_marker "$1" media "$3" "$2"
 }
@@ -429,8 +398,6 @@ cmd_check_current() {
 
 [[ $(id -u) == 0 ]] || die "run as root on the host"
 umask 022
-# Keep the existing root-only fixture seam; installed access always proves the
-# canonical guest mounts before touching fence state or opening its lock.
 if [[ $dir == /var/lib/aboutme ]]; then
   notice_library=$(dirname "${BASH_SOURCE[0]}")/crowdsec-privacy-notice-host.sh
   if [[ ! -f $notice_library ]]; then notice_library=$(dirname "${BASH_SOURCE[0]}")/../host/crowdsec-privacy-notice-host.sh; fi

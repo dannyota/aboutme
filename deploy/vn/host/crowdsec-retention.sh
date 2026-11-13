@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 # shellcheck source-path=SCRIPTDIR
-# Fixed-schema retention and stopped-consumer reconciliation.
-# See docs/design/crowdsec-http-privacy.md, Live retention and failure.
 
 retention_psql() {
   timeout 12 env -i PATH=/usr/bin:/bin PGPASSFILE=/dev/null PGSSLMODE=disable \
@@ -287,8 +285,6 @@ PY
 retention_reconcile() {
   local acknowledgement_seconds=$1
   ((acknowledgement_seconds > 0 && acknowledgement_seconds <= 20)) || return 1
-  # Pinned consumers have no applied-deletion acknowledgement. The bounded
-  # interface takes the stopped-consumer path immediately.
   if [[ $retention_quiescent == no ]]; then
     retention_stop && retention_clear_firewall || return 1
     retention_quiescent=yes
@@ -427,13 +423,10 @@ retention_main() {
   [[ ! -L /run/aboutme/crowdsec-retention.lock ]] || return 1
   exec {retention_lock}>/run/aboutme/crowdsec-retention.lock
   [[ $(stat -c '%u:%g:%a:%h' /run/aboutme/crowdsec-retention.lock) == 0:0:600:1 ]] || return 1
-  # Edge mutations and watchdog checks share this lock. Waiting consumes the
-  # existing outer deadline; it never renews the lease or extends a pass.
   flock -x -w 60 "$retention_lock" || return 1
   [[ ! -e /run/aboutme/crowdsec-retention-failed &&
     ! -L /run/aboutme/crowdsec-retention-failed ]] || return 1
   retention_work=$(mktemp -d /run/aboutme/crowdsec-retention.XXXXXX)
-  # Capture the fixed-prefix temporary path before this local leaves scope.
   # shellcheck disable=SC2064
   trap "rm -rf -- '$retention_work'" EXIT
   : >"$retention_work/epoch"
@@ -472,7 +465,6 @@ for line in lines:
     assert (kind=='d' and parent!='0') or (kind!='d' and parent=='0')
 PY
     [[ -s $retention_work/candidates ]] || break
-    # Ingestion can introduce overdue work after the initial batch choice.
     retention_batch_mode || return 1
     candidates=$(grep -c '^d|' "$retention_work/candidates" || true)
     if ((candidates > 0)); then
@@ -489,8 +481,6 @@ PY
   done
   retention_verify || return 1
   if [[ $mode == runtime && $retention_quiescent == yes ]]; then
-    # Existing valid authorization permits rebuild. A lease that expires
-    # during cleanup fails closed rather than authorizing an incomplete pass.
     /usr/local/lib/aboutme/crowdsec-retention-lease-check.sh || return 1
     retention_firewall_init || return 1
     local retention_restart_unit

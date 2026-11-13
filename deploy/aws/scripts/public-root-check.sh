@@ -1,10 +1,7 @@
 # shellcheck shell=bash
-# Sourced by deploy.sh. Runs a read-only public-root audit from the candidate
-# server image. It needs $candidate, $cluster, $commit, $region, $repo, $tag,
-# $work, current_def(), digest(), provenance_verify(), aws_(), and say().
 
 # shellcheck disable=SC2154
-public_root_check() { # root
+public_root_check() {
   local root=$1 d task revision code status started_by client_token
   public_root_valid "$root" || { say "invalid public root '$root'"; return 1; }
   ((public_root_check_attempt < 100)) || { say "too many public-root checks in one operation"; return 1; }
@@ -43,7 +40,6 @@ public_root_check() { # root
   [[ $revision == arn:* ]] || { say "public-root check task definition did not register"; return 1; }
 
   fence_checkpoint || return 1
-  # Set pending before RunTask. A lost response cannot prove no task started.
   public_root_pending=1
   public_root_started_by=$started_by
   say "public-root check correlation: started-by $started_by"

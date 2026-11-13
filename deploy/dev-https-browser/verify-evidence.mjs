@@ -1,20 +1,7 @@
-// Verifies a mode's /evidence JSON against the exact expected shape.
-// Baked into the browser image (see Dockerfile); run.sh invokes it as
-// `node verify-evidence.mjs <mode> <evidence-path>` after the browser proof
-// exits, before printing PASS. Any mismatch, including an unexpected extra
-// field, exits 1. check-shard-coverage.mjs imports the two step lists; only a
-// direct run verifies evidence.
 import { realpathSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
-// A sharded totp-browser-proof run proves only some of this scenario's steps
-// per shard (ABOUTME_TOTP_SHARD, set in the container environment by
-// run.sh's --env when the host set it). This checks one shard's evidence
-// against the closed step-name list below and leaves checking that every
-// step is true somewhere to the aggregation the totp-browser-proof workflow
-// runs after every shard finishes. An unset or empty shard is the unsharded
-// case, which must still prove every step itself.
 export const TOTP_STEP_NAMES = new Set([
   'agentGranted', 'agentRevoked', 'attemptsExhausted', 'cleanup',
   'concurrentUseRejected', 'currentStepAccepted', 'enrolled', 'finalRemoved',
@@ -28,9 +15,6 @@ export const TOTP_STEP_NAMES = new Set([
   'wrongSessionRejected',
 ]);
 
-// A sharded passkey-browser-proof run proves only some of this scenario's
-// steps per shard (ABOUTME_PASSKEY_SHARD), the same as totp above: an unset
-// or empty shard is the unsharded case, which must still prove every step.
 export const PASSKEY_STEP_NAMES = new Set([
   'agentGranted', 'agentRevoked', 'attemptsExhausted', 'ceremonyReplayRejected',
   'cleanup', 'concurrentCompletion', 'enrolled', 'finalRemoved', 'locales',
@@ -118,8 +102,6 @@ async function verify(mode, path) {
     scenario: 'public-resume-hydration',
     origin: 'https://localhost:20443',
     errors: { console: 0, externalRequest: 0, page: 0 },
-    // The sign-in-to-view steps follow the hydration steps, in the order the
-    // spec writes them (docs/design/viewer-analytics/sign-in-to-view.md).
     steps: {
       published: true,
       ssr: true,
@@ -135,9 +117,6 @@ async function verify(mode, path) {
       switchOff: true,
       viewCleanup: true,
     },
-    // The invite shows no sooner than its 5 s floor after view start and
-    // within the spec's 45 s wait. Any fallback value could be forged, so an
-    // invalid timing fails here.
     timings: { joinInviteMs: Number.isInteger(actual.timings?.joinInviteMs)
       && actual.timings.joinInviteMs >= 4900
       && actual.timings.joinInviteMs <= 45000 ? actual.timings.joinInviteMs : process.exit(1) },
@@ -260,7 +239,6 @@ async function verify(mode, path) {
       unpublish: 200,
       revoked: [401, 404].includes(actual.statuses?.revoked) ? actual.statuses.revoked : 404,
     },
-    // An invalid time is compared with 0, a valid time it can never equal.
     elapsedMs: { revocation: Number.isInteger(actual.elapsedMs?.revocation)
       && actual.elapsedMs.revocation >= 0
       && actual.elapsedMs.revocation <= 30000 ? actual.elapsedMs.revocation : 0 },

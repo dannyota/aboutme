@@ -1,4 +1,3 @@
-# This base is published from base.Containerfile.
 FROM ghcr.io/dannyota/aboutme-browser-base@sha256:861f8413ebeb789736a7223dbff043eea7af3f3e8233f3992fa712d06bba177e
 
 LABEL io.aboutme.dev-https-browser.contract="2" \
@@ -14,8 +13,6 @@ COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts \
     && npm cache clean --force
 
-# Spec sources are NOT baked in; they are mounted read-only at /uat-spec per
-# run and validated by run.sh, so a spec edit needs no image rebuild.
 COPY run.sh verify-evidence.mjs spec-sources.txt ./
 RUN chmod 0444 package.json package-lock.json verify-evidence.mjs spec-sources.txt \
     && chmod 0555 run.sh

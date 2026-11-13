@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Fixed root-only owner exchange for the accepted privacy notice.
 set -euo pipefail
 # shellcheck source=../host/crowdsec-privacy-notice-host.sh
 source /usr/local/lib/aboutme/crowdsec-privacy-notice-host.sh 2>/dev/null || { printf 'invalid_state\n' >&2; exit 1; }
@@ -108,7 +107,6 @@ notice_initial_authority() {
 notice_initial_quiescent() {
   aboutme_assert_cutover_quiescent || return 1
   local unit jobs units rc=0
-  # Five-field SQLite protection may continue; changed ingestion has a separate activation gate.
   for unit in aboutme-migrate aboutme-db-setup; do
     notice_unit_stopped "$unit" || return 1
   done
@@ -141,7 +139,6 @@ notice_initial_bound() {
 notice_initial_command() {
   local raw image
   image=$(jq -r .server_image <<<"$notice_initial_release") || return 1
-  # Preserve the kernel locks in every child, and reject surviving descendants.
   raw=$(python3 -I - "$image" <<'PY'
 import ctypes,os,selectors,signal,subprocess,sys,time
 child=None
@@ -277,8 +274,6 @@ notice_command_exit=0
 notice_command_started=no notice_cleanup_safe=no
 trap 'notice_invalid; exit 1' HUP TERM INT
 if ! notice_owner_run "$@" 2>/dev/null; then
-  # Only a pre-effect quiescence failure may release this returned operation.
-  # Once an app call starts, failure requires explicit inspection/recovery.
   if [[ -v notice_owner_operation && $notice_command_started == no && $notice_cleanup_safe == yes ]]; then
     if [[ -v notice_owner_fd ]]; then exec {notice_owner_fd}>&-; fi
     notice_fence release "$notice_owner_operation" >/dev/null 2>&1 || true

@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Hosted PostgreSQL is real; host controls below are explicit boundary doubles.
 
 retention_fixture_diagnostics() {
   exec {retention_fixture_error_fd}>&2
@@ -25,7 +24,6 @@ retention_fixture_pid_for() {
   if [[ -f $pid_root/pids/$unit ]]; then
     read -r pid <"$pid_root/pids/$unit"
     [[ $pid =~ ^[1-9][0-9]*$ ]] || return 1
-    # A stopped process can disappear between its PID-file read and this read.
     if ! { IFS= read -r process_stat <"/proc/$pid/stat"; } 2>/dev/null; then
       [[ ! -e /proc/$pid ]] || return 1
       pid=0
@@ -53,7 +51,6 @@ retention_fixture_time() {
   [[ -z ${2:-} ]] || printf '%s\n' "$2" >"$retention_fixture/verify-clock"
 }
 
-# Build outside the isolated network, against the same pinned engine as LAPI.
 retention_fixture_profile_binary() {
   local go_binary=$1 proof=$retention_fixture/profile-proof
   mkdir -m 0700 "$proof"
@@ -506,7 +503,6 @@ SH
   export PATH=/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
   retention_fixture_case=fixture-fence-initialization
   /usr/local/lib/aboutme/fence.sh init >/dev/null 2>&1
-  # A freshly initialized fence admits its tracked floor as the lowest tag.
   retention_fixture_tag=$(sed -n 's/^floor_tag=//p' /usr/local/lib/aboutme/fence.sh)
   if [[ ${retention_fixture_migration:-no} != yes ]]; then
     retention_fixture_case=fixture-fence-ownership
@@ -565,8 +561,6 @@ PY
   return 1
 }
 
-# Only service control is adapted to the namespace. Every consumer and the
-# kernel nft backend below is real, with private output and bounded lifetime.
 retention_fixture_consumers() {
   [[ -f ${CROWDSEC_TEST_CADDY_BINARY:-} && -x $CROWDSEC_TEST_CADDY_BINARY ]]
   install -m 0755 "$CROWDSEC_TEST_CADDY_BINARY" "$retention_fixture/bin/caddy"

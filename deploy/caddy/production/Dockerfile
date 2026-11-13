@@ -1,13 +1,6 @@
-# Production Caddy image. Build context is the repository root.
-
-# Caddy 2.11.9 built from source with our pinned Go toolchain (.tool-versions),
-# dependencies, and direct-edge plugins; see
-# deploy/caddy/production/build/main.go. The Go image digest pins the
-# multi-architecture index for amd64 and arm64.
 FROM docker.io/library/golang:1.27.4-alpine3.24@sha256:0a5f7fe796599ff487605987432e7619ae45beeb2fba4c2ce0b907879932aebf AS caddy-build
 WORKDIR /src
 COPY deploy/caddy/production/build/ ./
-# Retry proxy transport failures without changing module checksum verification.
 RUN for attempt in 1 2 3; do \
       go mod download && exit 0; \
       status=$?; \
@@ -26,25 +19,6 @@ COPY deploy/caddy/production/maintenance-render.sh /maintenance-render.sh
 COPY deploy/caddy/production/maintenance.html /maintenance.html
 RUN bash /maintenance-render.sh /maintenance.html >/maintenance.generated.caddy
 
-# Runtime for Caddy 2.11.9 with ca-certificates and mailcap. curl is not used
-# by our entrypoint or config, and the image sets no file capabilities.
-# The CloudFront edge binds only port 8443; the direct edge binds 80 and 443,
-# so its container is given
-# CAP_NET_BIND_SERVICE and nothing else (see deploy/caddy/production/test.sh).
-#
-# Caddy runs as uid and gid 10001, which no other image on the host uses. The
-# app and maintenance services share their host ports through SO_REUSEPORT, and
-# Linux lets a socket join a port only when its owner has the same effective
-# uid as the first socket's (socket(7)), so every Caddy image keeps this uid.
-#
-# ECS mounts a tmpfs on /run/caddy, and runc gives that tmpfs the mode of the
-# image's directory but not its owner. The directory is therefore root-owned
-# 1777, the default mode of a tmpfs, so uid 10001 can write there with the
-# tmpfs and without it (adapt mode). The entrypoint's umask 077 keeps the
-# files it writes private to uid 10001.
-#
-# /var/log/caddy holds direct-edge diagnostics on the host tmpfs. waf has
-# metadata-only rule matches. crowdsec has the bounded request feed.
 FROM docker.io/library/alpine:3.24@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf
 RUN apk add --no-cache ca-certificates mailcap \
     && addgroup -S -g 10001 caddy \

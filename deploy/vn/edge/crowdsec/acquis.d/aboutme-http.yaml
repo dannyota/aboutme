@@ -1,5 +1,3 @@
-# Minimal Caddy HTTP security feed. Both active files live on tmpfs and are
-# created before CrowdSec starts.
 source: file
 filenames:
   - /run/aboutme/caddy-log/crowdsec/serving.json

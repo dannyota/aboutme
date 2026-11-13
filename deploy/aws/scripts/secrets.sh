@@ -1,13 +1,4 @@
 #!/usr/bin/env bash
-# Creates missing production secrets in SSM Parameter Store. It never
-# overwrites a parameter and never prints or reads back a value.
-#
-#   secrets.sh                 create the base set of missing secrets
-#   secrets.sh totp-key <a|b>  create a fresh totp/key-<slot> if unused
-#
-# secrets.sh totp-key refuses a slot the running app task definition names,
-# so it never overwrites a key a task could still be reading or writing. See
-# docs/design/totp-key-management.md, "Rotation".
 set -euo pipefail
 region=ap-southeast-1
 cluster=aboutme-prod
@@ -18,7 +9,7 @@ exists() {
     --query 'length(Parameters)' --output text) == 1 ]]
 }
 
-put() { # name type generator...
+put() {
   local name=$prefix/$1 type=$2
   shift 2
   if exists "$name"; then
@@ -41,11 +32,7 @@ hex48() { openssl rand -hex 24; }
 key32() { openssl rand 32 | basenc --base64url | tr -d '=\n' && echo; }
 keyid() { echo k1; }
 
-# Unlike put, always writes a fresh value: rotation steps 1 and 7 in
-# docs/design/totp-key-management.md overwrite a slot that already holds a
-# retired key but that no running task names. The base set below keeps its
-# never-overwrite rule; only this path takes SSM's Overwrite.
-write_totp_key() { # a|b
+write_totp_key() {
   local name=$prefix/totp/key-$1 verb=created
   if exists "$name"; then
     verb=replaced
@@ -57,13 +44,7 @@ write_totp_key() { # a|b
   echo "$verb $name"
 }
 
-# Refuses a slot the running app task definition names in TOTP_ACTIVE_KEY or
-# TOTP_PREVIOUS_KEY, so rotation never overwrites a key a task can still read
-# or write. An AWS error aborts the script (set -e; no fallback on failure),
-# so a credential, region, or throttling problem never reads as "no service".
-# Only a call that succeeds and reports the app service does not exist yet
-# (empty services list with a MISSING failure) skips the task check.
-totp_key() { # a|b
+totp_key() {
   local slot=$1 resp task_def
   case $slot in
   a | b) ;;

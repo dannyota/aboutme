@@ -98,11 +98,6 @@ assert.match(spec, /countedConsoleFailure \?\?= `\$\{classifyConsoleFailure\(mes
 assert.equal(spec.match(/recordCountedConsole\(message, resumeID, slug\);/g)?.length, 4);
 assert.match(spec, /const marker = `fail-\$\{failureStage\}-\$\{reason\}\$\{.*?countedConsoleFailure/s);
 NODE
-# The publish proof's revocation rules: a revoked, deleted, or protected
-# public read is 401 or 404 and never 200; unpublish reaches an open page
-# within 30 s; console allowances cover only the test's own resume, the
-# listed statuses, and the test's own revocations; and the disposable resumes
-# are deleted where no counted page or counter can see it.
 node --input-type=module - "$SOURCE" <<'NODE' || fail 'publish revocation rules drifted'
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -329,8 +324,6 @@ digest_output=$(node "$ROOT/scripts/generate-public-roots.mjs" --check) ||
   fail 'application source-manifest digest is missing'
 [[ $digest_output == *$'PUBLIC_RENDERER_BUILD_DIGEST=sha256:'* ]] ||
   fail 'renderer source-manifest digest is missing'
-# The image manifest gates only image-side sources; spec sources are staged
-# per run by scripts/dev-https-check.sh and must never re-enter the manifest.
 for file in \
   deploy/dev-https-browser/Dockerfile \
   deploy/dev-https-browser/package.json \
@@ -564,10 +557,6 @@ grep -Fxq -- '--cap-add=SYS_CHROOT' "$READABLE_LOG" ||
   fail 'Chromium sandbox capability is missing'
 [ "$(grep -Ec '^--cap-add=' "$READABLE_LOG")" -eq 1 ] ||
   fail 'runtime has an extra added capability'
-# Only mcp-sdk mode runs the browser beside a second local process (the Go
-# runner) under its own resource bound, so only that mode caps the
-# container; a long, many-page journey such as second-factor stays
-# unbounded, matching every mode's behavior before mcp-sdk existed.
 if grep -Fq -- '--memory=' "$READABLE_LOG"; then
   fail 'auth mode runtime has an unexpected memory cap'
 fi
@@ -694,9 +683,6 @@ grep -Fxq -- '--memory=2g' "$READABLE_LOG" || fail 'mcp-sdk memory cap is missin
 grep -Fxq -- '--memory-swap=2g' "$READABLE_LOG" || fail 'mcp-sdk memory swap cap is missing'
 grep -Fxq -- '--cpus=2' "$READABLE_LOG" || fail 'mcp-sdk CPU cap is missing'
 
-# Production browses the real public origin, so it must not mount or trust
-# the local Caddy root: host_run takes no CA input directory in production,
-# and neither run.sh side ever imports one into the browser's NSS database.
 readonly MCP_SDK_PRODUCTION_EVIDENCE=$WORK/mcp-sdk-production-evidence
 install -d -m 0700 "$MCP_SDK_PRODUCTION_EVIDENCE"
 readonly MCP_SDK_PRODUCTION_NAME=aboutme-mcp-sdk-22222222222222222222222222222222
@@ -831,12 +817,6 @@ if grep -rnE --exclude='static-test.sh' --exclude-dir='node_modules' \
   fail 'secret-like literal found'
 fi
 
-# The runner prints only the last stage line and withholds every other byte,
-# so the second-factor proof puts its whole diagnosis on that one line. Keep
-# it assembled from fixed words: no message, URL, body, or account value, and
-# nothing outside the vocabulary the runner's own grep accepts. The proof
-# keeps its harness and page journeys in two modules it shares with the TOTP
-# proof, so these checks read the spec and both modules as one source.
 readonly SECOND_FACTOR_SPEC=$WORK/second-factor-sources.ts
 cat -- "$SOURCE/second-factor.spec.ts" "$SOURCE/second-factor-lib.ts" \
   "$SOURCE/second-factor-pages.ts" >"$SECOND_FACTOR_SPEC"
@@ -875,9 +855,6 @@ if grep -oE "'(callback|landing|submit)-[^']*'" "$SECOND_FACTOR_SPEC" |
   grep -vqE "^'(callback|landing|submit)-[a-z0-9-]+'$"; then
   fail 'a second-factor landing, callback or submit name is outside the runner vocabulary'
 fi
-# A landing that gave up also reports whether the sign-in form is still
-# submitting, read from the control's disabled state so no page text can
-# reach the log.
 grep -Fq "stage(settled ? where : \`\${where}-\${await submitState(page)}\`);" \
   "$SECOND_FACTOR_SPEC" ||
   fail 'the give-up landing no longer reports the submit state'
@@ -890,10 +867,6 @@ done
 grep -Fq 'const WAIT_LANDING_MS = 180_000;' "$SECOND_FACTOR_SPEC" ||
   fail 'the first app landing has no bound of its own'
 
-# Every page the journey opens is compiled once up front, in a stage that
-# names it, so a later failure is about the behaviour under test and not
-# about a cold route. Warm visits get their own bound; the journey keeps the
-# tight one.
 grep -Fq 'const WAIT_WARM_MS = 90_000;' "$SECOND_FACTOR_SPEC" ||
   fail 'the first visit to a page has no bound of its own'
 grep -Fq 'const WAIT_HYDRATE_MS = 30_000;' "$SECOND_FACTOR_SPEC" ||
@@ -908,8 +881,6 @@ warm_paths=$(grep -cE "^  \['/[a-z/-]*', '[a-z0-9-]+'\],$" "$SECOND_FACTOR_SPEC"
   fail 'the warm route table lost entries'
 grep -Fq "stage(\`warm-\${token}\`);" "$SECOND_FACTOR_SPEC" ||
   fail 'a warm visit no longer names its page'
-# Each warm visit is judged on its own, so a page that dirties a counter
-# names itself and the counter class before the assertion fails.
 grep -Fq "if (dirty !== null) stage(\`warm-dirty-\${token}-\${dirty}\`);" \
   "$SECOND_FACTOR_SPEC" ||
   fail 'a dirty warm visit no longer names its page and counter'
@@ -918,31 +889,22 @@ grep -Fq 'const before = { ...counters };' "$SECOND_FACTOR_SPEC" ||
 grep -Fq "type CounterClass = 'certificate' | 'console' | 'external' | 'page';" \
   "$SECOND_FACTOR_SPEC" ||
   fail 'the warm counter classes are no longer a closed set'
-# The one page the warm pass skips pays its first-visit cost where the
-# journey opens it for real, under the warm bound rather than the tight one.
 grep -Fq 'async function gotoFirstVisit(' "$SECOND_FACTOR_SPEC" ||
   fail 'the skipped page has no first-visit open'
 grep -Fq 'await gotoFirstVisit(page, `${ORIGIN}/reset-password#token=${resetToken}`);' \
   "$SECOND_FACTOR_SPEC" ||
   fail 'the reset link no longer opens at first-visit cost'
-# Neither page that takes its token from the URL fragment may be warmed
-# without one: each decides its own failure state during setup, on the client
-# only, so a tokenless visit cannot match the server render.
 warm_table=$(sed -n '/^export const WARM_ROUTES/,/^\];$/p' "$SECOND_FACTOR_SPEC")
 [ -n "$warm_table" ] || fail 'could not find the warm route table'
 if grep -qE "^  \['/(verify-email|reset-password)', " <<<"$warm_table"; then
   fail 'a tokenless fragment page is warmed again'
 fi
 
-# A page that needs a session is warmed with one, not signed out.
 grep -Fq 'const SIGNED_IN_WARM_ROUTES' "$SECOND_FACTOR_SPEC" ||
   fail 'the signed-in warm pass is gone'
 if grep -qE "^  \['/app/[a-z/-]*', '[a-z0-9-]+'\],$" <<<"$warm_table"; then
   fail 'an app page is warmed while signed out'
 fi
-# The landing of a sign-in or a completion is named from that closed set, not
-# waited on as one exact path: an app route this proof did not predict must be
-# reported, never waited on until the budget runs out.
 grep -Fq 'function landingCategory(' "$SECOND_FACTOR_SPEC" ||
   fail 'second-factor landings are no longer named'
 grep -Fq 'async function landedAfter(' "$SECOND_FACTOR_SPEC" ||
@@ -950,10 +912,7 @@ grep -Fq 'async function landedAfter(' "$SECOND_FACTOR_SPEC" ||
 if grep -Fq 'waitForURL(`${ORIGIN}/app/resumes`' "$SECOND_FACTOR_SPEC"; then
   fail 'second-factor proof waits on one exact app landing again'
 fi
-# A step that never settles must fail at its own stage instead of consuming
-# the whole test budget and reporting teardown. Playwright declares these two
-# on its test options, so they only take effect inside `use`; at the top level
-# of the config they are read by nobody.
+# Playwright reads actionTimeout and navigationTimeout only inside use (Playwright test options docs).
 grep -Fq 'const actionTimeout = secondFactor ? 20_000' \
   "$SOURCE/playwright.config.ts" ||
   fail 'second-factor actions are not bounded'
@@ -968,8 +927,6 @@ if grep -qE '^  (action|navigation)Timeout' "$SOURCE/playwright.config.ts"; then
   fail 'a browser timeout sits where Playwright ignores it'
 fi
 
-# Response, event, DevTools, and loopback waits are not covered by those two
-# options, so the proof bounds each of them itself.
 navigation_waits=$(grep -c 'page\.waitForURL(' "$SECOND_FACTOR_SPEC")
 navigation_bounds=$(grep -c 'timeout: WAIT_NAVIGATION_MS' "$SECOND_FACTOR_SPEC")
 [ "$navigation_bounds" -ge "$navigation_waits" ] ||
@@ -999,8 +956,6 @@ grep -Fq 'node /opt/aboutme-auth/verify-evidence.mjs' "$SOURCE/run.sh" ||
   fail 'verify-evidence.mjs is not a regular file'
 node --check "$SOURCE/verify-evidence.mjs" ||
   fail 'verify-evidence.mjs has a syntax error'
-# Publish evidence records a revoked page as 401 or 404 and an unpublish that
-# reached the open page within 30 s; anything else is rejected.
 node --input-type=module - "$SOURCE" <<'NODE' || fail 'publish evidence revocation rules drifted'
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -1077,7 +1032,6 @@ try {
   rmSync(dir, { recursive: true, force: true });
 }
 NODE
-# Public invite timings must be integers within the accepted window.
 node --input-type=module - "$SOURCE" <<'NODE' || fail 'public evidence timing rules drifted'
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -1351,9 +1305,6 @@ if grep -Fq 'proves trusted local Google authentication and CSRF boundaries' \
   fail 'privacy mode listed the auth proof'
 fi
 
-# Both second-factor modes run one spec file; the server enrollment flag, not
-# the spec, is what differs. Each mode must compile and list exactly the two
-# passkey proofs and no other.
 for passkey_mode in second-factor second-factor-disabled; do
   passkey_list=$(ABOUTME_BROWSER_MODE=$passkey_mode \
     "$SOURCE/node_modules/.bin/playwright" test --list \
@@ -1374,9 +1325,6 @@ for passkey_mode in second-factor second-factor-disabled; do
   done
 done
 
-# Both TOTP modes run one spec file; the server enrollment flag, not the
-# spec, is what differs. Each mode must compile and list exactly the two
-# authenticator-app proofs and no other.
 for totp_mode in totp totp-disabled; do
   totp_list=$(ABOUTME_BROWSER_MODE=$totp_mode \
     "$SOURCE/node_modules/.bin/playwright" test --list \
@@ -1396,7 +1344,6 @@ for totp_mode in totp totp-disabled; do
     fi
   done
 done
-# A listed set of TOTP shards becomes one enabled test per shard.
 totp_list=$(ABOUTME_BROWSER_MODE=totp ABOUTME_TOTP_SHARD=primary,skew \
   "$SOURCE/node_modules/.bin/playwright" test --list \
   --config "$CONTEXT/playwright.config.ts")
@@ -2015,7 +1962,6 @@ if grep -Fq 'browser-secret-must-not-escape' <<<"$output"; then
   fail 'editor failure leaked volatile output'
 fi
 
-# Any mode prints its own fail- lines instead of the last stage line.
 reset_inside
 if output=$(FAKE_BROWSER_MODE=public-fail PATH="$INSIDE_BIN:$PATH" \
   "$INSIDE_RUN" --inside public 2>&1); then
@@ -2511,8 +2457,6 @@ fi
 grep -Fq 'browser evidence has invalid schema' <<<"$output" ||
   fail 'totp evidence with an extra field returned the wrong diagnostic'
 
-# Listed TOTP shards run as parallel tests that each write their own
-# /evidence/<shard>/ directory, all of which must be present and valid.
 reset_inside
 readonly TOTP_SHARDS_OUTPUT=$(FAKE_BROWSER_MODE=totp-shards \
   ABOUTME_TOTP_SHARD=skew,primary run_inside totp)
@@ -2533,8 +2477,6 @@ fi
 grep -Fq 'browser produced unexpected evidence' <<<"$output" ||
   fail 'sharded totp evidence with a shard missing returned the wrong diagnostic'
 
-# A failing shard's own fail- line is printed, not the last stage line, which
-# another shard may have printed.
 reset_inside
 if output=$(FAKE_BROWSER_MODE=totp-shards-fail ABOUTME_TOTP_SHARD=skew,primary \
   PATH="$INSIDE_BIN:$PATH" "$INSIDE_RUN" --inside totp 2>&1); then
@@ -2578,9 +2520,6 @@ grep -Fxq 'MODE=totp-disabled' "$BROWSER_LOG" ||
 [ -f "$INSIDE_EVIDENCE/totp-enrollment-disabled-proof.json" ] ||
   fail 'totp-disabled evidence filename drifted'
 
-# The shard maps live once, in proof-shards.mjs, and the step lists once, in
-# verify-evidence.mjs. The specs and the coverage check import them, so a
-# shard or step added in one place reaches every side.
 for spec in totp.spec.ts second-factor.spec.ts; do
   grep -Fq "from './proof-shards.mjs';" "$SOURCE/$spec" ||
     fail "$spec does not take its shard map from proof-shards.mjs"
@@ -2596,9 +2535,6 @@ if grep -Eq '^const (TOTP|PASSKEY)_(STEP_NAMES|SHARD_ROLES)' "$COVERAGE"; then
   fail 'the coverage check keeps its own copy of a shard or step list'
 fi
 
-# Each scenario's coverage check passes on one evidence file per shard that
-# together prove every step, and fails when a shard's evidence is missing.
-# The CI jobs still call the two scenario-named entry points.
 coverage_setup=$(cd "$SOURCE" && node --input-type=module -e '
 import { PASSKEY_SHARD_ROLES, TOTP_SHARD_ROLES } from "./proof-shards.mjs";
 import { PASSKEY_STEP_NAMES, TOTP_STEP_NAMES } from "./verify-evidence.mjs";
@@ -2631,8 +2567,6 @@ if node "$COVERAGE" unknown "$WORK/none.json" 2>/dev/null; then
   fail 'the coverage check accepted an unknown scenario'
 fi
 
-# Exercise the host entry point with only the build, database, and browser
-# boundaries replaced. Preparation and cleanup use the real shell flow.
 readonly HOST_REPO=$CANONICAL_WORK/host-repo
 readonly HOST_BIN=$WORK/host-bin
 readonly HOST_CONTROL=$WORK/host-control
@@ -2794,7 +2728,6 @@ done
 mapfile -t host_names <"$HOST_CONTROL/names"
 [ "${host_names[0]}" != "${host_names[2]}" ] || host_fixture_fail 'client names were reused'
 
-# CIMD proof evidence must name the real SDK flow, beyond the DCR proof.
 for step in cimdDiscovered cimdConsentApproved cimdTokenExchanged cimdToolsListed cimdRefreshed cimdGrantRevoked cimdRevokedRejected; do
   grep -Fq "$step: true" "$SOURCE/verify-evidence.mjs" || fail "CIMD evidence omits $step"
   grep -Fq "$step: true" "$SOURCE/mcp-ts-sdk.spec.ts" || fail "CIMD SDK proof omits $step"

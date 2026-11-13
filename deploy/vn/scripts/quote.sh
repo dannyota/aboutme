@@ -1,13 +1,4 @@
 #!/usr/bin/env bash
-# The price gate to run before `tofu apply` in deploy/vn/prod. OpenTofu has no
-# price ceiling, so this quotes what the plan creates and refuses above a
-# maximum. Read-only: it only calls vngcloud quote and pricing reads
-# (docs/design/vietnam-production.md, "Infrastructure code and state").
-#
-# Run from deploy/vn/prod:
-#   ../scripts/quote.sh --plan <saved.tfplan> --max-price <vnd a month>
-# Quotes exactly one server and data volume to create in the saved plan.
-# Unknown values or missing creates refuse before any pricing call.
 set -euo pipefail
 
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -68,7 +59,6 @@ fi
 root_size=$(jq -r .server.root_disk_size <<<"$planned")
 data_size=$(jq -r .volume.size <<<"$planned")
 
-# price_of reads a quote's JSON on stdin and prints OptimumPrice.
 price_of() {
   jq -r '.OptimumPrice // empty'
 }

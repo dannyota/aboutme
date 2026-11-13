@@ -16,9 +16,6 @@ if [[ ${1:-} == packages ]]; then
   trap 'status=$?; systemctl mask --runtime crowdsec.service crowdsec-firewall-bouncer.service >/dev/null 2>&1; umount "$proof"; rmdir "$proof"; exit "$status"' EXIT
   trap 'echo "FAIL pinned-package-proof" >&2' ERR
   (cd "$ABOUTME_VN_DEBS" && sha256sum -c --quiet SHA256SUMS)
-  # CI installs only from the pinned package image: its digest and the pinned
-  # SHA256SUMS hash replace apt signatures for this local source. The source
-  # stays configured so later package installs in the job resolve the same pins.
   printf 'deb [trusted=yes] file:%s ./\n' "$ABOUTME_VN_DEBS" >/etc/apt/sources.list.d/aboutme-ci-debs.list
   apt_options=(-o Dir::Etc::sourcelist=/etc/apt/sources.list.d/aboutme-ci-debs.list -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0)
   cp "$ABOUTME_VN_DEBS/crowdsec_1.8.2_amd64.deb" "$ABOUTME_VN_DEBS/crowdsec-firewall-bouncer-nftables_0.0.36_amd64.deb" "$proof/"
@@ -35,8 +32,6 @@ if [[ ${1:-} == packages ]]; then
     [[ $(dpkg-deb -f "$archive" Package) == "$name" ]]
     [[ $(dpkg-deb -f "$archive" Version) == "$version" ]]
     [[ $(dpkg-deb -f "$archive" Architecture) == amd64 ]]
-    # The reviewed archive digest binds every generated control and payload
-    # member, not only tagged postinst source. Inspect all controls privately.
     dpkg-deb -e "$archive" "$proof/$name.control"
     for member in control preinst postinst prerm postrm conffiles md5sums; do
       [[ -f $proof/$name.control/$member && ! -L $proof/$name.control/$member ]]
@@ -65,8 +60,7 @@ PY
     install -m 0644 "$repo_root/deploy/vn/host/etc/systemd/system/$unit.service.d/90-aboutme-alert.conf" \
       "/etc/systemd/system/$unit.service.d/90-aboutme-alert.conf"
   done
-  # PGDG skips default creation when any cluster exists. Runner clusters must
-  # release the default socket port before this proof starts PostgreSQL 18.
+  # PGDG skips default cluster creation when any cluster exists (postgresql-common).
   systemctl stop postgresql.service >/dev/null 2>&1
   if ! pg_lsclusters --no-header 18 main >/dev/null 2>&1; then
     pg_createcluster --port=5432 --start-conf=manual 18 main >/dev/null 2>&1
@@ -96,8 +90,6 @@ PY
   crowdsec_install_offline apt-get "${apt_options[@]}" -o Dir::Log::Terminal=/dev/null -o Dir::Log::History=/dev/null \
     -o DPkg::Options::=--log=/dev/null install -y -qq crowdsec=1.8.2
   [[ $(dpkg-query -W -f='${Status}\t${Version}' crowdsec) == $'install ok installed\t1.8.2' ]]
-  # Read loaded command metadata only. Services stay disabled and the missing
-  # startup gate still denies starts; restore runtime denial before assertions.
   systemctl unmask --runtime crowdsec.service >/dev/null 2>&1
   systemctl daemon-reload
   systemctl show -p ExecStartPre -p ExecStart -p ExecReload crowdsec.service >"$proof/engine-commands"
@@ -120,8 +112,6 @@ PY
   [[ ! -s /etc/crowdsec/acquis.yaml ]]
   [[ -z $(find /etc/crowdsec/acquis.d -mindepth 1 -maxdepth 1 -type f -print -quit) ]]
   crowdsec_remove_online /etc/crowdsec/config.yaml /etc/crowdsec/config.yaml.local /etc/crowdsec/online_api_credentials.yaml
-  # Only these exact calls have reviewed non-database paths. Their outputs
-  # include configuration and therefore never leave private descriptors.
   /usr/bin/cscli hub update >/dev/null 2>&1
   /usr/bin/cscli hub upgrade >/dev/null 2>&1
   CROWDSEC_SETUP_UNATTENDED_DISABLE=1 /usr/bin/cscli setup unattended >/dev/null 2>&1

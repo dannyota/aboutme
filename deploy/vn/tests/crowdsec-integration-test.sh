@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Hosted-only PostgreSQL and real pinned-consumer proof in private namespaces.
 set -Eeuo pipefail
 retention_fixture_case=crowdsec-integration
 exec {integration_error_fd}>&2
@@ -23,8 +22,6 @@ retention_fixture_profile_binary "$profile_go"
 retention_fixture_case=crowdsec-integration
 retention_fixture_consumers
 sed -i 's|api_url http://127.0.0.1:8095|api_url http://127.0.0.1:18095|' "$retention_fixture/Caddyfile"
-# A second real pinned listener exercises maintenance's independent bouncer
-# cache. Process control remains the existing explicit namespace adapter.
 sed -e 's/:18080 {/:18081 {/' -e 's/respond "allowed" 200/respond "maintenance" 503/' \
   "$retention_fixture/Caddyfile" >"$retention_fixture/Caddyfile.maintenance"
 python3 -I - "$retention_fixture/control" <<'PYCONTROL'
@@ -43,8 +40,6 @@ sql() {
 }
 crowdsec_assert_postgresql
 
-# A positive vendor call distinguishes gate refusal from a broken CLI. Trace
-# only private, fixed arguments and prove refusal precedes vendor execution.
 crowdsec_admitted_cli bouncers list -o json >/dev/null 2>&1
 for fault in schema statistics; do
   if [[ $fault == schema ]]; then
@@ -159,7 +154,6 @@ integration_stage=parser-event-time
 bash "$repo_root/deploy/vn/tests/crowdsec-config-test.sh" parser
 integration_stage=consumers
 
-# These are real HTTP and kernel checks, not stream or last-pull assertions.
 http_status() { curl --noproxy '*' -s -o /dev/null -w '%{http_code}' --max-time 2 --interface "$1" "$2"; }
 wait_status() {
   local want=$1 source=$2 url=$3 result attempt
@@ -186,8 +180,6 @@ ip -6 addr add 2001:db8::80/128 dev lo >/dev/null 2>&1
 ip addr add 192.0.2.81/32 dev lo >/dev/null 2>&1
 ip -6 addr add 2001:db8::81/128 dev lo >/dev/null 2>&1
 
-# Exercise the installed entry point with real catalogs and consumers. Only
-# systemd and Podman's secret transport use the namespace adapters.
 retention_fixture_case=real-migration-switch
 integration_stage=migration-setup
 lib=/usr/local/lib/aboutme
@@ -207,8 +199,6 @@ fi
 exec /usr/local/lib/aboutme/secrets-host-real.sh "$@"
 SH
 chmod 0755 "$lib/secrets-host.sh"
-# Podman is outside this namespace proof. Deliver the real host helper's key
-# to the file read by both real Caddy processes, without exposing its value.
 printf '#!/usr/bin/env bash\nset -euo pipefail\nfixture=%q\n' "$retention_fixture" >"$retention_fixture/bin/podman"
 cat >>"$retention_fixture/bin/podman" <<'SH'
 case "$*" in
@@ -223,8 +213,6 @@ install -d -m 0700 "$retention_fixture/enabled" "$retention_fixture/active" /srv
 install -d -m 0755 /etc/aboutme
 mount -t tmpfs -o size=1m,mode=0700 tmpfs /etc/aboutme
 install -d -m 0700 /etc/aboutme/secrets /var/lib/aboutme/privacy-notice
-# The fresh fence's minimum is the installed tracked floor; check-current admits
-# that release.
 integration_release=$(sed -n 's/^floor_release=//p' /usr/local/lib/aboutme/fence.sh)
 [[ $integration_release =~ ^[0-9]+$ ]]
 printf '{"release_number":%s}\n' "$integration_release" >/var/lib/aboutme/release.json
@@ -246,7 +234,6 @@ cscli bouncers add aboutme-caddy -o raw >"$retention_fixture/caddy.key" 2>/dev/n
 cscli bouncers add aboutme-firewall -o raw >"$retention_fixture/firewall.key" 2>/dev/null
 cat "$edge/bouncers/crowdsec-firewall-bouncer.yaml.local" >/etc/crowdsec/bouncers/crowdsec-firewall-bouncer.yaml.local
 printf 'api_key: %s\n' "$(cat "$retention_fixture/firewall.key")" >>/etc/crowdsec/bouncers/crowdsec-firewall-bouncer.yaml.local
-# Preserve all three SQLite-era files so deletion cannot pass vacuously.
 [[ -s /var/lib/crowdsec/data/crowdsec.db ]]
 touch /var/lib/crowdsec/data/crowdsec.db-shm /var/lib/crowdsec/data/crowdsec.db-wal
 snapshot_credentials() {
@@ -256,7 +243,6 @@ snapshot_credentials() {
   install -m 0600 "$retention_fixture/firewall.key" "$retention_fixture/$1-firewall.key"
 }
 snapshot_credentials sqlite
-# The pre-switch services must be real processes, even with a SQLite catalog.
 integration_stage=migration-sqlite-start
 touch "$retention_fixture/sqlite-consumers"
 systemctl start crowdsec.service crowdsec-firewall-bouncer.service aboutme-caddy.service aboutme-maintenance.service
@@ -401,7 +387,6 @@ credentials_status sqlite 200 200
 integration_stage=migration-sqlite-files
 for suffix in '' -shm -wal; do [[ -f /var/lib/crowdsec/data/crowdsec.db$suffix ]]; done
 integration_stage=migration-switch
-# Cached data older than the vendor's shelf life must not require the hub.
 find /var/lib/crowdsec/data -type f ! -name 'crowdsec.db*' -exec touch -d "$retention_fixture_now - 8 days" {} +
 migration_run
 integration_stage=migration-switch-order
@@ -425,7 +410,6 @@ printf 'PASS real-migration-rejects-all-old-credentials\n'
 
 retention_fixture_case=real-migration-reset
 integration_stage=reset-attack-row
-# A live row and collected statistics distinguish recreation from cleanup.
 sql "INSERT INTO alerts (id,created_at,updated_at,started_at,stopped_at,scenario,source_ip,source_scope,source_value,capacity,events_count,leak_speed,simulated)
  VALUES (99000,:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,'crowdsecurity/ssh-bf','192.0.2.90','Ip','192.0.2.90',1,1,'1s',false);" >/dev/null
 integration_stage=reset-catalog-before
@@ -464,7 +448,6 @@ integration_stage=failure-denies-startup
 if "$lib/crowdsec-retention-lease-check.sh"; then exit 1; fi
 integration_stage=failure-injection-consumed
 [[ ! -e $retention_fixture/register-fail-once ]]
-# The injection ran after catalog initialization and machine registration.
 integration_stage=failure-initialized-gate
 "$lib/crowdsec-db.sh" preflight-ready </dev/null >/dev/null 2>&1
 integration_stage=failure-machine-registration
@@ -482,7 +465,6 @@ integration_stage=recovery-run
 migration_run --reset
 integration_stage=recovery-catalog-replaced
 [[ $(retention_fixture_admin postgres <<<"SELECT oid FROM pg_database WHERE datname='crowdsec';") != "$catalog_failed" ]]
-# Failure discarded the active-edge record; recovery preserves stopped edges.
 integration_stage=recovery-edge-state
 [[ $(cat "$retention_fixture/migrate-err") == crowdsec_migrate_no_edge ]]
 integration_stage=recovery-firewall-key
@@ -496,9 +478,6 @@ credentials_status recovered 200 200
 migration_noop
 printf 'PASS real-migration-failure-requires-explicit-reset\n'
 
-# Detection and retention proofs start with only the serving edge active.
-# Capture one clock for feed records, SQL fixtures and retention verification.
-# Nightly selection has separate boundary proofs; this proof needs a live pass.
 retention_fixture_now=$(/usr/bin/date -u +%Y-%m-%dT%H:%M:%S.%NZ)
 if [[ ${retention_fixture_now:11:5} > 19:59 && ${retention_fixture_now:11:5} < 20:05 ]]; then
   retention_fixture_now=$(/usr/bin/date -u -d "$retention_fixture_now - 5 minutes" +%Y-%m-%dT%H:%M:%S.%NZ)
@@ -508,7 +487,7 @@ retention_fixture_case=real-consumer-proof
 integration_stage=consumers
 systemctl stop aboutme-maintenance.service
 
-append_records() { # ip status count route [method] [probe] [target]
+append_records() {
   local ip=$1 status=$2 count=$3 route=$4 method=${5:-GET} probe=${6:-none} target=${7:-} i ts target_json destination=$feed
   [[ $route != maintenance ]] || destination=/run/aboutme/caddy-log/crowdsec/maintenance.json
   target_json=$(jq -cn --arg value "$target" '$value')
@@ -526,8 +505,6 @@ for scenario in aboutme-http-rate aboutme-http-status; do
   fi
 done
 
-# Each invalid shape has its own source and enough scanner events to overflow
-# a bucket if the parser accepts it. Diagnostics report fixed labels only.
 printf '{"malformed":"parserdiagnosticmarker4c8a",\n' >>"$feed"
 rejected_ips=()
 rejection_filters=(
@@ -585,7 +562,7 @@ for _ in $(seq 21); do
     "$ts" "$duplicate_ip" >>"$feed"
 done
 
-wait_for_decision() { # ip
+wait_for_decision() {
   local ip=$1 attempt decisions
   for ((attempt = 0; attempt < 30; attempt++)); do
     decisions=$(crowdsec_admitted_cli decisions list -o json)
@@ -659,8 +636,6 @@ for index in "${!valid_targets[@]}"; do
   IFS='|' read -r probe target <<<"${valid_targets[$index]}"
   append_records "$ip" 404 21 unknown GET "$probe" "$target"
   wait_for_decision "$ip" >/dev/null || {
-    # Best effort: collection never changes the verdict or its message. The
-    # file is made readable for the unprivileged artifact upload.
     ( set +e; trap - ERR
       printf 'valid_target_index=%s\n' "$index"
       printf 'fixture_time=%s\n' "$retention_fixture_now"
@@ -712,8 +687,6 @@ if grep -qE 'parserdiagnosticmarker4c8a|eligible%2fmarker|/unknown/sample\?token
   exit 1
 fi
 
-# A shared address sends wrong passwords, throttled requests, and the
-# bouncer's 403s; none of them may create a ban.
 shared_ip=192.0.2.50
 append_records "$shared_ip" 401 15 auth POST
 append_records "$shared_ip" 403 15 static GET
@@ -730,8 +703,6 @@ decision_duration() {
     WHERE d.value='$1' AND d.scenario='aboutme/http-status' ORDER BY d.id DESC LIMIT 1;"
 }
 integration_assert_count first-duration "$(decision_duration "$attack_ip")" -eq 900
-# A second offense from the same address escalates to one hour. It comes
-# from another route class: the first bucket is blackholed for five minutes.
 append_records "$attack_ip" 404 21 public
 for _ in $(seq 60); do
   [[ $(sql "SELECT count(*) FROM decisions WHERE value = '$attack_ip' AND scenario = 'aboutme/http-status';") -ge 2 ]] && break
@@ -746,7 +717,6 @@ for _ in {1..30}; do
 done
 integration_assert_count third-duration "$(decision_duration "$attack_ip")" -eq 14400
 
-# Expired history stays stored but cannot turn a new offense into a longer ban.
 expired_history_ip=192.0.2.46
 sql "INSERT INTO alerts (id,created_at,updated_at,started_at,stopped_at,scenario)
  VALUES (89000,:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,:'fixture_time'::timestamptz,'aboutme/http-status');
@@ -776,8 +746,6 @@ if ss -Htpn | grep -F crowdsec | grep -qvE '127\.0\.0\.1:[0-9]+[[:space:]]+127\.
   exit 1
 fi
 
-# The host retention job truncates the active file every five minutes. A new
-# record must still reach the parser after the same operation.
 : >"$feed"
 second_ip=192.0.2.42
 append_records "$second_ip" 404 21 static
@@ -829,7 +797,6 @@ PY
 nft add table inet retention_unrelated
 credential_digest=$(sql 'SELECT machine_id,password FROM machines ORDER BY id;' | sha256sum)
 bouncer_digest=$(sql 'SELECT name,api_key FROM bouncers ORDER BY id;' | sha256sum)
-# Hold a real response carrying a ban until stopped SQL deletion completes.
 ip addr add 192.0.2.52/32 dev lo
 touch "$retention_fixture/stream-hold"
 append_records 192.0.2.52 404 21 static
@@ -838,8 +805,6 @@ for _ in {1..100}; do [[ ! -e $retention_fixture/stream-held ]] || break; sleep 
 [[ -e $retention_fixture/stream-held && ! -e $retention_fixture/stream-released ]]
 old_caddy_pid=$(cat "$retention_fixture/pids/aboutme-caddy.service")
 old_maintenance_pid=$(cat "$retention_fixture/pids/aboutme-maintenance.service")
-# Keep decisions active in caches. Stale parents and an old child force the
-# exact candidate fallback rather than natural decision expiry.
 sql "UPDATE alerts SET created_at=:'fixture_time'::timestamptz-interval '23 hours 31 minutes'
  WHERE source_ip IN ('192.0.2.41','192.0.2.42','192.0.2.52','192.0.2.80','2001:db8::80');
  UPDATE events SET time=:'fixture_time'::timestamptz-interval '23 hours 31 minutes'
@@ -868,7 +833,6 @@ wait_status timeout 2001:db8::81 'http://[::1]:18080/'
 wait_status 403 192.0.2.45 http://127.0.0.1:18080/
 /usr/local/lib/aboutme/crowdsec-retention-lease-check.sh
 
-# Natural expiry and an explicit pre-selection revocation stay stream-visible.
 retention_fixture_case=expiry-and-revocation-deferred-until-batch
 integration_stage=expiry-setup
 systemctl stop aboutme-maintenance.service
@@ -876,7 +840,6 @@ for address in 192.0.2.49 192.0.2.51; do ip addr add "$address/32" dev lo; done
 crowdsec_admitted_cli decisions add --ip 192.0.2.49 --duration 20s >/dev/null 2>&1
 integration_stage=expiry-ban-visible
 wait_status 403 192.0.2.49 http://127.0.0.1:18080/
-# Start the stream-removal check after expiry, not when the ban first arrives.
 integration_stage=expiry-database-clock
 expired=0
 for _ in {1..20}; do
@@ -895,7 +858,6 @@ crowdsec_admitted_cli decisions delete --ip 192.0.2.51 >/dev/null 2>&1
 wait_status 200 192.0.2.51 http://127.0.0.1:18080/
 integration_assert_count expired-before-retention \
   "$(sql "SELECT count(*) FROM decisions WHERE value IN ('192.0.2.49','192.0.2.51') AND until<=clock_timestamp();")" -eq 2
-# Preserve both row histories and durations on the controlled retention clock.
 integration_stage=expiry-clock-translation
 sql "BEGIN;
  CREATE TEMP TABLE clock_shift AS SELECT :'fixture_time'::timestamptz-clock_timestamp() AS delta;
@@ -926,7 +888,6 @@ wait_status 403 192.0.2.45 http://127.0.0.1:18080/
 systemctl start aboutme-maintenance.service
 printf 'PASS real-expiry-and-revocation-retained-until-stopped-batch\n'
 
-# Replay event time through the pinned engine, without waiting 25 wall hours.
 retention_fixture_case=slow-trickle-old-first-timestamp
 integration_stage=slow-trickle-empty
 integration_assert_count initial-alerts \
@@ -945,7 +906,6 @@ with pathlib.Path(sys.argv[1]).open('w') as stream:
 PY
 "$lib/crowdsec-db.sh" preflight-ready </dev/null >/dev/null 2>&1
 replay_status=0
-# DSN replay uses CLI labels instead of the serving acquisition's labels.
 timeout 120 crowdsec -no-api -dsn "file://$retention_fixture/trickle.json" \
   -type aboutme-http -label feed_mode:serving -order-event \
   >"$retention_fixture/replay.log" 2>&1 || replay_status=$?
@@ -959,7 +919,6 @@ integration_assert_count cached-samples \
   "$(sql "SELECT coalesce(max(n),0) FROM (SELECT count(*) n FROM events WHERE alert_events IN (SELECT id FROM alerts WHERE source_ip='192.0.2.47') GROUP BY alert_events) samples;")" -le 6
 integration_assert_count decisions \
   "$(sql "SELECT count(*) FROM decisions WHERE value='192.0.2.47';")" -gt 0
-# Copy the replay's actual occurrence clocks into a graph without a decision.
 integration_stage=slow-trickle-copy
 sql "INSERT INTO alerts (id,created_at,updated_at,started_at,stopped_at,scenario,source_ip)
  SELECT 89001,created_at,updated_at,started_at,stopped_at,scenario,'192.0.2.48'
@@ -979,7 +938,6 @@ printf 'PASS slow-trickle-overdue-cleanup\n'
 [[ $(sql "SELECT count(*) FROM pg_stats WHERE schemaname='public';") == 0 ]]
 /usr/local/lib/aboutme/crowdsec-vacuum.sh
 [[ $(sql "SELECT count(*) FROM pg_stats WHERE schemaname='public';") == 0 ]]
-# A genuine lease is accepted before independent failures remove authorization.
 systemctl stop aboutme-caddy.service aboutme-maintenance.service crowdsec-firewall-bouncer.service crowdsec.service
 sql "UPDATE alerts SET created_at=:'fixture_time'::timestamptz-interval '23 hours 31 minutes' WHERE source_ip='192.0.2.45';" >/dev/null
 /usr/local/lib/aboutme/crowdsec-retention.sh startup

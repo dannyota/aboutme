@@ -4,7 +4,6 @@ root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 host=$root/deploy/vn/scripts/deploy-host.sh
-# Load only function definitions. All host commands below are stubs.
 sed -n '/^step_oneshot() {/,/^}/p' "$host" >"$work/oneshot"
 sed 's|/usr/local/lib/aboutme/workload-lock.sh|workload_lock|' "$work/oneshot" >"$work/functions"
 # shellcheck disable=SC1091
@@ -80,8 +79,6 @@ grep -qxF "Image=$observer_image" "$units/aboutme-observer.container"
 grep -qxF 'restart aboutme-observer' "$work/calls"
 if grep -q '@[A-Z_]*@' "$units/aboutme-observer.container"; then exit 1; fi
 grep -q 'aboutme-observer.container.in.*continue' "$host"
-# Atomic authority replacement requires the directory mount, rather than an
-# inode pinned by a single-file bind. This also applies after saved restoration.
 grep -qxF 'Volume=/var/lib/aboutme/privacy-notice:/var/lib/aboutme/privacy-notice:ro' \
   "$root/deploy/vn/host/quadlet/aboutme-server.container.in" || {
   echo 'server lacks the whole read-only notice authority directory' >&2; exit 1;
@@ -90,8 +87,6 @@ if grep -Eq '^Volume=.*privacy-notice/(epoch|send.json|activation.json):' \
   "$root/deploy/vn/host/quadlet/aboutme-server.container.in"; then
   echo 'server pins a replaceable authority file' >&2; exit 1
 fi
-# Exercise both callers with a failed real checkpoint boundary before a render
-# or any application start. The fence suite owns the notice state matrix.
 sed -n '/^step_app_up() {/,/^}/p' "$host" >"$work/app-up"
 # shellcheck disable=SC1091
 source "$work/app-up"
@@ -108,7 +103,6 @@ for operation in restore app-up; do
   [[ ! -e $work/notice-effects ]]
   grep -qxF invalid_state "$work/notice-out"
 done
-# A new full gate is required before each schema-capable smoke action.
 sed -n '/^step_ban_test() {/,/^}/p' "$host" |
   sed 's|/usr/local/lib/aboutme/crowdsec-db.sh|crowdsec_gate|g' >"$work/ban-function"
 # shellcheck disable=SC1091
@@ -191,7 +185,6 @@ for CLEANUP_ERROR in list exists reset; do
   export CLEANUP_ERROR
   : >"$work/reset-units"
   : >"$work/reset-attempts"
-  # Run outside any condition so errexit stays active, as in production.
   set +e
   (set -euo pipefail; step_timers start) 2>"$work/timers-out"
   status=$?

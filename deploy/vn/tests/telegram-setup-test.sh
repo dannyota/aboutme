@@ -72,8 +72,6 @@ expect_setup_rejected
 cp "$work/valid-env" "$work/repo/.env"
 if TG_SETUP_SSH_RESULT=1 bash "$setup" >"$work/out" 2>"$work/err"; then exit 1; fi
 
-# Source only host import functions into an installed-layout fixture. Actual
-# root admission remains in secrets-host.sh; these tests use synthetic files.
 sed -n '/^imported=(/,/^  smtp-username/p;/^replaceable=(/,/^  telegram-bot-token/p;/^podman_names=(/,/^  media-secret-access-key/p;/^member() {/,/^}/p;/^cmd_import() {/,/^}/p;/^store_telegram() {/,/^}/p;/^cmd_podman_sync() {/,/^}/p;/^cmd_age_copy() {/,/^}/p' \
   "$repo/deploy/vn/scripts/secrets-host.sh" >"$work/lib/imports.sh"
 # shellcheck disable=SC1091
@@ -142,7 +140,6 @@ assert "Restart" not in unit["Service"], "alert automatically repeats a complete
 # Allow the credential lock, three bounded requests, two waits, and cleanup.
 assert 85 < int(unit["Service"]["TimeoutStartSec"].removesuffix("s")) <= 120
 PY
-# Missing rotation confirmation leaves automatic delivery disabled.
 python3 -I - "$repo/docs/runbooks/production.md" <<'PY'
 import pathlib, sys
 runbook = pathlib.Path(sys.argv[1]).read_text()

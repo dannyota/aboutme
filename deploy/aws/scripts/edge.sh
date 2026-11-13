@@ -1,25 +1,11 @@
 # shellcheck shell=bash
-# Sourced by deploy.sh. The deploy-time origin-certificate guard
-# (docs/design/cloudfront-edge.md, "Origin certificate";
-# docs/adr/history/aws-production.md: "A deploy
-# refuses to run when it has fewer than 21 days left"). Needs $region, $work,
-# and say() already set.
 
-# /aboutme/prod/tls/origin-cert holds only the public certificate chain and
-# /aboutme/prod/tls/origin-key-sha256 only the SHA-256 of the origin key's
-# public key (tls.sh writes both); neither is secret, and the private key is
-# never read. They are read with the base caller's own credentials, as
-# origin_ip does: ssm:GetParameter is outside the deploy role's closed IAM
-# list. A certificate that does not match the stored key would stop every
-# Caddy start, so the deploy refuses first.
 edge_origin_cert_check() {
   if ! aws --region "$region" ssm get-parameter --name /aboutme/prod/tls/origin-cert \
       --query Parameter.Value --output text >"$work/origin-cert.pem" 2>/dev/null; then
     say "could not read the origin certificate"
     return 1
   fi
-  # A separate parse check first, so a missing or malformed parameter reports
-  # as unreadable rather than as a false "expiring soon".
   openssl x509 -in "$work/origin-cert.pem" -noout -enddate >/dev/null 2>&1 || {
     say "could not read the origin certificate"
     return 1
@@ -34,7 +20,6 @@ edge_origin_cert_check() {
     say "could not read the origin key fingerprint"
     return 1
   }
-  # Absent until the first tls.sh export run writes it.
   if [[ $want == None ]]; then
     say "no origin key fingerprint stored yet; skipping the key match check"
     return 0
@@ -50,11 +35,6 @@ edge_origin_cert_check() {
   }
 }
 
-# Runs on every deploy: production's only edge is CloudFront
-# (docs/design/cloudfront-edge.md; docs/adr/history/aws-production.md).
-# Checks the live distribution
-# with the base caller's own credentials, as origin_ip does: cloudfront:List*
-# and ec2:DescribeAddresses are outside the deploy role's closed list.
 edge_distribution_check() {
   local ip domain dists count origin https_port protocol mtls_arn origin_domain
   ip=$(aws --region "$region" ec2 describe-addresses --filters Name=tag:Name,Values=aboutme-prod \
@@ -74,8 +54,6 @@ edge_distribution_check() {
     say "expected exactly one CloudFront distribution for aboutme.vn; found $count; run tofu apply first"
     return 1
   }
-  # The distribution has more than one origin (the host and the transparency
-  # bucket), so the check reads the host origin by its OpenTofu origin_id.
   origin=$(jq -c '[.DistributionList.Items[] | select(.Aliases.Items[]? == "aboutme.vn")][0].Origins.Items[]? | select(.Id == "host")' <<<"$dists")
   https_port=$(jq -r '.CustomOriginConfig.HTTPSPort // empty' <<<"$origin")
   protocol=$(jq -r '.CustomOriginConfig.OriginProtocolPolicy // empty' <<<"$origin")
@@ -101,12 +79,7 @@ edge_distribution_check() {
   }
 }
 
-# The direct-origin check covers 443 and 8443 (docs/design/cloudfront-edge.md,
-# "Deploys and monitoring"). The security groups drop these packets, so only a
-# timeout (curl exit 28) passes: a refused connection or a TLS rejection means
-# the port is reachable, and mTLS alone is guarding it. It never retries into
-# a pass.
-edge_origin_closed() { # ip port
+edge_origin_closed() {
   local status=0
   curl -sk -m "${DEPLOY_SMOKE_TIMEOUT:-5}" -o /dev/null "https://$1:$2/" || status=$?
   ((status == 28)) || {

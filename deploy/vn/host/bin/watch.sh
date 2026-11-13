@@ -1,10 +1,5 @@
 #!/usr/bin/env bash
 # shellcheck source-path=SCRIPTDIR
-# The five-minute host watch (docs/design/vietnam-production.md, "Logs,
-# metrics, and alarms"). Runs as root from aboutme-watch.service and calls
-# the selected sender for alarm conditions, at most one message per
-# condition per day. Coraza counts stay in the journal. Every check runs even
-# when an earlier one fires.
 set -euo pipefail
 export LC_ALL=C
 
@@ -27,7 +22,7 @@ disk_percent=70
 backup_hours=26
 crowdsec_bans_per_hour=${CROWDSEC_BANS_PER_HOUR:-50}
 
-alert() { # key subject [detail]
+alert() {
   printf '%s\n' "${3-}" | "$sender" "$1" "$2" || true
 }
 
@@ -45,7 +40,6 @@ watch_crowdsec() (
   case $result in
     0) printf '%s\n' "$count" ;;
     3 | 124 | 137)
-      # Keep fence admission through shutdown, as the restore contract requires.
       "$lib/crowdsec-retention-fail.sh" || true
       echo 0 ;;
     *) return 1 ;;
@@ -53,7 +47,6 @@ watch_crowdsec() (
 )
 
 watch_crowdsec_query() {
-  # Keep the group alive until the outer deadline kills ignored-TERM children.
   trap '' TERM
   # The parent owns the fence and, when admitted, retention. Validate its fence
   # descriptor before the bounded admission query.
@@ -68,8 +61,6 @@ watch_crowdsec_query() {
   # shellcheck source=../crowdsec-retention-lease-check.sh
   source "$lib/crowdsec-retention-lease-check.sh"
   crowdsec_lease_check || return 3
-  # A stuck retention owner cannot suppress the independent watchdog. On lock
-  # contention inspect admission under the fence, but omit the ordinary query.
   if [[ $2 != yes ]]; then echo 0; return 0; fi
   if crowdsec_db_ready; then
     timeout --kill-after=1s 5 cscli alerts list --since 1h -o json 2>/dev/null |
@@ -82,11 +73,8 @@ watch_crowdsec_query() {
 if [[ $# == 3 && $1 == --crowdsec-query ]]; then watch_crowdsec_query "$2" "$3"; exit; fi
 (($# == 0)) || exit 2
 
-# The safety query has its own deadline. Shutdown retains its separate stop
-# budget; disk, backup, and journal checks run after both locks close.
 bans=$(watch_crowdsec) || exit 1
 
-# Root and data volume use.
 for pair in root:/ data:/srv/data; do
   name=${pair%%:*} mount=${pair#*:}
   used=$(df --output=pcent "$mount" | tail -n1 | tr -dc 0-9)
@@ -95,7 +83,6 @@ for pair in root:/ data:/srv/data; do
   fi
 done
 
-# Keep the subject count-only and detail below the sender's 2048-byte cap.
 failed=$(systemctl list-units --state=failed --no-legend --plain | awk '{ print $1 }' | sort |
   awk '
     NF { count++
@@ -108,17 +95,14 @@ if [[ -n $failed ]]; then
   alert failed-units "failed units: ${failed%%$'\n'*}" "${failed#*$'\n'}"
 fi
 
-# PostgreSQL over its socket.
 if ! runuser -u postgres -- pg_isready -q -h /run/postgresql; then
   alert postgres-down "PostgreSQL does not answer on /run/postgresql"
 else
-  # WAL archiving: the last attempt failed after the last success.
   archive_failing=$(runuser -u postgres -- psql -X -q -At -h /run/postgresql -d postgres -c \
     "SELECT coalesce(last_failed_time > coalesce(last_archived_time, 'epoch'), false) FROM pg_stat_archiver" || echo t)
   [[ $archive_failing == f ]] || alert archive-failing "WAL archiving to the backup bucket is failing"
 fi
 
-# Newest backup age.
 newest=$(runuser -u postgres -- pgbackrest --stanza=aboutme info --output=json 2>/dev/null |
   jq -r '[.[0].backup[]?.timestamp.stop | numbers] | max // empty' 2>/dev/null || true)
 if [[ -z $newest ]]; then
@@ -127,12 +111,8 @@ elif ((($(date +%s) - newest) / 3600 >= backup_hours)); then
   alert backup-stale "the newest backup is $((($(date +%s) - newest) / 3600)) hours old"
 fi
 
-# CrowdSec alert count captured under the bounded safety lock.
 ((bans <= crowdsec_bans_per_hour)) || alert crowdsec-bans "CrowdSec raised $bans alerts in the last hour"
 
-# Coraza writes metadata only. Each Caddy process owns one current file and at
-# most two rolls. Filter by record time because a low-volume current file can
-# live longer than the one-hour window.
 mapfile -t waf_logs < <(
   for stream in serving-match maintenance-match; do
     find /run/aboutme/caddy-log/waf -maxdepth 1 -type f \
@@ -162,6 +142,5 @@ if ((${#waf_logs[@]})); then
 fi
 printf 'coraza counts in the last hour: matches=%s unparsed=%s diagnostics=%s\n' "$matches" "$unparsed" "$diagnostics"
 
-# totp_unavailable in the server journal since the last run.
 totp=$(journalctl -u aboutme-server --since -6min -o cat --no-pager 2>/dev/null | grep -c -F totp_unavailable || true)
 ((${totp:-0} == 0)) || alert totp-unavailable "the server logged totp_unavailable $totp times"
