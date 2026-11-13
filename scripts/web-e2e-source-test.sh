@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 
-# Black-box contract for the reviewed Playwright candidate-source boundary.
 set -Eeuo pipefail
 export LC_ALL=C
 export TZ=UTC

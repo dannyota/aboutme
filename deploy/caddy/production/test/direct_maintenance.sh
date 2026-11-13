@@ -1,14 +1,10 @@
 # shellcheck shell=bash
-# Direct-maintenance regression helpers sourced by ../test.sh.
-# The harness defines the shared container, port, and work-directory variables.
 # shellcheck disable=SC2154
 
 test_direct_maintenance_log_isolation() {
   local serving_sum serving_feed_sum mdport mhport maintenance_ca code maintenance_matches
   local maintenance_feed leak
 
-  # Maintenance Caddy runs beside serving Caddy during a deploy. Both share the
-  # host log mount, but each process owns and rotates a distinct diagnostic file.
   serving_sum=$(podman exec "$name" sha256sum /var/log/caddy/waf/serving-match.log)
   serving_feed_sum=$(podman exec "$name" sha256sum /var/log/caddy/crowdsec/serving.json)
   podman exec "$name" test ! -e /var/log/caddy/waf/maintenance-match.log

@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Shared bounded consumer shutdown and retention failure action.
 
 retention_quiescent() {
   local unit state group container status
@@ -54,7 +53,6 @@ retention_stop() {
   {
     declare -p systemctl_cmd protected_units
     declare -f retention_quiescent retention_stop_main
-    # Keep the group leader alive until forced termination also kills children.
     printf 'trap "" TERM\n'
     printf 'retention_stop_main\n'
   } | timeout --signal=TERM --kill-after=2s 58 bash
@@ -113,8 +111,6 @@ retention_fail_main() {
     declare -f retention_quiescent retention_stop_main retention_stop retention_fail_action
     printf '%s\n' 'trap "" TERM' 'retention_fail_action'
   } | timeout --signal=TERM --kill-after=2s 73 bash || failed=1
-  # The manager starts delivery outside this process group and its safety locks.
-  # Bound only dispatch here; the alert service owns delivery and its journal.
   {
     declare -p systemctl_cmd
     printf '%s\n' 'trap "" TERM' '"$systemctl_cmd" --no-block start aboutme-alert@aboutme-crowdsec-retention.service'

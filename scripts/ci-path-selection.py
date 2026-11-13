@@ -1,5 +1,3 @@
-"""Select CI jobs and mutation tests. Errors retain the full gate."""
-
 import os
 import re
 import selectors

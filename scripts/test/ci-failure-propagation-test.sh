@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 
-# Author regression tests for failure propagation inside scripts/ci.sh groups.
 set -Eeuo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)

@@ -1,7 +1,4 @@
 #!/usr/bin/env bash
-# Runs one pgBackRest operation as the postgres user for
-# aboutme-backup@<kind>.service (docs/design/vietnam-production.md,
-# "PostgreSQL"). Accepts only full, diff, or verify.
 set -euo pipefail
 
 if [[ ${1-} != --locked ]]; then

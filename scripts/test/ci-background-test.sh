@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 
-# Tests scripts/ci-background.sh: a started command's output and exit status
-# reach the waiting step, a timeout fails, and misuse is refused.
 set -Eeuo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
@@ -45,7 +43,6 @@ status=0
 bash "$BG" wait never 1 >/dev/null 2>&1 || status=$?
 [ "$status" -eq 1 ] || fail "waiting for a name never started exited $status, want 1"
 
-# A log without an exit-status file cannot count as a completed command.
 mkdir -p "$CI_BACKGROUND_DIR"
 printf 'command output without completion\n' >"$CI_BACKGROUND_DIR/lost.log"
 status=0

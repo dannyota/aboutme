@@ -1191,8 +1191,6 @@ test("dev-https static shards retain sanitized startup evidence when a check fai
   assert.ok(!upload["continue-on-error"]);
 });
 
-// Every operational suite that left contracts still runs once, in a job that
-// no selection can skip, and the dev-https shards cover every check.
 function checkOperationalJobs(ci) {
   const commands = (name) => (ci.jobs[name].steps ?? []).map((step) => step.run ?? "");
   const runs = (target) => Object.keys(ci.jobs).flatMap((name) => commands(name)
@@ -1777,9 +1775,6 @@ const packagedInstallers = new Set([golangciInstaller, "./.github/actions/instal
 const packagedTool = /golangci|trivy|caddy|opentofu|\btofu\b/i;
 const toolRepository = String.raw`(?:golangci\/golangci-lint|aquasecurity\/trivy|caddyserver\/caddy|opentofu\/opentofu)`;
 const toolName = String.raw`(?:golangci-lint|trivy|caddy|opentofu|tofu)`;
-// Each pattern acquires one of these tools: a release or install-script
-// download, a source build, a download saved under the tool's name, a script
-// piped to a shell, or a package manager install.
 const toolAcquisition = [
   /\/releases\/download\//,
   new RegExp(String.raw`\bgo\s+(?:install|run|get)\b.*github\.com\/${toolRepository}`),
@@ -1792,8 +1787,6 @@ const toolAcquisition = [
 ];
 const scriptPath = /(?:^|[\s"'=])(?:\.\/)?(scripts\/[\w./-]+\.sh)\b/g;
 
-// Rejects a line that acquires golangci-lint, Trivy, Caddy, or OpenTofu, and
-// any GitHub release download at all.
 function checkToolLines(text, label, skipComments = false) {
   for (const line of text.replace(/\\\r?\n\s*/g, " ").split("\n")) {
     if (skipComments && /^\s*#/.test(line)) continue;
@@ -1801,10 +1794,6 @@ function checkToolLines(text, label, skipComments = false) {
   }
 }
 
-// golangci-lint, Trivy, Caddy, and OpenTofu come only from the verified
-// ci-tools archives, through the local installers or a script CI calls for
-// them. golangci-lint-action may only run the binary install-golangci-lint
-// put on PATH earlier in the same job.
 function checkToolSources(source, path, readScript = read) {
   const doc = parseYaml(source, path).toJS();
   assert.ok(!/\/releases\/download\//.test(JSON.stringify(doc)), `${path}: tools come only from the ci-tools package, not a release download`);
@@ -1844,7 +1833,6 @@ test("golangci-lint, Trivy, Caddy, and OpenTofu come only from the ci-tools pack
   checkToolSources(job(`${install}      - run: golangci-lint run ./...\n`), "fixture");
   checkToolSources(job("      - uses: ./.github/actions/install-caddy\n      - uses: ./.github/actions/install-opentofu\n"), "fixture");
   checkToolSources(job(trivyInstall), "fixture");
-  // Health checks, API queries, and tool use acquire nothing.
   checkToolSources(job([
     "      - run: curl -fsS http://127.0.0.1:2019/config/\n",
     "      - run: curl -fsS -o /dev/null http://caddy:2019/config/\n",

@@ -17,8 +17,6 @@ outputs:
 runs:
   using: composite
   steps:
-    # Pulls the database image and the public GHCR browser base from the
-    # Dockerfile's FROM reference in the background, ahead of the builds.
     - name: Start pulling container images in the background
       shell: bash
       run: |
@@ -32,15 +30,11 @@ runs:
         node-version: 24.22.2
         cache: npm
         cache-dependency-path: apps/web/package-lock.json
-    # Cached on apps/web/package-lock.json: `npx playwright install` is a
-    # no-op on a hit and still verifies the pinned browser is present.
     - name: Restore the Playwright browser cache
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ~/.cache/ms-playwright
         key: playwright-${{ runner.os }}-${{ hashFiles('apps/web/package-lock.json') }}
-    # The harness preflight requires the pinned Chromium on the host. The
-    # install overlaps the Go and Caddy setup below.
     - name: Start installing web dependencies and the pinned Chromium
       shell: bash
       run: |
@@ -53,12 +47,7 @@ runs:
     - name: Wait for web dependencies and the pinned Chromium
       shell: bash
       run: bash scripts/ci-background.sh wait web-deps
-    # Ubuntu 24.04 blocks unprivileged user namespaces for any binary without
-    # an AppArmor profile (kernel.apparmor_restrict_unprivileged_userns), so
-    # the pinned Chromium dies with "No usable sandbox" and every PDF and
-    # share-image render returns 503. This profile grants the namespace right
-    # to that one binary so the renderer keeps its sandbox, as Chromium's
-    # docs/security/apparmor-userns-restrictions.md recommends.
+    # Ubuntu 24.04 blocks unprivileged user namespaces for binaries without an AppArmor profile (kernel.apparmor_restrict_unprivileged_userns; Chromium docs/security/apparmor-userns-restrictions.md).
     - name: Let the pinned Chromium create its sandbox namespaces
       shell: bash
       run: |
@@ -66,8 +55,6 @@ runs:
         printf 'abi <abi/4.0>,\ninclude <tunables/global>\nprofile aboutme-ci-chromium %s flags=(unconfined) {\n  userns,\n}\n' "$chromium" |
           sudo tee /etc/apparmor.d/aboutme-ci-chromium >/dev/null
         sudo apparmor_parser -r /etc/apparmor.d/aboutme-ci-chromium
-    # dev-https starts the one shared database container itself; start it
-    # first to set up its roles.
     - shell: bash
       run: make test-db-up
     - name: Initialize database roles

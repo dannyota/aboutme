@@ -1,8 +1,5 @@
 #!/usr/bin/env bash
 
-# Tests scripts/pre-push.sh in temporary repositories with stub tools: change
-# detection, per-check file selection, refusals, the lock and watchdog refusals,
-# the watchdog arguments, and checkout-local dependencies.
 set -Eeuo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
@@ -20,12 +17,11 @@ fail() {
   exit 1
 }
 
-stub() { # stub <name> <body>
+stub() {
   printf '#!/usr/bin/env bash\n%s\n' "$2" >"$BIN/$1"
   chmod +x "$BIN/$1"
 }
 
-# fails <name>: true when STUB_FAIL lists <name>.
 stub_lib='log() { printf "%s\n" "$*" >>"$CALL_LOG"; }
 fails() { [[ " ${STUB_FAIL:-} " == *" $1 "* ]]; }'
 
@@ -45,7 +41,7 @@ if [[ -n ${STUB_SHELLCHECK_WARNING:-} && " $* " == *" -S warning "* ]]; then
 fi
 ! fails shellcheck'
 
-node_tool() { # node_tool <node_modules> <bin name> <package> <version>
+node_tool() {
   local modules=$1 name=$2 package=$3 version=$4
   mkdir -p "$modules/.bin" "$modules/$package"
   printf '{"version":"%s"}\n' "$version" >"$modules/$package/package.json"
@@ -59,7 +55,7 @@ web_packages=(eslint @nuxt/eslint @nuxt/eslint-config @typescript-eslint/parser
   eslint-plugin-vue vue-eslint-parser @stylistic/eslint-plugin)
 root_packages=(prettier markdownlint-cli2 markdownlint)
 
-lockfile() { # lockfile <file> <package...>: every package at 1.0.0
+lockfile() {
   local file=$1 package
   shift
   {
@@ -69,7 +65,7 @@ lockfile() { # lockfile <file> <package...>: every package at 1.0.0
   } >"$file"
 }
 
-new_repo() { # new_repo <dir>: a committed repository whose origin/main is HEAD
+new_repo() {
   local repo=$1 package
   mkdir -p "$repo/scripts" "$repo/apps/web/app" "$repo/apps/server/internal/foo" \
     "$repo/apps/server/internal/gone" "$repo/docs" \
@@ -102,13 +98,10 @@ LOCK
   printf 'export const a = 1;\n' >"$repo/apps/web/app/a.ts"
   printf 'package foo\n' >"$repo/apps/server/internal/foo/foo.go"
   printf 'package gone\n' >"$repo/apps/server/internal/gone/gone.go"
-  # One root module holds every Go directory, like the real repository.
   printf 'module test\n\ngo 1.21\n' >"$repo/go.mod"
   printf 'test config\n' >"$repo/apps/server/.golangci.yml"
   printf 'package foo\n' >"$repo/deploy/observer/internal/foo/foo.go"
   printf 'test config\n' >"$repo/deploy/observer/.golangci.yml"
-  # packages/schema/gen/go carries no .golangci.yml, so it stays gofmt-only,
-  # like the real generated schema packages.
   printf 'package bar\n' >"$repo/packages/schema/gen/go/internal/bar/bar.go"
   printf '# Doc\n' >"$repo/docs/a.md"
   git -C "$repo" init -q -b main
@@ -131,7 +124,6 @@ LOCK
   printf 'export default [];\n' >"$repo/apps/web/.nuxt/eslint.config.mjs"
 }
 
-# check <dir> <want exit> [env...]: runs the script and saves its output.
 check() {
   local dir=$1 want=$2 status=0
   shift 2
@@ -151,9 +143,7 @@ has_line() { grep -Eq -- "$1" "$WORK/out" || fail "missing output: $1"; }
 REPO=$WORK/repo
 new_repo "$REPO"
 
-# No changes: every check skips, lengths runs, under the lock and deadline.
 check "$REPO" 0
-# The lock parent creates the main checkout's private .dev/locks directory.
 python3 -c 'import os, sys; assert all(os.stat(p).st_mode & 0o777 == 0o700 for p in sys.argv[1:])' \
   "$REPO/.dev" "$REPO/.dev/locks" || fail 'the shared lock directory is not private'
 
@@ -163,7 +153,6 @@ has_line 'lengths +pass'
 has_line 'path-case +pass'
 no_call eslint
 
-# A watchdog refusal means nothing ran. Runtime failures are check failures.
 check "$REPO" 2 STUB_OWNED_STATUS=125
 has_line 'refused: watchdog could not start'
 no_call gofmt
@@ -172,8 +161,6 @@ for code in 123 124 126 127 130 137; do
   has_line 'FAIL: watchdog stopped'
 done
 
-# A real advisory lock held by another process refuses before the watchdog.
-# The shared lock lives in the main checkout's ignored .dev/locks directory.
 mkdir -p "$REPO/.dev/locks"
 python3 - "$REPO/.dev/locks/local-check.lock" "$WORK/ready" <<'LOCK' &
 import fcntl, sys, time
@@ -193,8 +180,6 @@ wait "$holder" || true
 has_line 'another local check held'
 no_call run-owned
 
-# Committed, uncommitted, and untracked web sources all reach ESLint; other
-# files under apps/web do not.
 printf 'export const a = 2;\n' >"$REPO/apps/web/app/a.ts"
 git -C "$REPO" commit -qam "test: web change"
 printf '<template />\n' >"$REPO/apps/web/app/b.vue"
@@ -207,7 +192,6 @@ has_line 'eslint +pass +3 file'
 check "$REPO" 1 STUB_FAIL=eslint
 has_line 'eslint +FAIL'
 
-# A stale install is refused, not trusted.
 node_tool "$REPO/apps/web/node_modules" eslint eslint 0.9.0
 check "$REPO" 2
 has_line 'eslint installed 0.9.0, lockfile 1.0.0'
@@ -215,7 +199,6 @@ has_line 'eslint +REFUSED +stale'
 no_call "eslint --no-warn-ignored"
 node_tool "$REPO/apps/web/node_modules" eslint eslint 1.0.0
 
-# A manifest change needs a real install, so the web check is refused.
 printf '{"private":true}\n' >"$REPO/apps/web/package.json"
 check "$REPO" 2
 has_line 'eslint +REFUSED +the branch changed apps/web/package.json'
@@ -223,7 +206,6 @@ no_call "eslint --no-warn-ignored"
 git -C "$REPO" checkout -q -- apps/web/package.json
 rm -f "$REPO/apps/web/app/b.vue" "$REPO/apps/web/app/c.mjs" "$REPO/apps/web/app/notes.txt"
 
-# Markdown people read goes to Prettier and markdownlint; agent-only paths do not.
 mkdir -p "$REPO/instructions"
 printf '# Changed\n' >"$REPO/docs/a.md"
 printf '# Agent\n' >"$REPO/instructions/x.md"
@@ -246,10 +228,6 @@ rm -rf "$REPO/instructions" "$REPO/AGENTS.md" "$REPO/CLAUDE.md" \
   "$REPO/apps/web/AGENTS.md" "$REPO/apps/web/CLAUDE.md" "$REPO/docs/component"
 git -C "$REPO" checkout -q -- docs/a.md
 
-# Go: gofmt sees every changed Go file; golangci-lint lints only a directory
-# with its own .golangci.yml (found from the tree, not a hardcoded list), from
-# that directory. packages/schema/gen/go has no .golangci.yml, so it reaches
-# gofmt only, like the real generated schema packages.
 printf 'package foo\n\nvar X = 1\n' >"$REPO/apps/server/internal/foo/foo.go"
 git -C "$REPO" rm -q apps/server/internal/gone/gone.go
 printf 'package foo\n\nvar Y = 1\n' >"$REPO/deploy/observer/internal/foo/foo.go"
@@ -271,7 +249,6 @@ check "$REPO" 2 STUB_GOLANGCI_VERSION=2.13.0
 has_line 'golangci-lint +REFUSED +installed 2.13.0'
 git -C "$REPO" reset -q --hard
 
-# Go packages excluded by build constraints are skipped without hiding other packages.
 if command -v go >/dev/null 2>&1; then
   mkdir -p "$REPO/apps/server/internal/pins"
   printf '//go:build dependency_pins\n\npackage pins\n' >"$REPO/apps/server/internal/pins/pins.go"
@@ -295,15 +272,12 @@ else
   printf 'pre-push-test: skipping build-tag cases (go not on PATH)\n'
 fi
 
-# Shell: bash -n catches syntax errors; other scripts use error severity.
 printf 'if then\n' >"$REPO/scripts/bad.sh"
 check "$REPO" 1
 has_line 'bash-n +FAIL'
 has_call "shellcheck -S error -- scripts/bad.sh"
 rm -f "$REPO/scripts/bad.sh"
 
-# SC2043 is a warning: the same script passes outside deploy/vn and fails
-# under deploy/vn, including nested paths, with CI's shellcheck flags.
 printf '#!/usr/bin/env bash\nfor value in one; do echo "$value"; done\n' \
   >"$REPO/scripts/warning.sh"
 check "$REPO" 0 STUB_SHELLCHECK_WARNING=1
@@ -328,14 +302,12 @@ has_call "shellcheck -S error -- scripts/warning.sh"
 rm -rf "$REPO/deploy/vn"
 rm -f "$REPO/scripts/warning.sh"
 
-# check-lengths.sh runs over the whole tree.
 seq 451 | sed 's/^/line /' >"$REPO/docs/long.md"
 git -C "$REPO" add docs/long.md
 check "$REPO" 1
 has_line 'lengths +FAIL'
 git -C "$REPO" rm -q -f docs/long.md
 
-# A worktree never borrows or changes the main checkout's dependencies.
 TREE=$WORK/tree
 git -C "$REPO" worktree add -q -b topic "$TREE" HEAD
 printf 'export const a = 3;\n' >"$TREE/apps/web/app/a.ts"
@@ -366,7 +338,6 @@ has_line 'eslint +REFUSED +no generated checkout-local'
 printf 'export default [];\n' >"$TREE/apps/web/.nuxt/eslint.config.mjs"
 check "$TREE" 0
 has_call 'eslint --no-warn-ignored -- app/a.ts (in web, modules real)'
-# The declared schema link cannot redirect source reads to another checkout.
 rm "$TREE/apps/web/node_modules/@aboutme/schema"
 ln -s "$REPO/packages/schema" "$TREE/apps/web/node_modules/@aboutme/schema"
 check "$TREE" 2
@@ -382,7 +353,6 @@ no_call eslint
 [[ $(cat "$REPO/apps/web/.nuxt/.pre-push-copy") == sentinel ]] || fail 'main sentinel changed'
 rm "$TREE/apps/web/.nuxt"
 mv "$WORK/local-nuxt" "$TREE/apps/web/.nuxt"
-# Scoped package links and generated-directory ancestors also refuse.
 mv "$TREE/apps/web/node_modules/@nuxt" "$WORK/nuxt-packages"
 ln -s "$WORK/nuxt-packages" "$TREE/apps/web/node_modules/@nuxt"
 check "$TREE" 2
@@ -396,12 +366,10 @@ has_line 'active development stack'
 no_call eslint
 rm "$TREE/.dev/server.pid"
 
-# A worktree branch that changed the web lockfile is refused.
 node -e 'const fs=require("fs"); const p=process.argv[1]; fs.writeFileSync(p,fs.readFileSync(p,"utf8").replace("1.0.0", "1.1.0"));' "$TREE/apps/web/package-lock.json"
 check "$TREE" 2
 has_line 'eslint +REFUSED +the branch changed apps/web/package.json or its lockfile'
 
-# Interrupt the actual lock -> pre-push -> watchdog -> check chain.
 REAL=$WORK/real
 new_repo "$REAL"
 cp "$ROOT/scripts/run-owned.sh" "$REAL/scripts/"

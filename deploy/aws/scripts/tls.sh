@@ -1,40 +1,19 @@
 #!/usr/bin/env bash
-# Production TLS material. No private key is printed.
-#
-#   tls.sh export       export the ACM origin certificate for aboutme.vn and
-#                       www.aboutme.vn (docs/design/cloudfront-edge.md,
-#                       "Origin certificate"; docs/adr/history/aws-production.md)
-#                       to SSM, and print the next step
-#   tls.sh client-ca      new CloudFront origin mTLS CA (docs/design/
-#                         cloudfront-edge.md, "Origin access"): the CA
-#                         certificate joins the SSM trust pool (key
-#                         discarded), and the client certificate and key go
-#                         to the per-user tmpfs, ready for tls.sh client-import
-#   tls.sh client-import  imports the client certificate and key from the
-#                         per-user tmpfs into ACM in us-east-1, then deletes
-#                         those files
-#   tls.sh forget-client  delete the client files without importing
-#
 set -euo pipefail
 region=ap-southeast-1
 runtime=${XDG_RUNTIME_DIR:?XDG_RUNTIME_DIR must point at a per-user tmpfs}
 client_dir=$runtime/aboutme-cloudfront-client
 client_name=cloudfront-origin.aboutme.vn
-# ACM's name for an ECDSA P-256 key.
 acm_ec_p256=EC_prime256v1
 umask 077
 
-store() { # parameter type file [tier]
+store() {
   jq -Rs --arg n "$1" --arg t "$2" --arg tier "${4:-Standard}" \
     '{Name: $n, Type: $t, Value: ., Overwrite: true, Tier: $tier}' "$3" >"$work/request.json"
   aws ssm put-parameter --region "$region" --cli-input-json "file://$work/request.json" >/dev/null
 }
 
-# Writes the SHA-256 of a PEM private key's public key, in hex, to a file.
-# It is public data; deploy.sh compares the one stored at origin-key-sha256
-# with the stored certificate's, so a key and certificate that do not match
-# stop a deploy instead of a Caddy start.
-pubkey_sha256() { # key-file out-file
+pubkey_sha256() {
   openssl pkey -in "$1" -pubout -outform DER | openssl dgst -sha256 -r | cut -d' ' -f1 | tr -d '\n' >"$2"
 }
 
@@ -52,10 +31,7 @@ case "${1:-}" in
     openssl req -x509 "${ec[@]}" -days 3650 -subj /CN=aboutme-cloudfront-origin-ca \
       -addext basicConstraints=critical,CA:TRUE -addext keyUsage=critical,keyCertSign,cRLSign \
       -keyout "$work/ca.key" -out "$work/ca.pem" 2>/dev/null
-    # The name must be exactly $client_name, as a DNS SAN: ACM derives an
-    # imported certificate's domain name only from a DNS-shaped name, and
-    # OpenTofu's data.aws_acm_certificate.client and client-import below look
-    # it up by that domain name. No DNS record exists or is needed for it.
+    # ACM derives an imported certificate's domain name only from a DNS SAN (ACM ImportCertificate docs).
     openssl req -new "${ec[@]}" -subj "/CN=$client_name" \
       -keyout "$client_dir/client.key" -out "$work/client.csr" 2>/dev/null
     printf '%s\n' basicConstraints=critical,CA:FALSE keyUsage=critical,digitalSignature \
@@ -64,9 +40,6 @@ case "${1:-}" in
       -CAcreateserial -days 3650 -sha256 -extfile "$work/client.ext" -out "$client_dir/client.pem" 2>/dev/null
     cp "$work/ca.pem" "$client_dir/ca.pem"
 
-    # The trust pool holds every CA Caddy must still accept; a rotation keeps
-    # the old CA until the new one is deployed and the parameter is
-    # overwritten to drop it.
     existing=$(aws ssm get-parameters --region "$region" --names /aboutme/prod/tls/cloudfront-client-ca \
       --query 'Parameters[0].Value' --output text)
     if [[ $existing == None ]]; then
@@ -85,8 +58,7 @@ case "${1:-}" in
     ;;
   client-import)
     [[ -d $client_dir ]] || { echo "tls: $client_dir does not exist; run tls.sh client-ca first" >&2; exit 1; }
-    # ListCertificates returns only RSA certificates unless keyTypes names
-    # others.
+    # ACM ListCertificates returns only RSA certificates unless keyTypes names others (ACM API reference).
     client_arns=$(aws acm list-certificates --region us-east-1 --includes "keyTypes=$acm_ec_p256" \
       --query "CertificateSummaryList[?DomainName=='$client_name' && Type=='IMPORTED'].CertificateArn" \
       --output text)
@@ -95,8 +67,7 @@ case "${1:-}" in
       echo "tls: more than one imported certificate for $client_name in us-east-1; refusing" >&2
       exit 1
     elif ((${#client_cert_arns[@]} == 1)); then
-      # Reimporting keeps the same ARN, so the distribution's
-      # origin_mtls_config never changes.
+      # Reimporting into an ACM ARN keeps the ARN (ACM ImportCertificate docs).
       aws acm import-certificate --region us-east-1 --certificate-arn "${client_cert_arns[0]}" \
         --certificate "fileb://$client_dir/client.pem" --private-key "fileb://$client_dir/client.key" \
         --certificate-chain "fileb://$client_dir/ca.pem" >"$work/import.json"
@@ -117,10 +88,7 @@ case "${1:-}" in
     echo "CloudFront client files deleted"
     ;;
   export)
-    # Exactly one certificate must match: an exportable, issued ACM
-    # certificate for aboutme.vn.
-    # ListCertificates returns only RSA certificates unless keyTypes names
-    # others.
+    # ACM ListCertificates returns only RSA certificates unless keyTypes names others (ACM API reference).
     # shellcheck disable=SC2016 # The backticks are JMESPath literals.
     certs=$(aws acm list-certificates --region "$region" --certificate-statuses ISSUED \
       --includes "keyTypes=$acm_ec_p256,exportOption=ENABLED" \
@@ -130,8 +98,7 @@ case "${1:-}" in
       { echo "tls: expected exactly one exportable, issued certificate for aboutme.vn in $region; found ${#cert_arns[@]}" >&2; exit 1; }
     cert_arn=${cert_arns[0]}
 
-    # No trailing newline: ACM receives the file's exact bytes, while openssl
-    # -passin file: drops a newline, so the two would disagree.
+    # openssl -passin file: drops a trailing newline while ACM takes exact bytes (openssl-passphrase-options(1)).
     openssl rand -hex 32 | tr -d '\n' >"$work/passphrase"
     aws acm export-certificate --region "$region" --certificate-arn "$cert_arn" \
       --passphrase "fileb://$work/passphrase" --output json >"$work/export.json"
@@ -154,14 +121,9 @@ case "${1:-}" in
       { echo "tls: the certificate does not cover both aboutme.vn and www.aboutme.vn" >&2; exit 1; }
     openssl x509 -in "$work/leaf.pem" -noout -checkend $((21 * 86400)) >/dev/null ||
       { echo "tls: the certificate has fewer than 21 days left" >&2; exit 1; }
-    # CloudFront needs the chain to reach a public root.
     openssl verify -untrusted "$work/chain.pem" "$work/leaf.pem" >/dev/null 2>&1 ||
       { echo "tls: the exported chain does not verify to a trusted root" >&2; exit 1; }
 
-    # Three writes: the key's fingerprint first, then the key, then the chain.
-    # Until the last one succeeds, the stored fingerprint no longer matches
-    # the stored certificate, so deploy.sh refuses instead of starting Caddy
-    # with a key and certificate that do not match.
     pubkey_sha256 "$work/key.pem" "$work/origin-key.sha256"
     store /aboutme/prod/tls/origin-key-sha256 String "$work/origin-key.sha256"
     store /aboutme/prod/tls/origin-key SecureString "$work/key.pem"

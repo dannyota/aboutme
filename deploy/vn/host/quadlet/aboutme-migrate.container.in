@@ -1,6 +1,4 @@
-# Rendered by deploy-host.sh; do not edit on the host. One-shot migrate apply
-# as aboutme_migrator, with no network: PostgreSQL only through the mounted
-# socket (docs/design/vietnam-production.md, "Host"; ADR 0005).
+# Rendered by deploy-host.sh; do not edit on the host.
 [Unit]
 OnFailure=aboutme-alert@%N.service
 Description=aboutme migrate

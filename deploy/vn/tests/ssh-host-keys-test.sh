@@ -7,8 +7,6 @@ work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/root/etc/ssh"
 
-# Apply systemd's ExecStart reset to the provider's failing command. The
-# resulting command runs against a temporary key directory, never /etc/ssh.
 printf '[Service]\nExecStart=/usr/local/sbin/runtime-ssh-host-keys.sh\n' >"$work/vendor.service"
 mapfile -t commands < <(awk '
   /^ExecStart=/ {
@@ -42,7 +40,6 @@ generate
 sha256sum "$work/root/etc/ssh/"* >"$work/after.sha"
 cmp -s "$work/before.sha" "$work/after.sha" || { echo "existing host keys changed" >&2; exit 1; }
 
-# A missing key can be filled without replacing another host identity.
 cp "$work/root/etc/ssh/ssh_host_ed25519_key" "$work/kept-key"
 cp "$work/root/etc/ssh/ssh_host_ed25519_key.pub" "$work/kept-key.pub"
 rm "$work/root/etc/ssh/ssh_host_ecdsa_key" "$work/root/etc/ssh/ssh_host_ecdsa_key.pub"

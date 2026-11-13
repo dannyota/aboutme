@@ -12,8 +12,7 @@ readonly CONTAINER=aboutme-test-media-s3
 readonly NETWORK=aboutme-test-media-s3
 readonly ENV_FILE=$ROOT/.dev/test-s3.env
 readonly ENDPOINT=http://127.0.0.1:20091
-# Chainguard builds these images from MinIO and mc source. Pin both images
-# by digest for amd64 and arm64, including their S3 conditional write support.
+# Chainguard builds these images from MinIO and mc source, with S3 conditional writes (Chainguard minio image).
 readonly MINIO_IMAGE=cgr.dev/chainguard/minio@sha256:bd014394a80898e68c149f2311fdf8d5a2c2f3bb2c33b9327ae6d02b4b065ae1
 readonly MC_IMAGE=cgr.dev/chainguard/minio-client@sha256:b8b144ab34694ecea25aa352c4be9de4c26ee2a02701521dce02ee5593c57338
 
@@ -172,9 +171,7 @@ ensure_bucket() {
   local MC_HOST_test
   MC_HOST_test="http://${TEST_S3_ACCESS_KEY_ID}:${TEST_S3_SECRET_ACCESS_KEY}@minio:9000"
   export MC_HOST_test
-  # MC_CONFIG_DIR: the image runs as a fixed non-root UID with no home
-  # directory entry, so mc's default $HOME/.mc config path cannot be
-  # resolved; /tmp is writable regardless of UID.
+  # The mc image runs as a UID with no home directory, so mc cannot resolve $HOME/.mc (Chainguard minio-client image).
   podman run --rm --network "$NETWORK" -e MC_HOST_test -e MC_CONFIG_DIR=/tmp/.mc "$MC_IMAGE" \
     mb --ignore-existing test/aboutme-test >/dev/null ||
     die "could not create the private test bucket"

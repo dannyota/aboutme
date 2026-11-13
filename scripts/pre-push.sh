@@ -1,17 +1,4 @@
 #!/usr/bin/env bash
-# Static pre-push check over the files this branch changed since it left
-# origin/main (committed, staged, unstaged, and untracked): ESLint on web
-# sources, gofmt and golangci-lint on Go packages, Prettier and markdownlint on
-# Markdown people read, check-lengths.sh, and bash -n plus shellcheck on shell
-# scripts. It never runs tests, typechecks, builds, databases, stacks, or
-# browsers; GitHub CI runs those (instructions/resources.md).
-#
-# The parent holds the shared local-check lock through owned-child cleanup and
-# a 10-minute deadline. Selected lint tools and generated config must belong to
-# this checkout and match its lockfile. Dependency preparation runs separately.
-#
-# Exit status: 0 every check that applies passed; 1 a check failed; 2 a check
-# or the whole run could not run locally, so CI alone covers it.
 set -Eeuo pipefail
 
 readonly TIMEOUT_SECONDS=600
@@ -29,11 +16,9 @@ cd "$ROOT"
 
 say() { printf 'pre-push: %s\n' "$*"; }
 
-# The Python lock parent closes the descriptor in children on both systems.
 outer() {
   local status=0 lock_pid= pending=
-  # A trap interrupts wait, so keep waiting until the lock parent has reaped
-  # the watchdog after its cleanup. Install traps before starting the parent.
+  # A trap interrupts wait, so the loop waits again until the lock parent reaps the watchdog (bash manual, wait).
   trap 'pending=INT; [ -z "$lock_pid" ] || kill -INT "$lock_pid" 2>/dev/null || true' INT
   trap 'pending=TERM; [ -z "$lock_pid" ] || kill -TERM "$lock_pid" 2>/dev/null || true' TERM
   python3 "$ROOT/scripts/lib/local-check.py" "$LOCK" "$LOCK_WAIT_SECONDS" \
@@ -55,18 +40,15 @@ outer() {
 }
 
 locked() {
-  # The lock parent must wait on the watchdog itself, with no shell between.
   exec bash "$ROOT/scripts/run-owned.sh" \
     --timeout "$TIMEOUT_SECONDS" -- bash "$SCRIPT" --capped
 }
-
-# The static checks run inside the watchdog.
 
 declare -a SUMMARY=()
 FAILED=0
 REFUSED=0
 
-record() { # record <check> <pass|FAIL|skip|REFUSED> <detail>
+record() {
   SUMMARY+=("$(printf '%-15s %-7s %s' "$1" "$2" "$3")")
   case $2 in
   FAIL) FAILED=1 ;;
@@ -74,14 +56,14 @@ record() { # record <check> <pass|FAIL|skip|REFUSED> <detail>
   esac
 }
 
-run() { # run <check> <detail> <command...>
+run() {
   local name=$1 detail=$2
   shift 2
   say "running $name: $*"
   if "$@"; then record "$name" pass "$detail"; else record "$name" FAIL "$detail"; fi
 }
 
-filter() { # filter <extended regex> < list
+filter() {
   grep -E -- "$1" || true
 }
 
@@ -95,7 +77,6 @@ collect_changes() {
   }
   base=$(git merge-base "$BASE_REF" HEAD)
   say "base $base ($BASE_REF merge-base)"
-  # TOUCHED includes deletions; CHANGED holds only files that still exist.
   mapfile -t TOUCHED < <(
     {
       git diff --name-only "$base" --
@@ -111,7 +92,7 @@ collect_changes() {
 
 list() { printf '%s\n' "$@"; }
 
-touched() { # touched <path>: true when the branch changed or deleted <path>
+touched() {
   local f
   for f in "${TOUCHED[@]}"; do [[ $f == "$1" ]] && return 0; done
   return 1
@@ -202,8 +183,6 @@ except (OSError, ValueError, TypeError, AttributeError, OverflowError):
 GUARD
 }
 
-# tool_drift <dir with package-lock.json> <node_modules> <package...>: prints
-# each package whose installed version differs from the lockfile's.
 tool_drift() {
   local dir=$1 modules=$2
   shift 2
@@ -223,8 +202,6 @@ for (const name of names) {
 EOF
 }
 
-# node_modules_for <dir> <refuse-label> <package...>: sets MODULES to the
-# node_modules for <dir> (relative to ROOT), or records a refusal and fails.
 MODULES=
 node_modules_for() {
   local dir=$1 label=$2 modules drift prefix=$1/
@@ -290,9 +267,6 @@ check_web() {
       --no-warn-ignored -- "$@"' eslint "${files[@]}"
 }
 
-# Markdown people read: the docs-lint scope in package.json, which leaves out
-# the agent-only paths AGENTS.md lists. Prettier also applies .prettierignore,
-# which covers apps/, so Prettier checks no apps/web file.
 check_docs() {
   local -a files
   mapfile -t files < <(list "${CHANGED[@]}" | filter '\.md$' |
@@ -318,8 +292,6 @@ check_docs() {
     "${files[@]}"
 }
 
-# go_packages <lint dir>: prints ./pkg for each package below <lint dir> with
-# a changed or deleted .go file that still holds Go files.
 go_packages() {
   local root=$1 f dir
   for f in "${TOUCHED[@]}"; do
@@ -329,9 +301,6 @@ go_packages() {
   done | sort -u
 }
 
-# lint_dirs: prints every directory (relative to ROOT) that holds its own
-# .golangci.yml, tracked or newly added on this branch. Lint scopes are
-# structural, so this reads the current tree rather than TOUCHED.
 lint_dirs() {
   { git ls-files -- '*/.golangci.yml'
     git ls-files --others --exclude-standard -- '*/.golangci.yml'; } |
@@ -355,10 +324,6 @@ check_go() {
     sed 's/^/  /' <<<"$unformatted"
     record gofmt FAIL "${#files[@]} file(s); run gofmt -w on the files above"
   fi
-  # Every directory with its own .golangci.yml (apps/server, deploy/observer)
-  # is linted with that config, from that directory, over its changed
-  # packages. Go code outside those directories (packages/schema/gen/go,
-  # deploy/caddy/production/build) gets gofmt alone, as before.
   local dir package probe count
   local -a linted=() candidates=() selected=()
   for dir in "${dirs[@]}"; do

@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# Hermetic lifecycle contract tests for scripts/dev-https.sh. The production
-# script runs only inside temporary repository fixtures with controlled tools.
 set -Eeuo pipefail
 umask 077
 
@@ -429,8 +427,6 @@ run_happy_path_and_lifecycle_checks() (
   assert_contains "$caddy_config" 'client_id'
   assert_contains "$caddy_config" 'http://localhost/callback'
   assert_not_contains "$caddy_config" 'tls_insecure_skip_verify'
-  # The env file is written with printf %q, which escapes the comma; the
-  # supervisor sources it, so check the value the server receives.
   [ "$(set -a && source .dev/native-https/run/server.env && printf '%s' "$PROVIDER_LOGIN_ENABLED")" = google,linkedin ] ||
     fail 'server PROVIDER_LOGIN_ENABLED is not google,linkedin'
   assert_contains "$server_env" 'PASSKEY_ENROLLMENT_ENABLED=true'
@@ -1014,9 +1010,6 @@ run_secret_mode_check() (
   [ ! -s "$FAKE_MUTATIONS" ] || fail 'unsafe secret mode performed a mutation'
 )
 
-# The passkey browser proof runs one phase with enrollment open and one with
-# it closed, so the server environment flag must follow
-# DEV_HTTPS_PASSKEY_ENROLLMENT exactly and reject anything but true or false.
 run_passkey_enrollment_flag_check() (
   local value
   # shellcheck source=lib/dev-https-lifecycle.sh
@@ -1038,10 +1031,6 @@ run_passkey_enrollment_flag_check() (
   done
 )
 
-# The TOTP browser proof runs one phase with enrollment open and one with it
-# closed, so the server environment flag must follow DEV_HTTPS_TOTP_ENROLLMENT
-# exactly and reject anything but true or false
-# (docs/design/totp-key-management.md "Key ring").
 run_totp_enrollment_flag_check() (
   local value
   # shellcheck source=lib/dev-https-lifecycle.sh
@@ -1098,7 +1087,6 @@ run_browser_staging_checks() (
   cp "$SOURCE_ROOT/deploy/dev-https-browser/spec-sources.txt" "$work/context/"
   mapfile -t sources <"$work/context/spec-sources.txt"
   for name in "${sources[@]}"; do printf 'fixture\n' >"$work/context/$name"; done
-  # A new list member must be staged without changing another shell array.
   printf 'additional.spec.ts\n' >>"$work/context/spec-sources.txt"
   printf 'fixture\n' >"$work/context/additional.spec.ts"
   # shellcheck source=scripts/lib/dev-https-browser-stage.sh
@@ -1130,7 +1118,6 @@ run_browser_staging_checks() (
         fi
         command chmod "$@"
       }
-      # Match callers that guard staging with || and remove it on exit.
       stage_dev_https_browser_specs "$work/context" "$work/failing-stage" || exit 1
       touch "$work/accepted-stage"
     } 2>&1); then
@@ -1170,7 +1157,6 @@ run_browser_staging_checks() (
   done
 )
 
-# All five service exits must remain failures even when probes return success.
 run_session_monitor_checks() (
   local fixture service pid output guard_pid status admission_start
   for service in mock-oauth mail-capture server web caddy; do
@@ -1180,7 +1166,6 @@ run_session_monitor_checks() (
     cd "$fixture/repo"
     bash scripts/dev-https.sh up >"$fixture/up" 2>&1 || fail "monitor setup: $(cat "$fixture/up")"
     pid=$(<".dev/native-https/run/$service.pid")
-    # A running proof must abort while its command is still sleeping.
     admission_start=$SECONDS
     bash scripts/dev-https.sh guard -- bash -c 'echo started >"$1"; sleep 120; echo unsafe >"$2"' proof "$fixture/proof-started" "$fixture/proof-completed" >"$fixture/guard" 2>&1 &
     guard_pid=$!
@@ -1233,8 +1218,6 @@ if [[ ${0##*/} = dev-https-session.sh ]]; then
   trap 'printf "exited\n" >"$FAKE_ANCHOR_EXIT"' EXIT
 fi
 EOF
-  # Audit the real latch result so tampering spans monitor iterations on both
-  # hosts. A quick down alone can finish before the supervisor inspects it.
   sed -n '/^latch_session_failure() {$/,/^}$/p' "$SOURCE_LIB_DIR/dev-https-identity.sh" |
     sed '1s/latch_session_failure/fixture_latch_session_failure/' >>"$fixture/repo/scripts/lib/dev-https-identity.sh"
   cat >>"$fixture/repo/scripts/lib/dev-https-identity.sh" <<'EOF'
@@ -1263,8 +1246,6 @@ EOF
         sed "$mutation" <<<"$original" >"$record"
         if output=$(bash scripts/dev-https.sh down 2>&1); then fail 'tampered anchor permitted stop'; fi
       else
-        # Change the record after initial anchor validation, while stop checks
-        # health. Keep the real group and final signal helper in this path.
         if output=$(FAKE_ANCHOR_MUTATION="$mutation" bash -c '
           source scripts/dev-https.sh help >/dev/null
           BASH_BIN=$(platform_realpath "$(command -v bash)")
@@ -1303,7 +1284,6 @@ EOF
   assert_log_line "$FAKE_SIGNAL_LOG" "-KILL -- -$pid"
   bash scripts/dev-https.sh up >"$fixture/up" 2>&1 || fail "service identity setup: $(cat "$fixture/up")"
   pid=$(sed -n 's/^pid=//p' "$record")
-  # A service PID must be a direct child of the anchor in the same group.
   printf '%s\n' "$pid" >.dev/native-https/run/server.pid
   if bash scripts/dev-https.sh status >/dev/null 2>&1; then fail 'anchor substituted for service admitted'; fi
   bash scripts/dev-https.sh down >/dev/null 2>&1 || fail 'service record tampering prevented safe group stop'
@@ -1393,7 +1373,6 @@ run_session_recovery_checks() (
   [ ! -s "$FAKE_FORBIDDEN" ] || fail 'cleanup touched shared database'
 )
 
-# Force stop boundaries inside health inspection without launching a stack.
 run_proof_transition_checks() (
   local fixture marker scenario allow_stop output fixture_python token=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa old=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
   fixture=$(mktemp -d)
@@ -1414,8 +1393,6 @@ run_proof_transition_checks() (
   source "$SOURCE_LIB_DIR/dev-https-state.sh"
   die() { fail "$@"; }
   fixture_python=$(command -v python3)
-  # Delete an enumerated file immediately before the real lstat. The complete
-  # production validator still inspects every surviving entry.
   python3() {
     if [ "${3:-}" = "$STATE_DIR" ] && [ -n "${SCAN_VANISH_PATH:-}" ]; then
       {
@@ -1508,7 +1485,6 @@ PY
   done
 )
 
-# A rejected proof must retain its anchor until TERM-resistant children die.
 run_proof_guard_checks() (
   local fixture status group row pid state scenario fixture_python
   fixture=$(mktemp -d)
@@ -1521,7 +1497,6 @@ run_proof_guard_checks() (
   cmd_status() { :; }
   proof_health() { [ ! -e "$fixture/unhealthy" ]; }
   fixture_python=$(command -v python3)
-  # Deliver a real signal while the monitor sleeps during cleanup.
   python3() {
     if [ "${3:-}" = "$ROOT/scripts/dev-https.sh" ] && [ -n "${PROOF_DRAIN_SIGNAL:-}" ]; then
       {
@@ -1652,9 +1627,6 @@ EOF
   [ ! -s "$fixture/all-pids" ] || fail 'publication failure started a service'
 )
 
-# Every check function in this file, in the order an unsharded run uses.
-# DEV_HTTPS_TEST_SHARD=<i>/<n> runs only the checks whose index in this array
-# (0-based) is congruent to i mod n; unset runs every one, in this order.
 readonly CHECKS=(
   run_session_monitor_checks
   run_session_anchor_checks
@@ -1689,9 +1661,6 @@ readonly CHECKS=(
   run_browser_staging_checks
 )
 
-# Fails if a run_* function defined in this file is missing from CHECKS, or
-# if CHECKS lists one more than once, so a new check cannot be silently left
-# out of every shard.
 check_checks_array_is_complete() {
   local defined listed
   defined=$(declare -F | awk '{print $3}' | grep '^run_' | sort)
@@ -1702,8 +1671,6 @@ check_checks_array_is_complete() {
     fail 'CHECKS does not list exactly the run_* checks defined in this script'
 }
 
-# Runs every check, or the slice DEV_HTTPS_TEST_SHARD=<i>/<n> selects. Named
-# without a run_ prefix so it is not itself a check declare -F would collect.
 select_and_run_checks() {
   local shard=${DEV_HTTPS_TEST_SHARD-} i n idx=0 check
   if [ -z "$shard" ]; then

@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Offline tests for scripts/npm-audit.sh. A stub npm prints a canned report.
 set -Eeuo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
@@ -14,10 +13,6 @@ WORK=$(mktemp -d "${TMPDIR:-/tmp}/aboutme-npm-audit-test.XXXXXX")
 trap '[ ! -f "$WORK/child.pids" ] || xargs kill -9 <"$WORK/child.pids" 2>/dev/null || true; rm -rf -- "$WORK"' EXIT
 mkdir -p "$WORK/pkg"
 
-# The stub hangs on its first $WORK/hangs calls, then prints the report. By
-# default it ignores TERM like a stuck npm (the ignore passes to its sleep
-# child). With $WORK/child present it dies on TERM but leaves a TERM-ignoring
-# child that holds stdout open.
 cat >"$WORK/npm" <<STUB
 #!/usr/bin/env bash
 n=\$(( \$(cat "$WORK/calls" 2>/dev/null || echo 0) + 1 ))
@@ -37,7 +32,6 @@ exit 1
 STUB
 chmod +x "$WORK/npm"
 
-# report SEVERITY ID: pkg carries one advisory and dep depends on pkg.
 report() {
   cat >"$WORK/report.json" <<JSON
 {"auditReportVersion":2,"vulnerabilities":{
@@ -48,7 +42,6 @@ JSON
 
 exceptions() { printf '%s\n' "$1" >"$WORK/ex.json"; }
 
-# entry ID DIR EXPIRES: one exception entry.
 entry() {
   printf '[{"id":"%s","dirs":[%s],"expires":"%s","reason":"r"}]' "$1" "$2" "$3"
 }
@@ -60,8 +53,6 @@ TODAY=2026-10-02
 EXFILE=
 AUDIT_TIMEOUT=10
 
-# run NAME EXPECTED_RC [stderr substring]. The audited directory is
-# $WORK/pkg and the repository root is $WORK, so exceptions name "pkg".
 run() {
   local name=$1 want=$2 needle=${3:-} rc=0 err
   rm -f "$WORK/calls"

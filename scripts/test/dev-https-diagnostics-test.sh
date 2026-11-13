@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Exercises startup failure evidence without launching services.
 set -Eeuo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 work=$(mktemp -d)
@@ -78,11 +77,9 @@ artifacts=("$work/artifacts/"*.txt)
 grep -Fq 'server stderr [REDACTED]' "${artifacts[0]}" || fail 'artifact lost the service stderr'
 ! grep -Fq 'synthetic-private-value' "${artifacts[0]}" || fail 'artifact exposed private log content'
 
-# Audit and service pidfiles can name the same process.
 printf '%s\n' "$$" "$$" invalid >"$work/pids"
 printf '%s\n' "$$" >"$work/run/web.pid"
 
-# A probe that ran retains its last response alongside the same failure.
 printf 'server readiness: exit=0 response=stubbed-success body=empty\n' >"$work/diagnostics/probe-server"
 status=0
 FIXTURE=$work PATH="$work/bin:$PATH" DEV_HTTPS_PID_AUDIT_FILE="$work/pids" \
@@ -99,7 +96,6 @@ awk -v pid="$$" '
   END { exit !(found == 1) }
 ' "$work/output" || fail 'process snapshot did not retain one row for duplicate PIDs'
 
-# Broken log targets must preserve the startup failure status.
 status=0
 BREAK_DIAGNOSTICS=1 FIXTURE=$work PATH="$work/bin:$PATH" \
   DEV_HTTPS_DIAGNOSTICS_DIR="$work/diagnostics" \
@@ -108,7 +104,6 @@ BREAK_DIAGNOSTICS=1 FIXTURE=$work PATH="$work/bin:$PATH" \
 [ "$status" -eq 7 ] || fail "diagnostic write failure changed exit 7 to $status"
 grep -Fq 'rollback-started' "$work/output" || fail 'diagnostic write failure prevented rollback'
 
-# A successful startup emits no failure evidence and needs no diagnostic tools.
 sed -e 's/return 7/return 0/' -e 's/return 1/return 0/' "$work/dev-https.sh" >"$work/success"
 mv "$work/success" "$work/dev-https.sh"
 DEV_HTTPS_DIAGNOSTICS_DIR="$work/diagnostics" FIXTURE=$work \
@@ -120,7 +115,6 @@ BREAK_DIAGNOSTICS=1 DEV_HTTPS_DIAGNOSTICS_DIR="$work/diagnostics" FIXTURE=$work 
   bash "$work/dev-https.sh" up >"$work/output" 2>&1 || fail 'diagnostic write failure changed exit 0'
 ! grep -Fq 'startup failure status=' "$work/output" || fail 'write failure reported a successful startup as failed'
 
-# Guard rejection must survive fixture cleanup without exposing its output.
 cat >"$work/dev-https.sh" <<'EOF'
 #!/usr/bin/env bash
 set -Eeuo pipefail
@@ -155,7 +149,6 @@ grep -Fq 'check=validate_service_listeners status=7' "$work/admission-artifacts/
 ! grep -Fq 'synthetic-private-value' "$work/admission-artifacts/admission.$guard_pid.rejected.txt" ||
   fail 'artifact exposed guard output'
 
-# Fatal validators do not return through the RETURN trap.
 FAIL_ADMISSION=exit SESSION_LIBRARY=$root/scripts/lib/dev-https-session.sh FIXTURE=$work \
   DEV_HTTPS_DIAGNOSTICS_DIR="$work/diagnostics" \
   BASH_ENV="$root/scripts/dev-https-test-diagnostics.sh" \
@@ -167,7 +160,6 @@ dev_https_test_wait_for_admission "$work" "$guard_pid" >"$work/admission-output"
 grep -Fq 'state=rejected guard_status=7' "$work/admission-output" || fail 'fatal guard exit status was lost'
 grep -Fq 'check=validate_service_listeners status=7' "$work/admission-output" || fail 'fatal rejecting check was lost'
 
-# Explicit success overrides a failed command; implicit failure keeps its status.
 cat >"$work/dev-https.sh" <<'EOF'
 #!/usr/bin/env bash
 set -Eeuo pipefail
@@ -191,7 +183,6 @@ for result in explicit:0 implicit:9; do
     "$work/diagnostics/admission.$guard_pid.log" || fail "admission lost ${result%:*} return status"
 done
 
-# Advance an injected clock past ten seconds while admission makes progress.
 (
   SECONDS=0
   sleep() {

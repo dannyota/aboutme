@@ -1,34 +1,4 @@
 #!/bin/sh
-# Writes the TLS material from the task environment to tmpfs, assembles the
-# edge listeners named in EDGES, then starts Caddy without a private key or
-# API key in its environment. MAINTENANCE=1 selects the maintenance-mode route
-# table instead of the normal one; both import the same edge listeners.
-#
-# EDGES is a comma-separated list of:
-#   cloudfront  8443, origin mTLS from CLOUDFRONT_CLIENT_CA, client address
-#               from CloudFront-Viewer-Address (docs/design/cloudfront-edge.md).
-#               Needs ORIGIN_CERT and ORIGIN_KEY.
-#   direct      80 and 443, Let's Encrypt certificates, client address from the
-#               socket, Coraza, and the CrowdSec bouncer
-#               (docs/design/vietnam-production.md, "Edge").
-# Unset means cloudfront; an empty list is an error.
-#
-# The direct listener reads:
-#   DIRECT_HOST        apex it serves; default aboutme.vn
-#   DIRECT_WWW_HOST    host that redirects to the apex; default www.DIRECT_HOST,
-#                      empty for none
-#   DIRECT_TLS         acme (default, Let's Encrypt) or internal (tests only)
-#   CROWDSEC_API_URL   CrowdSec local API, such as http://127.0.0.1:8081/
-#   CROWDSEC_API_KEY_FILE or CROWDSEC_API_KEY
-#                      the bouncer key, as a file (a mounted Podman secret) or
-#                      in the environment (an env Podman secret), not both
-# With neither CROWDSEC_API_URL nor a key, the bouncer is off and the listener
-# serves as before; giving only one of them is an error. With both edges, the
-# direct hosts must differ from the CloudFront listener's (a rehearsal host).
-#
-#   aboutme-caddy         run Caddy
-#   aboutme-caddy adapt   assemble the edges and check that both route
-#                         tables parse, without TLS material
 set -eu
 umask 077
 fail() { echo "aboutme-caddy: $*" >&2; exit 1; }
@@ -53,16 +23,11 @@ for edge in $(printf '%s' "$edges" | tr ',' ' '); do
   cat "/etc/caddy/edges/$edge.sites" >>/run/caddy/edges.sites
 done
 
-# A lowercase DNS name with at least two labels; Caddy reads it as a site
-# address, so nothing else may appear in it.
 hostname_ok() {
   printf '%s\n' "$1" | grep -Eqx '([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]([a-z0-9-]{0,61}[a-z0-9])?'
 }
 
-# Serving and maintenance Caddy run concurrently during a deploy. The file
-# writer can rotate a file from one process only, so each mode owns one fixed
-# basename. roll_keep_for expires rolled files; an active low-volume file can
-# remain longer than one day.
+# Caddy's file log writer rotates a file from one process only (Caddy log file output docs).
 write_waf_log_output() {
   case $1 in
     serving | maintenance) ;;
@@ -72,9 +37,6 @@ write_waf_log_output() {
     "$1" >/run/caddy/waf-log-output.caddy
 }
 
-# Only the direct HTTPS site imports this access logger. The custom encoder
-# emits exactly seven bounded CrowdSec fields. Serving and maintenance own
-# separate writers because both processes run during deploys.
 write_crowdsec_feed_log() {
   case $1 in
     serving | maintenance) ;;
@@ -156,8 +118,7 @@ case $seen in
       printf 'https://%s {\n\timport direct_tls\n\timport direct_response_headers\n\tredir https://%s{uri} permanent\n}\n' \
         "$www" "$DIRECT_HOST" >>/run/caddy/direct-www.sites
     fi
-    # Caddy picks a certificate by name, so with both edges the direct
-    # listener could present the CloudFront origin certificate.
+    # Caddy picks a TLS certificate by server name (Caddy automatic HTTPS docs).
     case $seen in
       *,cloudfront,*)
         case " $DIRECT_HOST $www " in
@@ -187,10 +148,6 @@ case $seen in
       else
         fail "CROWDSEC_API_URL without a CrowdSec key"
       fi
-      # Caddy reads the key from the file when the app starts ({file.*}), so
-      # the key is never part of the configuration. The bouncer pulls the
-      # decision stream every 10 seconds; when the local API is down it
-      # keeps serving and retries (no enable_hard_fails).
       printf 'crowdsec {\n\tapi_url %s\n\tapi_key {file.%s}\n\tticker_interval 10s\n}\n' \
         "$crowdsec_url" "$key_file" >/run/caddy/crowdsec.global
       printf 'crowdsec\n' >/run/caddy/crowdsec.handler

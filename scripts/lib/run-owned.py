@@ -1,5 +1,3 @@
-"""Portable process owner used by run-owned.sh. No command output is captured."""
-
 import os
 import signal
 import subprocess
@@ -12,7 +10,6 @@ def say(message):
 
 
 def snapshot():
-    # lstart binds each retained PID to its observed process identity.
     output = subprocess.check_output(
         ["ps", "-axo", "pid=,ppid=,pgid=,lstart=,stat="], text=True, timeout=2,
         env={**os.environ, "LC_ALL": "C"},
@@ -36,12 +33,9 @@ def snapshot():
 
 
 def members(rows, leader, known, root, group_owned=False):
-    # A numeric PID alone never preserves ownership after an observed exit.
     current = {(pid, started) for pid, _, _, started, _ in rows}
     retained = known & current
     anchors = retained | ({root} & current if root else set())
-    # The original group stays owned between samples even when every sampled
-    # member exits. A new leader identity proves that the PGID was reused.
     if root and any(pid == leader and started != root[1]
                     for pid, _, _, started, _ in rows):
         group_owned = False
@@ -66,7 +60,6 @@ def signal_members(known, sig, observe=None):
     if observe is None:
         observe = snapshot
     for pid, started in sorted(known):
-        # Revalidate immediately before each signal, including KILL cleanup.
         rows = observe()
         if not any(other == pid and birth == started and not state.startswith("Z")
                    for other, _, _, birth, state in rows):
@@ -95,7 +88,7 @@ def main(observe=None):
             args = args[2:]
         if len(args) < 2 or args[0] != "--":
             raise ValueError("usage: scripts/run-owned.sh [--timeout seconds] -- command [args...]")
-        observe()  # Refuse before launch if process ownership is unavailable.
+        observe()
     except (OSError, ValueError, IndexError, subprocess.SubprocessError) as error:
         say(f"refused: cannot inspect process ownership: {error}")
         return 125
@@ -110,8 +103,6 @@ def main(observe=None):
         return 127
     known = set()
     root = None
-    # setsid gives us this group at launch. Only a successful observation can
-    # resolve ownership, including when the first post-launch sample fails.
     group_open = True
     start = time.monotonic()
     reason = None
@@ -126,8 +117,6 @@ def main(observe=None):
                         for pid, _, _, started, _ in rows):
             group_open = False
         known = members(rows, child.pid, known, root, group_owned=group_open)
-        # Keep the leader identity after it is reaped. A descendant can fork
-        # and exit entirely between observations without ending group ownership.
         if not any(group == child.pid and not state.startswith("Z")
                    for _, _, group, _, state in rows):
             group_open = False
@@ -143,14 +132,12 @@ def main(observe=None):
             try:
                 os.killpg(child.pid, sig)
             except ProcessLookupError:
-                # ESRCH is kernel evidence that the launched group is empty.
                 group_open = False
         try:
             signal_members(known, sig, observe)
         except (OSError, ValueError, subprocess.SubprocessError) as error:
             say(f"cleanup observation failed: {error}")
             reason = reason or 126
-        # Popen retains the unreaped child identity even if ps is unavailable.
         if child.poll() is None:
             child.send_signal(sig)
 
@@ -171,7 +158,6 @@ def main(observe=None):
         say(f"ownership inspection failed: {error}")
         reason = 126
     finally:
-        # A completed command cannot leave background descendants.
         send(pending[0] if pending and reason == 128 + pending[0] else signal.SIGTERM)
         deadline = time.monotonic() + 5
         while (group_open or known) and time.monotonic() < deadline:
@@ -186,7 +172,6 @@ def main(observe=None):
         if group_open or known or child.poll() is None:
             say("KILL escalation")
         send(signal.SIGKILL)
-        # Keep the lock-owning caller waiting until every observed identity ends.
         while group_open or known:
             try:
                 sample()
@@ -197,7 +182,6 @@ def main(observe=None):
             if group_open or known:
                 time.sleep(0.1)
         status = child.wait()
-    # Cancellation can arrive after command success while descendants drain.
     if pending:
         return 128 + pending[0]
     return reason if reason is not None else (128 - status if status < 0 else status)

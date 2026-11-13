@@ -1,10 +1,4 @@
 #!/usr/bin/env bash
-# Fails when a tracked Markdown doc passes MD_MAX lines, a non-test Go file
-# under apps/server passes SERVER_CODE_MAX lines, or another non-test source
-# file passes CODE_MAX lines. Split an oversize file by topic (Go: a sibling
-# file in the same package; docs: a focused page) or trim it; git keeps history.
-# It reads working-tree files, so the pre-commit hook checks the whole tree,
-# not only staged content.
 set -Eeuo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -14,8 +8,6 @@ MD_MAX=400
 CODE_MAX=700
 SERVER_CODE_MAX=400
 
-# Generated paths without a standard header. sqlc output has the header, so no
-# .sql.go pattern belongs here.
 generated='^(apps/web/app/api/generated/|packages/schema/gen/)|generated\.[a-z]+$'
 tests='(_test\.(go|sh)|[-.]test\.sh|\.test\.[cm]?[jt]s|\.spec\.[cm]?[jt]s)$|(^|/)(test|tests|testdata)/'
 server_go='^apps/server/.*\.go$'
@@ -25,7 +17,6 @@ check() {
   local max=$1 file lines
   while IFS= read -r file; do
     [[ -f "$file" ]] || continue
-    # Generated files follow their generator, not authored size.
     head -n 5 "$file" | grep -Eq 'Code generated .* DO NOT EDIT|@generated' && continue
     lines=$(wc -l <"$file")
     if ((lines > max)); then

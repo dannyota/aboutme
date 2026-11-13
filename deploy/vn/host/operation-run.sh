@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Root entry point. Target and confirmation arrive only in the stdin envelope.
 set -euo pipefail
 umask 077
 ulimit -c 0
@@ -32,8 +31,6 @@ request_fence() {
   operation_save
 }
 request_release() {
-  # The controller releases after the request unit exits, never from an EXIT trap.
-  # An applicable plan keeps its capacity until quiescent closure.
   request_unit_stopped && account_attempts_stopped || return 1
   local held owner
   held=$(jq -r .fenceHeld <<<"$state")
@@ -72,7 +69,6 @@ request_new() {
   request_lock
   request_start
   flock -u "$request_fd"
-  # The detached unit owns the read. SSH loss cannot extend its planning deadline.
   local stop_at=$((SECONDS+60))
   while ((SECONDS<stop_at)); do
     operation_load "$id" || refuse
@@ -136,7 +132,6 @@ request_finish() {
       state=$(jq '.phase="serving" | .expiresAt=null | .confirmation=null' <<<"$state")
       operation_save && request_release || return 1
       if [[ $pending_verb == verify ]]; then request_challenge || return 1; fi
-      # Dispatch the idempotent existing job only after durable fence release.
       state=$(jq '.reserved=true | .intent="sweep"' <<<"$state")
       operation_save || return 1
       systemctl start --no-block aboutme-job@media-deletion-sweep.service >/dev/null 2>&1 || return 1
@@ -187,7 +182,6 @@ request_existing() {
   state=$(jq '.reserved=true' <<<"$state")
   operation_save || refuse
   account_attempts_stopped || refuse
-  # A crash after write intent is unknown even if no result was saved.
   if [[ $(jq -r .intent <<<"$state") == delete && $write == not_started ]]; then
     state=$(jq '.action.writeOutcome="unknown" | .outcome="unknown"' <<<"$state")
     operation_save || refuse
@@ -209,8 +203,6 @@ request_existing() {
     operation_output "$id"; return
   fi
   if [[ $verb == resume && $phase == accepted && $write == not_started && $(jq -r .intent <<<"$state") == none ]]; then
-    # No create can precede durable delete intent, so this accepted request
-    # has no destructive attempt to replay.
     account_live || refuse
     state=$(jq '.pendingVerb="apply"' <<<"$state")
     operation_save || refuse
@@ -226,8 +218,6 @@ request_existing() {
   if [[ $verb == verify ]]; then
     [[ $write == committed || $write == absent_after_unknown ]] || refuse
     request_finish || refuse
-    # Read verification can use a later capable release after the write fence
-    # has gone. Bind the new read challenge to that live release.
     local saved_state=$state
     state=''
     account_live || refuse
@@ -258,7 +248,6 @@ request_proof() {
   operation_save || refuse
   state=$(jq --arg result "$result" --arg nonce "$nonce" \
     '.proofReceipt={nonce:$nonce,result:$result} | .action.publicVerification=(if $result=="pass" then (if .action.publicVerification=="failed" then "failed" else "limited" end) else "failed" end)' <<<"$state")
-  # Versioned cards and a possibly lost committed slug list limit public proof.
   operation_save || refuse
   state=$(jq '.reserved=false' <<<"$state")
   operation_save || refuse
@@ -309,8 +298,6 @@ operation_prune() {
       flock -n "$prune_fd" || exit 0
       operation_load "$id" || exit 1
       if [[ $(jq -r .phase <<<"$state") == planned && $(jq -r .reserved <<<"$state") == true && $(date -u +%s) -ge $(date -u -d "$(jq -r .expiresAt <<<"$state")" +%s) ]]; then
-        # Retention never releases a fence. Expired, already released plans
-        # may return capacity only after fresh quiescence checks.
         [[ $(jq -r .fenceHeld <<<"$state") == false ]] || exit 0
         request_unit_stopped && account_attempts_stopped || exit 0
         state=$(jq '.phase="closed" | .outcome="aborted" | .expiresAt=null | .confirmation=null | .reserved=false | .pendingVerb="none" | .intent="none"' <<<"$state")
@@ -341,8 +328,6 @@ operation_main() {
       operation_id_valid "$id" || refuse invalid_request 2
       request_lock
       request_fence || refuse
-      # Keep request and fence order before the shared workload lock. The child
-      # inherits the request flock; it opens no second request lock.
       "$lib/workload-lock.sh" 60 bash -c \
         'source /usr/local/lib/aboutme/operation-run.sh; id=$1; operation_load "$id"; operation_effect' bash "$id"
       ;;

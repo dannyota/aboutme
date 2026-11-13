@@ -1,7 +1,4 @@
 # shellcheck shell=bash
-# The direct edge serves the host's deployment document read-only, also in
-# maintenance (docs/design/deployment-transparency/host.md). Sourced by
-# test.sh; uses its work, name, dport, and dcurl.
 check_deployment_security_headers() {
   for header in 'strict-transport-security: max-age=31536000' \
     'x-content-type-options: nosniff'; do
@@ -13,8 +10,6 @@ check_deployment_security_headers() {
 }
 
 test_direct_deployment_document() {
-  # The direct edge serves only the public document, even in maintenance. The
-  # directory mount must keep seeing atomic replacements of deployment.json.
   printf '%s\n' '{"marker":"first"}' >"$work/deployment/deployment.json"
   printf 'private\n' >"$work/deployment/private.json"
   chmod 0644 "$work/deployment/"*.json

@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Exercise installer blocks and migration admission without host access or root.
 set -euo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 work=$(mktemp -d)
@@ -108,7 +107,6 @@ cscli() {
 }
 SH
 
-# Keep the real no-op and registration predicates; replace host/root boundaries.
 sed -e 's/\$EUID == 0/1 == 1/g' \
   -e "s|/etc/crowdsec|$work/config|g" \
   -e "s|/run/aboutme|$work/runtime|g" \
@@ -143,13 +141,10 @@ SH
 chmod +x "$lib/"*.sh
 
 installer=${1:-$root/deploy/vn/host/install.sh}
-# Extract complete production blocks so a changed branch affects this proof.
 {
   printf '#!/usr/bin/env bash\nset -euo pipefail\nsource "$FIXTURE_SUPPORT"\n'
   sed -n '/^POSTGRESQL_COMMON_VERSION=/,/^CROWDSEC_BOUNCER_VERSION=/p' "$installer"
   sed -n '/^# Installs packages at/,/^# copy_tree/{ /^# copy_tree/d; p; }' "$installer"
-  # This fixture owns package and migration admission; lock behavior has its
-  # own real-lock installer fixture.
   printf 'install_admission_transition() { [[ $1 != --shared-fence ]] || shift; "$@"; }\n'
   awk '/^crowdsec_install_closed=no$/ {copy=1} copy {print} /^trap cleanup_install EXIT$/ {exit}' "$installer"
   cat <<'SH'
@@ -211,7 +206,6 @@ for ENGINE_STATE in 'hold ok installed' 'install ok installed'; do
 done
 printf 'PASS matching-held-and-unheld-pins-preserve-both-edge-modes\n'
 
-# An installed version alone cannot admit an absent, broken, or different pin.
 export ENGINE_STATE='hold ok installed' BOUNCER_STATE='hold ok installed'
 for fault in missing unpacked half-configured removal reinstall-required version; do
   new_case

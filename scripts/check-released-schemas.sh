@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 
-# Released document versions freeze at the application v1 baseline.
 set -Eeuo pipefail
 [ "$#" -eq 3 ] && [ "$1" = --commits ] || {
   echo 'usage: --commits <base> <head>' >&2

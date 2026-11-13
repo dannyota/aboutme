@@ -1,5 +1,3 @@
-"""Compatibility entry point for run-owned.py."""
-
 from pathlib import Path
 import runpy
 

@@ -1,11 +1,5 @@
 #!/usr/bin/env bash
-# Environment and readiness helpers for the native HTTPS harness.
-# Sourced by scripts/dev-https.sh; defines functions and constants only.
 
-# passkey_enrollment_flag echoes the closed PASSKEY_ENROLLMENT_ENABLED value
-# for the server environment. DEV_HTTPS_PASSKEY_ENROLLMENT selects it and
-# accepts only "true" or "false"; it defaults to true so the harness can run
-# the enrollment journey without an extra switch.
 passkey_enrollment_flag() {
   local raw=${DEV_HTTPS_PASSKEY_ENROLLMENT:-true}
   case $raw in
@@ -14,11 +8,6 @@ passkey_enrollment_flag() {
   esac
 }
 
-# totp_enrollment_flag echoes the closed TOTP_ENROLLMENT_ENABLED value for the
-# server environment. DEV_HTTPS_TOTP_ENROLLMENT selects it and accepts only
-# "true" or "false"; it defaults to true so the harness can run the TOTP
-# enrollment journey without an extra switch
-# (docs/design/totp-key-management.md "Key ring").
 totp_enrollment_flag() {
   local raw=${DEV_HTTPS_TOTP_ENROLLMENT:-true}
   case $raw in
@@ -42,8 +31,6 @@ write_service_env() {
     dev_https_view_pass_key=$(printf '%s' "aboutme-dev-only-view-pass-key32" | base64 -w0 | tr '+/' '-_' | tr -d '=')
     passkey_enrollment=$(passkey_enrollment_flag) || return 1
     totp_enrollment=$(totp_enrollment_flag) || return 1
-    # PROVIDER_LOGIN_ENABLED lists google and linkedin only, so the harness's
-    # GitHub start route stays 404 (docs/design/linkedin-sign-in.md "Design").
     printf 'PORT=%q\nLISTEN_HOST=%q\nDATABASE_URL=%q\nENV=%q\nPUBLIC_ORIGIN=%q\nPUBLIC_RENDER_ORIGIN=%q\nAPP_BUILD_DIGEST=%q\nPUBLIC_RENDERER_BUILD_DIGEST=%q\nTRUSTED_PROXY_CIDRS=%q\nLOG_LEVEL=%q\nMEDIA_BACKEND=%q\nMEDIA_FS_DIR=%q\nGOOGLE_CLIENT_ID=%q\nGOOGLE_CLIENT_SECRET=%q\nGOOGLE_OIDC_ISSUER_URL=%q\nLINKEDIN_CLIENT_ID=%q\nLINKEDIN_CLIENT_SECRET=%q\nLINKEDIN_OIDC_ISSUER_URL=%q\nPASSWORD_RATE_HMAC_KEY=%q\nAUTH_EMAIL_ACTIVE_KEY_ID=%q\nAUTH_EMAIL_ACTIVE_KEY=%q\nAUTH_EMAIL_MODE=%q\nAUTH_EMAIL_CAPTURE_URL=%q\nAUTH_EMAIL_CAPTURE_BEARER=%q\nMCP_ENABLED=%q\nPROVIDER_LOGIN_ENABLED=%q\nPASSKEY_ENROLLMENT_ENABLED=%q\nTOTP_ACTIVE_KEY=%q\nTOTP_ENROLLMENT_ENABLED=%q\nVIEW_PASS_KEY=%q\nSIGN_IN_TO_VIEW_ENABLED=%q\nPREVIEW_CARD_ENABLED=%q\n' \
       "$SERVER_PORT" 127.0.0.1 "$DATABASE_URL" dev "$PUBLIC_ORIGIN" "$PUBLIC_RENDER_ORIGIN" "$APP_BUILD_DIGEST" "$PUBLIC_RENDERER_BUILD_DIGEST" 127.0.0.1/32 "$LOG_LEVEL" fs "$MEDIA_DIR" \
       "$GOOGLE_CLIENT_ID" "$GOOGLE_CLIENT_SECRET" "$GOOGLE_ISSUER_URL" \
@@ -51,7 +38,6 @@ write_service_env() {
       "$PASSWORD_RATE_HMAC_KEY_B64" "$ACTIVE_KEY_ID" "$AUTH_EMAIL_ACTIVE_KEY_B64" capture "$MAIL_CAPTURE_URL" "$AUTH_EMAIL_CAPTURE_BEARER_B64" true "google,linkedin" "$passkey_enrollment" \
       "$TOTP_ACTIVE_KEY_B64" "$totp_enrollment" \
       "$dev_https_view_pass_key" true true >"$file"
-    # Go reads this root on its first TLS request, after Caddy starts.
     printf 'OAUTH_CIMD_ENABLED=%q\nOAUTH_CIMD_DEV_STUB_ADDR=%q\nSSL_CERT_FILE=%q\n' \
       true "127.0.0.1:$CADDY_PORT" "$CADDY_ROOT" >>"$file"
     local chromium_path

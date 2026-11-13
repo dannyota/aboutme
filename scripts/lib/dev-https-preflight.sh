@@ -1,7 +1,4 @@
 #!/usr/bin/env bash
-# Preflight checks for the native HTTPS harness: required tools, source
-# digests, and conflicting-stack detection before it starts or resumes.
-# Sourced by scripts/dev-https.sh; defines functions and constants only.
 
 require_tools() {
   local tool

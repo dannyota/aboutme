@@ -1,11 +1,9 @@
 #!/usr/bin/env bash
 # shellcheck source-path=SCRIPTDIR
-# Sends bounded host metadata. See docs/design/telegram-host-alerts.md.
 set +xv
 set -euo pipefail
 export LC_ALL=C
 umask 077
-# Provider and utility diagnostics must never reach the journal.
 exec {alert_journal_fd}>&2
 exec 2>/dev/null
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -59,8 +57,6 @@ trap 'outcome transport_failed; exit 1' HUP INT TERM
 if [[ $test_mode == yes ]]; then
   text='[aboutme-prod] host alert delivery test'
 else
-  # Filtering precedes shell capture so NUL and control bytes cannot leak into
-  # shell warnings. Read only the bounded prefix, even if stdin never closes.
   detail=$(head -c 4096 | tr -cd '\40-\176\n' || true)
   truncation=$'\n[detail truncated]'
   if ((${#detail} > 2048)); then detail=${detail:0:$((2048-${#truncation}))}$truncation; fi
@@ -95,7 +91,6 @@ curl_config() {
   printf -v json '{"chat_id":"%s","text":"%s"}' "$telegram_chat" "$escaped"
   escaped=${json//\\/\\\\}
   escaped=${escaped//\"/\\\"}
-  # Both printf calls are builtins. Secrets travel only through this pipe.
   printf 'url = "%s/bot%s/sendMessage"\n' "$endpoint" "$telegram_token"
   printf 'data = "%s"\n' "$escaped"
 }
@@ -109,8 +104,6 @@ send() (
     --config - --write-out 'http:%{http_code}\nupload:%{size_upload}\nrequest:%{size_request}\n' --output >(
       {
         head -c 16384
-        # Count, but never retain, one extra byte. This also detects oversized
-        # streams without Content-Length, independently of curl's version.
         extra=$(head -c 1 | wc -c)
         if ((extra != 0)); then printf 'oversized\n' >&"$reply_status_fd"; fi
       } | jq -Rrs '
@@ -130,8 +123,6 @@ for attempt in 1 2 3; do
     [[ $result == *$'\nbody:sent\n'* ]] || fail invalid_response
     break
   fi
-  # Unit-failure alerts can wait independently; other callers get one attempt.
-  # Any request bytes or response make delivery uncertain, including partial success.
   [[ $key == unit-* && $attempt != 3 && $result == *$'\nhttp:000\n'* &&
     $result == *$'\nupload:0\n'* && $result == *$'\nrequest:0\n'* &&
     $result == *$'\nbody:empty\n'* &&

@@ -1,14 +1,4 @@
 #!/usr/bin/env bash
-# Local build, test, lint, and drift reproduction without hosted browser proofs.
-# The full local run needs owner authorization; connected security scanning uses `make scan`.
-#
-#   scripts/ci.sh          local reproduction (`make ci`)
-#   scripts/ci.sh --fast   subset without web checks, database and media storage suites, or route-table tests
-#                          (`make check`)
-#
-# The database-backed groups start or reuse the shared Postgres and always leave
-# it running. Teardown is an integration-owner action in a declared idle window;
-# CI cannot infer container ownership atomically from a separate preflight.
 set -Eeuo pipefail
 
 cd "$(dirname "$0")/.."
@@ -29,9 +19,6 @@ group() {
   echo "=== $name"
   local start
   start=$SECONDS
-  # Each group runs in a subshell: several of them cd into apps/server, and
-  # without this that cd leaks into every later group -- which silently made
-  # `make sqlc-check` and `make web-lint` run from the wrong directory.
   if ("$@"); then
     echo "--- $name OK ($((SECONDS - start))s)"
   else
@@ -41,8 +28,6 @@ group() {
   fi
 }
 
-# Everything below runs even if an earlier group failed, so one run reports
-# every problem instead of only the first. The script still exits non-zero.
 run() { group "$@" || true; }
 
 docs() { make docs-lint; }
@@ -71,9 +56,7 @@ api() { make api-check; }
 
 go_build() { make server-build server-vet server-test; }
 
-# GOGC=50 halves golangci-lint's peak heap (it is the single largest memory
-# consumer in the gate) at a small time cost -- this machine has been OOM
-# killed under concurrent gate runs before.
+# GOGC=50 lowers golangci-lint's peak heap at a small time cost (Go runtime, GOGC).
 go_lint() { cd "$ROOT/apps/server" && GOGC=50 golangci-lint run; }
 
 go_tidy() {
@@ -209,9 +192,6 @@ else
   run "web" web
   echo
   echo "=== starting test database"
-  # The target is idempotent. This preflight is informational only: container
-  # ownership cannot be inferred across a separate check/start boundary, so CI
-  # leaves the shared database running in every case.
   running_containers=$(podman ps --format '{{.Names}}')
   if grep -qx aboutme-test-db <<<"$running_containers"; then
     echo "aboutme-test-db already running (shared); this run will not stop it."

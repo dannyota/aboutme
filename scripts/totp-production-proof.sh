@@ -1,24 +1,4 @@
 #!/usr/bin/env bash
-# Stages and runs one production TOTP proof mode
-# (docs/runbooks/totp-keys.md "Production proofs"). run.sh's validate_spec_dir
-# requires an owner-matched, mode-0700, exact-fileset spec directory, which
-# the live deploy/dev-https-browser source tree can never satisfy (it also
-# carries Dockerfile, run.sh, and every other mode's non-production spec), so
-# this wrapper stages a temporary copy before calling run.sh, the same way
-# scripts/dev-https-check.sh does for the local modes.
-#
-# Usage: scripts/totp-production-proof.sh <mode>
-#   mode: totp-prod-flag-off | totp-prod-enabled | totp-prod-cleanup
-#
-# The manager runs it directly from the release worktree:
-#
-#   scripts/totp-production-proof.sh totp-prod-enabled
-#
-# It takes the shared local-check lock itself without blocking and holds it
-# until it exits. Child processes never inherit the lock descriptor, so a
-# container helper cannot keep the lock after the run. It also checks the
-# stack quiescence and uses run-owned.sh for the whole command tree.
-# Do not wrap it in another lock on the same file.
 set -Eeuo pipefail
 
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
@@ -61,8 +41,6 @@ UID_NOW=$(id -u)
   [ "$(stat -c %a "$ACCOUNT_FILE")" = 600 ] ||
   fail 'account.env ownership or mode mismatch; want 0600'
 
-# --- No active aboutme development stack ------------------------------------
-
 stack_pid_alive() {
   local pidfile=$1 pid
   [ -f "$pidfile" ] && [ ! -L "$pidfile" ] || return 1
@@ -82,16 +60,12 @@ for record in "$REPO"/.dev/native-https/run/session*; do
     fail 'development session state exists; stop the stack before a production proof'
 done
 
-# --- Shared lock and watchdog -----------------------------------------------
-
 if [ -z "${ABOUTME_TOTP_PROOF_CAPPED:-}" ]; then
   LOCK=${ABOUTME_LOCAL_CHECK_LOCK_PATH:-$(local_check_lock_path "$REPO")}
   exec python3 "$REPO/scripts/lib/local-check.py" "$LOCK" 0 \
     env ABOUTME_TOTP_PROOF_CAPPED=1 bash "$REPO/scripts/run-owned.sh" \
     --timeout 4200 -- bash "$REPO/scripts/totp-production-proof.sh" "$MODE"
 fi
-
-# --- Staging and cleanup -----------------------------------------------------
 
 staging=
 cleanup() {
@@ -111,8 +85,6 @@ source "$REPO/scripts/lib/dev-https-browser-stage.sh"
 staging=$(mktemp -d "$REPO/.dev/v0.4.7/totp-prod-spec.XXXXXX")
 stage_dev_https_browser_specs "$CONTEXT" "$staging" ||
   fail 'cannot stage the production spec fileset'
-
-# --- Build the pinned image once, then run the staged proof -----------------
 
 iidfile=$(mktemp "$REPO/.dev/v0.4.7/totp-prod-iid.XXXXXX")
 if ! bash "$REPO/scripts/run-owned.sh" --timeout 600 -- \

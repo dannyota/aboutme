@@ -1,7 +1,3 @@
-# Firewall bouncer overrides (docs/design/vietnam-production.md, "Edge").
-# The bouncer acts only on SSH decisions; the Caddy bouncer handles HTTP.
-# Owning activation creates the managed key on encrypted storage. Ordinary
-# installation preserves it and appends it only to the protected installed copy.
 api_url: http://127.0.0.1:8095/
 mode: nftables
 log_mode: file

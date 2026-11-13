@@ -31,7 +31,6 @@
 # never touches the laptop disk.
 set -euo pipefail
 
-# Host entry points precede every laptop import and cloud operation.
 notice_host_invalid() { printf 'invalid_state\n' >&2; exit 1; }
 notice_postgres() {
   setpriv --reuid="$(id -u postgres)" --regid="$(id -g postgres)" --init-groups "$@" 3<&- 4>&-
@@ -107,7 +106,7 @@ notice_host_child() {
   notice_restore_denial 4>&- && systemctl stop postgresql@18-main.service 4>&- || return 1
   local restore_args=(--stanza=aboutme --delta --archive-mode=off)
   if [[ $notice_mode == time ]]; then
-    # Automatic backup selection requires a space and an explicit UTC offset.
+    # pgBackRest automatic backup selection needs a space and an explicit UTC offset in --target (pgBackRest restore reference).
     restore_args+=(--type=time "--target=${notice_target:0:10} ${notice_target:11:8}+00" --target-action=promote)
   fi
   notice_restore_denial 4>&- && notice_postgres pgbackrest "${restore_args[@]}" restore || return 1
@@ -260,8 +259,6 @@ for t in ssh tar ssh-keygen date mktemp; do
 done
 [[ -d ${XDG_RUNTIME_DIR:-} ]] || die "XDG_RUNTIME_DIR must name a tmpfs directory"
 
-# The key must be one ssh-ed25519 public key, as the production admin key is
-# (design "Host", access).
 [[ -f $admin_key_file ]] || die "--admin-key-file: no such file"
 admin_key=$(<"$admin_key_file")
 [[ $admin_key == ssh-ed25519\ * && $admin_key != *$'\n'* ]] ||
@@ -269,7 +266,7 @@ admin_key=$(<"$admin_key_file")
 ssh-keygen -l -f "$admin_key_file" >/dev/null 2>&1 ||
   die "--admin-key-file is not a valid public key"
 
-# pgBackRest takes the target as 'YYYY-MM-DD HH:MM:SS+00'.
+# pgBackRest takes the target as 'YYYY-MM-DD HH:MM:SS+00' (pgBackRest restore reference).
 if [[ -z $target_time ]]; then
   target_time=$(date -u -d '24 hours ago' '+%Y-%m-%dT%H:%M:%SZ')
 fi
@@ -283,8 +280,6 @@ run='' ssh_dir=''
 server_id='' create_attempted=0 drill_ip='' volume_id='' volume_attempted=0
 failures=0
 declare -a result_lines=() count_lines=()
-
-# ---- Cleanup -------------------------------------------------------------
 
 # Runs on every exit. A server whose create may have reached the API is found
 # by name when no ID came back, so a half-finished order is not left billing.
@@ -318,7 +313,6 @@ cleanup() {
         ((rc)) || rc=1
       fi
     fi
-    # The volume may have gone with the server; delete-volume reads first.
     if [[ -n $volume_id ]] && vng_ro volume get-volume --volume-id "$volume_id" >/dev/null 2>&1; then
       if ! vng volume delete-volume --volume-id "$volume_id" --yes >/dev/null; then
         say "ERROR: could not delete drill volume $volume_id; it holds production data, delete it by hand" >&2
@@ -333,11 +327,6 @@ trap cleanup EXIT
 run=$(mktemp -d "$XDG_RUNTIME_DIR/restore-drill.XXXXXX")
 ssh_dir=$(mktemp -d /tmp/aboutme-ssh.XXXXXX)
 
-# ---- vngcloud ------------------------------------------------------------
-
-# find_server_id prints the ID of the server named $SERVER_NAME, or nothing.
-# The list's JSON shape is not pinned, so any object with that exact Name and
-# a UUID counts.
 find_server_id() {
   vng_ro compute list-servers --size 100 2>/dev/null | jq -r --arg n "$SERVER_NAME" '
     [.. | objects | select((.Name // .name) == $n) | (.UUID // .uuid // .ID // .id)
@@ -434,8 +423,7 @@ CLOUD
 
   create_attempted=1
   say "creating $SERVER_NAME (waits for ACTIVE)"
-  # No --ssh-key-id: GreenNode refuses user data on a create that also sets an
-  # SSH key, and the admin key arrives through the cloud-config above.
+  # GreenNode refuses user data on a create that also sets an SSH key (vngcloud wiki Compute-Servers.md).
   server_id=$(vng compute create-server --name "$SERVER_NAME" \
     --zone-id "$ZONE_ID" --flavor-id "$FLAVOR_ID" --image-id "$IMAGE_ID" \
     --vpc-id "$vpc_id" --subnet-id "$subnet_id" --security-group-id "$sg_id" \
@@ -464,8 +452,6 @@ server_private_ip() {
     (.Server // .) | .InternalInterfaces[0] | (.FixedIP // .fixedIp // empty)'
 }
 
-# ---- SSH -----------------------------------------------------------------
-
 # One multiplexed connection per host.
 # The drill server's host key is the one this run generated and handed to
 # cloud-init, pinned under a fixed alias in a per-run known_hosts file, with
@@ -476,8 +462,6 @@ drill_opts=(-p "$SSH_PORT" -o ControlMaster=auto -o "ControlPath=$ssh_dir/drill.
   -o ConnectTimeout=15 -o StrictHostKeyChecking=yes -o "HostKeyAlias=$SERVER_NAME" -o LogLevel=ERROR
   -o "UserKnownHostsFile=$run/known_hosts" -o ServerAliveInterval=30)
 
-# The public half is also kept in the state directory, so --resume can pin the
-# same key; it is not secret.
 hostkey_state=${XDG_STATE_HOME:-$HOME/.local/state}/aboutme/restore-drill-hostkey.pub
 new_host_key() {
   ssh-keygen -q -t ed25519 -N '' -C "$SERVER_NAME" -f "$run/hostkey"
@@ -489,7 +473,6 @@ pin_host_key() {
   printf '%s %s\n' "$SERVER_NAME" "$(cut -d' ' -f1,2 "$hostkey_state")" >"$run/known_hosts"
 }
 
-# prsh runs a quoted command on the production host. rsh runs one on the drill.
 # shellcheck disable=SC2029 # the command is quoted for the remote shell on purpose
 prsh() { ssh "${prod_opts[@]}" "$ADMIN_USER@$prod_host" "$(printf '%q ' "$@")"; }
 # shellcheck disable=SC2029 # as above
@@ -514,8 +497,6 @@ connect_drill() {
   die "the drill server did not accept SSH within 10 minutes"
 }
 
-# ---- Install and restore -------------------------------------------------
-
 # Copies only host/ and the two scripts install.sh installs, never deploy/vn/prod
 # (it may hold ignored state and variable files).
 install_drill_host() {
@@ -525,15 +506,12 @@ install_drill_host() {
   tar -C "$here/.." -c host edge scripts/fence.sh scripts/deploy-host.sh scripts/deploy-safety.sh \
     scripts/crowdsec-privacy-notice.sh scripts/restore-drill.sh |
     rsh bash -c 'mkdir -p /tmp/aboutme-bundle && tar -C /tmp/aboutme-bundle -x'
-  # The data disk is the one disk that is neither the root disk nor zram.
   # shellcheck disable=SC2016 # runs on the drill host
   data_dev=$(rsh bash -c 'root=$(lsblk -no PKNAME "$(findmnt -no SOURCE /)" | head -n1)
     lsblk -dnpo NAME,TYPE | awk -v r="/dev/$root" "\$2==\"disk\" && \$1!=r && \$1!~/zram/ {print \$1}"')
   [[ $data_dev =~ ^/dev/[a-z0-9]+$ ]] ||
     die "expected exactly one data disk on the drill server, found: ${data_dev:-none}"
   rsh sudo bash "$bundle/host/data-volume.sh" "$data_dev" --format
-  # install.sh needs an ABOUTME_INSTALL_ONLY=postgres switch that stops after
-  # PostgreSQL and pgBackRest exist and starts no timer or other agent.
   rsh sudo env ABOUTME_INSTALL_ONLY=postgres bash "$bundle/host/install.sh" "$bundle"
   # Nothing on this server may archive WAL or back up to the production
   # repository: stop the fresh cluster and any backup timer before the
@@ -554,7 +532,6 @@ copy_secrets() {
     die "secrets.conf on the drill host is empty"
 }
 
-# One confirmed SSH result covers replacement, recovery, and every locked check.
 restore_run() {
   local mode=$1 out label=latest
   local call=(sudo /usr/local/lib/aboutme/restore-drill.sh host-pass "$mode")
@@ -570,8 +547,6 @@ restore_run() {
   else printf 'PASS point-in-time notice restore fence\n'; fi
   result_lines+=("PASS $label notice restore fence")
 }
-
-# ---- Main ----------------------------------------------------------------
 
 existing=$(find_server_id)
 if [[ -n $existing ]]; then
@@ -595,8 +570,6 @@ say "latest restore took ${latest_seconds}s"
 restore_run time
 time_seconds=$restore_seconds
 say "point-in-time restore to $pg_target took ${time_seconds}s"
-
-# ---- Summary -------------------------------------------------------------
 
 printf 'notice reconciliation: not performed\n'
 summary=$(

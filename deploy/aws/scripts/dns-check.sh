@@ -1,20 +1,4 @@
 #!/usr/bin/env bash
-# Compares the Route 53 zone for aboutme.vn with what Cloudflare serves, before
-# the name servers change at the .vn registrar (docs/runbooks/dns.md). Read
-# only: it queries both providers' authoritative servers directly, lists the
-# Route 53 zone and its DNSSEC state with the caller's AWS credentials, and
-# lists the Cloudflare records with the `cf` CLI.
-#
-# Usage: AWS_PROFILE=<profile> deploy/aws/scripts/dns-check.sh
-#
-# DNS_CHECK_CLOUDFLARE_NS  a Cloudflare name server for the zone
-#                          (default zahir.ns.cloudflare.com)
-# DNS_CHECK_SUBNET         client subnet sent with the CloudFront alias
-#                          queries (default 14.160.0.0/24, VNPT in Hanoi)
-# DNS_CHECK_CF             0 skips listing the Cloudflare records; without it
-#                          a missing `cf` fails the check
-#
-# Exits 0 when every check passes, 1 when any fails.
 set -euo pipefail
 
 zone=aboutme.vn
@@ -37,31 +21,23 @@ for tool in aws dig jq curl openssl base64; do
   command -v "$tool" >/dev/null || die "$tool is required"
 done
 
-# One authoritative, non-recursive query. A timeout prints dig's own error
-# line, which then fails the comparison instead of stopping the script.
-ask() { # server name type [dig options...]
+ask() {
   local server=$1 name=$2 type=$3
   shift 3
   dig +short +norec +time=3 +tries=2 "$@" "@$server" "$name" "$type" || true
 }
 
-# Whether a line of the set starts with the given text; end the text with a
-# newline to match a whole line.
-has_line() { # set prefix
+has_line() {
   [[ $'\n'$1$'\n' == *$'\n'"$2"* ]]
 }
 
-# Puts one record set in a comparable form: TXT strings joined, names in
-# lower case without the trailing dot, lines sorted.
-normalize() { # type
+normalize() {
   if [[ $1 == TXT ]]; then
     sed -e 's/" "//g' -e 's/^"//' -e 's/"$//'
   else
     tr '[:upper:]' '[:lower:]' | sed -e 's/\.$//' -e 's/\. / /g'
   fi | LC_ALL=C sort -u
 }
-
-# ---- The Route 53 zone ----
 
 zone_id=$(aws route53 list-hosted-zones-by-name --dns-name "$zone" --max-items 1 --output json |
   jq -r --arg name "$zone." \
@@ -80,14 +56,10 @@ for ns in "${r53_ns[@]}"; do
   fi
 done
 
-# "name type alias" lines, lower case, no trailing dot; NS and SOA belong to
-# each provider and are not compared.
 r53_sets=$(aws route53 list-resource-record-sets --hosted-zone-id "$zone_id" --output json |
   jq -r '.ResourceRecordSets[] | select(.Type != "NS" and .Type != "SOA") |
     "\(.Name | ascii_downcase | rtrimstr(".")) \(.Type) \(if .AliasTarget then "alias" else "plain" end)"' |
   LC_ALL=C sort -u)
-
-# ---- Every Cloudflare record exists in Route 53 ----
 
 if [[ ${DNS_CHECK_CF:-1} == 0 ]]; then
   note "DNS_CHECK_CF=0: a record that exists only at Cloudflare is not detected"
@@ -99,7 +71,6 @@ else
     die "cf dns records list did not print a JSON array of records"
   [[ -n $cf_records ]] || die "cf dns records list returned no records"
   while read -r name type; do
-    # The apex and www are CNAMEs at Cloudflare and aliases in Route 53.
     if [[ $type == CNAME && ($name == "$zone" || $name == "www.$zone") ]]; then
       name_type="$name A"
     else
@@ -112,8 +83,6 @@ else
     fi
   done <<<"$cf_records"
 fi
-
-# ---- Plain records answer the same from both providers ----
 
 while read -r name type kind; do
   [[ $kind == plain ]] || continue
@@ -130,8 +99,6 @@ while read -r name type kind; do
     ok "$name $type matches"
   fi
 done <<<"$r53_sets"
-
-# ---- The aliases reach the CloudFront distribution ----
 
 for name in "$zone" "www.$zone"; do
   for type in A AAAA HTTPS; do
@@ -157,8 +124,6 @@ for name in "$zone" "www.$zone"; do
       ok "$name AAAA: ${#addrs[@]} addresses"
       continue
     }
-    # The certificate, Host, and Via prove the address serves this
-    # distribution; x-amz-cf-pop names the edge a viewer in $subnet gets.
     headers=$(curl -sS -o /dev/null -D - --max-time 15 --resolve "$name:443:${addrs[0]}" \
       "https://$name/healthz" 2>&1 | tr -d '\r') || {
       fail "$name via ${addrs[0]}: ${headers##*$'\n'}"
@@ -173,8 +138,6 @@ for name in "$zone" "www.$zone"; do
     fi
   done
 done
-
-# ---- DNSSEC signing and the DS values for the registrar ----
 
 dnssec=$(aws route53 get-dnssec --hosted-zone-id "$zone_id" --output json)
 if [[ $(jq -r '.Status.ServeSignature' <<<"$dnssec") != SIGNING ]]; then
@@ -193,16 +156,14 @@ else
       else
         fail "$ns does not serve the active key-signing key"
       fi
-      # dig +short prints an RRSIG as its data, which starts with the type
-      # it covers.
+      # dig +short prints an RRSIG as its data, starting with the covered type (dig manual).
       if has_line "$(ask "$ns" "$zone" A +dnssec)" "A "; then
         ok "$ns signs $zone A"
       else
         fail "$ns returns no RRSIG for $zone A"
       fi
     done
-    # SHA-256 over the owner name in wire form and the DNSKEY RDATA:
-    # flags 257, protocol 3, algorithm 13, public key (RFC 4034, 5.1.4).
+    # DS digest: SHA-256 over owner name in wire form and DNSKEY RDATA (RFC 4034, 5.1.4).
     computed=$({
       printf '\x07aboutme\x02vn\x00\x01\x01\x03\x0d'
       base64 -d <<<"$public_key"

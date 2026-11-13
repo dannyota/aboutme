@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 
-# Generate the reviewed browser source set from fixed, Git-visible roots.
 set -Eeuo pipefail
 export LC_ALL=C
 

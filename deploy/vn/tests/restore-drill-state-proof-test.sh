@@ -220,8 +220,6 @@ run_case delete-output-failure || fail 'final HEAD did not settle delete output 
 [[ $(grep -c delete-object "$work/delete-output-failure.log") == 1 ]] || fail 'delete output failure retried'
 run_case delete-ambiguous || fail 'final HEAD did not settle ambiguous delete'
 [[ $(grep -c delete-object "$work/delete-ambiguous.log") == 1 ]] || fail 'ambiguous delete retried'
-# Each pass is one host controller call. Later SSH queries cannot complete a
-# restore after its workload ownership has ended.
 drill=$repo_root/deploy/vn/scripts/restore-drill.sh
 sed -n '/^restore_run() {/,/^}/p' "$drill" >"$work/restore-function"
 grep -Fq '/usr/local/lib/aboutme/restore-drill.sh' "$work/restore-function" || fail 'pass omitted fixed host controller'
@@ -243,8 +241,6 @@ grep -Fq 'restore_run time' "$drill" || fail 'PITR restore pass absent'
 if grep -Eq '^run_checks[[:space:]]+(latest|"point-in-time")' "$drill"; then
   fail 'laptop completed database checks outside host ownership'
 fi
-# A streamed check cannot certify a lost SSH reply. Exercise only the laptop
-# call wrapper, with its transport closed over the two permitted argument lists.
 (
   die() { printf 'invalid_state\n' >&2; exit 1; }
   say() { :; }

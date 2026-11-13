@@ -1,8 +1,4 @@
 #!/usr/bin/env bash
-# Native development stack: Go server, Nuxt, and Caddy on one origin, backed by
-# the shared Postgres container's aboutme_dev database. See
-# docs/runbooks/native-development.md.
-# Use http://localhost:20080 so cookie scope, CSRF and OAuth match PUBLIC_ORIGIN.
 set -Eeuo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
@@ -19,7 +15,6 @@ die() {
   exit 1
 }
 
-# Fixed ports keep PUBLIC_ORIGIN-derived cookies, CSRF, and redirects aligned.
 readonly CADDY_PORT=20080
 readonly SERVER_PORT=20081
 readonly PRINT_LISTEN_ADDR=127.0.0.1:20082
@@ -31,7 +26,6 @@ readonly ACTIVE_KEY_ID=dev-active
 readonly PUBLIC_ORIGIN="http://localhost:${CADDY_PORT}"
 readonly PUBLIC_RENDER_ORIGIN=http://127.0.0.1:20030
 
-# Native development and tests use separate logical databases.
 DEV_DATABASE_URL=${ABOUTME_DEV_DATABASE_URL:-postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme_dev?sslmode=disable}
 DEV_LOG_LEVEL=${ABOUTME_DEV_LOG_LEVEL:-info}
 DEV_AUTO_SEED=${ABOUTME_DEV_AUTO_SEED:-1}
@@ -82,8 +76,6 @@ AUTH_EMAIL_CAPTURE_BEARER_B64=
 TOTP_ACTIVE_KEY_B64=
 VIEW_PASS_KEY_B64=
 
-# Each saved PID belongs to a detached owner that waits for service cleanup.
-
 pidfile() { printf '%s/%s.pid' "$DEV_DIR" "$1"; }
 logfile() { printf '%s/%s.log' "$DEV_DIR" "$1"; }
 
@@ -97,7 +89,6 @@ port_of() {
   esac
 }
 
-# Bind saved PIDs to a checkout, random launch token, birth time and command.
 native_identity() {
   "$(command -v python3)" -I -B - "$ROOT" "$DEV_DIR" "$@" <<'IDENTITY'
 import hashlib
@@ -230,11 +221,7 @@ ensure_secrets() {
   PASSWORD_RATE_HMAC_KEY_B64=$(base64url_of "$SECRETS_DIR/password-rate-hmac-key")
   AUTH_EMAIL_ACTIVE_KEY_B64=$(base64url_of "$SECRETS_DIR/auth-email-active-key")
   AUTH_EMAIL_CAPTURE_BEARER_B64=$(base64url_of "$SECRETS_DIR/auth-email-capture-bearer")
-  # TOTP_ACTIVE_KEY takes the same 32-byte state secret and base64url shape as
-  # the keys above (docs/design/totp-key-management.md "Key ring").
   TOTP_ACTIVE_KEY_B64=$(base64url_of "$SECRETS_DIR/totp-key-a")
-  # VIEW_PASS_KEY takes the same shape (docs/design/viewer-analytics/sign-in-to-view.md
-  # "Pass cookie").
   VIEW_PASS_KEY_B64=$(base64url_of "$SECRETS_DIR/view-pass-key")
 }
 
@@ -291,8 +278,6 @@ stop_service() {
   info "stopped $name (pid $pid)"
 }
 
-# wait_http polls url until it answers, or fails with the tail of the
-# service's log. A crash during startup is reported, never waited out.
 wait_http() {
   local name=$1 url=$2 timeout=$3 pid deadline
   pid=$(service_pid "$name") || die "$name exited before it began serving; see $(logfile "$name")"
@@ -332,8 +317,6 @@ wait_capture() {
   die "$name did not start listening on port $port within ${timeout}s; full log: $(logfile "$name")"
 }
 
-# Adapt only environment tokens; route-table tests check the same substitutions.
-
 count_occurrences() {
   local hay=$1 needle=$2 n=0
   while [[ $hay == *"$needle"* ]]; do
@@ -356,7 +339,6 @@ generate_caddyfile() {
   suffix=${content#*"$PUBLIC_ROOTS_MARKER"}
   content=$prefix$fragment$suffix
 
-  # Bind loopback without a Host matcher so localhost and 127.0.0.1 both work.
   local -a olds=(
     ':80 {'
     'reverse_proxy server:8080 {'
@@ -515,10 +497,8 @@ start_web() {
   ! port_blocked_by_stranger web || die "port $WEB_PORT is already in use by a process this script did not start"
   [ -d "$ROOT/apps/web/node_modules" ] || die "apps/web/node_modules is missing; run 'npm ci' in apps/web first"
   info "--- web (:$WEB_PORT)"
-  # Explicit flags override nuxt.config.ts's devServer.port.
   start_service web "$ROOT/apps/web" \
     env NUXT_PRINT_ORIGIN="http://$PRINT_LISTEN_ADDR" npm run dev -- --port "$WEB_PORT" --host 127.0.0.1
-  # First request compiles the app, so this is the slow one.
   wait_http web "http://127.0.0.1:$WEB_PORT/" 240
   info "web ready on http://127.0.0.1:$WEB_PORT"
 }
@@ -542,8 +522,6 @@ start_caddy() {
     printf 'effective_caddyfile_sha256=%s\n' "$(sha256sum "$CADDYFILE_GEN" | awk '{print $1}')"
   } >"$CADDY_HASHES"
   mkdir -p "$DEV_DIR/caddy-state/config" "$DEV_DIR/caddy-state/data"
-  # Keep caddy's instance uuid and autosave out of the developer's real
-  # ~/.config/caddy and ~/.local/share/caddy.
   start_service caddy "$ROOT" \
     env \
     XDG_CONFIG_HOME="$DEV_DIR/caddy-state/config" \
@@ -598,7 +576,6 @@ cmd_status() {
     if pid=$(service_pid "$name" 2>/dev/null); then
       state=running
     elif pid=$(read_pid "$name" 2>/dev/null); then
-      # A pid file with no live process is a crash, not an absence.
       state=CRASHED
       failed=1
     else

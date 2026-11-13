@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 
-# Published-release fixtures exercise selection, coverage, and error collection.
 set -Eeuo pipefail
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/aboutme-security-scan.XXXXXX")
@@ -69,7 +68,6 @@ fi
 STUB
 chmod +x "$WORK/bin/gh" "$WORK/bin/git" "$WORK/bin/trivy"
 
-# A failed primary list retries GHCR directly, including on a 404.
 cat >"$WORK/bin/fetch-trivy" <<'STUB'
 #!/usr/bin/env bash
 set -eu
@@ -102,7 +100,6 @@ fi
 [ "$(wc -l <"$FETCH_CALL_LOG")" -eq 3 ] || fail 'database retries must be bounded'
 rm "$WORK/bin/sleep"
 
-# Scans fail before invoking Trivy if the handed-off database is absent.
 export TRIVY_CACHE_DIR="$WORK/trivy-cache"
 : >"$CALL_LOG"
 if bash "$ROOT/scripts/security-scan.sh" scan-image "$WORK/bin/trivy" fixture "" "$WORK/report.json" >"$WORK/output" 2>&1; then
@@ -257,8 +254,6 @@ expect_status success
 [ ! -s "$WORK/reports/failed.txt" ] || fail 'stale failure survived a clean run'
 printf 'ok - observer findings and engine errors fail while collecting other targets\n'
 
-# install-trivy takes the pinned archive for this machine from a directory,
-# checks its sha256, and never downloads.
 for name in curl wget; do
   cat >"$WORK/bin/$name" <<'STUB'
 #!/usr/bin/env bash
@@ -290,7 +285,7 @@ for arch in amd64 arm64; do
   sed "s/^$pin=.*/$pin=${hash%% *}/" "$WORK/security-scan.sh" >"$WORK/security-scan.next"
   mv "$WORK/security-scan.next" "$WORK/security-scan.sh"
 done
-install_trivy() { # machine archive-dir...
+install_trivy() {
   rm -rf "$WORK/trivy-bin" "$FETCH_LOG"
   status=0
   FIXTURE_MACHINE=$1 bash "$WORK/security-scan.sh" install-trivy "$WORK/trivy-bin" "${@:2}" >"$WORK/output" 2>&1 || status=$?

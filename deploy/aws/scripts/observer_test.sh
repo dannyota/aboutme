@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Checks observer.sh's order and failures against stubbed commands.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 work=$(mktemp -d)
@@ -20,7 +19,6 @@ STUB
   chmod +x "$work/bin/$cmd"
 done
 
-# One responder; $STUB_CASE picks the scenario.
 cat >"$work/respond" <<STUB
 #!/usr/bin/env bash
 cmd=\$1; shift; args="\$*"
@@ -72,7 +70,7 @@ case "$cmd $args" in
 esac
 STUB
 
-run_case() { # name want(0|fail) [args]
+run_case() {
   local name=$1 want=$2 got
   shift 2
   : >"$work/$name.calls"
@@ -104,8 +102,6 @@ before() {
 }
 absent() { ! grep -q -F -- "$2" "$1" || { echo "$(basename "$1"): unexpected '$2'" >&2; exit 1; }; }
 
-# A normal update: provenance for this tag and commit first, then every AWS
-# mutation as the deploy role, the copy by digest, and the function by digest.
 run_case ok 0
 f=$work/ok.calls
 policy="gh attestation verify oci://ghcr.io/dannyota/aboutme-observer@$digest --repo dannyota/aboutme"
@@ -130,39 +126,30 @@ for mutation in "ecr get-login-password" "lambda update-function-code" "ecr desc
     { echo "ok: $mutation ran outside the deploy role" >&2; exit 1; }
 done
 
-# An image already in ECR with the same digest is not copied again.
 run_case already_copied 0
 absent "$work/already_copied.calls" "skopeo copy"
 grep -qF "lambda update-function-code" "$work/already_copied.calls" ||
   { echo "already_copied: the function was not updated" >&2; exit 1; }
 
-# Before OpenTofu creates the function, the copy happens and the script
-# prints the digest to set, without an update.
 run_case no_function 0
 absent "$work/no_function.calls" "lambda update-function-code"
 grep -qF "observer_image_digest = \"$digest\"" "$work/no_function.out" ||
   { echo "no_function: the digest to set was not printed" >&2; exit 1; }
 
-# Every refusal happens before anything reaches ECR or Lambda.
 for name in not_on_main no_image provenance_fails; do
   run_case "$name" fail
   absent "$work/$name.calls" "skopeo copy"
   absent "$work/$name.calls" "lambda update-function-code"
   absent "$work/$name.calls" "sts get-caller-identity"
 done
-# An immutable tag that already names another digest, or an unreadable
-# repository, stops before the copy.
 for name in tag_taken ecr_denied; do
   run_case "$name" fail
   absent "$work/$name.calls" "skopeo copy"
   absent "$work/$name.calls" "lambda update-function-code"
 done
-# A copy whose ECR digest differs never reaches the function.
 run_case copy_changes_digest fail
 absent "$work/copy_changes_digest.calls" "lambda update-function-code"
-# A function that does not end up on the digest fails.
 run_case stale_function fail
-# Malformed and extra arguments.
 run_case bad_tag fail v0.6
 absent "$work/bad_tag.calls" "git"
 run_case extra_args 2 v0.6.5 v0.6.6

@@ -1,9 +1,4 @@
 #!/usr/bin/env bash
-# Browser-free manifest-completeness gate. Build the Nuxt app from exactly the
-# files scripts/web-e2e-source.manifest lists, so a stale manifest (a file the
-# build imports but the manifest omits) fails here in seconds instead of inside
-# the Playwright image. Reuses web-e2e-source.sh for its closed-root, secret,
-# and sort validation.
 set -Eeuo pipefail
 export LC_ALL=C
 cd "$(dirname "${BASH_SOURCE[0]}")/.."

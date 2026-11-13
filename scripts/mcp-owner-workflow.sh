@@ -1,10 +1,5 @@
 #!/usr/bin/env bash
 
-# Runs the MCP owner workflow: the host Go runner joined with the browser
-# helper. `local` proves the SDK path on the native HTTPS stack with synthetic
-# data and attests a clean release tag; `production` requires that attestation
-# before it touches the owner credential. It takes no origin, credential,
-# resume, or token input. See docs/design/mcp-owner-workflow.md.
 set -Eeuo pipefail
 umask 077
 
@@ -20,8 +15,6 @@ readonly TARGET_TITLE='CV tiếng Việt'
 readonly TARGET_HEADLINE='Kỹ sư nền tảng hư cấu'
 readonly TARGET_SECTION='Kinh nghiệm'
 readonly IMAGE_RE='^sha256:[0-9a-f]{64}$'
-# The release-images workflow publishes here, and deploy/aws/scripts/deploy.sh
-# deploys the digest this registry returns for the release tag.
 readonly IMAGE_REPOSITORY=dannyota/aboutme
 # The runner prints at most one closed failure word (reason.go) on stderr, only
 # while it has written no evidence; this list must match them all.
@@ -38,16 +31,11 @@ readonly -a IMAGE_SOURCES=(
 
 say() { printf '%s: %s\n' "$NAME" "$1"; }
 stage() { say "stage $1"; }
-# fail writes to ERR_FD, the saved stderr. main silences descriptor 2 so tool
-# diagnostics and shell job notices never reach the output. Every descriptor
-# the script opens is dynamic, so none replaces one a caller passed down.
 fail() { printf '%s: %s\n' "$NAME" "$1" >&"$ERR_FD"; exit 1; }
 secure_dir() { [ -d "$1" ] && [ ! -L "$1" ] && [ "$(stat -c '%u %a' -- "$1")" = "$UID_NOW 700" ]; }
 secure_file() { [ -f "$1" ] && [ ! -L "$1" ] && [ "$(stat -c '%u %a' -- "$1")" = "$UID_NOW 600" ]; }
 file_sha256() { [ -f "$1" ] && [ ! -L "$1" ] && sha256sum -- "$1" | awk '{print $1}'; }
 
-# spec_manifest prints the closed staged browser source set run.sh enforces,
-# sorted bytewise. A change in membership changes the digest.
 spec_manifest() {
   local manifest=$1 name
   local -a names=()
@@ -60,8 +48,6 @@ spec_manifest() {
   printf '%s\n' "${names[@]}" | LC_ALL=C sort -u
 }
 
-# browser_source_digest hashes ordered path, mode, and content entries for
-# every staged source in the closed manifest.
 browser_source_digest() {
   local dir=$1 name mode hash
   shift
@@ -107,9 +93,6 @@ take_lock() {
   flock -n "$LOCK_FD" || fail 'another workflow run holds the lock'
 }
 
-# take_local_check_lock takes the pre-move .git lock, then the shared lock, so
-# fixture cleanup never overlaps the password proof or another local check
-# (instructions/resources.md). Inherited descriptors for them are reused.
 take_local_check_lock() {
   local lock lock_trace lock_status line
   [ ! -L "$MAIN/.dev/locks" ] && install -d -m 0700 "$MAIN/.dev/locks" || fail 'the shared local-check lock is a symbolic link'
@@ -205,8 +188,6 @@ current_identity() {
   BROWSER_RUNNER_SHA=$(file_sha256 "$CONTEXT/run.sh") || fail 'cannot hash the browser runner'
 }
 
-# https_server_identity hashes the server binary the native HTTPS stack runs,
-# not the dev-native one, and requires the hash `dev-https status` checks.
 https_server_identity() {
   local config=$STATE/effective-config
   local -a lines=()
@@ -217,8 +198,6 @@ https_server_identity() {
     fail 'the HTTPS stack server does not match its effective config'
 }
 
-# release_identity sets RELEASE_TAG and RELEASE_COMMIT only for a clean
-# checkout whose HEAD is exactly one release tag.
 release_identity() {
   local tags tagged
   local dirty
@@ -235,7 +214,6 @@ release_identity() {
   RELEASE_TAG=$tags
 }
 
-# Sets $2 to the AWS linux/arm64 digest, or an older single manifest's digest.
 registry_digest() {
   local name=$1 token media_type digest= response_headers response_body header_digests=()
   token=$(curl -fsS --proto '=https' --max-time 20 "https://ghcr.io/token?scope=repository:$IMAGE_REPOSITORY-$name:pull&service=ghcr.io" |
@@ -264,12 +242,10 @@ registry_digest() {
   [[ $digest =~ $IMAGE_RE ]] || return 1
   printf -v "$2" '%s' "$digest"
 }
-# Caller input cannot set these registry-derived release image digests.
 release_images() {
   APP_IMAGE= WEB_IMAGE=
   registry_digest server APP_IMAGE && registry_digest web WEB_IMAGE
 }
-# Rejects an invalid proof before production resolves the owner credential.
 validate_attestation() {
   local path=$PRODUCTION_CONTROL/$ATTESTATION_NAME reason
   secure_dir "$PRODUCTION_CONTROL" || fail 'attestation rejected: missing'
@@ -320,9 +296,6 @@ write_attestation() {
   secure_dir "$PRODUCTION_CONTROL" || fail 'invalid production control directory'
   temporary=$(mktemp "$PRODUCTION_CONTROL/.attestation.XXXXXX")
   chmod 0600 "$temporary"
-  # Every value below is a constant, a fixed timestamp, or a value already
-  # matched against a hex, tag, commit, or digest pattern, so none needs JSON
-  # escaping.
   printf '{"version":1,"scenario":"%s","result":"passed","completed_at":"%s","release_tag":"%s",' \
     "$SCENARIO" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$RELEASE_TAG" >"$temporary"
   printf '"release_commit":"%s","runner_sha256":"%s","server_sha256":"%s","launcher_sha256":"%s",' \
@@ -424,8 +397,6 @@ fixture_cleanup() {
   "$BIN/password-auth-fixture" cleanup --database-url "$NATIVE_DSN" >/dev/null 2>&1
 }
 
-# seed_fixture creates the reserved local password account, then proves real
-# sign-in, creates one fictional English resume with a photo, and signs out.
 seed_fixture() {
   local revision
   fixture_cleanup || fail 'fixture cleanup failed'
@@ -446,8 +417,6 @@ seed_fixture() {
   sign_out && rm -f -- "$SCRATCH/body"
 }
 
-# supply_candidate writes the fictional Vietnamese candidate and its
-# digest-bound review for the local proof. It changes only translatable text.
 supply_candidate() {
   local source=$RUN/source.json candidate review source_sha candidate_sha
   secure_file "$source" || fail 'invalid source handoff'
@@ -477,10 +446,6 @@ stop_process() {
   kill -KILL "$pid" 2>/dev/null || true
 }
 
-# run_joined starts the host runner and the browser container together and waits for both. A
-# failure of either stops the other, but a helper that already wrote its result may exit by itself
-# within the stop grace, so its final stage names the failed step. Both are reaped. When the runner
-# succeeds without a handoff (sentinel stop or revocation-only recovery), the idle helper is stopped.
 run_joined() {
   local supplied=0 deadline=$((SECONDS + RUN_LIMIT_SECONDS)) runner_done_at=
   RUNNER_STATUS= BROWSER_STATUS= BROWSER_STOPPED=0 BROWSER_SIGNALLED=0 OUTCOME=
@@ -492,7 +457,7 @@ run_joined() {
   (cd "$REPO" && exec "${trust[@]}" "$RUNNER" "$MODE" "$RUN" "$RUN/browser") \
     </dev/null >/dev/null 2>"$RUNNER_LOG" {ERR_FD}>&- &
   RUNNER_PID=$!
-  local browser_ca_input=$CA_INPUT # run.sh refuses a CA input in production
+  local browser_ca_input=$CA_INPUT
   [ "$MODE" != production ] || browser_ca_input=
   "$CONTEXT/run.sh" "$BROWSER_IMAGE" "$browser_ca_input" "$STAGING" "$BROWSER_EVIDENCE" mcp-sdk \
     "$MODE" "$RUN/browser" "$CREDENTIAL" "$CONTAINER_NAME" </dev/null >"$BROWSER_LOG" 2>&1 \
@@ -506,7 +471,6 @@ run_joined() {
         [ -z "$BROWSER_PID" ] || BROWSER_SIGNALLED=1
         stop_process "$BROWSER_PID"
       elif [ "$RUNNER_STATUS" -eq 0 ]; then
-        # A sentinel stop or revocation recovery needs no browser handoff.
         OUTCOME=$(check_evidence) || OUTCOME=rejected
         if [ -n "$BROWSER_PID" ] && [ "$OUTCOME" != completed ] && [ "$OUTCOME" != rejected ]; then
           BROWSER_STOPPED=1 && stop_process "$BROWSER_PID"
@@ -577,9 +541,6 @@ report_failure() {
   fi
 }
 
-# check_evidence accepts only the runner's closed allowlisted evidence shape
-# and prints completed, recovered, or already-complete. Local proof must show
-# the replayed create.
 check_evidence() {
   local path=$RUN/evidence.json
   if [ ! -e "$path" ] && [ ! -L "$path" ]; then
@@ -622,10 +583,6 @@ inspect_target() {
   rm -f -- "$SCRATCH/response" && sign_out
 }
 
-# cleanup runs on every exit. Known local debris outlives it: each local run
-# leaves one client registration row named "aboutme MCP owner workflow" in
-# aboutme_dev.oauth_clients, and deleting the fixture user can leave its photo
-# objects in the local media store. Both are disposable local data.
 cleanup() {
   local status=$? path
   trap - EXIT

@@ -1,4 +1,3 @@
-# Public browser evidence excludes test titles, errors, responses, and traces.
 import json
 from pathlib import Path
 import re
@@ -11,7 +10,6 @@ import tempfile
 import zlib
 
 def pixel_png(content):
-    # Accept only the bounded, non-interlaced RGB/RGBA format emitted by the browser.
     try:
         if not content.startswith(b"\x89PNG\r\n\x1a\n") or len(content) > 32 * 1024 * 1024:
             return None
@@ -94,7 +92,6 @@ def pixel_png(content):
     except (ValueError, struct.error, zlib.error):
         return None
 
-# IDs name synthetic fixture families. Result attachments select the case.
 FIXTURES = {
     "screenshot.spec.ts": "renderer",
     "resume-screen.spec.ts": "resume-screen",
@@ -197,7 +194,6 @@ try:
                         yield from suite.get("specs", [])
                         yield from cases(suite.get("suites", []))
 
-                # Validate before publishing any images from this report.
                 selected = []
                 for spec, owner in ((spec, Path(suite.get("file", "")).name)
                                     for suite in data.get("suites", []) for spec in cases([suite])):

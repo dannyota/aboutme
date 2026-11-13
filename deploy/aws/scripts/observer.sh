@@ -1,18 +1,4 @@
 #!/usr/bin/env bash
-# Updates the deployment observer to a tagged release
-# (docs/design/deployment-transparency/README.md, "Where the observer runs").
-#
-#   observer.sh <tag>
-#
-# Verifies the tag's ghcr.io/dannyota/aboutme-observer digest has build
-# provenance signed for that tag and its commit (the sourced provenance.sh),
-# copies it byte for byte into the aboutme-prod-observer ECR repository,
-# fails unless ECR holds the same digest, then points the observer function
-# at that digest. Every AWS call runs as the deploy role, reached through the
-# operator role (the sourced fence.sh). Before OpenTofu has created the
-# function, it stops after the copy and prints the digest to set as
-# observer_image_digest. Observer updates are separate from application
-# deploys; this script never touches ECS.
 set -euo pipefail
 
 region=ap-southeast-1
@@ -40,7 +26,6 @@ script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=provenance.sh
 source "$script_dir/provenance.sh"
 
-# 1. The tag must be on main; its image must carry provenance for it.
 git fetch -q origin main
 commit=$(git rev-list -n1 "$tag")
 git merge-base --is-ancestor "$commit" origin/main || { say "$tag is not on main"; exit 1; }
@@ -54,13 +39,10 @@ digest=$(curl -fsSI -H "Authorization: Bearer $token" \
 provenance_verify observer "$digest" "$tag" "$commit" || exit 1
 say "verified ghcr.io/$repo-observer@$digest for $tag"
 
-# 2. Operator then deploy role.
 # shellcheck source=fence.sh
 source "$script_dir/fence.sh"
 registry="$account_id.dkr.ecr.$region.amazonaws.com"
 
-# 3. Copy by digest. Tags are immutable, so a tag already in ECR must hold
-# this exact digest; a copy that would change the digest fails.
 existing=$(aws_ ecr describe-images --repository-name "$ecr_repository" --image-ids "imageTag=$tag" \
   --query 'imageDetails[0].imageDigest' --output text 2>"$work/describe.err") || existing=""
 if [[ -z $existing ]] && ! grep -q ImageNotFoundException "$work/describe.err"; then
@@ -87,7 +69,6 @@ copied=$(aws_ ecr describe-images --repository-name "$ecr_repository" --image-id
 [[ $copied == "$digest" ]] || { say "ECR holds $tag as $copied, not $digest"; exit 1; }
 say "ECR holds $registry/$ecr_repository@$digest"
 
-# 4. Point the function at the copy by digest.
 if ! aws_ lambda get-function --function-name "$function_name" --query 'Configuration.FunctionName' \
   --output text >/dev/null 2>"$work/get.err"; then
   if grep -q ResourceNotFoundException "$work/get.err"; then

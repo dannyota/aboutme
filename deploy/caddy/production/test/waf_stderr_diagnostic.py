@@ -8,7 +8,7 @@ import sys
 
 
 class JSONObject(list):
-    """Keep duplicate keys so ambiguous metadata stays redacted."""
+    pass
 
 
 LOGGERS = frozenset({
@@ -141,7 +141,6 @@ def main(argv=None):
         for stream, path in (("stdout", args.stdout), ("stderr", args.stderr)):
             with open(path, encoding="utf-8", errors="replace") as source:
                 for record in diagnose(source, args.mode, stream):
-                    # Only fixed categories and line numbers reach the job log.
                     print(json.dumps(record, separators=(",", ":")))
                     status = 1
     except OSError:

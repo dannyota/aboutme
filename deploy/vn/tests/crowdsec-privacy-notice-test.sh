@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Hosted, isolated guest filesystem proof. This does not prove provider identity, physical power-loss durability, delivery, or full-host reconciliation.
 set -euo pipefail; export LC_ALL=C
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 fail() { printf 'FAIL notice host %s\n' "$1" >&2; exit 1; }
@@ -8,7 +7,6 @@ controller_source=$root/deploy/vn/scripts/restore-drill.sh; [[ -f $primitive && 
 legacy_fields=(LEGACY_RELEASE_TAG LEGACY_RELEASE_SHA256 LEGACY_SERVER_IMAGE LEGACY_WEB_IMAGE LEGACY_FENCE_SHA256 LEGACY_DEPLOY_HOST_SHA256 LEGACY_DEPLOY_SAFETY_SHA256)
 for field in "${legacy_fields[@]}"; do grep -Eq "^readonly $field='[^']+'$" "$primitive" || fail 'missing closed legacy pin'; done
 [[ $(id -u) == 0 ]] || fail 'isolated root runner required'
-# Structural checks supplement the filesystem proof; they do not prove runtime network isolation.
 grep -Fq -- '--network=none' "$wrapper" || fail 'owner command network'; grep -Eq -- '--memory(=|[[:space:]])(256[mM]|268435456)' "$wrapper" || fail 'owner command memory'
 grep -Fq 'aboutme_app' "$wrapper" || fail 'owner command database identity'; grep -Fq '/run/postgresql' "$wrapper" || fail 'owner command database socket'
 grep -Fq 'server_image' "$wrapper" || fail 'owner command release pin'; grep -Fq 'privacy-notice:/var/lib/aboutme/privacy-notice:ro' "$wrapper" || fail 'owner authority directory mount'
@@ -22,7 +20,6 @@ awk '
   /if \[ "\$only" = postgres \]/ {postgres=NR}; END {exit !(helper && workload && fence && controller && postgres && helper<postgres && workload<postgres && fence<postgres && controller<postgres)}
 ' "$installer" || fail 'postgres installer skipped shared dependencies'
 work=$(mktemp -d /run/aboutme-notice-test.XXXXXX)
-# Fixtures share an executable header; bodies retain their own failure rules.
 stub() { local target=$1; { printf '#!/usr/bin/env bash\n'; cat; } >"$target"; chmod 0755 "$target"; }
 loops=()
 cleanup() {
@@ -33,14 +30,12 @@ cleanup() {
   /usr/bin/rm -rf -- "$work"
 }
 trap cleanup EXIT
-# Exercise fixture execution with a noexec backing mount, regardless of runner policy.
 mount --bind "$work" "$work"; mount -o remount,bind,noexec "$work"
 stub "$work/exec-probe" <<'STUB'
 exit 0
 STUB
 probe_result=0; "$work/exec-probe" >/dev/null 2>&1 || probe_result=$?
 [[ $probe_result == 126 ]] || fail 'noexec fixture control'
-# Permit only this private fixture bind to execute its copied helpers and stubs.
 mount -o remount,bind,exec "$work"
 "$work/exec-probe" >/dev/null 2>&1 || fail 'executable fixture mount'
 mkdir -p "$work/bin" "$work/lib" /srv/data /var/lib/aboutme /usr/local/lib/aboutme; truncate -s 64M "$work/disk"
@@ -52,8 +47,6 @@ mount --bind /srv/data/aboutme /var/lib/aboutme
 cp "$primitive" "$work/lib/crowdsec-privacy-notice-host.sh"; cp "$controller_source" "$work/lib/restore-drill.sh"
 cp "$root/deploy/vn/scripts/fence.sh" "$root/deploy/vn/scripts/deploy-safety.sh" \
   "$root/deploy/vn/host/workload-lock.sh" "$work/lib/"
-# Any automated CrowdSec invocation is a regression. Cluster restore itself
-# remains covered by the PostgreSQL fixture stages below.
 for helper in crowdsec-db crowdsec-provision crowdsec-migrate; do
   stub "$work/lib/$helper.sh" <<'STUB'
 printf 'crowdsec-called\n' >>"$NOTICE_FIXTURE/crowdsec-effects"
@@ -61,7 +54,6 @@ exit 1
 STUB
 done
 mount --bind "$work/lib" /usr/local/lib/aboutme; mkdir -p /run/aboutme; export NOTICE_FIXTURE=$work NOTICE_DEVICE=$device
-# A fresh fence admits its installed tracked floor, and raise refuses any tag above it.
 floor_tag=$(sed -n 's/^floor_tag=//p' /usr/local/lib/aboutme/fence.sh); floor_release=$(sed -n 's/^floor_release=//p' /usr/local/lib/aboutme/fence.sh)
 [[ $floor_release =~ ^[0-9]+$ && $floor_tag =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]] || fail 'installed tracked floor'
 above_floor=v${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.$((BASH_REMATCH[3] + 1)); above_release=$((floor_release + 1))
@@ -259,7 +251,6 @@ notice_test_ms() {
   stamp=${stamp/./}
   printf '%d\n' "$((10#$stamp * 10))"
 }
-# Join the child and its lock-holding parents before checking the shared lock.
 release_notice_child() {
   python3 -I - "$1" "$2" <<'PYTHON'
 import os, select, sys, time
@@ -318,8 +309,6 @@ retained() {
   jq -e '.operation_kind=="notice_restore" and (.operation_id|type=="string")' /var/lib/aboutme/fence.json >/dev/null || fail 'operation not retained'
   denied
 }
-# The fence minimum admits the tracked floor, so only the notice protection
-# refuses these starts.
 denied() {
   local unit
   for unit in aboutme-server aboutme-web aboutme-caddy aboutme-migrate aboutme-db-setup aboutme-job@media-deletion-sweep crowdsec crowdsec-firewall-bouncer; do
@@ -353,7 +342,6 @@ for label in absent duplicate failure; do
 done
 umount /var/lib/aboutme; umount /srv/data; refuse "$host" initialize; mount "$device" /srv/data
 mount --bind /srv/data/aboutme /var/lib/aboutme
-# Missing bind with plausible root shadow state must not initialize authority.
 umount /var/lib/aboutme; refuse "$host" initialize; [[ ! -e /var/lib/aboutme/fence.json ]] || fail 'root shadow initialized'
 mount --bind /srv/data/aboutme /var/lib/aboutme; mkdir /srv/data/other; mount --bind /srv/data/other /var/lib/aboutme; refuse "$host" initialize
 [[ ! -e /srv/data/other/fence.json ]] || fail 'wrong bind initialized'; umount /var/lib/aboutme; mount -t tmpfs tmpfs /srv/data
@@ -373,14 +361,12 @@ cmp -s "$authority/epoch" "$work/initial-epoch" || fail 'reinstall rotated epoch
 rm "$authority/initial-epoch"; refuse "$host" initialize
 [[ ! -e $authority/initial-epoch ]] || fail 'adopted reinstall recreated anchor'
 cp "$work/initial-epoch" "$authority/initial-epoch"; chmod 0444 "$authority/initial-epoch"
-# Neither ordinary reinstall nor replacement-host bootstrap may derive receipt authority from a minimum release or a restored database.
 [[ ! -e $authority/send.json && ! -e $authority/activation.json ]] || fail 'bootstrap issued receipt'
 for command in prepare enqueue status activate authorize-send reconcile-initial; do refuse bash "$wrapper" "$command" extra; done
 refuse bash "$wrapper" --force; refuse bash "$wrapper" --resume
 for override in FENCE_DIR ABOUTME_WORKLOAD_LOCK NOTICE_AUTHORITY_DIR NOTICE_OPERATION_ID \
   RECOVERY_WAIT_SECONDS DB_NAME SMOKE_TABLE PG_TARGET NOTICE_COMMAND NOTICE_CONTROLLER; do refuse env "$override=invalid" "$controller" host-pass latest
 done
-# Controlled database commands retain the inherited workload descriptor while proving contention in a separate process. They never read restored rows.
 stub "$work/bin/db-probe" <<'STUB'
 set -euo pipefail; name=${0##*/}
 if /usr/bin/flock -n /run/aboutme/workload.lock true; then exit 1; fi
@@ -443,7 +429,6 @@ stub "$work/bin/sleep" <<'STUB'
 if [[ ${NOTICE_DB_FAIL:-none} == recovery ]]; then kill -TERM "$PPID"; exit 1; fi
 exec /usr/bin/sleep "$@"
 STUB
-# The installed helper source stays unchanged. This private fixture surrounds it to inject completion-channel corruption and nonzero helper termination.
 cp "$work/lib/workload-lock.sh" "$work/lib/workload-lock-real.sh"
 stub "$work/lib/workload-lock.sh" <<'STUB'
 set -euo pipefail; [[ $# == 3 && $1 == 300 && $2 == /usr/local/lib/aboutme/restore-drill.sh && $3 == _host-pass ]] || exit 1
@@ -491,7 +476,6 @@ else
 fi
 printf 'helper-joined\n' >>"$NOTICE_FIXTURE/order"; [[ ${NOTICE_HELPER_EXIT:-0} == 0 ]] || exit 1
 STUB
-# Instrument only the copied source boundary, retaining its real checks.
 sed -i '/^notice_restore_postcheck() {/a\
   if /usr/bin/flock -n /run/aboutme/workload.lock true; then return 1; fi\
   printf "postcheck\\n" >>"$NOTICE_FIXTURE/order"\
@@ -505,7 +489,6 @@ refuse restore_pass; umount "$authority"; mount --bind "$authority" "$authority"
 umount "$authority"; mkdir "$authority/nested"; mount -t tmpfs tmpfs "$authority/nested"; refuse restore_pass
 umount "$authority/nested"; rmdir "$authority/nested"
 for pass in latest time repeated; do
-  # Safe malformed files must be revoked without parsing their contents.
   printf '{}\n' >"$authority/send.json"; printf '{}\n' >"$authority/activation.json"; chmod 0444 "$authority/send.json" "$authority/activation.json"; cp "$authority/epoch" "$work/previous-epoch"
   : >"$work/order"; quiet restore_pass "$pass"
   ! cmp -s "$authority/epoch" "$work/previous-epoch" || fail 'restore reused epoch'; cp "$authority/epoch" "$work/$pass-epoch"
@@ -562,7 +545,6 @@ for stage in restore recovery version counts grants schema roles smoke; do
   denied; refuse "$controller" host-pass latest --resume; reset_owner
 done
 for signal in HUP TERM INT; do NOTICE_SIGNAL=$signal NOTICE_DB_SIGNAL=restore blocked_pass; done
-# A surviving restore descendant must keep the kernel lock after either controller dies. The latch is a fixture FIFO, never a protocol/FD token.
 mkfifo "$work/continue"; exec {continue_fd}<>"$work/continue"
 for victim in outer child; do
   rm -f "$work/held-child" "$work/held-controller" "$work/outer-controller"
@@ -591,13 +573,11 @@ done
 exec {continue_fd}>&-; cp "$authority/epoch" "$work/pre-drift-epoch"; NOTICE_DB_DRIFT=smoke refuse restore_pass; denied
 cp "$work/pre-drift-epoch" "$authority/epoch"; reset_owner; quiet restore_pass; cp "$authority/epoch" "$work/previous-epoch"
 quiet restore_pass; ! cmp -s "$authority/epoch" "$work/previous-epoch" || fail 'absent receipts skipped rotation'
-# Every observed durable write boundary must fail closed and keep its owner.
 rm -f "$work/sync-count" "$work/first-authority-sync" "$work/last-authority-sync"; quiet restore_pass; first_boundary=$(cat "$work/first-authority-sync")
 boundaries=$(cat "$work/last-authority-sync"); ((boundaries - first_boundary >= 3)) || fail 'missing durable boundaries'
 for ((boundary = first_boundary; boundary <= boundaries; boundary++)); do
   rm -f "$work/sync-count"; NOTICE_FAIL_SYNC=$boundary refuse restore_pass; [[ -f $authority/restore-reconciliation ]] || fail 'failure lost reconciliation'
   retained; refuse "$host" pre-restore --resume
-  # A fixture restores the known baseline only after the failed process exits.
   reset_owner; /usr/bin/rm -f "$work/await-directory-sync"
 done
 NOTICE_FAIL_MOVE=1 refuse restore_pass; [[ -f $authority/restore-reconciliation ]] || fail 'rename failure lost marker'
@@ -641,7 +621,6 @@ done
 rm -f "$authority/send.json"; chmod 0777 "$authority"; refuse restore_pass; chmod 0755 "$authority"
 reset_owner; refuse "$host" adopt extra; refuse "$host" adopt --force; refuse "$host" adopt
 [[ ! -e $work/forbidden ]] || fail 'host primitive called application dependency'
-# Synthetic adoption uses exact legacy script fixtures and a copied reviewed program with literal substitutions. The real rollout needs the primary's verified legacy pins before shipping.
 mkdir "$work/legacy" "$work/reviewed"
 for name in fence deploy-host deploy-safety; do
   cp "$root/deploy/vn/tests/fixtures/legacy-notice-adoption/$name.sh.txt" "$work/legacy/$name.sh"
@@ -682,7 +661,6 @@ fi
 exec "/usr/bin/${0##*/}" "$@"
 STUB
 done
-# Remove only the synthetic test state after all its owning processes ended.
 rm -rf -- "$authority"; rm -f /var/lib/aboutme/fence.json /var/lib/aboutme/fence.lock "$host"; cp "$work/legacy/"*.sh "$work/lib/"; cp "$work/legacy/release.json" /var/lib/aboutme/release.json
 "$fence" init >"$work/out" 2>"$work/err"
 for fault in unknown-helper unknown-release; do
@@ -729,13 +707,10 @@ done
 for field in "${legacy_fields[@]}"; do export "$field=caller_override"; done
 refuse bash "$adopt" adopt
 for field in "${legacy_fields[@]}"; do unset "$field"; done
-# The app fixture emits only closed aggregates. It never simulates delivery.
 cp "$root/deploy/vn/scripts/fence.sh" "$root/deploy/vn/scripts/deploy-safety.sh" "$work/lib/"; mkdir -p "$work/units" "$work/etc" /etc/containers/systemd /etc/aboutme
 mount --bind "$work/units" /etc/containers/systemd; mount --bind "$work/etc" /etc/aboutme; : >"$work/etc/server.env"
 : >"$work/etc/flags.env"
-# The deployed release and its server unit change together. Activation raises
-# the fence to this tag, so it sits at the tracked floor.
-release_fixture() { # tag number
+release_fixture() {
   jq --arg tag "$1" --argjson number "$2" '.release_tag=$tag | .release_number=$number' "$work/legacy/release.json" > /var/lib/aboutme/release.json
   sed -e "s/@RELEASE_TAG@/$1/g" -e "s/@RELEASE_NUMBER@/$2/g" \
     -e "s|@SERVER_IMAGE@|$legacy_server|g" -e "s|@WEB_IMAGE@|$legacy_web|g" \
@@ -819,12 +794,9 @@ app() {
     [[ $(jq -Sc . "$work/out") == "$(jq -Sc . "$work/aggregate")" ]] || fail 'aggregate output changed'
   fi; cp /var/lib/aboutme/fence.json "$work/owner-baseline"
 }
-# Reset only known synthetic fixture state, never production recovery or automatic release.
 invalid_aggregate() { refuse bash "$wrapper" "${1:-authorize-send}"; jq -e '.operation_kind=="deploy" and (.operation_id|type=="string")' /var/lib/aboutme/fence.json >/dev/null || fail 'invalid post-call output released owner'; cp "$work/owner-baseline" /var/lib/aboutme/fence.json; }
-# Reconciliation permits ordinary mail startup; notice SMTP claim/send gates remain backend full-CI proofs.
 "$fence" check "$floor_release" aboutme-server >"$work/out" 2>"$work/err" || fail 'notice marker blocked compatible ordinary mail'
 refuse bash "$wrapper" enqueue; refuse bash "$wrapper" authorize-send
-# Initial proof has its own closed output and never creates mail authority.
 jq -nc --arg digest "$digest" '{schema_version:1,result:"initial_reconciled",campaign_id:"crowdsec-postgres-paths-v1",
   content_sha256:$digest,campaign_count:0,recipient_count:0,notice_job_count:0}' >"$work/initial"
 cp /var/lib/aboutme/fence.json "$work/initial-fence"; cp "$authority/epoch" "$work/initial-current"
@@ -924,12 +896,10 @@ release_notice_child "$(cat "$work/initial-held-child")" "$work/initial-continue
 /usr/bin/flock -n /run/aboutme/workload.lock true || fail 'initial fixture left child alive'
 [[ ! -s $work/initial-death-out ]] || fail 'initial parent death exposed success'
 refuse bash "$wrapper" reconcile-initial; initial_reset; exec {initial_continue_fd}>&-
-# A missing marker never substitutes for another database proof.
 touch "$authority/restore-reconciliation"; chmod 0444 "$authority/restore-reconciliation"
 NOTICE_LOCK=contention refuse bash "$wrapper" reconcile-initial
 [[ -f $authority/restore-reconciliation ]] || fail 'lock contention cleared marker'
 initial_reset; : >"$work/systemctl-calls"
-# An inert job slice's description does not make it an account writer.
 before=$(wc -l <"$work/initial-calls")
 NOTICE_INITIAL_SLICE=active NOTICE_LEGACY_PROTECTION=active app 0 reconcile-initial
 [[ $(wc -l <"$work/initial-calls") == $((before + 1)) ]] || fail 'inert job slice blocked initial database proof'
@@ -951,7 +921,6 @@ for fault in before-store after-rename after-sync lost-response; do
   initial_reset; app 0 reconcile-initial
 done
 cp "$work/sealed" "$work/aggregate"; printf '2\n' >"$work/app-exit"
-# Capture must persist before writer shutdown, remain on a pending batch, and clear only after the sealed postcondition. The fixture has no member data.
 jq '.state="capturing" | .actual_count=0 | .counts.unqueued=0 | .sealed_at=null' "$work/sealed" >"$work/aggregate"
 NOTICE_CAPTURE=1 app 2 prepare; [[ -f $authority/capture-in-progress && ! -s $authority/capture-in-progress ]] || fail 'pending capture lost marker'
 [[ $(stat -c '%u:%g:%a:%h' "$authority/capture-in-progress") == 0:0:444:1 ]] || fail 'capture marker metadata'; NOTICE_APP_STATE=inspection-failure refuse bash "$wrapper" prepare
@@ -979,7 +948,6 @@ done
 printf '\377\n' >"$work/aggregate"; invalid_aggregate; head -c 4097 /dev/zero >"$work/aggregate"; invalid_aggregate
 cp "$work/sealed" "$work/aggregate"; NOTICE_APP_ERROR=1 invalid_aggregate; printf '0\n' >"$work/app-exit"; invalid_aggregate
 printf '2\n' >"$work/app-exit"
-# A valid aggregate cannot authorize a different deployed release or image.
 cp /var/lib/aboutme/release.json "$work/current-release"
 jq '.release_number=1' "$work/current-release" > /var/lib/aboutme/release.json
 refuse bash "$wrapper" authorize-send; cp "$work/current-release" /var/lib/aboutme/release.json; cp "$work/units/aboutme-server.container" "$work/current-unit"
@@ -993,8 +961,6 @@ printf '{}\n' >"$authority/send.json"; refuse bash "$wrapper" enqueue; cp "$work
 jq '.result="activated" | .state="activated" | .counts={unqueued:0,queued:0,accepted:1,deleted:0,failed:0,cancelled:0}
   | .activation_count=1 | .first_activated_at="2026-10-19T01:02:05.000000Z"
   | .activated_at=.first_activated_at | .last_accepted_at=.first_activated_at' "$work/sealed" >"$work/aggregate"
-# A deployed release above the tracked floor activates nothing: the app call
-# runs, then the fence refuses the raise, keeps its minimum, and keeps the owner.
 cp /var/lib/aboutme/fence.json "$work/ceiling-fence"; /usr/bin/rm -f "$work/container-args"
 release_fixture "$above_floor" "$above_release"; printf '0\n' >"$work/app-exit"; refuse bash "$wrapper" activate
 grep -qxF activate "$work/container-args" && [[ ! -e $authority/activation.json ]] &&
@@ -1007,12 +973,10 @@ NOTICE_CLAIMED=1 app 0 activate; [[ -f $authority/activation.json && ! -e $autho
 awk '$0=="stop" {stopped=NR} $0=="join" {joined=NR} $0=="rm send.json" {revoked=NR} END {exit !(stopped && joined>stopped && revoked>joined)}' \
   "$work/order" || fail 'claimed worker not joined before revocation'
 cp "$authority/activation.json" "$work/current-activation"; app 0 activate; cmp -s "$authority/activation.json" "$work/current-activation" || fail 'reconstruction changed activation'
-# Acceptance remains valid after outbox cleanup. The host receives no outbox rows, and the pinned clock is more than seven days after acceptance.
 [[ $(date -u +%Y-%m-%d) == 2026-11-01 ]] || fail 'delayed activation clock'; rm "$authority/activation.json"; app 0 activate
 cmp -s "$authority/activation.json" "$work/current-activation" || fail 'delayed reconstruction changed evidence'
 touch "$authority/restore-reconciliation"; chmod 0444 "$authority/restore-reconciliation"; refuse bash "$wrapper" authorize-send; refuse bash "$wrapper" activate
 rm "$authority/restore-reconciliation"
-# Known late failure blocks reactivation even with a past accepted result.
 rm "$authority/activation.json"
 jq '.result="blocked" | .state="sealed" | .activated_at=null | .last_accepted_at=null
   | .counts.accepted=0 | .counts.failed=1 | .failure_counts.delivery_failed=1' "$work/aggregate" >"$work/late-failure"

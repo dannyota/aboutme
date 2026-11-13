@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Root authority remains outside restored database state. See the notice design.
 readonly LEGACY_RELEASE_TAG='v0.8.6'
 readonly LEGACY_RELEASE_SHA256='90c0fc03a9d9b5e48f28b7679cc58b27f22c9cb6e04d06ed4a80355e301c4cd8'
 readonly LEGACY_SERVER_IMAGE='ghcr.io/dannyota/aboutme-server@sha256:7aafadf9a3233e3ba39b0a8b1c87efd45a76cccae7196528b94cd867f5cd5190'
@@ -131,7 +130,6 @@ notice_installed_admission() {
 notice_restore_host_check() {
   if notice_absent /var/lib/aboutme/release.json; then notice_app_absent; return; fi
   [[ $(notice_installed_admission) == "$notice_admission" ]] || return 1
-  # Only a separately reviewed fixed full-host controller may reach this branch.
   # shellcheck source=../scripts/deploy-safety.sh
   source /usr/local/lib/aboutme/deploy-safety.sh
   aboutme_assert_cutover_quiescent || return 1
@@ -348,7 +346,6 @@ notice_adopt() {
   exec {notice_bundle_fd}>>/srv/data/host-operations/.bundle.lock || return 1
   flock -x -w 30 "$notice_bundle_fd" || return 1
   notice_recheck_mount || return 1
-  # The incoming reviewed helper reads intent even before its installed copy.
   base=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
   incoming=$base/crowdsec-privacy-notice-host.sh
   if [[ -f $base/../scripts/fence.sh ]]; then base=$(cd "$base/../scripts" && pwd); fi
@@ -357,7 +354,6 @@ notice_adopt() {
   if [[ $(jq -r '.notice_authority.state // empty' <<<"$state") == initializing ]]; then
     notice_operation=$(jq -er .notice_authority.operation_id <<<"$state") || return 1
     [[ $(jq -r .operation_id <<<"$state") == "$notice_operation" && $(jq -r .operation_kind <<<"$state") == cutover ]] || return 1
-    # Only this recorded adoption may repair an interrupted installed copy.
     for name in fence deploy-host deploy-safety; do
       installed=/usr/local/lib/aboutme/$name.sh
       notice_absent "$installed" && continue
@@ -387,8 +383,6 @@ notice_adopt() {
   aboutme_stop_jobs 60 || return 1
   exec {notice_boot_fd}>>/run/aboutme/workload.lock || return 1
   flock -x -w 300 "$notice_boot_fd" || return 1
-  # The fixed legacy edge predates PostgreSQL retention admission. This verified
-  # adoption owns cutover/workload guards and proves stopped writers itself.
   systemctl stop aboutme-caddy aboutme-server aboutme-web || return 1
   for name in aboutme-caddy aboutme-server aboutme-web; do
     state=$(systemctl show --all --property=ActiveState --property=Job \
@@ -401,7 +395,6 @@ notice_adopt() {
   aboutme_assert_fail_closed && aboutme_assert_cutover_quiescent || return 1
   "$base/fence.sh" checkpoint "$notice_operation" "$tag" >/dev/null 2>&1 || return 1
   if [[ $resuming == no ]]; then notice_fence mutation-start "$notice_operation" "$tag" quiesce >/dev/null 2>&1 || return 1; fi
-  # The legacy helper cannot write evidence; use the incoming reviewed helper.
   "$base/fence.sh" notice-authority "$notice_operation" initializing >/dev/null 2>&1 || return 1
   notice_install_canonical "$incoming" || return 1
   for name in fence deploy-host deploy-safety; do

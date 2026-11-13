@@ -32,9 +32,10 @@ release gates. [ADR 0026](../adr/0026-vietnam-hosted-production.md) and
 | B: labeled containers | Remove the same 420 lines; estimate 250–400 lines for container lifecycle, image definitions and wiring, net 20–170 fewer before caller edits. Retain 24 behaviors; replace 12 with 5 container cases, total 29. | Podman VM services would still need native browser wiring. | Wrong labels or writable mounts can target another checkout. Image maintenance and VM networking remain. |
 | C: keep identity      | Remove/add 0 ownership lines; retain all 36 cases and 1,621 suite lines. Add 0 lock lines.                                                                                                                       | Linux `/proc` only.                                        | Better stale-PID rejection, but still a non-atomic check before signaling; highest maintenance cost.     |
 
-**Accepted A:** replace five launch protocols in
-`dev-https-lifecycle.sh:78-104`. `platform.sh:35-40` supplies `setsid --fork`
-with Python `os.setsid()` fallback.
+**Accepted A:** replace the five launch protocols in `dev-https-lifecycle.sh`
+(`start_mock`, `start_mail_capture`, `start_server`, `start_web`,
+`start_caddy`). `detach` in `platform.sh` supplies `setsid --fork` with Python
+`os.setsid()` fallback.
 
 HTTPS is optional on both laptop platforms. Linux keeps container browsers;
 macOS uses native builds. Keep every hosted static shard and every proof.

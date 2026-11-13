@@ -1,4 +1,3 @@
-# The observer needs public HTTPS and DNS, not application or host access.
 [Network]
 NetworkName=aboutme-observer
 Driver=bridge

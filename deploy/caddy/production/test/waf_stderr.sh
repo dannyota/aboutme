@@ -1,9 +1,7 @@
 # shellcheck shell=bash
-# WAF stderr privacy helpers sourced by ../test.sh.
-# The harness defines the shared root and work-directory variables.
 # shellcheck disable=SC2154
 
-assert_waf_stderr_private() { # container mode
+assert_waf_stderr_private() {
   local container=$1 mode=$2 stdout_file stderr_file
   case $mode in
     serving|maintenance) ;;

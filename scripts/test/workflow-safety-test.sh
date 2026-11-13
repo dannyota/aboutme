@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 
-# Regression checks for hosted workflow contracts.
 set -Eeuo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
@@ -17,7 +16,6 @@ fail() {
   exit 1
 }
 
-# Packaged, cached, and downloaded tools must pass pinned checksums.
 node --input-type=module - "$ROOT" "$WORK" <<'NODE'
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
@@ -562,7 +560,7 @@ if grep -Fq 'changed=$(git diff --name-status' "$WORKFLOW"; then
   fail "a hosted append-only job still filters git diff before checking its status"
 fi
 
-assert_preflight_guards() { # job-body
+assert_preflight_guards() {
   grep -Fq 'bash scripts/check-migrations-append-only.sh --commits "$base" HEAD' <<<"$1" ||
     fail "preflight does not use the tested migration commit-to-commit guard"
   grep -Fq 'bash scripts/check-released-schemas.sh --commits "$base" HEAD' <<<"$1" ||
@@ -573,7 +571,7 @@ assert_preflight_guards() { # job-body
     fail "preflight does not use the validated dispatch comparison base"
 }
 
-assert_migration_guard() { # script-body
+assert_migration_guard() {
   grep -Fq 'BASELINE=.v1-baseline' <<<"$1" ||
     fail "migration guard does not use the application v1 marker"
   grep -Fq 'base=$(resolve_commit "$1") || fail "base is not a commit: $1"' <<<"$1" ||
@@ -585,7 +583,7 @@ assert_migration_guard() { # script-body
   fi
 }
 
-assert_released_schema_guard() { # script-body
+assert_released_schema_guard() {
   grep -Fq 'git cat-file -e "$base:.v1-baseline"' <<<"$1" ||
     fail "released-schema guard does not use the trusted v1 base marker"
   grep -Fq 'git diff --quiet "$base" "$head" -- .v1-baseline' <<<"$1" ||
@@ -607,7 +605,7 @@ assert_released_schema_guard() { # script-body
   fi
 }
 
-expect_guard_drift() { # validator body diagnostic
+expect_guard_drift() {
   local status=0
   ( "$1" "$2" ) >"$WORK/guard-drift" 2>&1 || status=$?
   [ "$status" -eq 1 ] || fail "guard drift did not fail: $3"
@@ -679,7 +677,7 @@ grep -Fq 'run: make test-media-s3-down' "$WORKFLOW" ||
 
 WEB_E2E_JOB=$(awk '/^  web-e2e:$/{flag=1; next} /^  [a-z]/{flag=0} flag' "$WORKFLOW")
 [ -n "$WEB_E2E_JOB" ] || fail "hosted workflow lacks the pinned browser job"
-assert_browser_dependencies() { # job-body
+assert_browser_dependencies() {
   local needs
   needs=$(awk '
     /^    needs:/ { count++; active = 1; sub(/^    needs:[ ]*/, ""); print; next }
@@ -720,9 +718,7 @@ if grep -Fq -- '--update-snapshots' "$WORKFLOW"; then
   fail "hosted workflow passes a browser snapshot update flag"
 fi
 
-# The matrix runs exactly the Makefile's shards, which together cover every
-# spec once (scripts/test/makefile-safety-test.sh checks the partition).
-assert_web_e2e_shards() { # job-body makefile-recipe
+assert_web_e2e_shards() {
   local matrix make_shards
   grep -Fxq '        shard: [preview-gap, rest-1, rest-2, rest-3, rest-4]' <<<"$1" ||
     fail "pinned browser job does not run every shard that together covers every spec"
@@ -784,8 +780,6 @@ if grep -Eq 'ABOUTME_RELEASE_APP_IMAGE|ABOUTME_RELEASE_WEB_IMAGE|owner-test\.env
   fail "dev-https-proofs job leaks a release image or owner credential input"
 fi
 
-# Every proof runs exactly once: each dev-https check below, and every shard
-# of the two sharded second-factor journeys, read from their shard maps.
 shard_proofs=$(
   cd "$ROOT/deploy/dev-https-browser" &&
     node --input-type=module -e "
@@ -800,17 +794,13 @@ expected_proofs=$(
     mcp-ts-sdk password privacy public publish sample-start transport \
     "$shard_proofs" | LC_ALL=C sort
 )
-# A TOTP proof may list several shards, comma-separated; each counts once.
 actual_proofs=$(awk '$1 == "proofs:" { for (i = 2; i <= NF; i++) {
     if ($i ~ /^totp:/) { n = split(substr($i, 6), s, ","); for (j = 1; j <= n; j++) print "totp:" s[j] }
     else print $i } }' <<<"$PROOF_JOB" | LC_ALL=C sort)
 [ "$actual_proofs" = "$expected_proofs" ] ||
   fail "dev-https-proofs groups do not run every proof exactly once: $(tr '\n' ' ' <<<"$actual_proofs")"
 
-# Each cleanup step's own if: always() is asserted against its own named
-# block, not a job-wide count, so a check cannot pass by attaching every
-# always() to one step and none to the others.
-step_block() { # step-name job-body
+step_block() {
   awk -v name="      - name: $1" '
     $0 == name { found = 1; print; next }
     found && /^      - / { exit }
@@ -843,7 +833,6 @@ grep -Fq 'if: always()' <<<"$STOP_DB_STEP" ||
 grep -Fq -- 'run: make test-db-down' <<<"$STOP_DB_STEP" ||
   fail "dev-https-proofs job's stop-database step does not stop the runner-local database"
 
-# The gate checks that the shards' evidence together proves every step.
 CI_JOB=$(awk '/^  ci:$/{flag=1; next} /^  [a-z]/{flag=0} flag' "$WORKFLOW")
 [ -n "$CI_JOB" ] || fail "hosted workflow lacks the ci gate job"
 grep -Fq 'pattern: shard-evidence-*' <<<"$CI_JOB" ||
@@ -855,8 +844,7 @@ grep -Fq 'node deploy/dev-https-browser/check-shard-coverage.mjs passkey \' <<<"
 grep -Fq '      - dev-https-proofs' <<<"$CI_JOB" ||
   fail "ci gate does not require the dev-https-proofs job"
 
-# The gate permits only named prose omissions and the web-only omission.
-assert_skip_permissions() { # aggregate-job-body
+assert_skip_permissions() {
   grep -Fq '$selection == "prose" and $event == "pull_request"' <<<"$1" &&
     grep -Fq '(.key | IN("macos-tooling", "vn-infra", "server", "server-integration", "server-resumeapi", "web", "web-e2e", "dev-https-proofs"))' <<<"$1" &&
     grep -Fq '$selection == "no-web" and ($event == "pull_request" or $event == "push") and .key == "web-e2e"' <<<"$1" ||
@@ -870,7 +858,7 @@ for pattern in '$selection == "prose" and $event == "pull_request"' '(.key | IN(
     'ci gate does not enforce named selection skips'
 done
 
-assert_vn_selection() { # caller-job-body
+assert_vn_selection() {
   grep -Fxq "    if: github.event_name != 'pull_request' || needs.preflight.outputs.selection != 'prose'" <<<"$1" ||
     fail "VN caller does not use the exact selection condition"
   grep -Fxq '    needs: [preflight]' <<<"$1" ||
@@ -883,8 +871,7 @@ expect_guard_drift assert_vn_selection "$(sed '/^    if:/d' <<<"$VN_JOB")" \
 expect_guard_drift assert_vn_selection "$(sed '/^    needs:/d' <<<"$VN_JOB")" \
   'VN caller does not require preflight'
 
-# Only the trusted renewal workflow may also receive its environment credentials.
-assert_workflow_secrets() { # workflow-directory
+assert_workflow_secrets() {
   node --input-type=module - "$1" "$ROOT" <<'NODE'
 import { readFileSync, readdirSync } from "node:fs";
 import { createHash } from "node:crypto";
@@ -1043,14 +1030,11 @@ for credential in VNGCLOUD_CLIENT_ID VNGCLOUD_CLIENT_SECRET VNGCLOUD_PROJECT_ID;
 done
 rm "$WORK/workflows/vmonitor-renew.yml"
 
-# Each observer platform builds in its own native job. The plain version tag
-# stays arm64 for Lambda, while amd64 uses a platform suffix. Both jobs smoke,
-# scan, attest provenance, attest an SBOM, and upload release evidence.
-release_job_body() { # job-id
+release_job_body() {
   awk -v job="  $1:" '$0 == job { flag = 1; next } /^  [a-z]/ { flag = 0 } flag' "$RELEASE_WORKFLOW"
 }
 
-assert_observer_build() { # action-body
+assert_observer_build() {
   grep -Fq 'observer*)' <<<"$1" &&
     grep -Fq 'docker build --platform "linux/$ARCH" --provenance=false' <<<"$1" &&
     grep -Fq -- '--build-arg VERSION="$VERSION" --build-arg COMMIT="$COMMIT"' <<<"$1" ||
@@ -1098,9 +1082,6 @@ grep -Fq 'name: digest-observer-amd64' <<<"$OBSERVER_AMD_JOB" ||
 grep -Fq 'name: sbom-observer-amd64' <<<"$OBSERVER_AMD_JOB" ||
   fail "amd64 observer job does not upload its SBOM"
 
-# The release job waits for both observer jobs to collect their evidence, but
-# only successful app images gate publication. A failed observer scan must not
-# block the server, web, and caddy release.
 RELEASE_JOB=$(release_job_body release)
 [ -n "$RELEASE_JOB" ] || fail "release-images workflow lacks the release job"
 grep -Fxq '    needs: [image, observer-image, observer-image-amd64]' <<<"$RELEASE_JOB" ||
@@ -1128,8 +1109,7 @@ grep -Fq 'echo "ghcr.io/dannyota/aboutme-observer@$d linux/$arch" >>release/dige
 grep -Fq 'cp "artifacts/aboutme-$name-arm64.spdx.json" "release/aboutme-$name.spdx.json"' <<<"$RELEASE_JOB" ||
   fail "release job does not publish the legacy app SBOM name from the AWS arm64 image"
 
-# Scheduled scans need a contract checked by pull-request CI.
-assert_observer_scan() { # govulncheck job-body
+assert_observer_scan() {
   awk '
     function finish_step() { if (scan && directory) found = 1 }
     /^      - / {
@@ -1142,7 +1122,7 @@ assert_observer_scan() { # govulncheck job-body
   ' <<<"$1" || fail "$observer_diagnostic"
 }
 
-assert_image_scan() { # image-scan job-body
+assert_image_scan() {
   local scan_step scan_command scan_env install_step
   scan_step=$(step_block "Scan released images" "$1")
   scan_command=$(awk '
@@ -1180,7 +1160,7 @@ image_command_diagnostic='security-scan Scan released images must pass the Trivy
 assert_observer_scan "$SECURITY_GO_JOB"
 assert_image_scan "$SECURITY_IMAGE_JOB"
 
-expect_security_drift() { # validator job-body diagnostic
+expect_security_drift() {
   local status=0
   ( "$1" "$2" ) >"$WORK/security-drift" 2>&1 || status=$?
   [ "$status" -eq 1 ] || fail "security scan drift did not fail: $3"
@@ -1221,7 +1201,6 @@ expect_security_drift assert_image_scan \
 $TRIVY_INSTALL_STEP" \
   'security-scan must install Trivy before Scan released images'
 
-# A missing database must stop the scheduled scan before Trivy runs.
 SECURITY_DB_DOWNLOAD=$(step_block "Download Trivy database" "$SECURITY_IMAGE_JOB")
 grep -Fq 'name: trivy-db' <<<"$SECURITY_DB_DOWNLOAD" || fail 'security scan must download the database artifact'
 grep -Fq 'path: ${{ runner.temp }}/trivy-cache/db' <<<"$SECURITY_DB_DOWNLOAD" || fail 'security scan must use the database cache directory'

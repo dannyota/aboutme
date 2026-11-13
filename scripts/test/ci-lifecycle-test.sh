@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 
-# Author regression tests for CI signal handling and shared-DB ownership.
 set -Eeuo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)

@@ -1,15 +1,3 @@
-// Checks that every step of a sharded second-factor scenario is proven
-// across its CI shard matrix, after every shard finishes: `totp` for the
-// totp-browser-proof matrix and `passkey` for passkey-browser-proof. Each
-// evidence file was already checked against the closed step-name list by
-// verify-evidence.mjs when its own shard ran; this checks that the
-// shard-to-role map is complete, that evidence for every shard (and only
-// every shard) is present once, that the union of enabled-phase evidence
-// covers every step, and that exactly one disabled-phase evidence file is
-// present. The step lists come from verify-evidence.mjs and the shard maps
-// from proof-shards.mjs.
-//
-// Usage: node check-shard-coverage.mjs <totp|passkey> <evidence-path>...
 import { realpathSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
@@ -21,9 +9,6 @@ import {
 } from './proof-shards.mjs';
 import { PASSKEY_STEP_NAMES, TOTP_STEP_NAMES } from './verify-evidence.mjs';
 
-// Evidence and artifact names start with the scenario name:
-// <name>-second-factor-proof.json, <name>-enrollment-disabled-proof.json,
-// and one <name>-browser-proof-evidence-<shard>/ artifact per shard.
 const SCENARIOS = {
   passkey: {
     enabledRoles: PASSKEY_ENABLED_ROLES,
@@ -57,7 +42,6 @@ function assertShardRoleMapIsComplete({ enabledRoles, mapName, shardRoles }) {
   }
 }
 
-/** The shard whose artifact directory a downloaded evidence path sits under. */
 function shardOf(name, shardRoles, path) {
   for (const shard of Object.keys(shardRoles)) {
     if (path.includes(`${name}-browser-proof-evidence-${shard}/`)) return shard;
@@ -65,7 +49,6 @@ function shardOf(name, shardRoles, path) {
   return null;
 }
 
-/** Checks one scenario's evidence paths; returns the summary or throws. */
 async function checkCoverage(name, paths) {
   const scenario = SCENARIOS[name];
   const { shardRoles, steps } = scenario;
@@ -122,7 +105,6 @@ async function checkCoverage(name, paths) {
   return `all ${steps.size} steps proven across ${seenShards.size} shard(s); disabled phase proven once`;
 }
 
-/** Runs the check for one scenario and exits 1 on any gap. */
 export async function runShardCoverage(name, paths) {
   if (!Object.hasOwn(SCENARIOS, name)) {
     console.error('usage: check-shard-coverage.mjs <totp|passkey> <evidence-path>...');

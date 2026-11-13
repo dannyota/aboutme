@@ -1,5 +1,3 @@
-"""Native shutdown preserves watchdog ownership until cleanup finishes."""
-
 import os
 from pathlib import Path
 import shutil
@@ -27,7 +25,6 @@ def watchdog(directory):
         (directory / "term").touch()
 
     signal.signal(signal.SIGTERM, term)
-    # A separate session models a descendant only the watchdog can clean up.
     child = subprocess.Popen([sys.executable, "-c", "import signal; signal.pause()"],
                              start_new_session=True)
     try:
@@ -68,7 +65,6 @@ def run_case(root, blocked, wrapped=False):
         scripts = prepare(root, repository)
         environment = os.environ.copy()
         if wrapped:
-            # Model a framework launcher that replaces its executable spelling.
             binary = repository / "bin"
             binary.mkdir()
             launcher = binary / "python3"
@@ -81,7 +77,6 @@ def run_case(root, blocked, wrapped=False):
         reapers = []
         down = None
         try:
-            # A blocked first service must not prevent later services stopping.
             for name in ("caddy", "web"):
                 directory = state / name
                 directory.mkdir()
@@ -136,7 +131,6 @@ def run_case(root, blocked, wrapped=False):
                 assert "stopped caddy" not in output, output
                 assert "native dev stack is down" not in output, output
                 assert "caddy" in errors and "watchdog" in errors and "deadline" in errors, errors
-                # Releasing cleanup after the caller fails proves ownership survived.
                 (directory / "release").touch()
                 reapers[0].join(timeout=10)
                 assert not reapers[0].is_alive(), "watchdog did not finish cleanup"
@@ -192,7 +186,6 @@ def foreign_cases(root):
                 assert foreign.poll() is None, f"foreign group leader killed: {mode}"
                 assert pidfile.exists(), f"rejected state deleted: {mode}"
                 identity.unlink(missing_ok=True)
-            # A command carrying the marker as data cannot register ownership.
             token = secrets.token_hex(16)
             impersonator = subprocess.Popen(
                 [shutil.which("python3"), "-c", "import time; time.sleep(60)",
@@ -206,7 +199,6 @@ def foreign_cases(root):
             finally:
                 impersonator.terminate()
                 impersonator.wait(timeout=10)
-            # Malformed PIDs and linked PID files also preserve state.
             for value in ("0", "1", "-1", "garbage"):
                 pidfile.write_text(value)
                 result = invoke(repository, "cmd_down")

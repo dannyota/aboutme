@@ -1,20 +1,16 @@
-# Secrets — never commit credentials
 .env
 .env.*
 !.env.example
 
-# Node
 node_modules/
 node_modules
 
-# Build outputs
 dist/
 .output/
 .nuxt/
 coverage/
 __pycache__/
 
-# Local state
 *.log
 .DS_Store
 .playwright-mcp/
@@ -22,7 +18,6 @@ __pycache__/
 !AGENTS.md
 !CLAUDE.md
 
-# Shared agent roles. Everything else under .claude/ and .codex/ stays local.
 !.claude/
 .claude/*
 !.claude/agents/

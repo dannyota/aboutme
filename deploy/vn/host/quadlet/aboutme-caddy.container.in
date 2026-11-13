@@ -1,8 +1,4 @@
-# Rendered by deploy-host.sh; do not edit on the host. Caddy on 80 and 443 with
-# the direct edge (docs/design/vietnam-production.md, "Edge"). It shares its
-# storage directory and uid 10001 with aboutme-maintenance, so either process
-# answers the other's ACME HTTP-01 challenge and both may hold the ports with
-# SO_REUSEPORT during a deploy ("Host").
+# Rendered by deploy-host.sh; do not edit on the host.
 [Unit]
 OnFailure=aboutme-alert@%N.service
 Description=aboutme Caddy

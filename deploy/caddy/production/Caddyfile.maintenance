@@ -1,31 +1,9 @@
-# Maintenance-mode production route table. entrypoint.sh selects this file
-# instead of Caddyfile when MAINTENANCE=1. Every path and method on the apex
-# gets maintenance.html at 503, served verbatim by file_server so nothing in
-# the page can be read as a Caddy placeholder; see maintenance-render.sh for
-# the generated headers this imports, built the same way as routes.caddy.
-#
-# It imports the same edge listeners as Caddyfile (see edges/), so both carry
-# the same client certificate trust and client address rule; only the
-# apex_site snippet differs. www still redirects to the apex, as in
-# Caddyfile: the page polls /readyz on its own origin, and a visitor's tab
-# must keep pointing at the apex across the deploy, or the poll becomes a
-# blocked cross-origin fetch once maintenance mode ends and www starts
-# redirecting again.
 {
 	admin off
-	# No automatic HTTP-to-HTTPS redirect server. CloudFront reaches the
-	# origin over HTTPS on 8443 only, so with only that edge Caddy binds no
-	# privileged port and runs with no capability. The direct edge declares
-	# its own port 80 site (edges/direct.sites).
 	auto_https disable_redirects
 	import /run/caddy/edges.global
-	# CloudFront keeps no access log and retains the method and URI on runtime
-	# errors, without addresses or headers. The direct edge routes request data
-	# through fixed allowlist encoders instead.
 	log default {
 		output stderr
-		# Direct-edge WAF, CrowdSec, and HTTP errors use private allowlist
-		# loggers. CloudFront-only keeps its existing error output.
 		import /run/caddy/default-log-excludes.caddy
 		format filter {
 			wrap json
@@ -41,9 +19,7 @@
 	import /etc/caddy/maintenance.generated.caddy
 	root * /etc/caddy/maintenance-site
 	rewrite * /maintenance.html
-	# file_server serves only GET and HEAD. Change every other request to GET so
-	# it serves the same static 503 page. Keep HEAD untouched so its body stays
-	# empty.
+	# Caddy file_server serves only GET and HEAD (Caddy file_server docs).
 	@maintenance_body not method HEAD
 	method @maintenance_body GET
 	file_server {

@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 set -uo pipefail
-# Runner logs admit only fixed messages; shell errors can expose arguments.
 exec 2>/dev/null
 umask 077
 diagnostic='Synthetic quota diagnostic: stage=environment reason=args'

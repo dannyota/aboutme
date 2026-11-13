@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Ordinary maintenance keeps the pinned catalog free of planner samples.
 set -euo pipefail
 umask 077
 
@@ -12,7 +11,6 @@ vacuum_main() {
   flock -n "$vacuum_lock" || return 1
   local work relation
   work=$(mktemp -d /run/aboutme/crowdsec-vacuum.XXXXXX)
-  # Capture the fixed-prefix temporary path before this local leaves scope.
   # shellcheck disable=SC2064
   trap "rm -rf -- '$work'" EXIT
   /usr/local/lib/aboutme/crowdsec-db.sh preflight-ready </dev/null \

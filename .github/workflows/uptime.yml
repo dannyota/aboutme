@@ -1,6 +1,3 @@
-# Readiness backstop for production (docs/runbooks/production.md, "Alarms"). A
-# failed scheduled run makes GitHub email the account that last changed the
-# schedule. Scheduled runs can arrive hours apart; vMonitor is the site-down alarm.
 name: Uptime
 
 on:
@@ -22,7 +19,6 @@ jobs:
     steps:
       - name: Check https://aboutme.vn/readyz
         run: |
-          # Three tries 20 seconds apart, so one dropped request does not page.
           for attempt in 1 2 3; do
             code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 \
               https://aboutme.vn/readyz) || code=none

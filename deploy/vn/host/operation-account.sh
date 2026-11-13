@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
-# Account deletion never retries a saved destructive attempt.
 set -euo pipefail
 
-# The runner supplies these inputs before calling the account helpers.
 declare lib id operations_dir
 
 account_secret_id() {
@@ -26,8 +24,6 @@ account_live() {
     grep -qxF "$expected" <<<"$digests" || return 1
     platform=$(podman image inspect --format '{{.Os}}/{{.Architecture}}' "$image" 2>/dev/null) || return 1
     [[ $platform == linux/amd64 ]] || return 1
-    # Select only the two public release fields inside the template, never
-    # print or capture the other process environment entries.
     metadata=$(podman container inspect --format '{{range .Config.Env}}{{if ge (len .) 19}}{{if eq (slice . 0 19) "DEPLOY_RELEASE_TAG="}}{{println .}}{{end}}{{end}}{{if ge (len .) 22}}{{if eq (slice . 0 22) "DEPLOY_RELEASE_NUMBER="}}{{println .}}{{end}}{{end}}{{end}}' "aboutme-$component" 2>/dev/null) || return 1
     [[ $(grep -cxF "DEPLOY_RELEASE_TAG=$tag" <<<"$metadata") == 1 && $(grep -cxF "DEPLOY_RELEASE_NUMBER=$(jq -r .release_number <<<"$live")" <<<"$metadata") == 1 && $(wc -l <<<"$metadata") == 2 ]] || return 1
   done
@@ -42,14 +38,12 @@ account_live() {
       $(jq -r .flagsHash <<<"$state") == "$flags" &&
       $(jq -r .dbSecretId <<<"$state") == "$db_secret_id" ]] || return 1
   fi
-  # The sourced runner consumes the live release and flags returned here.
   # shellcheck disable=SC2034
   live_release=$live flags_hash=$flags
 }
 
 account_backend_stopped() {
   local app=$1 count
-  # Only backend metadata is read. A failed query never proves absence.
   count=$(timeout 30 runuser -u postgres -- psql -XAt -v ON_ERROR_STOP=1 \
     --dbname aboutme --set=app="$app" <<'SQL'
 SELECT count(*) FROM pg_stat_activity WHERE application_name = :'app';
@@ -78,7 +72,7 @@ account_attempts_stopped() {
   operation_save
 }
 
-account_container() { # intent server arguments...
+account_container() {
   local intent=$1 number name app image tag release_number result rc=0
   shift
   account_live || return 1
@@ -97,7 +91,6 @@ account_container() { # intent server arguments...
   [[ ! -L $result ]] || return 1
   rm -f "$result"
   (umask 077; : >"$result")
-  # Creation is an effect with a durable intent. No network/media credential.
   podman create --no-healthcheck --name "$name" --network none --entrypoint /usr/local/bin/server \
     --memory 256m --memory-swap 256m --log-driver none --ulimit core=0:0 \
     --cap-drop ALL --security-opt no-new-privileges --read-only --restart no \
@@ -110,11 +103,10 @@ account_container() { # intent server arguments...
     (ulimit -f 4; timeout 150 podman start --attach "$name" >"$result" 2>/dev/null) || rc=$?
   fi
   command_rc=$rc command_output=$result
-  # A timeout, missing container, or lost reply does not replace a backend check.
   account_attempts_stopped || return 1
 }
 
-account_parse_write() { # exit output-file uuid slug
+account_parse_write() {
   local rc=$1 file=$2 user=$3 slug=$4 line slugs outcome=unknown returned=null
   if [[ $(wc -c <"$file") -le 1024 && $(wc -l <"$file") == 2 && $(tail -n 1 "$file") == 'account-delete: end' ]]; then
     line=$(head -n 1 "$file")
@@ -133,7 +125,7 @@ account_parse_write() { # exit output-file uuid slug
 account_slugs_valid() {
   jq -e 'type=="array" and length<=3 and .==sort and .==unique and all(.[]; type=="string" and length>=4 and length<=30 and test("^[a-z0-9]+(-[a-z0-9]+)*$"))' <<<"$1" >/dev/null
 }
-account_parse_snapshot() { # kind, bounded stdout
+account_parse_snapshot() {
   python3 - "$1" 3<<<"$2" <<'PYTHON'
 import json, os, sys
 try:
@@ -178,7 +170,6 @@ account_show() {
 account_delete() {
   local parsed user slug
   user=$(jq -r .action.userId <<<"$state") slug=$(jq -r .action.reportedSlug <<<"$state")
-  # This is the sole destructive dispatch. Lost result reconciles by UUID.
   account_container delete account-delete confirm "$slug" "$user" || return 1
   parsed=$(account_parse_write "$command_rc" "$command_output" "$user" "$slug")
   state=$(jq --argjson r "$parsed" '.action += $r | .outcome=(if $r.writeOutcome=="unknown" then "unknown" else "pending" end)' <<<"$state")
@@ -201,7 +192,6 @@ account_reconcile() {
 account_cleanup() {
   local pending slug
   [[ $(jq -r .action.writeOutcome <<<"$state") =~ ^(committed|absent_after_unknown)$ ]] || return 0
-  # Each known slug must be absent at the command boundary as well as HTTPS.
   while IFS= read -r slug; do
     account_container show-verify account-delete show "$slug" || return 1
     if [[ $command_rc != 4 || $(wc -c <"$command_output") -gt 1024 || $(wc -l <"$command_output") != 2 || $(head -n1 "$command_output") != "not found: $slug" || $(tail -n1 "$command_output") != 'account-delete: end' ]]; then
@@ -210,7 +200,6 @@ account_cleanup() {
       return 1
     fi
   done < <(jq -r '(.action.shownSlugs+(.action.returnedSlugs//[]))|unique|.[]' <<<"$state")
-  # Recheck account absence before interpreting a global queue snapshot.
   account_container status account-delete status "$(jq -r .action.userId <<<"$state")" || return 1
   [[ $command_rc == 0 && $(account_parse_status "$(<"$command_output")") == absent ]] || return 1
   account_container queue media-deletion-status || return 1

@@ -1,6 +1,4 @@
-# Rendered by deploy-host.sh; do not edit on the host. The maintenance Caddy,
-# started only by a deploy or a recovery, never at boot
-# (docs/design/single-host-production.md, "Release and deploy").
+# Rendered by deploy-host.sh; do not edit on the host.
 [Unit]
 OnFailure=aboutme-alert@%N.service
 Description=aboutme maintenance Caddy

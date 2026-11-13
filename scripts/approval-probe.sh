@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Anonymous feasibility only. The independently chosen SHA and hash are public.
 set -Eeuo pipefail
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 exec python3 -I - "$ROOT/scripts/approval-probe.json" "$@" <<'PY'

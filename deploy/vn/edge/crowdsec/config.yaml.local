@@ -1,5 +1,3 @@
-# Self-contained PostgreSQL configuration, also installed for provisioning.
-# The package base supplies acquisition, plugin and local client settings.
 common:
   daemonize: false
   log_media: file

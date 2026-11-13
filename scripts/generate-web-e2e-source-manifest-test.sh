@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 
-# Black-box contract for automatic E2E source-manifest generation.
 set -Eeuo pipefail
 export LC_ALL=C
 

@@ -1,23 +1,6 @@
 # shellcheck shell=bash
-# Sourced by deploy.sh. Implements deploy.sh --totp-key-reencrypt, the
-# one-shot key re-encryption operation (docs/design/totp-key-management.md,
-# "Rotation", and docs/design/passkey-release-fence.md, "Authenticator-app
-# key re-encryption"). It builds and registers its own
-# aboutme-prod-totp-reencrypt revision, the same way deploy.sh builds and
-# registers migrate, jobs, and db-setup, so the task always runs the tag's
-# server image under a DEPLOY_RELEASE_* stamp rather than OpenTofu's
-# placeholder registration. It never registers or changes a service.
-# Needs $region, $cluster, $work, $tag, $commit, $candidate, $repo,
-# $fence_epoch_totp, $fence_min, say(), digest(), current_def(),
-# describe_task_def(), aws_(), task_def_release_number(), fence_lock,
-# fence_checkpoint, and provenance_verify() already defined by deploy.sh,
-# fence.sh, and provenance.sh.
 
-# Extracts TOTP_ACTIVE_KEY/TOTP_PREVIOUS_KEY valueFrom names from one
-# container of a task definition, sorted so set order never causes a false
-# mismatch. A missing previous slot is normal (see "Key ring") and yields one
-# line rather than two.
-totp_key_slots() { # task-definition JSON, container name
+totp_key_slots() {
   jq -r --arg c "$2" '.containerDefinitions[] | select(.name == $c)
     | (.secrets // [])[] | select(.name == "TOTP_ACTIVE_KEY" or .name == "TOTP_PREVIOUS_KEY")
     | "\(.name)=\(.valueFrom)"' <<<"$1" | sort
@@ -44,9 +27,6 @@ totp_reencrypt_run() {
   fence_lock || exit 1
   fence_checkpoint || exit 1
 
-  # The running-app release and stability checks run only after the lock is
-  # held, so a stale read can never pass them and then lose a race to a
-  # concurrent deploy before the checkpoint below re-proves the lock.
   local service service_td running_count desired_count service_release
   service=$(aws_ ecs describe-services --cluster "$cluster" --services aboutme-prod-app --output json) ||
     { say "could not read the running app service"; exit 1; }
@@ -59,9 +39,6 @@ totp_reencrypt_run() {
   [[ $service_release == "$candidate" ]] ||
     { say "the running app is release $service_release, not $tag"; exit 1; }
 
-  # Before registering: the new revision's key slots must be exactly the
-  # running app's, so the task never seals a row under a key the running app
-  # cannot read.
   local running_def new_def running_slots new_slots
   running_def=$(describe_task_def "$service_td") || { say "could not read the running app task definition"; exit 1; }
   new_def=$(cat "$work/totp-reencrypt.json")
@@ -81,10 +58,6 @@ totp_reencrypt_run() {
     --task-definition "$revision" --started-by deploy-totp-reencrypt \
     --query 'tasks[0].taskArn' --output text) || { say "totp-key-reencrypt did not start"; exit 1; }
   [[ $task == arn:* ]] || { say "totp-key-reencrypt did not start"; exit 1; }
-  # One run may take 30 minutes (docs/design/totp-key-management.md), longer
-  # than one ECS waiter (about 10 minutes), so the lock stays held until the
-  # task stops or four waits pass. If the task is still running then, the
-  # lock is deliberately kept and the operator is told why.
   local waited=0 last
   until aws_ ecs wait tasks-stopped --cluster "$cluster" --tasks "$task"; do
     waited=$((waited + 1))

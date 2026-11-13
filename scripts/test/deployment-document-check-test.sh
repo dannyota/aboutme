@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Offline wrapper tests with stub network tools and watchdog execution.
 set -Eeuo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
@@ -91,7 +90,6 @@ age: 5
 server: CloudFront
 '
 
-# reset restores the all-passing stubs and a clean evidence directory.
 reset() {
   rm -rf -- "$REPO/.dev" "$STUB"/*.log "$STUB"/*-fail "$STUB"/fail-* "$STUB/dc-out-www"
   printf '%s' "$GOOD_HEADERS" | sed 's/$/\r/' >"$STUB/headers"
@@ -99,7 +97,6 @@ reset() {
   printf '%s %s v0.6.5\n%s %s v0.6.5\n' "$IMAGE" "$D1" "$IMAGE" "$D2" >"$STUB/dc-out"
 }
 
-# run_check runs the script with the stubs and stores its output and status.
 OUTPUT=
 RC=0
 run_check() {
@@ -112,18 +109,16 @@ run_check() {
 
 summary() { cat "$REPO"/.dev/prod-checks/transparency/*/summary.txt; }
 
-expect_refusal() { # expect_refusal <name> <message fragment>
+expect_refusal() {
   [ "$RC" -ne 0 ] || fail "$1: the script ran"
   grep -Fq -- "$2" <<<"$OUTPUT" || fail "$1: wrong diagnostic: $OUTPUT"
 }
 
-expect_fail() { # expect_fail <name> <FAIL line fragment>
+expect_fail() {
   run_check
   [ "$RC" -ne 0 ] || fail "$1: the check passed"
   summary | grep -E "^FAIL .*$2" >/dev/null || fail "$1: no FAIL line for $2"
 }
-
-# --- usage and preflight ------------------------------------------------------
 
 reset
 run_check extra
@@ -154,8 +149,6 @@ touch "$STUB/gh-auth-fail"
 run_check
 expect_refusal 'a signed-out gh was accepted' 'gh is not signed in'
 
-# --- happy path ---------------------------------------------------------------
-
 reset
 run_check
 [ "$RC" -eq 0 ] || fail "happy path exited $RC: $OUTPUT"
@@ -167,22 +160,17 @@ grep -Fxq -- '--timeout 900 -- bash '"$REPO"'/scripts/deployment-document-check.
 [ "$(grep -c . "$STUB/dc.log")" -eq 2 ] || fail 'document-check did not run once per URL'
 grep -Fxq -- '-now 2026-10-02T03:21:05Z' "$STUB/dc.log" ||
   fail 'now is not the Date header plus Age'
-# Two digests, each verified twice (provenance and SBOM), no repeats.
 [ "$(grep -c . "$STUB/gh.log")" -eq 4 ] || fail 'gh ran the wrong number of times'
 [ "$(grep -c -- "--predicate-type https://spdx.dev/Document/v2.3" "$STUB/gh.log")" -eq 2 ] ||
   fail 'the SBOM verification did not run once per digest'
 grep -Fq -- "attestation verify oci://$IMAGE@$D1 --repo dannyota/aboutme --signer-workflow dannyota/aboutme/.github/workflows/release-images.yml --source-ref refs/tags/v0.6.5 --deny-self-hosted-runners" "$STUB/gh.log" ||
   fail 'the provenance command line is wrong'
 
-# --- duplicate digests --------------------------------------------------------
-
 reset
 printf '%s %s v0.6.5\n%s %s v0.6.5\n' "$IMAGE" "$D1" "$IMAGE" "$D1" >"$STUB/dc-out"
 run_check
 [ "$RC" -eq 0 ] || fail "duplicate digests exited $RC"
 [ "$(grep -c . "$STUB/gh.log")" -eq 2 ] || fail 'a duplicate digest was verified twice'
-
-# --- header failures ----------------------------------------------------------
 
 reset
 grep -v '^x-content-type-options' <<<"$GOOD_HEADERS" >"$STUB/headers"
@@ -228,8 +216,6 @@ expect_fail 'www differs from apex' 'www lists the same images as apex'
 reset
 touch "$STUB/curl-fail"
 expect_fail 'fetch failure' 'fetch'
-
-# --- document-check and attestation failures ------------------------------------
 
 reset
 touch "$STUB/dc-fail"

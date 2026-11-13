@@ -1,14 +1,10 @@
 #!/usr/bin/env bash
-# Checks dns-check.sh against stubbed aws, dig, curl, and cf answers.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/bin"
 
-# Cloudflare's live key-signing key for aboutme.vn and the digest of the DS
-# record the .vn registry published for it (key tag 2371): a real pair, so
-# the script's own digest computation is checked, not echoed.
 ksk_public='mdsswUyr3DPW132mOi8V9xESWE8jTo0dxCjjnopKl+GqJxpVXckHAeF+KkxLbxILfDLUT0rAK9iUzy1L53eKGQ=='
 ksk_digest='006A39A4D5419DB32B9BA95D930E0101AA1D8ACD3945C9F0359AF8206CADFEAC'
 
@@ -101,7 +97,7 @@ for cmd in aws dig curl cf; do
   ln -s stub "$work/bin/$cmd"
 done
 
-run_case() { # name want-exit [expected output line]
+run_case() {
   local name=$1 want=$2 line=${3:-} got=0
   CASE=$name KSK_PUBLIC=$ksk_public KSK_DIGEST=$ksk_digest PATH="$work/bin:$PATH" \
     bash "$here/dns-check.sh" >"$work/$name.out" 2>&1 || got=$?

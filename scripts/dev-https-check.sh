@@ -1,11 +1,5 @@
 #!/usr/bin/env bash
 
-# One entry point for the trusted-browser proofs (auth, transport, editor,
-# public, password-auth, MCP, entry, publish, exports, privacy, sample-start,
-# passkey, and totp). Stages an immutable per-run copy of the spec sources
-# and mounts it into the pinned browser image, so editing a spec
-# never requires an image rebuild; the image manifest gates only the
-# image-side sources, including the spec source list.
 set -Eeuo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
@@ -31,7 +25,6 @@ readonly -a IMAGE_SOURCES=(
   deploy/dev-https-browser/verify-evidence.mjs
 )
 
-# Spec-side sources: staged per run, never gated on the image manifest.
 mapfile -t SPEC_SOURCES <"$CONTEXT/spec-sources.txt"
 readonly -a SPEC_SOURCES
 
@@ -97,8 +90,6 @@ image_source_hash() {
 }
 
 spec_source_hash() {
-  # Content-only digest of the staged specs; staging paths are random per
-  # run, so path strings must not enter the digest.
   local base=$1 path
   {
     for path in "${SPEC_SOURCES[@]}"; do
@@ -206,8 +197,6 @@ prepare_factor_accounts() {
     >/dev/null 2>&1 || fail 'factor fixture seed failed'
 }
 
-# new_client_name prints a fresh, uniquely named local OAuth client for a run
-# that registers a connected agent.
 new_client_name() {
   local run_id
   run_id=$(python3 -I -c 'import uuid; print(uuid.uuid4())') || return 1
@@ -216,8 +205,6 @@ new_client_name() {
   printf 'aboutme MCP UAT %s' "$run_id"
 }
 
-# assert_server_flag proves the running server environment carries the exact
-# named enrollment flag this phase needs.
 assert_server_flag() {
   local name=$1 want=$2 env_file=$STATE/run/server.env
   [ -f "$env_file" ] && [ ! -L "$env_file" ] ||
@@ -226,7 +213,6 @@ assert_server_flag() {
     fail "server environment does not carry $name=$want"
 }
 
-# prune_evidence keeps only the newest EVIDENCE_KEEP runs of one prefix.
 prune_evidence() {
   platform_prune_evidence "$EVIDENCE_ROOT" "$1" "$EVIDENCE_KEEP" ||
     fail 'cannot prune evidence'
@@ -241,9 +227,6 @@ spec_sha=$(spec_source_hash "$staging") ||
   fail 'cannot hash staged spec sources'
 
 if [ "$MODE" = passkey ]; then
-  # The enabled phase registers a connected agent and reads security mail, so
-  # its input carries the capture token and this run's client name beside the
-  # Caddy root. The disabled phase needs only the root.
   capture_secret=$STATE/secrets/auth-email-capture-bearer
   [ -f "$capture_secret" ] && [ ! -L "$capture_secret" ] &&
     [ "$(platform_stat u "$capture_secret")" = "$UID_NOW" ] ||
@@ -280,17 +263,11 @@ if [ "$MODE" = passkey ]; then
     "$enabled_evidence" second-factor || status=$?
 
   disabled_evidence=none
-  # The disabled-enrollment phase does not depend on which roles the enabled
-  # phase sharded (second-factor.spec.ts "Enabled-proof sharding"); only the
-  # primary-disabled shard, or an unsharded run, proves it, so the
-  # recovery-attempts shard does not repeat it for no added coverage.
   run_disabled_phase=1
   case ${ABOUTME_PASSKEY_SHARD-} in
   recovery-attempts) run_disabled_phase=0 ;;
   esac
   if [ "$status" -eq 0 ] && [ "$run_disabled_phase" -eq 1 ]; then
-    # The runner-local database keeps its rows across this restart; only the
-    # server enrollment flag changes.
     bash "$REPO/scripts/dev-https.sh" down ||
       fail 'cannot stop the harness between passkey phases'
     DEV_HTTPS_PASSKEY_ENROLLMENT=false bash "$REPO/scripts/dev-https.sh" up ||
@@ -302,8 +279,6 @@ if [ "$MODE" = passkey ]; then
       fail 'evidence directory ownership or mode mismatch'
     "$CONTEXT/run.sh" "$image_id" "$INPUT" "$staging" \
       "$disabled_evidence" second-factor-disabled || status=$?
-    # Leave no stack running at an unexpected flag; the operator or the hosted
-    # job starts a fresh one.
     bash "$REPO/scripts/dev-https.sh" down || status=1
   fi
 
@@ -323,13 +298,6 @@ if [ "$MODE" = passkey ]; then
 fi
 
 if [ "$MODE" = totp ]; then
-  # Two bounded phases, one per server TOTP enrollment flag. The enabled
-  # phase registers a connected agent, links a provider, and reads security
-  # mail, so its input carries the capture token and this run's client name
-  # beside the Caddy root, exactly like the passkey mode above. The disabled
-  # phase needs only the root
-  # (docs/design/totp-second-factor-contract.md "Migration, mixed versions,
-  # and loss").
   capture_secret=$STATE/secrets/auth-email-capture-bearer
   [ -f "$capture_secret" ] && [ ! -L "$capture_secret" ] &&
     [ "$(platform_stat u "$capture_secret")" = "$UID_NOW" ] ||
@@ -366,20 +334,12 @@ if [ "$MODE" = totp ]; then
     "$enabled_evidence" totp || status=$?
 
   disabled_evidence=none
-  # The disabled-enrollment phase does not depend on which roles the enabled
-  # phase sharded (totp.spec.ts "Enabled-proof sharding"); only a run whose
-  # comma-separated shard list includes epoch-disabled, or an unsharded run,
-  # proves it, so the other shards do not repeat it for no added coverage.
-  # It restarts the harness, so it starts only after every listed shard's
-  # parallel enabled test has finished.
   run_disabled_phase=1
   case ,${ABOUTME_TOTP_SHARD-}, in
   ,, | *,epoch-disabled,*) ;;
   *) run_disabled_phase=0 ;;
   esac
   if [ "$status" -eq 0 ] && [ "$run_disabled_phase" -eq 1 ]; then
-    # The runner-local database keeps its rows across this restart; only the
-    # server enrollment flag changes.
     bash "$REPO/scripts/dev-https.sh" down ||
       fail 'cannot stop the harness between TOTP phases'
     DEV_HTTPS_TOTP_ENROLLMENT=false bash "$REPO/scripts/dev-https.sh" up ||
@@ -391,8 +351,6 @@ if [ "$MODE" = totp ]; then
       fail 'evidence directory ownership or mode mismatch'
     "$CONTEXT/run.sh" "$image_id" "$INPUT" "$staging" \
       "$disabled_evidence" totp-disabled || status=$?
-    # Leave no stack running at an unexpected flag; the operator or the
-    # hosted job starts a fresh one.
     bash "$REPO/scripts/dev-https.sh" down || status=1
   fi
 
@@ -436,10 +394,6 @@ if [ "$MODE" = password-auth ] || [ "$MODE" = sample-start ]; then
   curl -fsS -X DELETE -H "Authorization: Bearer $capture_token" \
     "http://127.0.0.1:20444/api/messages" >/dev/null
 elif [ "$MODE" = linkedin ]; then
-  # The proof registers and verifies its own password accounts through the
-  # capture mailbox. The fixture removes every row an earlier run left, so
-  # each run starts from the same state (docs/design/linkedin-sign-in.md
-  # "Tests").
   capture_secret=$STATE/secrets/auth-email-capture-bearer
   [ -f "$capture_secret" ] && [ ! -L "$capture_secret" ] &&
     [ "$(platform_stat u "$capture_secret")" = "$UID_NOW" ] ||
@@ -520,7 +474,6 @@ elif [ "$MODE" = mcp ] || [ "$MODE" = mcp-ts-sdk ] || [ "$MODE" = privacy ]; the
     status=1
   fi
 fi
-# Keep only the newest EVIDENCE_KEEP runs for this mode.
 prune_evidence "$evidence_prefix"
 
 [ "$status" -eq 0 ] || fail 'browser proof failed'

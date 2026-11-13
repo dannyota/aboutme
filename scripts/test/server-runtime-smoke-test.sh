@@ -9,7 +9,6 @@ mkdir -p "$tmp/artifacts/server" "$tmp/artifacts/web/.output/server"
 printf 'server\n' > "$tmp/artifacts/server/server"
 printf 'web\n' > "$tmp/artifacts/web/.output/server/index.mjs"
 
-# A manifest is deterministic, uses relative paths, and includes both trees.
 (cd "$tmp/artifacts" && sha256sum server/server web/.output/server/index.mjs) > "$tmp/expected"
 bash "$smoke" manifest "$tmp/artifacts" > "$tmp/manifest"
 server_pin=$(awk '/^FROM / && / AS runtime$/ {print $2}' "$root/deploy/server.Dockerfile")
@@ -50,7 +49,6 @@ for binary in render-browser-supervisor migrate db-setup; do
 done
 bash "$smoke" manifest "$tmp/artifacts" > "$tmp/manifest"
 
-# Runtime fixtures replace Docker and the clock, never the smoke decisions.
 real_python=$(command -v python3)
 mkdir "$tmp/bin"
 cat > "$tmp/bin/python3" <<PY

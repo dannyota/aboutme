@@ -1,23 +1,8 @@
 # shellcheck shell=bash
-# Sourced by deploy.sh. Implements deploy.sh --account-delete, which runs the
-# server's out-of-band account-delete command as a one-shot production task
-# (docs/design/showcase.md, "Derived values and reports"; docs/runbooks/account-delete.md).
-# The task is the live tag's jobs family at that tag's provenance-checked
-# server image with a command override, the same shape as the public-root
-# audit. It changes no service, schedule, snapshot, or image; the server
-# command deletes the account through the same path as a self-delete.
-#
-# Needs $region, $cluster, $work, $tag, $commit, $candidate, $repo,
-# $account_delete_args, $operation_id, say(), digest(), current_def(), describe_task_def(), aws_(),
-# task_def_release_number(), public_root_valid(), fence_lock, fence_checkpoint,
-# and provenance_verify() already defined by deploy.sh, fence.sh, and
-# provenance.sh.
 
 account_delete_log_group=/aboutme/prod
 
-# Checks the subcommand and its arguments before any AWS call. The slug uses
-# the public slug grammar; the user ID is a lowercase UUID.
-account_delete_validate() { # subcommand [args...]
+account_delete_validate() {
   local sub=${1:-} slug=${2:-} user=${3:-}
   case "$sub:$#" in
     show:2 | confirm:3) ;;
@@ -28,18 +13,9 @@ account_delete_validate() { # subcommand [args...]
     { say "invalid user ID '$user'"; exit 2; }
 }
 
-# The deploy and operator roles cannot read CloudWatch Logs, so the owner's own
-# login reads the task log; it never assumes either role and never writes.
-# Every run that reaches the database ends stdout with this exact line, so a
-# log without it is incomplete (lag, a missed page, or an early failure).
 account_delete_end_marker="account-delete: end"
 
-# Reads the stream from the start, following nextForwardToken until the token
-# repeats, and retries up to $2 times (default five) for a log still being
-# delivered. Prints
-# the lines read, never the marker line. Returns 1 when the marker never
-# appeared; what was read is still printed.
-account_delete_log() { # task id [attempts]
+account_delete_log() {
   local stream=jobs/jobs/$1 tries=${2:-5} attempt page token next buf="" pages
   for ((attempt = 1; attempt <= tries; attempt++)); do
     buf="" token="" pages=0
@@ -85,8 +61,6 @@ account_delete_run() {
   fence_lock || exit 1
   fence_checkpoint || exit 1
 
-  # Under the lock, the deletion must run against the live release: a task at
-  # another tag could read or write rows its schema does not match.
   local service service_td running_count desired_count service_release
   service=$(aws_ ecs describe-services --cluster "$cluster" --services aboutme-prod-app --output json) ||
     { say "could not read the running app service"; exit 1; }
@@ -107,9 +81,6 @@ account_delete_run() {
   fence_checkpoint || exit 1
   started_by="acctdel-${operation_id:0:20}"
   client_token="acctdel-$operation_id"
-  # From RunTask until ECS proves the task stopped, the lock is deliberately
-  # not released on exit: a lost response or a signal cannot prove the task
-  # is not running.
   # shellcheck disable=SC2034 # read by on_exit in deploy.sh
   lock_held=0
   say "account-delete correlation: started-by $started_by; the operation lock stays held until the task stops"
@@ -130,8 +101,6 @@ account_delete_run() {
   code=$(aws_ ecs describe-tasks --cluster "$cluster" --tasks "$task" \
     --query 'tasks[0].containers[?name==`jobs`].exitCode | [0]' --output text) || code=unknown
 
-  # Exit 1 and exit 3 print no end line, so those reads make one pass and do
-  # not wait for a line that never comes.
   local complete=1 tries=5
   [[ $code == 1 || $code == 3 ]] && tries=1
   account_delete_log "${task##*/}" "$tries" || complete=0

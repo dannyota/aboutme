@@ -89,10 +89,6 @@ case "${1-}:$#" in
     say "wrote the age ciphertext to $3"
     ;;
   move-from-ssm:1)
-    # Cutover only, run by the owner with AWS credentials: each value goes
-    # from SSM straight into the SSH pipe and replaces the rehearsal value
-    # (docs/design/vietnam-production.md, "Secrets and host identity").
-    # These values rotate once AWS real data is deleted.
     declare -A from=(
       [auth-email-active-key-id]=/aboutme/prod/auth-email/active-key-id
       [auth-email-active-key]=/aboutme/prod/auth-email/active-key

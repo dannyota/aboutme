@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Proves create-only writes with one disposable, nonsecret state-bucket object.
 set -euo pipefail
 
 BUCKET=aboutme-tfstate

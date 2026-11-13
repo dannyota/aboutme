@@ -1,14 +1,9 @@
 name: Security scan
 
-# Scans default-branch dependencies and published release images on a schedule,
-# so a vulnerability disclosed after a release still surfaces. This does not
-# inventory deployed versions. GitHub notifies only the user who last
-# edited the cron line when a scheduled run fails, and only if their Actions
-# notifications are on; in a public repository it also disables the schedule
-# after 60 days with no repository activity.
+# GitHub notifies only the user who last edited the cron line of a failed scheduled run and disables the schedule after 60 days without repository activity (GitHub Actions docs, scheduled events).
 on:
   schedule:
-    - cron: "17 3 * * 1" # Monday 03:17 UTC, off-peak
+    - cron: "17 3 * * 1"
   workflow_dispatch:
     inputs:
       release_tag:
@@ -115,11 +110,6 @@ jobs:
       - if: failure()
         run: echo "### npm audit found a high or critical advisory" >>"$GITHUB_STEP_SUMMARY"
 
-  # Scans both platforms of server, web, caddy, and observer by published digest
-  # with the same pinned Trivy install release-images.yml uses. Fails on fixable
-  # HIGH or CRITICAL finding across every target; scripts/security-scan.sh
-  # weekly-scan continues past a failing target so one run always reports
-  # the complete picture.
   image-scan:
     needs: trivy-db
     name: Scan release images

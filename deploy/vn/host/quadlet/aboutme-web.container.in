@@ -1,6 +1,4 @@
-# Rendered by deploy-host.sh; do not edit on the host. Nuxt in its own network
-# namespace, published on loopback only (docs/design/vietnam-production.md,
-# "Host").
+# Rendered by deploy-host.sh; do not edit on the host.
 [Unit]
 OnFailure=aboutme-alert@%N.service
 Description=aboutme Nuxt renderer

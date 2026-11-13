@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# One host migration step. See docs/runbooks/crowdsec-postgresql.md.
 # shellcheck source-path=SCRIPTDIR
 
 lib=/usr/local/lib/aboutme
@@ -42,7 +41,6 @@ migrate_idle() {
     [[ -n $unit ]] || continue
     [[ $unit == aboutme-operation@*.service && ( $state == inactive || $state == failed ) ]] || return 1
   done <<<"$units"
-  # Match the installer's unresolved-operation admission under the bundle lock.
   # shellcheck source=operation-state.sh
   source "$lib/operation-state.sh"
   for operation in /srv/data/host-operations/*; do
@@ -105,7 +103,6 @@ PY
 migrate_activate() {
   migrate_at activate-config install -o root -g root -m 0644 \
     /etc/crowdsec/config.yaml.postgresql /etc/crowdsec/config.yaml.local || return 1
-  # Remove inherited database keys so the installed overlay selects only pgx.
   # shellcheck source=crowdsec-offline.sh
   migrate_at activate-offline source "$lib/crowdsec-offline.sh" || return 1
   crowdsec_remove_online /etc/crowdsec/config.yaml /etc/crowdsec/config.yaml.local \
@@ -157,7 +154,6 @@ migrate_firewall_ready() {
   )
 }
 migrate_fresh_admission() (
-  # The provisioner alone initializes schema; this check only selects recovery.
   # shellcheck source=crowdsec-db.sh
   source "$lib/crowdsec-db.sh"
   unset crowdsec_db_lock_fd
@@ -189,10 +185,7 @@ migrate_main() {
   migrate_at machine "$lib/crowdsec-db.sh" preflight-ready </dev/null || return 1
   cscli machines add -a --force --error || return 1
   chmod 0600 /etc/crowdsec/local_api_credentials.yaml || return 1
-  # Only admitted fresh provisioning or explicit reset can reopen failed startup.
-  # Both have stopped consumers and passed the new catalog and activation gates.
   migrate_at startup-admission rm -f -- /run/aboutme/crowdsec-retention-failed || return 1
-  # Startup retention clears owned cache/firewall state and binds the new lease.
   migrate_at startup-retention systemctl start aboutme-crowdsec-retention-startup.service || return 1
   migrate_at maintenance-timers systemctl enable --now aboutme-crowdsec-retention.timer aboutme-crowdsec-vacuum.timer || return 1
   migrate_at unmask systemctl unmask --runtime crowdsec.service crowdsec-firewall-bouncer.service || return 1
@@ -230,7 +223,6 @@ migrate_run() {
   if ! { migrate_at lock migrate_lock && migrate_at idle migrate_idle && migrate_at notice migrate_notice; } >/dev/null 2>&1; then
     migrate_failure; return 1
   fi
-  # Signal traps also run inside migrate_main's discarded diagnostics.
   exec {migrate_error_fd}>&2
   trap 'migrate_failure 2>&"$migrate_error_fd"; exit 1' HUP INT TERM
   if ! migrate_main "$@" >/dev/null 2>&1; then

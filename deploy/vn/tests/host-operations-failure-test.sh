@@ -36,15 +36,12 @@ for output in '{"success":true,"pending":-1}' '{"success":false,"pending":0}' '{
 done
 [[ $(account_parse_queue '{"success":true,"pending":0}') == 0 ]] || fail zero
 [[ $(account_parse_queue '{"success":true,"pending":2}') == 2 ]] || fail nonzero
-# Resume must contain only the read command, never the destructive command.
 body=$(sed -n '/^account_reconcile()/,/^}/p' "$here/host/operation-account.sh")
 [[ $body == *'account-delete status'* && $body != *'account-delete confirm'* ]] || fail 'unknown replay'
 grep -qF '180' "$here/host/operation-state.sh" || fail 'account evidence retention'
 grep -qF '30' "$here/host/operation-state.sh" || fail 'attempt metadata retention'
 echo 'host operation result reconciliation passed'
 
-# Exercise the durable state implementation under the CI user's UID. Only the
-# root ownership expectation changes; modes, links, bounds and IO stay real.
 python3 - "$here/host/operation-state.sh" "$work/state.py" <<'PY'
 import pathlib, sys
 source = pathlib.Path(sys.argv[1]).read_text().split("<<'PY'\n", 1)[1].split('\nPY\n', 1)[0]
@@ -52,13 +49,10 @@ pathlib.Path(sys.argv[2]).write_text(source.replace('s.st_uid != 0', 's.st_uid !
 PY
 operations_dir=$work/records
 mkdir -m 0700 "$operations_dir"
-# Redirect installed paths and the root UID expectation only in this private
-# test copy; modes, links, state IO and request dispatch stay real.
 sed -e "s|^lib=/usr/local/lib/aboutme$|lib=$here/host|" \
   -e "s|EUID == 0|EUID == $(id -u)|" "$here/host/operation-run.sh" >"$work/runner.sh"
 # shellcheck source=deploy/vn/host/operation-run.sh
 source "$work/runner.sh"
-# Use the fixture state driver after loading installed helper definitions.
 operation_state() { python3 "$work/state.py" "$1" "${2:-}" "$operations_dir"; }
 new_state() {
   local request=$1
@@ -73,8 +67,6 @@ new_state() {
     challenge:null,recoveryCopy:null,proofReceipt:null,attemptCount:0,attempts:[],intent:"none",pendingVerb:"none",fenceHeld:false,reserved:true,closureQuiescent:true}'
 }
 request_id() { printf '%042dA' "$1"; }
-# Unknown requests have no state, lock, fence or unit to change. Missing or
-# unsafe files inside an existing request are protocol failures, not absence.
 (
   operations_dir=$work/lookup-records
   mkdir -m 0700 "$operations_dir"
@@ -99,8 +91,6 @@ request_id() { printf '%042dA' "$1"; }
   done
   expect_error not_found operation_main run "$id"
   [[ ! -e $operations_dir/$id && ! -e $work/unknown-dispatch && ! -e $work/unknown-fence ]] || fail 'unknown lookup created work'
-  # Inject EIO at the request-directory lookup. Absence must come from errno,
-  # and failed metadata reads must stop before opening a lock or dispatching.
   (
     operation_state() {
       python3 - "$work/state.py" "$1" "${2:-}" "$operations_dir" <<'PY'
@@ -162,7 +152,6 @@ PY
 )
 echo 'host operation unknown requests and damaged state passed'
 
-# Concurrent admission may reserve exactly 32 slots, even across restarts.
 for n in $(seq 1 36); do
   (request=$(request_id "$n"); operation_state new '' 3<<<"$(new_state "$request")" >"$work/admit-$n" 2>/dev/null || true) &
 done
@@ -170,7 +159,6 @@ wait
 count=$(find "$operations_dir" -mindepth 1 -maxdepth 1 -type d | wc -l)
 [[ $count == 32 ]] || fail 'concurrent admission overbooked or lost capacity'
 if operation_state new '' 3<<<"$(new_state "$id")" >/dev/null 2>&1; then fail 'restart lost reservation accounting'; fi
-# Finalizing successful shows releases fences while retaining plan capacity.
 (
   lib=$work/plan-lib
   mkdir -p "$lib"
@@ -213,7 +201,6 @@ STUB
   done
   id=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
   if operation_state new '' 3<<<"$(new_state "$id")" >/dev/null 2>&1; then fail '33rd applicable plan admitted'; fi
-  # Aborted plans close before returning their reservations.
   for path in "$operations_dir"/*; do
     [[ -d $path ]] || continue
     id=${path##*/}
@@ -224,11 +211,9 @@ STUB
     [[ $(jq -r .phase <<<"$state") == closed && $(jq -r .reserved <<<"$state") == false ]] || fail 'closed plan retained capacity'
   done
 )
-# Compact, closed records retain audit but return unused reservation bytes.
 audit_count=$(find "$operations_dir" -name 'audit-*' | wc -l)
 operation_state new '' 3<<<"$(new_state "$id")" >/dev/null || fail '33rd compact record refused'
 [[ $(find "$operations_dir" -name 'audit-*' | wc -l) == "$audit_count" ]] || fail 'unexpired audit evicted'
-# A held request lock makes retention skip that request, not race its writer.
 exec {held}>"$operations_dir/$id/.request.lock"
 flock "$held"
 state=$(jq '.createdAt="2000-01-01T00:00:00Z" | .evidenceAt=.createdAt | .expiresAt=.createdAt | .closureQuiescent=false' "$operations_dir/$id/state.json")
@@ -239,12 +224,10 @@ flock -u "$held"
 operation_state prune '' >/dev/null
 [[ $(jq -r .action.userId "$operations_dir/$id/state.json") == null ]] || fail '180-day target retained'
 [[ $(jq -r .reserved "$operations_dir/$id/state.json") == true ]] || fail 'expiry freed uncertain attempt capacity'
-# Expired plans become compact only after a controller proves quiescence.
 state=$(operation_state load "$id" | jq '.phase="closed" | .outcome="unverified" | .reserved=false | .closureQuiescent=true')
 operation_state save "$id" 3<<<"$state" >/dev/null
 operation_state prune '' >/dev/null
 [[ $(jq -r .reserved "$operations_dir/$id/state.json") == false ]] || fail 'safe closure kept reservation'
-# Unsafe files, malformed versions and an unwritable audit path fail closed.
 request=$(request_id 99)
 new_state "$request" | jq '.schemaVersion=2' >"$work/bad"
 if operation_state new '' 3<"$work/bad" >/dev/null 2>&1; then fail 'unknown schema accepted'; fi
@@ -254,14 +237,11 @@ rm "$operations_dir/$id/unsafe"
 chmod 0500 "$operations_dir/$id"
 if operation_state save "$id" 3<<<"$state" >/dev/null 2>&1; then fail 'unwritable state admitted write'; fi
 chmod 0700 "$operations_dir/$id"
-# Expired, quiescent attempt metadata is removed at 30 days without extending
-# or evicting personal audit. The attempt counter survives compaction.
 request=$(request_id 97)
 state=$(new_state "$request" | jq --arg id "$request" '.phase="closed" | .outcome="aborted" | .confirmation=null | .expiresAt=null | .reserved=false | .attemptCount=1 | .attempts=[{number:1,container:("aboutme-operation-"+$id+"-1"),applicationName:("hostop:"+$id+":1"),startedAt:"2000-01-01T00:00:00Z",stopped:true}]')
 operation_state new '' 3<<<"$state" >/dev/null
 operation_state prune '' >/dev/null
 [[ $(jq '.attempts|length' "$operations_dir/$request/state.json") == 0 && $(jq .attemptCount "$operations_dir/$request/state.json") == 1 ]] || fail '30-day metadata retention'
-# True byte capacity cannot evict retained records.
 request=$(request_id 99)
 truncate -s 67108864 "$operations_dir/$id/retained"
 chmod 0600 "$operations_dir/$id/retained"
@@ -285,27 +265,22 @@ account_container() {
   command_rc=${stub_rc:-0} command_output=$work/output
   printf '%s\n' "${stub_output:-}" >"$command_output"
 }
-# SSH loss before dispatch leaves no effect; abort must close, never dispatch.
 operation_save
 (request_existing abort >/dev/null) || fail 'before-dispatch abort refused'
 [[ ! -e $work/dispatches ]] || fail 'abort dispatched deletion'
-# Crash after intent, before receipt: preserve unknown and issue a UUID read.
 state=$(new_state "$id" | jq '.phase="accepted" | .confirmation=null | .expiresAt=null | .pendingVerb="apply" | .intent="delete"')
 operation_save
 (request_existing resume >/dev/null) || fail 'lost dispatch resume refused'
 [[ $(jq -r .action.writeOutcome "$work/saved") == unknown ]] || fail 'intent did not become unknown'
 [[ $(wc -l <"$work/dispatches") == 1 ]] || fail 'more than one reconciliation dispatch'
-# Renamed slug does not authorize absence or a second destructive command.
 state=$(<"$work/saved")
 stub_output='{"success":true,"state":"present"}'
 account_reconcile || fail 'present reconciliation failed'
 [[ $(jq -r .action.writeOutcome <<<"$state") == present ]] || fail 'rename treated as absence'
 [[ $(<"$work/commands") == *"account-delete status $user"* && $(<"$work/commands") != *confirm* ]] || fail 'destructive replay'
-# Lost commit receipt plus absent UUID records only absent_after_unknown.
 stub_output='{"success":true,"state":"absent"}'
 account_reconcile || fail 'absent reconciliation failed'
 [[ $(jq -r .action.writeOutcome <<<"$state") == absent_after_unknown ]] || fail 'claimed committed result'
-# Backend/unit liveness and failed reads retain ownership.
 touch "$work/backend-active"
 operation_save
 if (request_existing resume >/dev/null 2>&1); then fail 'live backend released'; fi
@@ -317,7 +292,6 @@ stub_rc=1
 if account_reconcile; then fail 'failed status proved absence'; fi
 stub_rc=0 stub_output='{}'
 if account_reconcile; then fail 'unknown status proved absence'; fi
-# Expired evidence may only abort after quiescence, without target lookup.
 state=$(new_state "$id" | jq '.phase="accepted" | .confirmation=null | .expiresAt=null | .action.userId=null | .action.reportedSlug=null | .action.shownSlugs=[] | .action.returnedSlugs=[] | .action.writeOutcome="evidence_expired"')
 operation_save
 rm "$work/commands"
@@ -326,7 +300,6 @@ request_release() { state=$(jq '.fenceHeld=false | .reserved=(.phase=="planned")
 (request_existing abort >/dev/null) || fail 'expired abort refused'
 [[ ! -e $work/commands && $(jq -r .outcome "$work/saved") == unverified ]] || fail 'expired abort queried target'
 
-# Concurrent apply/resume/abort share the request flock. Only one apply wins.
 state=$(new_state "$id")
 operation_save
 rm -f "$work/dispatches"
@@ -342,7 +315,6 @@ wait
 rm -f "$work/unit-active"
 echo 'host operation durable failure cases passed'
 
-# A stale plan, confirmation drift or live-release drift cannot dispatch.
 for reason in expired confirmation release; do
   state=$(new_state "$id")
   [[ $reason != expired ]] || state=$(jq '.expiresAt="2000-01-01T00:00:00Z"' <<<"$state")
@@ -356,14 +328,11 @@ for reason in expired confirmation release; do
   ) && fail 'stale or changed plan dispatched'
   [[ ! -e $work/dispatches ]] || fail 'refusal created an effect'
 done
-# A duplicate accepted apply must still bind the exact UUID and reported slug.
 state=$(new_state "$id" | jq '.phase="accepted" | .confirmation=null | .expiresAt=null | .pendingVerb="apply"')
 operation_save
 confirmation="delete-account:$id:$user:other-slug"
 if (request_existing apply "$confirmation" >/dev/null 2>&1); then fail 'duplicate rebound confirmation'; fi
 
-# Queue reads prove physical completion only after UUID absence. Cleanup runs
-# under a read attempt, then finalization releases the fence before sweep start.
 account_container() {
   command_rc=0 command_output=$work/output
   case $1 in
@@ -396,7 +365,6 @@ state=$(jq '.pendingVerb="resume"' <<<"$state")
 request_finish || fail 'known write could not release'
 [[ $(head -n1 "$work/order") == release && $(tail -n1 "$work/order") == sweep ]] || fail 'cleanup started before release'
 
-# Backend liveness is metadata-based, and a failed metadata query is not zero.
 (
   # shellcheck source=deploy/vn/host/operation-account.sh
   source "$here/host/operation-account.sh"
@@ -419,8 +387,6 @@ request_finish || fail 'known write could not release'
   if account_attempts_stopped; then fail 'failed metadata read proved absence'; fi
 )
 
-# Delayed proof and cleanup may bind a later capable live read release without
-# repeating confirm. Unknown mutation resumes still require the saved release.
 state=$(new_state "$id" | jq '.phase="serving" | .confirmation=null | .expiresAt=null | .action.writeOutcome="committed"')
 operation_save
 account_live() {
@@ -433,8 +399,6 @@ account_live() {
 [[ $(jq -r .pendingVerb "$work/saved") == verify ]] || fail 'verification became deletion'
 echo 'host operation stale plan, cleanup and backend cases passed'
 
-# Interrupt intent, creation, effect receipt and result persistence separately.
-# The same container implementation runs with synthetic Podman and fence calls.
 for crash in intent create receipt result; do
   (
     # shellcheck source=deploy/vn/host/operation-account.sh
@@ -483,8 +447,6 @@ for crash in intent create receipt result; do
 done
 echo 'host operation crash boundaries passed'
 
-# Retention cannot release a bound fence, and a released expired plan must
-# prove fresh quiescence before dropping its reservation.
 (
   operation_state() { :; }
   operation_load() { state=$(<"$work/prune-state"); }
@@ -514,8 +476,6 @@ echo 'host operation crash boundaries passed'
 )
 echo 'host operation expired plan admission passed'
 
-# Proof receipts bind request, live digest and phase. Duplicate receipts return
-# the same result and contradictory or expired receipts cannot advance state.
 (
   account_live() { return 0; }
   id=$(request_id 95)
@@ -536,8 +496,6 @@ echo 'host operation expired plan admission passed'
 )
 echo 'host operation proof receipts passed'
 
-# Accepted work lost before the first intent may continue on explicit resume.
-# Once intent exists, the earlier crash case requires a separate UUID read.
 (
   account_live() { return 0; }
   id=$(request_id 94)
@@ -549,7 +507,6 @@ echo 'host operation proof receipts passed'
 )
 echo 'host operation pre-intent resume passed'
 
-# Inactive without a completed systemd job is not quiescence.
 (
   # shellcheck disable=SC1090
   source <(sed -n '/^request_unit_stopped()/,/^}/p' "$here/host/operation-run.sh")
@@ -565,17 +522,13 @@ echo 'host operation pre-intent resume passed'
 )
 echo 'host operation queued unit checks passed'
 
-# The real live-release check admits every verb that rechecks it on any release
-# from v0.7.9 on, and refuses an older or malformed tag before any effect. Only
-# installed paths, the flags file and host commands are synthetic.
-# account_live has a local named live, so the fixture uses another name.
 live_dir=$work/live
 mkdir -p "$live_dir"
 : >"$live_dir/flags.env"
 printf '#!/usr/bin/env bash\ncat %q\n' "$live_dir/release.json" >"$live_dir/deploy-host.sh"
 printf '#!/usr/bin/env bash\n[[ $1 == read ]] && echo %q\n' '{"minimum_release":4007}' >"$live_dir/fence.sh"
 chmod +x "$live_dir/deploy-host.sh" "$live_dir/fence.sh"
-live_verbs() { # tag number; prints the verbs that passed the live check
+live_verbs() {
   (
     eval "$(sed -n '/^account_secret_id() {/,/^}/p; /^account_live() {/,/^}/p' "$here/host/operation-account.sh" |
       sed "s|/etc/aboutme/flags.env|$live_dir/flags.env|g")"
@@ -596,12 +549,12 @@ live_verbs() { # tag number; prints the verbs that passed the live check
         *) return 1 ;;
       esac
     }
-    bound() { # jq filter; the saved request bound to the live release
+    bound() {
       state=$(new_state "$id" | jq --slurpfile live "$live_dir/release.json" --arg flags "$(sha256sum "$live_dir/flags.env" | cut -d' ' -f1)" \
         '.release=$live[0] | .flagsHash=$flags | .dbSecretId="synthetic" | '"$1")
       operation_save
     }
-    passed() { # verb; the check passed only if the verb dispatched
+    passed() {
       [[ -e $work/dispatches && $(wc -l <"$work/dispatches") == 1 ]] && echo "$1"
       rm -f "$work/dispatches"
     }

@@ -8,7 +8,6 @@ trap 'rm -rf "$work"' EXIT
 export WATCH_TEST_REAL_SLEEP
 WATCH_TEST_REAL_SLEEP=$(command -v sleep)
 mkdir -p "$work/bin" "$work/lib"
-# Only the canonical lock path and wait duration are redirected in this fixture.
 sed -e "s|/var/lib/aboutme/fence.lock|$work/fence.lock|g" \
   -e "s|/run/aboutme/crowdsec-retention.lock|$work/retention.lock|g" \
   -e 's/flock -s -w 30 /flock -s -w 0 /' \
@@ -160,7 +159,7 @@ export PATH=$work/bin:$PATH ABOUTME_WATCH_TEST_LIB=$work/lib
 export ABOUTME_RETENTION_SUCCESS_MARKER=$work/retention-ok
 : >"$ABOUTME_RETENTION_SUCCESS_MARKER"
 
-run_watch() { # fixture alerts
+run_watch() {
   export WATCH_TEST_FIXTURE=$1 WATCH_TEST_ALERTS=$2 WATCH_TEST_RETENTION_FAILURES=$work/retention-failures
   : >"$WATCH_TEST_ALERTS"
   : >"$WATCH_TEST_RETENTION_FAILURES"
@@ -198,7 +197,6 @@ grep -qxF 'omitted units: 81' "$work/failed.alerts.failed-units.detail"
 [[ $(wc -c <"$work/failed.alerts.failed-units.detail") -le 2048 ]]
 [[ $(grep -c '^aboutme-' "$work/failed.alerts.failed-units.detail") == 20 ]]
 
-# Exercise both transports with the watcher's long failure list.
 cp "$work/lib/alert.sh" "$work/alert-stub.sh"
 cp "$repo_root/deploy/vn/host/bin/alert.sh" "$work/lib/alert.sh"
 cp "$repo_root/deploy/vn/host/bin/alert-telegram.sh" "$work/lib/alert-telegram.sh"
@@ -256,7 +254,6 @@ ABOUTME_ALERT_TEST_ROOT=$work/alert-state WATCH_TEST_MESSAGE=$work/telegram-mess
 grep -qF 'failed units: 101' "$work/telegram-message"
 grep -qF 'omitted units: 81' "$work/telegram-message"
 
-# Every condition keeps its single-attempt budget during a transport outage.
 rm -f "$work/alert-state/alerts/failed-units."*
 : >"$work/transport-attempts"
 : >"$work/retry-delays"
@@ -275,7 +272,6 @@ done
 grep -qxF 'coraza counts in the last hour: matches=1 unparsed=1 diagnostics=0' "$work/outage.alerts.journal"
 [[ $(wc -l <"$work/totp-reads") == 1 ]] || { echo 'transport outage skipped the final TOTP check' >&2; exit 1; }
 
-# Pause after the watcher selected Telegram, then roll back and replace chat.
 rm -f "$work/alert-state/alerts/failed-units."*
 ABOUTME_ALERT_TEST_ROOT=$work/alert-state WATCH_TEST_MESSAGE=$work/after-rollback-message \
   WATCH_TEST_PAUSE_PREFLIGHT=1 WATCH_TEST_PREFLIGHT_ENTERED=$work/rollback-entered \
@@ -299,7 +295,6 @@ WATCH_TEST_SEND_FAILS=1 WATCH_TEST_FAILED_UNITS=$work/failed-units \
   run_watch "$work/host-checks.log" "$work/send-failure.alerts"
 grep -qF 'coraza counts in the last hour:' "$work/send-failure.alerts.journal"
 
-# A hung LAPI call must release both locks without waiting for the unit deadline.
 WATCH_TEST_HUNG_CSCLI=1 WATCH_TEST_CSCLI_ENTERED=$work/cscli-entered \
   WATCH_TEST_FIXTURE=$base WATCH_TEST_ALERTS=$work/hung.alerts \
   WATCH_TEST_RETENTION_FAILURES=$work/hung.failures "$watch" >"$work/hung.journal" &
@@ -318,8 +313,6 @@ timeout 3 flock -x "$work/fence.lock" true || {
 wait "$watch_pid"
 flock -n "$work/retention.lock" true
 
-# A nested preflight that ignores TERM must not escape the query's process group
-# and retain either inherited safety descriptor after the whole query deadline.
 sed 's/timeout --kill-after=1s 20 /timeout --kill-after=0.1s 0.5 /' "$watch" >"$work/watch-preflight.sh"
 WATCH_TEST_IGNORE_TERM_PREFLIGHT=1 WATCH_TEST_PREFLIGHT_ENTERED=$work/preflight-entered \
   WATCH_TEST_FIXTURE=$base WATCH_TEST_ALERTS=$work/preflight.alerts \
@@ -334,8 +327,6 @@ for pid_file in "$work/preflight-entered" "$work/preflight-entered.child"; do
   [[ -z $process_state || $process_state == *Z* ]] || { echo 'preflight descendant survived its deadline' >&2; exit 1; }
 done
 
-# Exercise the real failure action with cleanup that ignores TERM and owns a
-# sleeping descendant. Denial and shutdown proof must precede bounded cleanup.
 cp "$work/lib/crowdsec-retention-fail.sh" "$work/failure-stub.sh"
 sed 's/--kill-after=2s 73 /--kill-after=0.1s 3 /' \
   "$repo_root/deploy/vn/host/crowdsec-retention-fail.sh" >"$work/lib/crowdsec-retention-fail.sh"
@@ -386,7 +377,6 @@ done
 cp "$work/failure-stub.sh" "$work/lib/crowdsec-retention-fail.sh"
 : >"$ABOUTME_RETENTION_SUCCESS_MARKER"
 
-# An unrelated blocked backup check must not retain either safety lock.
 WATCH_TEST_HUNG_BACKUP=1 WATCH_TEST_BACKUP_ENTERED=$work/backup-entered \
   WATCH_TEST_BACKUP_RELEASE=$work/backup-release WATCH_TEST_FIXTURE=$base \
   WATCH_TEST_ALERTS=$work/backup.alerts WATCH_TEST_RETENTION_FAILURES=$work/backup.failures \
@@ -508,7 +498,6 @@ for state in changed recovery; do
 done
 unset WATCH_TEST_DATABASE_CHANGED WATCH_TEST_DATABASE_RECOVERY
 
-# A held completion lock refuses the scheduled tick before any failure body.
 : >"$work/admission.failures"
 exec {guard}>"$work/fence.lock"
 flock -x "$guard"
@@ -518,7 +507,6 @@ fi
 [[ ! -s $work/admission.failures ]]
 flock -u "$guard"
 
-# A tick during any edge mutation waits before its safety or failure body.
 for transition in maintenance-up app-down render restore-previous app-up maintenance-down fail-closed; do
   : >"$work/transition.failures"
   exec {edge_guard}>"$work/retention.lock"

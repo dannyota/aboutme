@@ -10,14 +10,12 @@ mkdir -p "$work/bin" "$work/fence" "$work/operations"
 chmod 0700 "$work/operations"
 : >"$work/operations/.bundle.lock"
 chmod 0600 "$work/operations/.bundle.lock"
-# Use the runner's UID only in the private copy; modes and locks stay real.
 fixture_uid=$(id -u)
 sed -e "s|/srv/data/host-operations|$work/operations|g" \
   -e "s/== 0:700/== $fixture_uid:700/; s/== 0:600/== $fixture_uid:600/" \
   "$fence" >"$work/fence.sh"
 chmod +x "$work/fence.sh"
 fence=$work/fence.sh
-# Cases follow the tracked floor, so raising it changes no case.
 floor_tag=$(sed -n 's/^floor_tag=//p' "$fence")
 floor_release=$(sed -n 's/^floor_release=//p' "$fence")
 [[ $floor_release =~ ^[0-9]+$ && $floor_tag =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]
@@ -62,8 +60,6 @@ grep -Fq '"$lib/fence.sh" check "$number" "aboutme-job@$name"' \
 
 "$fence" init
 [[ $(jq -r .minimum_tag "$work/fence/fence.json") == "$floor_tag" ]]
-# A raise stops at the tracked floor of the installed fence.sh. Start below it,
-# as production does once a bundle that raises the tracked floor is installed.
 jq '.minimum_release = 4007 | .minimum_tag = "v0.4.7"' "$work/fence/fence.json" >"$work/below-floor.json"
 cp "$work/below-floor.json" "$work/fence/fence.json"
 raise_op=$("$fence" lock deploy v0.4.7)
@@ -103,7 +99,6 @@ for invalid in missing-directory directory-mode missing-lock lock-mode symlink-l
     symlink-lock) rm "$work/operations/.bundle.lock"; mv "$work/saved-lock" "$work/operations/.bundle.lock" ;;
   esac
 done
-# Record real flock calls and prove bundle admission precedes the fence lock.
 export FLOCK_CALLS=$work/flock-calls BUNDLE_PATH=$work/operations/.bundle.lock
 export REAL_FLOCK
 REAL_FLOCK=$(command -v flock)
@@ -147,8 +142,6 @@ if wait "$waiting"; then echo 'bundle contention allowed ownership' >&2; exit 1;
 [[ ! -s $work/busy.out ]]
 grep -qxF "fence: could not take $BUNDLE_PATH within 30 s" "$work/busy.err"
 [[ $(jq -r '.operation_id // empty' "$work/fence/fence.json") == '' ]]
-# An installer or notice adopter passes its exclusive open description to the
-# child. Acquiring ownership must neither deadlock nor unlock the caller.
 bundle_op=$(timeout 5 "$fence" lock deploy "$floor_tag")
 if "$REAL_FLOCK" -x -n "$BUNDLE_PATH" true; then exit 1; fi
 "$fence" release "$bundle_op"
@@ -158,8 +151,6 @@ if MOUNT_ABSENT=1 "$fence" check "$floor_release" aboutme-server 2>/dev/null; th
   echo "the server started without its data mount" >&2
   exit 1
 fi
-# Bind account requests to one kind and tag. Neither release nor clear bypasses
-# the operation quiescence guard, including after a lost lock reply.
 request=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 [[ $("$fence" lock-for account_delete "$floor_tag" "$request") == "$request" ]]
 [[ $("$fence" lock-for account_delete "$floor_tag" "$request") == "$request" ]]
@@ -185,7 +176,6 @@ if "$fence" lock-for account_delete v0.4.6 "$request" 2>/dev/null; then
   echo "an account request bypassed the release floor" >&2
   exit 1
 fi
-# A private copy redirects only the fixed marker path for CI fixtures.
 sed "s|/srv/data/host-operations|$work/operations|g" "$fence" >"$work/marker-fence.sh"
 chmod +x "$work/marker-fence.sh"
 for marker in malformed symlink; do
@@ -270,9 +260,6 @@ if "$fence" check "$floor_release" aboutme-db-setup 2>/dev/null; then
 fi
 
 rm "$work/fence/cutover-mutation.json"
-# Notice restore ownership has no reset-db exception and survives a new check
-# process, as it does after reboot. Existing deploy/cutover assertions above
-# keep their separate minimum-only and reset-db rules.
 notice_op=$("$fence" lock notice_restore "$floor_tag")
 for unit in aboutme-server aboutme-web aboutme-caddy aboutme-migrate \
   aboutme-db-setup aboutme-job@media-deletion-sweep crowdsec crowdsec-firewall-bouncer; do
@@ -292,8 +279,6 @@ if "$fence" notice-restore-release "$request" >/dev/null 2>&1; then
   echo 'strict notice release accepted a different owner' >&2
   exit 1
 fi
-# This lightweight fixture has no mounted authority. Successful exact release
-# belongs to the complete mounted host-controller proof, not this setup reset.
 jq 'del(.operation_id,.operation_kind,.operation_tag,.operation_started_at,.operation_checked_at)' \
   "$work/fence/fence.json" >"$work/unowned.json"
 cp "$work/unowned.json" "$work/fence/fence.json"

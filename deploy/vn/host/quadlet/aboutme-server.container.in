@@ -1,6 +1,4 @@
-# Rendered by deploy-host.sh; do not edit on the host. The Go server on the
-# host network, 127.0.0.1:8080 and the print listener 172.17.0.1:8081
-# (docs/design/vietnam-production.md, "Host").
+# Rendered by deploy-host.sh; do not edit on the host.
 [Unit]
 OnFailure=aboutme-alert@%N.service
 Description=aboutme Go server
@@ -31,10 +29,6 @@ Secret=smtp-password,type=env,target=SMTP_PASSWORD
 @SERVER_SECRETS@
 Volume=/run/postgresql:/run/postgresql
 Volume=/var/lib/aboutme/privacy-notice:/var/lib/aboutme/privacy-notice:ro
-# SYS_ADMIN lets the default seccomp profile allow the user namespaces that
-# Chromium's sandbox needs. The image runs as a non-root user, so the process
-# gains no effective capability (docs/design/single-host-production.md, "Host
-# and networking").
 AddCapability=SYS_ADMIN
 PodmanArgs=--init --shm-size=128m --memory=512m
 HealthCmd=wget -q -O /dev/null http://127.0.0.1:8080/healthz

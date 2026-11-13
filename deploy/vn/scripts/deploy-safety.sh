@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Shared unit-state guards for deploy and cutover operations.
 
 aboutme_jobs=(
   idempotency-expiry-sweep
@@ -73,8 +72,6 @@ aboutme_start_edge() {
 }
 
 aboutme_edge_start() {
-  # Admission is checked inside the lock. Deployment cannot renew a failed gate;
-  # provisioning establishes startup before modern edge units need it.
   aboutme_edge_transition aboutme_start_edge "$@"
 }
 
@@ -94,7 +91,7 @@ aboutme_stop_edge() {
   done
 }
 
-aboutme_wait_stopped() { # unit seconds
+aboutme_wait_stopped() {
   local unit=$1 seconds=$2 i
   for ((i = 0; i < seconds; i++)); do
     aboutme_active "$unit" || return 0
@@ -103,7 +100,7 @@ aboutme_wait_stopped() { # unit seconds
   return 1
 }
 
-aboutme_stop_jobs() { # wait seconds
+aboutme_stop_jobs() {
   local seconds=$1 job rc=0 timers=() services=()
   for job in "${aboutme_jobs[@]}"; do
     timers+=("aboutme-job-$job.timer")
@@ -152,7 +149,7 @@ aboutme_assert_cutover_quiescent() {
   aboutme_assert_jobs_stopped
 }
 
-aboutme_fail_closed() { # wait seconds
+aboutme_fail_closed() {
   local seconds=$1 rc=0
   aboutme_stop_jobs "$seconds" || rc=1
   aboutme_edge_transition aboutme_stop_edge aboutme-caddy aboutme-server aboutme-web || rc=1
@@ -180,7 +177,7 @@ aboutme_assert_fail_closed() {
   ((bad == 0))
 }
 
-aboutme_assert_operation_release() { # request id
+aboutme_assert_operation_release() {
   local id=$1 state unit_state containers count
   mountpoint -q /srv/data || return 1
   [[ $id =~ ^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$ ]] || return 1

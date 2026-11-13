@@ -5,8 +5,6 @@ ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/aboutme-codex-agent.XXXXXX")
 WORK=$(cd "$WORK" && pwd -P)
 trap 'rm -rf -- "$WORK"' EXIT
-# The worktree, brief, and report share a session scratchpad, like the
-# primary's; the main checkout and $HOME sit outside it.
 MAIN=$WORK/main
 SESSION=$WORK/session/scratchpad
 TREE="$SESSION/wt/tree with spaces"
@@ -29,14 +27,11 @@ python3 -c 'import json, os, sys; e = dict(os.environ); e["PATH"] = sys.argv[2];
 cat >"$STDIN_LOG"
 exit "${CODEX_STATUS:-0}"
 SH
-# Checkout configuration never chooses a writable root, so go and npm never run.
 for tool in go npm; do
   printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$0 $*" >>"$TOOL_LOG"\nprintf "%%s\\n" "%s"\n' \
     "$FAKE_HOME/.ssh" >"$WORK/bin/$tool"
 done
 chmod +x "$WORK/bin/codex" "$WORK/bin/go" "$WORK/bin/npm"
-# Hostile configuration that once redirected a root: project and user .npmrc
-# files, inherited cache variables, and shell startup files.
 printf 'cache=${HOME}/.ssh\n' | tee "$TREE/.npmrc" >"$FAKE_HOME/.npmrc"
 printf 'export GH_TOKEN=fixture-zshenv\n' >"$WORK/zdot/.zshenv"
 printf 'export GH_TOKEN=fixture-zprofile\n' >"$WORK/zdot/.zprofile"
@@ -57,7 +52,6 @@ import sys
 Path(sys.argv[1]).write_bytes(b"stdin must not reach codex\n" * 65536)
 PY
 
-# remove_run_temp deletes the per-run temp directory the last launch created.
 remove_run_temp() {
   python3 -c 'import json, shutil, sys; shutil.rmtree(json.load(open(sys.argv[1]))["TMPDIR"])' "$ENV_LOG"
 }
@@ -160,10 +154,6 @@ PY
   remove_run_temp
 }
 
-# run [launcher args...] starts the launcher with credentials, hostile cache
-# and temp settings, and shell startup hooks in its environment. TMPDIR_MODE=unset
-# leaves TMPDIR unset instead of pointing it at the scratchpad; HOME_DIR replaces
-# the fixture $HOME.
 run() {
   local -a settings=(GH_TOKEN=ghp_UNTRUSTED GITHUB_TOKEN=UNTRUSTED GH_HOST=github.com
     AWS_PROFILE=prod AWS_SECRET_ACCESS_KEY=UNTRUSTED VNGCLOUD_CLIENT_ID=UNTRUSTED
@@ -271,8 +261,6 @@ for effort in low medium high xhigh; do
   check_args gpt-6.1-sol "$effort" no
 done
 
-# refuse_root <link> <target> <pattern>: a writable root linked to <target> is
-# refused before anything is created there.
 refuse_root() {
   local link=$1 target=$2 pattern=$3 before after
   [[ ! -e $link ]] || mv "$link" "$WORK/link-saved"
@@ -292,8 +280,6 @@ refuse_root() {
   [[ ! -e $WORK/link-saved ]] || mv "$WORK/link-saved" "$link"
 }
 if [[ $(uname -s) == Darwin ]]; then cache=$FAKE_HOME/Library/Caches; else cache=$FAKE_HOME/.cache; fi
-# A root that is, or sits under, a symbolic link is refused wherever the link
-# points, so no list of protected paths has to be complete.
 refuse_root "$FAKE_HOME/.npm" "$FAKE_HOME/.docker" 'npm_config_cache: .*/\.npm is a symbolic link'
 refuse_root "$FAKE_HOME/.npm" "$SESSION/sandbox-probe" 'npm_config_cache: .*/\.npm is a symbolic link'
 refuse_root "$FAKE_HOME/.npm" "$FAKE_HOME/.ssh" 'npm_config_cache: .*/\.npm is a symbolic link'
@@ -303,9 +289,6 @@ refuse_root "$cache" "$FAKE_HOME/other-caches" 'GOCACHE: .*/[.]?[Cc]aches? is a 
 refuse_root "$cache/golangci-lint" "$SESSION/wt" 'GOLANGCI_LINT_CACHE: .* is a symbolic link'
 refuse_root "$MAIN/.dev/locks" "$MAIN/.git" 'lock directory'
 
-# refuse_home <home> <pattern>: a $HOME that puts the fixed roots in Git
-# metadata, the main checkout, or the session scratchpad is refused, and
-# nothing is created there.
 refuse_home() {
   rm -f "$CALL_LOG"
   if HOME_DIR=$1 run implementer >"$WORK/error" 2>&1; then
@@ -320,7 +303,6 @@ refuse_home "$MAIN/.git/home" 'GOCACHE overlaps the Git directory'
 refuse_home "$MAIN/home" "GOCACHE overlaps a protected path: $MAIN\$"
 refuse_home "$SESSION/home" "GOCACHE overlaps a protected path: $SESSION\$"
 
-# A workspace-write role outside a Git checkout has no shared lock root.
 mkdir -p "$WORK/plain/.codex/agents"
 cp "$WORK/valid-role" "$WORK/plain/.codex/agents/implementer.toml"
 rm -f "$CALL_LOG"

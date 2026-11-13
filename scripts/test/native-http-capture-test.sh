@@ -1,16 +1,6 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# Static contract for the native public HTTP capture. It proves the
-# fixture command's opt-in, loopback, rooted-path, and frozen-clock rules, and
-# that the capture script and Make target exist with the required isolated
-# lifecycle. It never touches the database or starts a stack.
-#
-#   scripts/test/native-http-capture-test.sh              # fixture + lifecycle
-#   scripts/test/native-http-capture-test.sh -k fixture    # fixture only
-#   scripts/test/native-http-capture-test.sh -k lifecycle  # lifecycle only
-#   scripts/test/native-http-capture-test.sh -k canonical  # canonicalization only
-
 ROOT=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd -P)
 cd "$ROOT"
 
@@ -45,10 +35,6 @@ cleanup_fixture_tmp() {
 }
 trap cleanup_fixture_tmp EXIT
 
-# ---------------------------------------------------------------------------
-# fixture: the seed/cleanup command validates its inputs before any I/O
-# ---------------------------------------------------------------------------
-
 test_fixture() {
   local bin
   fixture_tmp=$(mktemp -d "$ROOT/native-http-capture-test.XXXXXX")
@@ -56,9 +42,6 @@ test_fixture() {
   (cd "$ROOT/apps/server" && go build -o "$bin" ./cmd/native-http-fixture) ||
     fail 'native-http-fixture does not build'
 
-  # A valid invocation passes validation and fails later at the database
-  # connection. Port 1 is loopback but nothing listens there, so this proves
-  # validation accepted the input without requiring a live database.
   local closed_dsn closed_out
   closed_dsn='postgres://aboutme:aboutme_dev@127.0.0.1:1/aboutme_p5a_fixture?sslmode=disable'
   set +e
@@ -105,10 +88,6 @@ test_fixture() {
   printf '%s\n' 'native-http-capture-test: fixture PASS'
 }
 
-# ---------------------------------------------------------------------------
-# lifecycle: the capture script and Make target exist with the isolated rules
-# ---------------------------------------------------------------------------
-
 test_lifecycle() {
   local capture=$ROOT/scripts/native-http-capture.sh
   [ -f "$capture" ] || fail 'scripts/native-http-capture.sh is missing'
@@ -145,10 +124,6 @@ test_lifecycle() {
 
   printf '%s\n' 'native-http-capture-test: lifecycle PASS'
 }
-
-# ---------------------------------------------------------------------------
-# canonical: only checkout-root __file paths may vary between worktrees
-# ---------------------------------------------------------------------------
 
 test_canonical() {
   node "$ROOT/scripts/test/native-http-hashes.test.mjs" ||

@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 # shellcheck source-path=SCRIPTDIR
-# Read-only admission and provisioning policy for the pinned CrowdSec catalog.
-# See docs/design/crowdsec-http-privacy.md, Database and authorization.
 
 crowdsec_db_fail() { printf 'crowdsec_db_%s\n' "$1" >&2; return 1; }
 crowdsec_db_safe() {

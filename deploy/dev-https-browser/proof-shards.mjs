@@ -16,9 +16,6 @@ export const TOTP_SHARD_ROLES = Object.freeze({
   'epoch-disabled': ['epoch'],
 });
 
-// Every role the enabled TOTP journey proves, excluding 'none' (no account
-// yet) and 'disabled' (the separate disabled-enrollment phase, proven by the
-// epoch-disabled shard's disabled-phase run instead).
 export const TOTP_ENABLED_ROLES = Object.freeze([
   'primary', 'skew', 'replay', 'concurrent', 'replace', 'epoch', 'locale',
   'recovery', 'attempts',
@@ -29,8 +26,6 @@ export const PASSKEY_SHARD_ROLES = Object.freeze({
   'recovery-attempts': ['recovery', 'attempts'],
 });
 
-// Every role the enabled passkey journey proves, excluding 'none' and
-// 'disabled' (proven by the primary-disabled shard's disabled-phase run).
 export const PASSKEY_ENABLED_ROLES = Object.freeze([
   'primary', 'recovery', 'attempts',
 ]);

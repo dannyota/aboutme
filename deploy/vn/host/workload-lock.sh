@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Runs one memory-heavy host operation at a time.
 set -euo pipefail
 
 if ((EUID == 0)) && [[ -n ${ABOUTME_WORKLOAD_LOCK:-} ]]; then

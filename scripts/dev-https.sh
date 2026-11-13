@@ -1,12 +1,7 @@
 #!/usr/bin/env bash
-# Native HTTPS authentication harness on https://localhost:20443.
 set -Eeuo pipefail
 umask 077
 
-# Resolved in pure Bash (no external dirname) and sourced before the cd
-# below, so a missing PATH tool or an unresolved working directory can
-# never stop the harness from loading its own libraries and reaching the
-# tool check that reports the missing tool by name.
 case ${BASH_SOURCE[0]} in
 */*) SCRIPT_DIR=${BASH_SOURCE[0]%/*} ;;
 *) SCRIPT_DIR=. ;;

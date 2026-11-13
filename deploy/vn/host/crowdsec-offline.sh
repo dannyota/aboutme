@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# Shared CrowdSec central API opt-out checks. Callers set the paths when a
-# test uses a temporary root.
 
 crowdsec_preseed_offline() {
   local selected
@@ -13,7 +11,7 @@ crowdsec_preseed_offline() {
   [[ $selected == $'0 false\n0 false\n0 127.0.0.1:8095' ]]
 }
 
-crowdsec_install_offline() { # install-command package...
+crowdsec_install_offline() {
   (
     set -euo pipefail
     local policy=${CROWDSEC_POLICY_RC_D:-/usr/sbin/policy-rc.d}
@@ -157,7 +155,7 @@ crowdsec_configure_local_detection() {
   rm -f /etc/crowdsec/scenarios/ssh-time-based-bf.yaml || return $?
 }
 
-crowdsec_assert_offline() { # base-config local-config credentials
+crowdsec_assert_offline() {
   local base=$1 local_config=$2 credentials=$3 file
   for file in "$base" "$local_config"; do
     [[ -f $file && ! -L $file ]] || {
@@ -175,7 +173,7 @@ crowdsec_assert_offline() { # base-config local-config credentials
   fi
 }
 
-crowdsec_remove_online() { # base-config local-config credentials
+crowdsec_remove_online() {
   local base=$1 local_config=$2 credentials=$3 tmp
   tmp=$(mktemp "${base}.XXXXXX")
   awk '

@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 
-# Make target safety contracts.
 set -Eeuo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
@@ -99,7 +98,6 @@ for shard in harness rest; do
     WEB_E2E_RUN_ID=valid WEB_E2E_SHARD="$shard"
 done
 
-# Exercise the public diagnostic collector without a browser or container.
 python3 - "$ROOT/Makefile" "$ROOT/scripts/collect-browser-diagnostics.py" "$WORK" <<'PYTHON'
 import hashlib
 import io
@@ -605,9 +603,7 @@ read_https_calls() {
   tr '\0' '\n' <"$HTTPS_CALLS"
 }
 
-# https_called reads the whole call log before matching. A `grep -q` on a pipe
-# exits at the first match, and under pipefail the writer's closed-pipe status
-# then fails the pipeline once the log outgrows the pipe buffer, as on macOS.
+# grep -q on a pipe exits at the first match, and pipefail then fails on the writer's closed pipe (bash manual, pipefail).
 https_called() {
   local flag=$1 pattern=$2 calls
   calls=$(read_https_calls)
@@ -732,8 +728,6 @@ https_called -Fx 'deploy/dev-https-browser' || {
   exit 1
 }
 
-# Spec drift must NOT block a check: specs are staged per run, not baked
-# into the image, so an edited spec runs without an image rebuild.
 cp "$HTTPS_REPO/deploy/dev-https-browser/transport.spec.ts" \
   "$WORK/transport.spec.ts.clean"
 printf '%s\n' '// source-drift' >> \
@@ -751,7 +745,6 @@ https_called -Fx podman || {
 cp "$WORK/transport.spec.ts.clean" \
   "$HTTPS_REPO/deploy/dev-https-browser/transport.spec.ts"
 
-# Image-side drift must still block before any runtime call.
 for image_source in run.sh spec-sources.txt; do
   cp "$HTTPS_REPO/deploy/dev-https-browser/$image_source" "$WORK/$image_source.clean"
   printf '%s\n' '# image-source-drift' >> \

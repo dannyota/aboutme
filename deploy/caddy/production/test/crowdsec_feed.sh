@@ -1,13 +1,11 @@
 #!/usr/bin/env bash
-# Direct request-feed regression helpers sourced by ../test.sh.
-# The harness defines the shared container, request, and work variables.
 # shellcheck disable=SC2154
 
-feed_line_count() { # container path
+feed_line_count() {
   podman exec "$1" sh -c "wc -l < '$2'"
 }
 
-wait_for_feed_lines() { # container path minimum
+wait_for_feed_lines() {
   local got=0 minimum=$3
   for _ in $(seq 1 40); do
     got=$(feed_line_count "$1" "$2")
@@ -18,7 +16,7 @@ wait_for_feed_lines() { # container path minimum
   exit 1
 }
 
-assert_private_log_has_no_markers() { # text
+assert_private_log_has_no_markers() {
   local text=$1 marker
   for marker in pathmarker7e2a querymarker4c9d headermarker8f3b bodymarker1d6c \
     hostmarker5a7e agentmarker2b4f 198.51.100.77 203.0.113.78; do
@@ -29,7 +27,7 @@ assert_private_log_has_no_markers() { # text
   done
 }
 
-assert_http_stdlib_logging_private() { # container mode
+assert_http_stdlib_logging_private() {
   local config adapted
   case $2 in
     serving) config=Caddyfile ;;
@@ -79,8 +77,6 @@ test_direct_crowdsec_feed() {
     { echo "adapted config lacks the safe TLS logger" >&2; exit 1; }
 
   before=$(feed_line_count "$name" "$feed")
-  # The web upstream returns a real denial so only this unknown path may be
-  # sampled. Its separate listener leaves the existing Go stand-in intact.
   podman exec "$name-echo" sh -c \
     'printf "{\n admin off\n}\n:3000 {\n respond 404\n}\n" >/tmp/feed-upstream'
   podman exec -d "$name-echo" caddy run --config /tmp/feed-upstream --adapter caddyfile
@@ -88,7 +84,6 @@ test_direct_crowdsec_feed() {
     if podman exec "$name-echo" wget -q -O /dev/null http://127.0.0.1:3000/ 2>/dev/null; then
       break
     fi
-    # wget returns failure for the expected denial; prove the listener exists.
     if podman exec "$name-echo" sh -c 'grep -q ":0BB8 " /proc/net/tcp /proc/net/tcp6'; then
       break
     fi
@@ -108,9 +103,6 @@ test_direct_crowdsec_feed() {
     "https://aboutme.vn:$dport/unknown/eligible%2fmarker?token=querymarker4c9d") == 404 ]] ||
     { echo "eligible-target-status" >&2; exit 1; }
 
-  # The earlier IPv4 proof added this namespace-local name. Move that name to
-  # IPv6 so wget sends aboutme.vn as both TLS SNI and the HTTP Host while Caddy
-  # sees the socket peer as ::1.
   podman exec --user 0 "$name-echo" sh -c \
     'sed "s/^127\.0\.0\.1 aboutme\.vn$/::1 aboutme.vn/" /etc/hosts >/tmp/hosts && cat /tmp/hosts >/etc/hosts'
   podman exec "$name-echo" wget -q -O /dev/null --no-check-certificate \
@@ -148,8 +140,6 @@ test_direct_crowdsec_feed() {
   assert_private_log_has_no_markers "$feed_text"
   test_crowdsec_feed_size_roll
 
-  # A wrong Host and a stopped upstream force Caddy error paths while every
-  # request surface carries a distinct marker.
   dcurl -o /dev/null -H 'Host: hostmarker5a7e.example' \
     "https://aboutme.vn:$dport/pathmarker7e2a?token=querymarker4c9d" || true
   podman stop "$name-echo" >/dev/null
@@ -170,9 +160,6 @@ test_direct_crowdsec_feed() {
 test_crowdsec_feed_size_roll() {
   local target rolls=0 active_size roll_size statuses=$work/feed-roll-status
   target=/unknown/$(printf '%0499d' 0)'[0001-3600]'
-  # Two size rotations prove the writer retains only one uncompressed roll.
-  # One client avoids per-request helper processes. The four-digit expansion
-  # keeps every target at 512 bytes; each expanded response goes to /dev/null.
   timeout 120s curl --disable --silent --fail-early --max-time 10 \
     --noproxy '*' --resolve "aboutme.vn:$dport:127.0.0.1" --cacert "$work/direct-ca.pem" \
     --output /dev/null --write-out '%{http_code}\n' "https://aboutme.vn:$dport$target" \

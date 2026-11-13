@@ -344,7 +344,6 @@ for OBSERVER_CASE in good arm64 index bad-provenance transport-error; do
     grep -q -- 'pull .*ghcr.io/dannyota/aboutme-observer@sha256:' "$work/host.log"
     grep -q -- 'render .*ghcr.io/dannyota/aboutme-observer@sha256:' "$work/host.log"
     grep -q -- '--source-ref refs/tags/v0.7.5' "$work/observer-verify.log"
-    # App images pin the linux/amd64 digest inside the index, not the index.
     grep -q -- "render .*ghcr.io/dannyota/aboutme-server@sha256:$(printf '%064d' 0 | tr 0 d)" "$work/host.log"
     if grep -q -- "aboutme-server@sha256:$(printf '%064d' 0 | tr 0 b)" "$work/host.log"; then exit 1; fi
   else
@@ -416,9 +415,6 @@ for EDGE_CASE in delayed stuck late-ban no-ban; do
 done
 unset EDGE_CASE
 
-# The ban poll ends at its deadline: with 10 s requests and 5 s sleeps, the
-# eleventh poll starts at 150 s and the loop ends at 160 s. Unsetting SECONDS
-# makes it a plain variable that the fakes advance.
 sed -n '/^ban_seen() {/,/^}/p' "$repo_root/deploy/vn/scripts/deploy.sh" >"$work/ban-seen.sh"
 deadline=$(
   # shellcheck source=/dev/null
@@ -436,8 +432,6 @@ if [[ $polls != 11 || ! $clock =~ ^[0-9]+$ ]] || ((clock > 160)); then
   edge_failures=1
 fi
 
-# The host counts its port-443 sockets from the SSH client address while the
-# deploy holds one HTTPS request open; ss filters, so no peer list crosses SSH.
 egress_failures=0
 filter="ss -Htn state established '( sport = :443 ) and ( dst 198.51.100.10 or dst [::ffff:198.51.100.10] )' | wc -l"
 site_probe='-s -o /dev/null -m 10 -w %{http_code} https://vn.example.test/'
@@ -493,7 +487,6 @@ for EGRESS_COUNT in 0 x; do
   done
 done
 
-# A first deploy has nothing on 443 until maintenance starts.
 export EGRESS_COUNT=0
 egress_reset
 result=failure
@@ -513,8 +506,6 @@ if [[ $result != failure || $stopped != 1 || -z $confirmed || -z $refused || $co
 fi
 unset EGRESS_COUNT
 
-# When nothing answers on 443, a rollback or forward fix still reaches
-# maintenance, and the check waits until maintenance serves.
 export SITE_CASE=down
 for mode in deploy rollback; do
   args=(v0.1.1)
@@ -553,7 +544,6 @@ for mode in deploy rollback; do
 done
 unset SITE_CASE EGRESS_COUNT
 
-# An interrupted deploy joins its probe before it exits.
 export EGRESS_CASE=interrupt
 egress_reset
 status=0
@@ -567,8 +557,6 @@ fi
 rm -f "$work/probe.pid"
 unset EGRESS_CASE
 
-# Release floors (docs/design/release-floors.md). Tags derive from the tracked
-# floor in fence.sh, so raising it changes no case.
 floor_failures=0
 floor_fail() { echo "$*" >&2; floor_failures=1; }
 floor_reset() {
@@ -579,7 +567,6 @@ floor_reset() {
   : >"$work/ssh.log"
 }
 deploy() { "$repo_root/deploy/vn/scripts/deploy.sh" "$@"; }
-# Prints the first order.log line number that holds a fixed string.
 at() { grep -nF -- "$1" "$work/order.log" | head -n1 | cut -d: -f1 || true; }
 op_id=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 file_read="ls-tree --full-tree $(printf '%040d' 0 | tr 0 a) -- apps/server/migrations/schema-floor"
@@ -593,9 +580,6 @@ if deploy --activate "$above_floor" >"$work/floor-activate.out" 2>&1 ||
   floor_fail 'an activation above the tracked floor was not refused before SSH'
 fi
 
-# A candidate below its own schema floor, a schema floor above the tracked
-# floor, a file that is not one strict tag and a newline, an entry that is not
-# a regular file, and a tree or file that cannot be read all stop before SSH.
 for schema_case in above-candidate above-tracked no-newline blank-line padded crlf empty two-tags \
   tree-unreadable executable symlink directory submodule file-unreadable; do
   tag=v0.1.1 message='must hold one strict tag and a newline'
@@ -625,9 +609,6 @@ for schema_case in above-candidate above-tracked no-newline blank-line padded cr
 done
 unset SCHEMA_TREE SCHEMA_ENTRY SCHEMA_SHOW
 
-# Above the fence: the deploy reads the minimum and raises with the operation
-# ID after app-down and render, before db-setup and migrate. It never prints
-# the fence document, which holds that ID.
 export SCHEMA_FLOOR=$'v0.1.1\n' FENCE_MINIMUM=1000
 for mode in deploy first-deploy; do
   args=(v0.1.1)
@@ -644,8 +625,6 @@ for mode in deploy first-deploy; do
   fi
 done
 
-# A failed raise may still have landed, so recovery fails closed and starts
-# nothing.
 floor_reset
 if FAIL_RAISE=1 deploy v0.1.1 >"$work/floor-raise-failed.out" 2>&1 ||
    ! grep -qF "/fence.sh raise $op_id v0.1.1 " "$work/order.log" || ! grep -q ' fail-closed ' "$work/host.log" ||
@@ -653,7 +632,6 @@ if FAIL_RAISE=1 deploy v0.1.1 >"$work/floor-raise-failed.out" 2>&1 ||
   floor_fail 'a failed schema-floor raise did not fail closed'
 fi
 
-# A failed fence read sends no raise, so recovery restores the previous release.
 floor_reset
 if FAIL_FENCE_READ=1 deploy v0.1.1 >"$work/floor-read-failed.out" 2>&1 ||
    ! grep -qF '/fence.sh read ' "$work/order.log" || grep -qF '/fence.sh raise ' "$work/order.log" ||
@@ -680,7 +658,6 @@ if ! grep -qsxF -- "$file_read" "$work/git.log" || grep -qF -e '/fence.sh read '
   floor_fail 'a tree without a schema floor did not deploy without reading the fence'
 fi
 
-# A rollback and an activation never read the file.
 export SCHEMA_FLOOR=$'v0.1.2\n'
 for mode in rollback activate; do
   floor_reset

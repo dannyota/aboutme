@@ -1,18 +1,5 @@
 #!/usr/bin/env bash
-# Fails when the Nuxt dev server that the HTTPS proofs run finds a client
-# dependency at runtime instead of pre-bundling it at startup. Vite then
-# optimizes again, and when that changes a dependency a page already loaded,
-# it reloads every open page. Add each reported module to
-# vite.optimizeDeps.include in apps/web/nuxt.config.ts.
-#
-# The check starts the dev server on an empty client dependency cache and
-# sends it no request, so the startup warmup crawls the whole client module
-# graph, lazy routes included. It reads the crawl's verbose log line and
-# Vite's dependency debug log. Run it in a checkout with no dev stack: like
-# any Nuxt command it writes .nuxt, and it clears node_modules/.cache/vite.
-#
-# Exit status: 0 when nothing was found at runtime, 1 when something was,
-# 2 when the check could not run or the crawl did not finish.
+# Vite reloads every open page when it optimizes a dependency first found at runtime (Vite dependency pre-bundling docs).
 set -Eeuo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -51,8 +38,7 @@ cleanup() {
 trap cleanup EXIT
 
 rm -rf -- "$WEB/node_modules/.cache/vite"
-# Job control gives the server its own process group, so stopping it also
-# stops the forked Nuxt child.
+# Job control gives the backgrounded server its own process group (bash manual, JOB CONTROL).
 set -m
 (cd "$WEB" && DEBUG=vite:deps exec node_modules/.bin/nuxt dev \
   --port "$PORT" --host 127.0.0.1 --logLevel verbose --no-tui) \
@@ -68,8 +54,7 @@ until grep -aq 'Vite client warmed up' "$log"; do
   ((SECONDS < deadline)) || refuse 'the client warmup did not finish within 240 seconds'
   sleep 1
 done
-# Vite optimizes each batch it finds after a short debounce, and Nuxt names
-# the new modules 3 seconds after the last one.
+# Vite optimizes each batch after a short debounce and Nuxt names new modules 3 seconds after the last one (Vite, Nuxt dev server).
 sleep 5
 stop_server
 

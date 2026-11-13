@@ -320,7 +320,6 @@ done
 reset_mock
 printf '{}' >"$work/boundary.json"
 truncate -s 1048576 "$work/boundary.json"
-# JSON permits whitespace padding but not NUL padding.
 tr '\000' ' ' <"$work/boundary.json" >"$work/boundary-valid.json"
 drill_journal_put_create 'releases/10.json' "$work/boundary-valid.json"
 drill_journal_get 'releases/10.json' "$work/boundary-read.json"
@@ -355,8 +354,6 @@ done <"$work/config-paths"
 [[ -z $(find "$work" -maxdepth 1 -name '.drill-journal-read.*' -print -quit) ]] || fail 'download scratch paths leaked'
 grep -Eq -- 'delete-object|--replace|--yes|--if-none-match|--content-type|--region|--project-id|--debug|--query|--endpoint-url' "$work/native.log" && fail 'unsupported or unsafe native operation'
 
-# Drill summaries must distinguish guest denial from app reconciliation and
-# must never publish epoch, receipt, or restored member state as evidence.
 drill=$repo_root/deploy/vn/scripts/restore-drill.sh
 for fixed in 'PASS latest notice restore fence' \
   'PASS point-in-time notice restore fence' 'notice reconciliation: not performed'; do

@@ -42,7 +42,6 @@ if platform_stat u "$work/missing" 2>/dev/null || platform_realpath "$work/missi
   printf '%s\n' 'missing path accepted' >&2
   exit 1
 fi
-# Every worktree resolves one shared lock in the main checkout, outside .git.
 git init -q "$work/main"
 git -C "$work/main" -c user.name=Test -c user.email=test@example.invalid commit -q --allow-empty -m fixture
 git -C "$work/main" worktree add -q -b fixture "$work/tree"
@@ -124,7 +123,6 @@ survivor=${first##*/}
 LC_ALL=C platform_prune_evidence "$work/ties" proof 1
 [ -d "$work/ties/$survivor" ]
 [ ! -e "$work/ties/proof.Z" ]
-# Snapshot commands keep spaces and obtain numeric session IDs on both hosts.
 row=$(platform_process_snapshot "$$")
 read -r pid ppid pgid uid sid state command <<<"$row"
 [ "$pid" = "$$" ] && [ "$uid" = "$EUID" ]
@@ -135,7 +133,6 @@ done
 if platform_signal_group TERM "$pgid" ignored; then
   printf 'signalled own group\n' >&2; exit 1
 fi
-# Every listener, including IPv6 and multiple owners, needs an identified PID.
 cat >"$work/bin/lsof" <<'EOF'
 #!/usr/bin/env bash
 case $LISTENER_CASE in
@@ -154,8 +151,6 @@ done
 status=0
 PATH="$work/bin:$PATH" LISTENER_CASE=empty platform_listener_pids 20443 || status=$?
 [ "$status" = 1 ]
-# Linux must see sockets that an unprivileged lsof omits entirely, including
-# a hidden listener beside another socket with a visible owner.
 cat >"$work/bin/ss" <<'EOF'
 #!/usr/bin/env bash
 case $LISTENER_CASE in
@@ -179,10 +174,8 @@ done
 status=0
 PATH="$work/bin:$PATH" LISTENER_OS=Linux LISTENER_CASE=empty platform_listener_pids 20443 || status=$?
 [ "$status" = 1 ]
-# Force the Python detach path and verify complete argv and UID checks.
 mkdir "$work/fallback"
-# Link the real interpreter: a version-manager shim such as pyenv's is a
-# bash script and cannot run with only this directory on PATH.
+# A version-manager shim such as pyenv's is a bash script, so the real interpreter is linked (pyenv).
 ln -s "$(python3 -c 'import sys; print(sys.executable)')" "$work/fallback/python3"
 cat >"$work/anchor with spaces.sh" <<'EOF'
 #!/bin/bash
@@ -199,7 +192,6 @@ platform_validate_anchor "$anchor_pid" "$expected"
 platform_group_members "$anchor_pid" | grep -Fxq "$anchor_pid"
 if platform_signal_group TERM "$anchor_pid" "$expected-other"; then exit 1; fi
 kill -0 "$anchor_pid"
-# Controlled ps rows still use a real process for os.getsid.
 cat >"$work/bin/ps" <<'EOF'
 #!/usr/bin/env bash
 if [ "$1" = -o ]; then exec /bin/ps "$@"; fi
@@ -220,8 +212,6 @@ done
 kill -0 "$anchor_pid"
 platform_signal_group TERM "$anchor_pid" "$expected"
 
-# Draining membership must not compare separate, changing process lists or
-# resolve sessions for children that can exit after ps takes its snapshot.
 (
   export PATH="$work/bin:$PATH" GROUP_ANCHOR=$$ GROUP_UID=$EUID
   export GROUP_PS_LOG=$work/group-ps.calls GROUP_PS_CASE=draining GROUP_OS=Darwin
@@ -300,7 +290,6 @@ EOF
   done
 )
 
-# Linux inspection needs ss even when lsof is unavailable.
 ln -s "$(command -v bash)" "$work/fallback/bash"
 cat >"$work/fallback/uname" <<'EOF'
 #!/usr/bin/env bash

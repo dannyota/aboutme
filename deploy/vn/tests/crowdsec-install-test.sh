@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Exercise engine activation and helper ordering without host services.
 set -euo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 installer=${1:-$root/deploy/vn/host/install.sh}
@@ -271,7 +270,6 @@ run_install || fail 'profile activation failed'
 expect_activation
 printf 'PASS batching-helper-follows-loaded-profile\n'
 
-# A previous interrupted copy can leave matching disk config with an old helper.
 new_case
 printf 'old-profile\n' >"$FIXTURE_CASE/loaded-profile"
 printf '#!/bin/sh\n# eager reconciliation\n' >"$FIXTURE_CASE/lib/crowdsec-retention.sh"

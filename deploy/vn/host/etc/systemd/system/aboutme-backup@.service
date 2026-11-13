@@ -1,5 +1,3 @@
-# pgBackRest backup or verify; the instance is full, diff, or verify
-# (docs/design/vietnam-production.md, "PostgreSQL").
 [Unit]
 Description=aboutme pgBackRest %i
 After=postgresql@18-main.service

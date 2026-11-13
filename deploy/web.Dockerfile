@@ -1,18 +1,7 @@
-# Multi-stage build for apps/web (Nuxt 4 / Vue 3).
-# Build context is the repository root: apps/web depends on packages/schema
-# through a relative `file:` reference, so the build needs both directories.
-
-# ---- build ----
-# Node 24.22.2: pinned exactly to apps/web/.nvmrc. Digest pins the
-# multi-arch index so the same reference resolves on amd64 and arm64.
 FROM docker.io/library/node:24.22.2-alpine3.24@sha256:8a32c8cf649a49915a66e81e7a609223c708d0adabf288ee3f4077d765542f85 AS build
 
 WORKDIR /src
 
-# `npm ci` runs `nuxt prepare`, which loads nuxt.config.ts, and that config
-# builds validators from app/, server/, the OpenAPI contract and the schema
-# package. So every build input is copied before install. The list mirrors the
-# non-test entries of scripts/web-e2e-source.manifest.
 COPY apps/web/package.json apps/web/package-lock.json apps/web/nuxt.config.ts apps/web/tsconfig.json ./apps/web/
 COPY apps/web/types/ ./apps/web/types/
 COPY apps/web/app/ ./apps/web/app/
@@ -29,14 +18,7 @@ RUN npm --prefix apps/web ci
 
 RUN npm --prefix apps/web run build
 
-# Fail the build if node-forge, braces, or the build-only packages listhen,
-# globby, fast-glob, and micromatch appear in the shipped output, or if the
-# output is missing. Scan package paths and file contents for these packages.
-# "braces" alone is too common a word for the content scan; its
-# package path and its three parents cover it. Busybox grep has no --exclude,
-# so package manifests are filtered from the content scan afterward: other
-# packages list these names as dev dependencies, and a shipped copy would
-# still show up as a path.
+# Busybox grep has no --exclude, so manifests are filtered afterward (BusyBox grep).
 RUN set -e; out=apps/web/.output; test -f "$out/server/index.mjs"; \
     hits=$(find "$out" \( -ipath '*node-forge*' -o -ipath '*listhen*' \
       -o -ipath '*/node_modules/braces*' -o -ipath '*/node_modules/micromatch*' \
@@ -46,17 +28,11 @@ RUN set -e; out=apps/web/.output; test -f "$out/server/index.mjs"; \
     hits=$(printf '%s\n' "$hits" | grep -v '/package\.json$' || true); \
     if [ -n "$hits" ]; then printf '%s\n' "$hits"; exit 1; fi
 
-# ---- runtime ----
-# Nitro's node-server preset (Nuxt's default) bundles its own dependencies
-# into .output/, so the runtime stage needs no node_modules install.
+# Nitro's node-server preset bundles its dependencies into .output (Nitro node-server preset docs).
 FROM docker.io/library/node:24.22.2-alpine3.24@sha256:8a32c8cf649a49915a66e81e7a609223c708d0adabf288ee3f4077d765542f85 AS runtime
 
 WORKDIR /app
 
-# The runtime only runs `node .output/server/index.mjs`, so the base's package
-# managers (npm, npx, corepack, yarn) and their bundled dependencies are
-# removed rather than shipped unused. The final check fails the build if a
-# base update moves them.
 RUN addgroup -S aboutme && adduser -S aboutme -G aboutme \
     && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /opt/yarn-v* \
     && rm -f /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack \
@@ -72,8 +48,6 @@ ENV HOST=0.0.0.0 \
     PORT=3000
 EXPOSE 3000
 
-# Plain GET with output discarded, not `--spider` (HEAD) — consistent with
-# server.Dockerfile's healthcheck; avoids depending on HEAD support.
 HEALTHCHECK --interval=5s --timeout=3s --start-period=10s --retries=10 \
     CMD wget -q -O /dev/null http://127.0.0.1:3000/ || exit 1
 

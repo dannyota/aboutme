@@ -400,14 +400,9 @@ function caddyPaths(registry, dispatch) {
     .join(" ");
 }
 
-// The resume page and its Markdown: one slug segment of 4 to 30 characters.
 const caddySlugExpression =
   "({http.request.uri.path}.matches('^/[a-z0-9]+(-[a-z0-9]+)*(\\\\.md)?$') && ((!{http.request.uri.path}.endsWith('.md') && size({http.request.uri.path}) >= 5 && size({http.request.uri.path}) <= 31) || ({http.request.uri.path}.endsWith('.md') && size({http.request.uri.path}) >= 8 && size({http.request.uri.path}) <= 34)))";
 
-// The project list and project pages below a resume slug: the slug grammar,
-// the literal projects, and a project slug; the second pattern bounds each
-// segment's length (4 to 30, and 2 to 40). Fixed and reserved roots match
-// earlier handles, so /app/projects stays Nuxt and /admin/projects 404.
 const caddyProjectsExpression =
   "({http.request.uri.path}.matches('^/[a-z0-9]+(-[a-z0-9]+)*/projects(/[a-z0-9]+(-[a-z0-9]+)*)?$') && {http.request.uri.path}.matches('^/[a-z0-9-]{4,30}/projects(/[a-z0-9-]{2,40})?$'))";
 

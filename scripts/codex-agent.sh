@@ -1,14 +1,4 @@
 #!/usr/bin/env bash
-# Start one Codex job with its role's model, effort, sandbox, and instructions.
-# Codex and every sandboxed command get the caller's environment minus names
-# that carry or locate credentials, without shell snapshots, login shells, or
-# the owner's shell startup files, and with a new private $TMPDIR per launch.
-# workspace-write roles also get network access and writable roots for fixed
-# per-user Go, golangci-lint, and npm caches, that $TMPDIR, and the main
-# checkout's .dev/locks directory, which holds the shared local-check lock.
-# Checkout configuration never chooses a root, no root may be or sit under a
-# symbolic link, /tmp is not writable, and no root may reach Git metadata, the
-# main checkout, the scratchpad, credential stores, or $HOME itself.
 set -Eeuo pipefail
 
 exec python3 -I - "$@" <<'PY'

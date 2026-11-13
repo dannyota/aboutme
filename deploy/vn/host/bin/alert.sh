@@ -1,15 +1,4 @@
 #!/usr/bin/env bash
-# Routes confirmed Telegram alerts, otherwise mails through Bizfly with msmtp
-# (docs/design/vietnam-production.md, "Logs, metrics, and alarms"). Runs as
-# root, from aboutme-alert@.service (every unit's OnFailure=) and watch.sh.
-#
-#   alert.sh <key> <subject>     optional plain-text detail on stdin
-#
-# One message per key per day: the first call of a day creates a stamp file
-# with noclobber, so a repeat that day sends nothing. A failed send removes the
-# stamp, so the next call tries again. The mail leaves the country through
-# the support mailbox, so it carries unit names, counts, and percentages only,
-# never log lines or personal data.
 set -euo pipefail
 set +xv
 
@@ -29,8 +18,6 @@ else
   transport_file=/etc/aboutme/alert-transport
 fi
 
-# Direct retention and vacuum callers share the same explicit cutover as the
-# watcher and systemd unit. Delivery failure never selects another transport.
 if [[ -e $transport_file || -L $transport_file ]]; then
   [[ -f $transport_file && ! -L $transport_file &&
     $(stat -c '%u:%a' "$transport_file") == "$EUID:600" &&
@@ -49,8 +36,6 @@ key=$1 subject=$2
 [[ $subject =~ ^[[:print:]]{1,200}$ ]] || die "malformed subject"
 detail=$(head -c 4096 | tr -cd '[:print:]\n' || true)
 
-# smtp.env as JSON; the same strict line shape as deploy-host.sh reads
-# flags.env with, so msmtp gets exactly what the server gets.
 smtp=$(jq -Rn '
   [inputs | select(test("^[[:space:]]*(#|$)") | not)
     | if test("^[A-Z][A-Z0-9_]*=") then capture("^(?<key>[^=]+)=(?<value>.*)$")
@@ -77,8 +62,6 @@ user_size=$(stat -c %s -- "$user_file") || die "the SMTP username is missing"
 printable_size=$(LC_ALL=C tr -cd '[:print:]' <"$user_file" | wc -c)
 ((user_size >= 1 && user_size <= 256 && printable_size == user_size)) ||
   die "the SMTP username must be 1 to 256 printable ASCII bytes with no newline"
-# Command substitution is safe after the byte check rejects every newline.
-# msmtp's quoted config argument preserves spaces; escape its two delimiters.
 user=$(<"$user_file")
 quoted_user=${user//\\/\\\\}
 quoted_user=${quoted_user//\"/\\\"}
@@ -110,8 +93,6 @@ user "$quoted_user"
 passwordeval cat $secrets/smtp-password
 account default : aboutme
 CONF
-# The display name goes out as a quoted string, so dots and commas in it stay
-# part of the name.
 from_name=$(get SES_FROM_NAME)
 from_name=${from_name//\\/\\\\}
 from_name=${from_name//\"/\\\"}

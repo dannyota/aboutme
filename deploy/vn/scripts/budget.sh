@@ -1,19 +1,4 @@
 #!/usr/bin/env bash
-# Creates the monthly cost budget `aboutme-prod` with alert thresholds at 80 and
-# 100 percent of the limit (docs/design/vietnam-production.md, "Logs, metrics,
-# and alarms", the Spend row; "Infrastructure code and state" puts billing
-# budgets in the vngcloud CLI).
-#
-#   budget.sh --limit-vnd <amount>
-#
-# Values come from the vngcloud wiki, Billing-and-Pricing.md, "Budgets": the
-# period type is MONTHLY, the budget type is ACTUAL (the other value is
-# FORECASTED), and each threshold type is ACTUAL. The account holds at most one
-# budget of each type, so the script stops if another ACTUAL budget exists.
-# Re-running changes nothing that already exists, and never changes a limit.
-#
-# Unconfirmed: that --limit-amount is in VND (a live budget reads
-# Currency "credit"), and which address the budget alerts go to.
 set -euo pipefail
 
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
