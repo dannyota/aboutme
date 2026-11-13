@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
-	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -134,31 +133,31 @@ func TestIdempotencyConflict_RequiresExactConstraint(t *testing.T) {
 		})
 	}
 
-	t.Run("exact constraint answers an expired record as the main path does", func(t *testing.T) {
-		hash := sha256.Sum256([]byte(t.Name()))
-
-		mainUserID, mainKey := createTestUserWithContext(ctx, t, q), uuid.New()
-		createIdempotencyRecord(ctx, t, q, mainUserID, idempotencyTestRoute, mainKey, hash, clock.Now().Add(-time.Hour))
-		want, err := resume.NewIdempotencyStoreForTest(pool, clock.Now).Execute(ctx, mainUserID, idempotencyTestRoute, mainKey, hash, mutate)
-		if err != nil {
-			t.Fatalf("main path Execute() error = %v", err)
+	t.Run("exact constraint refuses an expired record and the retry runs fresh", func(t *testing.T) {
+		calls := 0
+		counted := func(*store.Queries) (resume.StoredResponse, error) {
+			calls++
+			return fresh, nil
 		}
-
 		c := seededConflict{
 			userID:       createTestUserWithContext(ctx, t, q),
 			key:          uuid.New(),
-			hash:         hash,
+			hash:         sha256.Sum256([]byte(t.Name())),
 			winnerExpiry: -time.Hour,
 			insertErr:    &pgconn.PgError{Code: "23505", ConstraintName: "idempotency_records_user_route_key_key"},
 		}
-		got, _, err := executeWithSeededConflict(ctx, t, q, pool, clock.Now, c, mutate)
-		if err != nil {
-			t.Fatalf("Execute() error = %v, want the main path's answer for an expired key", err)
+		got, begins, err := executeWithSeededConflict(ctx, t, q, pool, clock.Now, c, counted)
+		if err == nil || got.Replayed || got.Outcome != resume.CommitDefinitelyRolledBack {
+			t.Fatalf("Execute() = %+v, %v; want a definite rollback that replays nothing", got, err)
 		}
-		if !reflect.DeepEqual(got, want) {
-			t.Errorf("Execute() = %+v, want the main path's answer for an expired key %+v", got, want)
+		if begins != 2 || calls != 1 {
+			t.Fatalf("Execute began %d transactions and ran the mutation %d times, want 2 and 1", begins, calls)
 		}
 
+		retry, err := resume.NewIdempotencyStoreForTest(pool, clock.Now).Execute(ctx, c.userID, idempotencyTestRoute, c.key, c.hash, counted)
+		if err != nil || retry.Replayed || retry.Outcome != resume.CommitCommitted || calls != 2 {
+			t.Fatalf("retry = %+v, %v after %d mutations; want a fresh commit", retry, err, calls)
+		}
 		row, err := q.GetIdempotencyRecord(ctx, store.GetIdempotencyRecordParams{
 			UserID: c.userID, Route: idempotencyTestRoute, IdempotencyKey: c.key,
 		})

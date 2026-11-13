@@ -50,6 +50,7 @@ Open items that outlived their shipped plans. One line each, with the evidence t
 - Add and review a host procedure for TOTP key re-encryption.
 - Add and review a host procedure for rotating the sign-in-to-view key.
 - A deploy whose migrate step applies nothing still sets `migration_may_be_applied` (`deploy/vn/scripts/deploy.sh` step 7), so any later failure, such as a smoke check, fails closed with maintenance up and the app stopped, as on 2026-10-22. Have the host report whether migrate applied a migration, and restore the previous release when none did.
+- Project create and replace charge the slug rate limiter inside the idempotency callback (`allowSlug` in `apps/server/internal/projectapi/mutations.go` and `replace.go`), which [ADR 0006](../adr/0006-transactional-idempotency.md) keeps free of external side effects, so a rolled-back attempt still spends a slot. Move admission outside the callback with a regression at the last free slot.
 
 ## Acceptance evidence gaps
 

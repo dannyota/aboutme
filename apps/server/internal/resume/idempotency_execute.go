@@ -23,11 +23,7 @@ func (s *IdempotencyStore) Execute(ctx context.Context, userID uuid.UUID,
 		return ExecuteResult{Outcome: CommitNotAttempted}, err
 	}
 
-	result, err := s.executeMutation(ctx, userID, operation, key, requestHash, now, mutate)
-	if errors.Is(err, errExpiredRecordConflict) {
-		return s.executeMutation(ctx, userID, operation, key, requestHash, now, mutate)
-	}
-	return result, err
+	return s.executeMutation(ctx, userID, operation, key, requestHash, now, mutate)
 }
 
 func (s *IdempotencyStore) executeMutation(ctx context.Context, userID uuid.UUID,
