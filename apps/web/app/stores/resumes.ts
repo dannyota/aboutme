@@ -30,6 +30,8 @@ interface ResumeStoreState {
   records: Map<string, ResumeRecord>;
   /** Editor pages open on each resume; other pages leave its record alone. */
   editors: Map<string, number>;
+  /** Times another page left a resume's record to its open editor. */
+  handovers: Map<string, number>;
 }
 
 interface ResumeStoreActions {
@@ -93,6 +95,8 @@ interface ResumeStoreActions {
   dropCommands(resumeId: string, commandIds: ReadonlySet<string>): void;
   /** An editor page opened on the resume, or closed. */
   markEditorOpen(resumeId: string, open: boolean): void;
+  /** Leaves the record to the open editor, whose queue then looks at it. */
+  handOver(resumeId: string): void;
   removeResume(resumeId: string): void;
 }
 
@@ -101,6 +105,7 @@ interface ResumeStore extends ResumeStoreState, ResumeStoreActions {
   saveStateFor(resumeId: string): SaveState;
   /** An editor page has the resume's record open. */
   openInEditor(resumeId: string): boolean;
+  handoversFor(resumeId: string): number;
 }
 
 /** The store's record for `resumeId`, as its reactive state holds it. */
@@ -115,6 +120,7 @@ const resumeStore = defineStore('resumes', {
   state: () => ({
     records: new Map<string, unknown>(),
     editors: new Map<string, number>(),
+    handovers: new Map<string, number>(),
   }),
 
   getters: {
@@ -134,6 +140,10 @@ const resumeStore = defineStore('resumes', {
       (state) =>
         (resumeId: string): boolean =>
           (state.editors.get(resumeId) ?? 0) > 0,
+    handoversFor:
+      (state) =>
+        (resumeId: string): number =>
+          state.handovers.get(resumeId) ?? 0,
   },
 
   actions: {
@@ -348,6 +358,10 @@ const resumeStore = defineStore('resumes', {
       const count = (this.editors.get(resumeId) ?? 0) + (open ? 1 : -1);
       if (count > 0) this.editors.set(resumeId, count);
       else this.editors.delete(resumeId);
+    },
+
+    handOver(resumeId: string) {
+      this.handovers.set(resumeId, (this.handovers.get(resumeId) ?? 0) + 1);
     },
 
     removeResume(resumeId: string) {

@@ -154,7 +154,9 @@ export function useResumeList(deps: ResumeListDeps = {}): ResumeListController {
       // editor has open keeps everything, the editor's work included.
       for (const id of touched.value) {
         coordinator.stop(id);
-        if (!store.openInEditor(id)) store.dropCommands(id, ownCommands);
+        // An open editor takes the record over, with what this list held.
+        if (store.openInEditor(id)) store.handOver(id);
+        else store.dropCommands(id, ownCommands);
       }
     });
   }
@@ -420,6 +422,7 @@ export function useResumeList(deps: ResumeListDeps = {}): ResumeListController {
 
   const rename = async (id: string, title: string): Promise<void> => {
     const actions = await initializeForAction(id);
+    if (disposed.value) return;
     const result = actions?.edit({
       kind: 'metadataField',
       field: 'title',
@@ -445,6 +448,7 @@ export function useResumeList(deps: ResumeListDeps = {}): ResumeListController {
 
   const remove = async (id: string, confirmedTitle: string): Promise<void> => {
     const actions = await initializeForAction(id, confirmedTitle);
+    if (disposed.value) return;
     const result = actions?.edit({ kind: 'resumeDelete', confirmedTitle });
     if (result?.kind === 'enqueued') {
       ownCommands.add(result.command.id);
@@ -474,11 +478,14 @@ export function useResumeList(deps: ResumeListDeps = {}): ResumeListController {
 /**
  * Whether the record's title is still on its way: queued, in flight, of
  * unknown outcome, or held to be sent again. A write refused for good is
- * not; it stays held for Try again while the card shows the saved title.
+ * not, until Try again sends it; it stays held while the card shows the
+ * saved title.
  */
 function titleStillSending(record: ResumeRecord): boolean {
   if (record.pending.length > 0) return true;
   const held = record.attempt;
   return held !== null
-    && (held.kind !== 'failed' || held.reason === 'stale-limit');
+    && (held.kind !== 'failed'
+      || held.reason === 'stale-limit'
+      || held.sending === true);
 }

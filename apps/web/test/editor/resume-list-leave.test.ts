@@ -1,11 +1,21 @@
 import { mockNuxtImport, mountSuspended } from '@nuxt/test-utils/runtime';
-import { computed, defineComponent, h, nextTick, ref } from 'vue';
+import {
+  computed,
+  defineComponent,
+  effectScope,
+  h,
+  nextTick,
+  ref,
+} from 'vue';
 import { RouterView } from 'vue-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import ResumeList from '../../app/components/editor/list/ResumeList.vue';
-// eslint-disable-next-line max-len
-import type { ResumeEditorActions } from '../../app/composables/useResumeEditor';
+import {
+  createResumeEditorActions,
+  type ResumeEditorActions,
+} from '../../app/composables/useResumeEditor';
+import { createMutationCoordinator } from '../../app/editor/coordinator';
 import {
   useResumeList,
   type ResumeListController,
@@ -539,5 +549,100 @@ describe('a delete that landed but whose answer was lost', () => {
     await context.settle(5_000);
     expect(context.card().exists()).toBe(false);
     expect(useResumeStore().recordFor(ID)).toBeUndefined();
+  });
+});
+
+describe('a rename or delete whose read finished just as the page went', () => {
+  it.each(['rename', 'remove'] as const)(
+    'queues and sends nothing for a %s',
+    async (action) => {
+      const server = fakeServer(startingResume());
+      mocks.server = server;
+      signedIn();
+      const store = useResumeStore();
+      const runtime = {
+        nowEpochMs: () => Date.now(),
+        uuid: () => crypto.randomUUID(),
+        delay: (ms: number) =>
+          new Promise<void>((resolve) => setTimeout(resolve, ms)),
+      };
+      const auth = mocks.auth as never;
+      const coordinator = createMutationCoordinator({
+        api: server.api as never, store, auth, runtime,
+      });
+      const scope = effectScope();
+      const list = scope.run(() => useResumeList({
+        api: server.api as never,
+        store,
+        coordinator,
+        runtime,
+        authState: computed(() => 'authenticated') as never,
+        ownerId: ref('owner-1'),
+        // The page goes as the read finishes, before the action goes on.
+        actionsFor: (resumeId) => {
+          scope.stop();
+          return createResumeEditorActions({
+            resumeId, store, coordinator, auth, runtime,
+          });
+        },
+      }))!;
+
+      await (action === 'rename'
+        ? list.rename(ID, 'Ada resume')
+        : list.remove(ID, 'Fixture'));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(store.recordFor(ID)).toMatchObject({ pending: [], attempt: null });
+      expect(server.sent).toEqual([]);
+    },
+  );
+});
+
+describe('Try again of a rename refused for good', () => {
+  it('shows the attempted title while it is on its way', async () => {
+    const context = await openList();
+    context.server.failNextWrite({ kind: 'rejected', code: 'request_invalid' });
+    await context.rename();
+    await context.settle();
+    expect(context.card().text()).toContain('Fixture');
+
+    const release = context.server.holdNextResponse();
+    await context.card().get('[data-action="retry-rename"]').trigger('click');
+    await context.settle();
+
+    expect(context.card().text()).toContain('Ada resume');
+    expect(context.card().find('[data-state-mark="saving"]').exists())
+      .toBe(true);
+    release();
+    await context.settle();
+    expect(context.server.stored.metadata.title).toBe('Ada resume');
+    expect(context.card().text()).toContain('Ada resume');
+  });
+});
+
+describe('an editor open while the list held a rename', () => {
+  it('sends the held rename once after the list goes', async () => {
+    const context = await openList({ timers: false });
+    context.server.loseEveryResponse({ applied: false });
+    await context.rename();
+    // The rename and its quick replay are both lost; the list holds it.
+    await vi.waitFor(() => {
+      expect(context.server.sent.length).toBeGreaterThanOrEqual(2);
+    });
+    await openEditorPage();
+
+    context.server.loseEveryResponse(undefined);
+    const sends = context.server.sent.length;
+    context.wrapper.unmount();
+
+    await vi.waitFor(() => {
+      expect(context.server.stored.metadata.title).toBe('Ada resume');
+    }, { timeout: 4_000 });
+    await new Promise((resolve) => setTimeout(resolve, 1_500));
+    expect(context.server.sent).toHaveLength(sends + 1);
+    expect(useResumeStore().recordFor(ID)).toMatchObject({
+      attempt: null,
+      pending: [],
+    });
   });
 });

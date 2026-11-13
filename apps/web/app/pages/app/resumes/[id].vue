@@ -284,8 +284,10 @@ function retryFirstLoad(): void {
 
 onMounted(() => {
   // While this page lives, a page leaving the resume behind, such as the
-  // resume list, leaves the record and its queued work to this editor.
+  // resume list, leaves the record and its queued work to this editor,
+  // whose queue then sends what it holds at once, on its own schedule after.
   store.markEditorOpen(id, true);
+  watch(() => store.handoversFor(id), () => void actions.value?.wake(false));
   watch(auth.authState, (state) => void settleSession(state), {
     immediate: true,
   });
