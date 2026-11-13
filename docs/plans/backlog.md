@@ -20,7 +20,7 @@ Open items that outlived their shipped plans. One line each, with the evidence t
 
 - Database audit of 2026-11-11 (owner approved all items; one change each, in this order). Evidence: the review of main 85741fac.
   - The showcase sync rereads the resume after a document save (`showcase/service.go:102`), and `SaveMetadataAndDocumentTx` saves then rereads. Pass the saved row through when `ShowcaseSync.SyncTx` next changes.
-  - Each idempotency expiry page measures `octet_length(response_body::text)` (`sql/privacy_retention.sql:41`) while holding user row locks, so very large expired bodies can delay that user's writers up to the 15 s statement timeout. Store each record's byte size at insert instead.
+  - Each idempotency expiry page measures `octet_length(response_body::text)` (`sql/privacy_retention.sql:31`) while holding user row locks, so very large expired bodies can delay that user's writers up to the 15 s statement timeout. Store each record's byte size at insert instead.
 
 - The signed-in header overflows by 27 px in English at 640 px wide, before and after the Projects link was added (measured in `apps/web/e2e/projects.spec.ts` runs on 2026-11-11, which therefore asserts only the page column at that width). It fits from 700 px, and Vietnamese fits everywhere.
 
