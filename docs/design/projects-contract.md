@@ -285,6 +285,23 @@ geometry, so [print rules](templates/print.md) and the product page images are
 unaffected; a display check proves a linked and an unlinked title measure the
 same. An unpublished resume and the editor preview of one carry no map.
 
+The envelope is version 2 only when the map is non-empty; otherwise it stays
+version 1, byte for byte. Its `projectLinks` maps each visible project entry
+with an available page to that page's absolute URL. Each value is exactly the
+configured canonical origin plus `/{slug}/projects/{project-slug}`, so an `http`
+value is possible only when the origin itself is `http`, as on local
+development; one constructor builds every version 2 envelope and refuses any
+other value. The print renderer cannot know the origin, so it checks only each
+value's shape and relies on Go for its authority. Go computes the map by the
+same rule as the public JSON, so a resume's PDF, its page and its JSON link the
+same projects. The public PDF and the owner's export of a live resume both carry
+it, and the PDF format version rises with it.
+
+## Entry points on the resume page
+
+The resume page's title links, its page bar link and their hydration are
+specified in [project entry points](project-entry-points.md).
+
 ## Export and deletion
 
 - The account export moves to `exportVersion` 2 and gains `projects`, ordered by

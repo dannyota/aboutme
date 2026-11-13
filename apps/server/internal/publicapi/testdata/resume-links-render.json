@@ -1,0 +1,1306 @@
+{
+  "cases": [
+    {
+      "name": "en-two-linked-entries",
+      "envelope": {
+        "publicResume": {
+          "slug": "do-hoang-nam",
+          "revision": "7",
+          "lng": "en",
+          "downloadEnabled": true,
+          "document": {
+            "schemaVersion": 6,
+            "personalDetails": {
+              "details": [
+                {
+                  "id": "9fc208cb-2a62-5fb1-b526-bca31b915ea5",
+                  "type": "email",
+                  "value": "nam.do@example.com"
+                },
+                {
+                  "id": "a6e149f6-a159-5049-a4e7-b46694ccada5",
+                  "type": "phone",
+                  "value": "+84 90 000 0521"
+                },
+                {
+                  "id": "342384e9-1edc-5d3e-b980-41a26fca8fcc",
+                  "type": "location",
+                  "value": "Cau Giay, Hanoi"
+                },
+                {
+                  "id": "9d5f2dcc-cbe0-50a1-8f50-3398475a490a",
+                  "type": "github",
+                  "value": "https://example.com/do-hoang-nam"
+                }
+              ],
+              "fullName": "Đỗ Hoàng Nam",
+              "headline": "Senior Frontend Engineer · React, TypeScript, Next.js"
+            },
+            "content": {
+              "certificate": {
+                "sectionType": "certificate",
+                "displayName": "Certifications",
+                "iconKey": "award",
+                "entries": [
+                  {
+                    "date": {
+                      "m": 5,
+                      "y": 2024
+                    },
+                    "id": "579c86a2-a274-55d6-8792-d8d946ceca99",
+                    "issuer": "Amazon Web Services",
+                    "title": "AWS Certified Developer – Associate"
+                  }
+                ]
+              },
+              "education": {
+                "sectionType": "education",
+                "displayName": "Education",
+                "iconKey": "graduation-cap",
+                "entries": [
+                  {
+                    "city": "Hanoi",
+                    "country": "Vietnam",
+                    "dates": {
+                      "end": {
+                        "m": 6,
+                        "y": 2020
+                      },
+                      "present": false,
+                      "start": {
+                        "m": 9,
+                        "y": 2015
+                      }
+                    },
+                    "degree": "B.Eng. in Information Technology",
+                    "id": "bfdc168e-1288-5440-b38b-3a0448c8b95c",
+                    "school": "Song Hong University of Technology"
+                  }
+                ]
+              },
+              "language": {
+                "sectionType": "language",
+                "displayName": "Languages",
+                "iconKey": "languages",
+                "entries": [
+                  {
+                    "id": "34cdc1c2-bae2-548f-9250-e0f815ed7f19",
+                    "level": 4,
+                    "name": "English (IELTS 7.0)"
+                  }
+                ]
+              },
+              "profile": {
+                "sectionType": "profile",
+                "displayName": "Summary",
+                "iconKey": "user",
+                "entries": [
+                  {
+                    "id": "bf6f1a37-a8f2-5528-b56a-bbb0a89f5a07",
+                    "text": "\u003cp\u003eSenior Frontend Engineer with 6 years on e-commerce and SaaS web apps for more than 2 million users a month. Strong in web performance, design systems, accessibility, and Playwright testing. Lead a team of 4 and maintain an open-source address library used by 40 Vietnamese shops.\u003c/p\u003e"
+                  }
+                ]
+              },
+              "project": {
+                "sectionType": "project",
+                "displayName": "Projects",
+                "iconKey": "folder",
+                "entries": [
+                  {
+                    "dates": {
+                      "end": null,
+                      "present": true,
+                      "start": {
+                        "m": 1,
+                        "y": 2024
+                      }
+                    },
+                    "description": "\u003cp\u003eVietnamese address library in TypeScript that parses and normalizes addresses after the 2025 province merger: 300 GitHub stars, 3,000 npm downloads a week.\u003c/p\u003e",
+                    "id": "8c8b959a-0df4-59de-88d9-2ce01b88fb86",
+                    "link": "https://example.com/do-hoang-nam/vn-address-kit",
+                    "title": "vn-address-kit"
+                  },
+                  {
+                    "dates": {
+                      "end": {
+                        "m": 2,
+                        "y": 2025
+                      },
+                      "present": false,
+                      "start": {
+                        "m": 9,
+                        "y": 2024
+                      }
+                    },
+                    "description": "\u003cp\u003eOpen checklist and demo repository for Core Web Vitals in Next.js; used by 3 local teams, 1,200 GitHub stars.\u003c/p\u003e",
+                    "id": "2ffd46bf-7cc3-5497-bd46-13fbe94653a4",
+                    "title": "Next.js performance checklist"
+                  }
+                ]
+              },
+              "skill": {
+                "sectionType": "skill",
+                "displayName": "Skills",
+                "iconKey": "code",
+                "entries": [
+                  {
+                    "id": "77fe74f5-ccbe-53a0-a79d-6d8f7b079d44",
+                    "level": 5,
+                    "name": "React"
+                  },
+                  {
+                    "id": "362339f1-ff6b-5a66-9be6-dd1b1a940f4c",
+                    "level": 5,
+                    "name": "TypeScript"
+                  },
+                  {
+                    "id": "8873ef68-9180-5606-a5ef-7c6ba6c4e431",
+                    "level": 4,
+                    "name": "Next.js"
+                  },
+                  {
+                    "id": "05a01e10-7242-5b6c-9f17-588ce98a4367",
+                    "level": 4,
+                    "name": "Playwright"
+                  },
+                  {
+                    "id": "b1fecc66-2441-50ad-88a4-f57419bc9619",
+                    "level": 4,
+                    "name": "Tailwind CSS"
+                  },
+                  {
+                    "id": "61dcb600-2164-54a4-b85b-e7a162df8140",
+                    "level": 4,
+                    "name": "Vitest"
+                  },
+                  {
+                    "id": "604262ec-7b19-5f41-a2b7-f267bf89a3de",
+                    "level": 3,
+                    "name": "Node.js"
+                  },
+                  {
+                    "id": "1e31b9eb-258b-59b0-a113-215326ae0611",
+                    "level": 3,
+                    "name": "GraphQL"
+                  }
+                ]
+              },
+              "work": {
+                "sectionType": "work",
+                "displayName": "Experience",
+                "iconKey": "briefcase",
+                "entries": [
+                  {
+                    "city": "Hanoi",
+                    "country": "Vietnam",
+                    "dates": {
+                      "end": null,
+                      "present": true,
+                      "start": {
+                        "m": 4,
+                        "y": 2024
+                      }
+                    },
+                    "description": "\u003cul\u003e\u003cli\u003eLead a team of 4 moving the shopping app from a React SPA to Next.js; LCP fell from 4.1 s to 1.9 s.\u003c/li\u003e\u003cli\u003eMaintain a 60-component React and TypeScript design system for 5 product teams, which cut feature build time by about 30%.\u003c/li\u003e\u003cli\u003eRun A/B tests on the checkout flow; 6 tests raised conversion by 9%.\u003c/li\u003e\u003cli\u003eCut the home page JavaScript bundle from 480 KB to 210 KB with code splitting.\u003c/li\u003e\u003cli\u003eKeep the checkout at WCAG 2.1 AA with axe checks in CI, after fixing 140 accessibility issues in 3 months.\u003c/li\u003e\u003c/ul\u003e",
+                    "employer": "An e-commerce company (500 staff)",
+                    "id": "d1aa2a3b-dfbe-5c4b-8a11-3f5289b0d3d9",
+                    "jobTitle": "Senior Frontend Engineer"
+                  },
+                  {
+                    "city": "Hanoi",
+                    "country": "Vietnam",
+                    "dates": {
+                      "end": {
+                        "m": 3,
+                        "y": 2024
+                      },
+                      "present": false,
+                      "start": {
+                        "m": 1,
+                        "y": 2022
+                      }
+                    },
+                    "description": "\u003cul\u003e\u003cli\u003eBuilt the inventory dashboard in React and GraphQL for 800 retail businesses.\u003c/li\u003e\u003cli\u003eSet up Playwright end-to-end tests in GitLab CI, cutting regressions that reached production by 70%.\u003c/li\u003e\u003cli\u003eAdded virtual scrolling to a 10,000-row table, bringing scroll lag down from 3 s to 0.3 s.\u003c/li\u003e\u003cli\u003eBuilt an offline-first point-of-sale screen with IndexedDB, so 300 stores kept selling through network outages.\u003c/li\u003e\u003c/ul\u003e",
+                    "employer": "A retail SaaS company (120 staff)",
+                    "id": "39159c90-3b96-5a8d-8768-8724df347584",
+                    "jobTitle": "Frontend Developer"
+                  },
+                  {
+                    "city": "Hanoi",
+                    "country": "Vietnam",
+                    "dates": {
+                      "end": {
+                        "m": 12,
+                        "y": 2021
+                      },
+                      "present": false,
+                      "start": {
+                        "m": 7,
+                        "y": 2020
+                      }
+                    },
+                    "description": "\u003cul\u003e\u003cli\u003eBooking system for a Japanese clinic chain (8 months): built 12 admin screens in React.\u003c/li\u003e\u003cli\u003eRecruitment website for a Singapore client (6 months): built the responsive UI in Vue.js, scoring 95 in mobile Lighthouse.\u003c/li\u003e\u003cli\u003eWrote Jest unit tests for the booking flow, raising coverage from 30% to 80%.\u003c/li\u003e\u003c/ul\u003e",
+                    "employer": "A Japan-focused software outsourcing company",
+                    "id": "8c53131a-bf53-5953-a5a7-8773fcc88ca8",
+                    "jobTitle": "Junior Frontend Developer"
+                  }
+                ]
+              }
+            },
+            "customization": {
+              "colors": {
+                "accent": "#0d5a73",
+                "background": "#ffffff",
+                "primary": "#10394d",
+                "text": "#1a1f24"
+              },
+              "dateFormat": "Mon YYYY",
+              "font": {
+                "baseSizePx": 13,
+                "family": "source-sans-3"
+              },
+              "header": {
+                "align": "left",
+                "detailsLayout": "inline",
+                "iconStyle": "outline"
+              },
+              "heading": {
+                "showRule": true,
+                "style": "uppercase"
+              },
+              "layout": {
+                "columns": 2,
+                "sections": {
+                  "main": [
+                    "profile",
+                    "work",
+                    "project"
+                  ],
+                  "sidebar": [
+                    "skill",
+                    "certificate",
+                    "language",
+                    "education"
+                  ]
+                },
+                "surfaceTarget": "none"
+              },
+              "pageFormat": "a4",
+              "sectionDisplay": {
+                "language": {
+                  "style": "dots"
+                },
+                "skill": {
+                  "style": "bar"
+                }
+              },
+              "spacing": {
+                "entryGap": 6,
+                "lineHeight": 1.3,
+                "pageMargin": {
+                  "x": 11,
+                  "y": 12
+                },
+                "sectionGap": 12
+              }
+            }
+          }
+        },
+        "mode": "continuous",
+        "canonicalOrigin": "https://aboutme.example",
+        "discoveryEnabled": true,
+        "pageTitle": "Đỗ Hoàng Nam — Resume",
+        "faviconHref": "",
+        "preview": {
+          "title": "Đỗ Hoàng Nam",
+          "description": "Senior Frontend Engineer with 6 years on e-commerce and SaaS web apps for more than 2 million users a month.",
+          "locale": "en_US",
+          "imageAlt": "Đỗ Hoàng Nam · Senior Frontend Engineer · React, TypeScript, Next.js",
+          "imageUrl": "https://aboutme.example/api/v1/public/resumes/do-hoang-nam/og/0123456789abcdef.png"
+        },
+        "projectLinks": [
+          {
+            "entryId": "8c8b959a-0df4-59de-88d9-2ce01b88fb86",
+            "url": "https://aboutme.example/do-hoang-nam/projects/vn-address-kit"
+          },
+          {
+            "entryId": "2ffd46bf-7cc3-5497-bd46-13fbe94653a4",
+            "url": "https://aboutme.example/do-hoang-nam/projects/nextjs-perf-checklist"
+          }
+        ],
+        "projectsUrl": "https://aboutme.example/do-hoang-nam/projects"
+      }
+    },
+    {
+      "name": "en-hidden-linked-entry",
+      "envelope": {
+        "publicResume": {
+          "slug": "do-hoang-nam",
+          "revision": "8",
+          "lng": "en",
+          "downloadEnabled": true,
+          "document": {
+            "schemaVersion": 6,
+            "personalDetails": {
+              "details": [
+                {
+                  "id": "9fc208cb-2a62-5fb1-b526-bca31b915ea5",
+                  "type": "email",
+                  "value": "nam.do@example.com"
+                },
+                {
+                  "id": "a6e149f6-a159-5049-a4e7-b46694ccada5",
+                  "type": "phone",
+                  "value": "+84 90 000 0521"
+                },
+                {
+                  "id": "342384e9-1edc-5d3e-b980-41a26fca8fcc",
+                  "type": "location",
+                  "value": "Cau Giay, Hanoi"
+                },
+                {
+                  "id": "9d5f2dcc-cbe0-50a1-8f50-3398475a490a",
+                  "type": "github",
+                  "value": "https://example.com/do-hoang-nam"
+                }
+              ],
+              "fullName": "Đỗ Hoàng Nam",
+              "headline": "Senior Frontend Engineer · React, TypeScript, Next.js"
+            },
+            "content": {
+              "certificate": {
+                "sectionType": "certificate",
+                "displayName": "Certifications",
+                "iconKey": "award",
+                "entries": [
+                  {
+                    "date": {
+                      "m": 5,
+                      "y": 2024
+                    },
+                    "id": "579c86a2-a274-55d6-8792-d8d946ceca99",
+                    "issuer": "Amazon Web Services",
+                    "title": "AWS Certified Developer – Associate"
+                  }
+                ]
+              },
+              "education": {
+                "sectionType": "education",
+                "displayName": "Education",
+                "iconKey": "graduation-cap",
+                "entries": [
+                  {
+                    "city": "Hanoi",
+                    "country": "Vietnam",
+                    "dates": {
+                      "end": {
+                        "m": 6,
+                        "y": 2020
+                      },
+                      "present": false,
+                      "start": {
+                        "m": 9,
+                        "y": 2015
+                      }
+                    },
+                    "degree": "B.Eng. in Information Technology",
+                    "id": "bfdc168e-1288-5440-b38b-3a0448c8b95c",
+                    "school": "Song Hong University of Technology"
+                  }
+                ]
+              },
+              "language": {
+                "sectionType": "language",
+                "displayName": "Languages",
+                "iconKey": "languages",
+                "entries": [
+                  {
+                    "id": "34cdc1c2-bae2-548f-9250-e0f815ed7f19",
+                    "level": 4,
+                    "name": "English (IELTS 7.0)"
+                  }
+                ]
+              },
+              "profile": {
+                "sectionType": "profile",
+                "displayName": "Summary",
+                "iconKey": "user",
+                "entries": [
+                  {
+                    "id": "bf6f1a37-a8f2-5528-b56a-bbb0a89f5a07",
+                    "text": "\u003cp\u003eSenior Frontend Engineer with 6 years on e-commerce and SaaS web apps for more than 2 million users a month. Strong in web performance, design systems, accessibility, and Playwright testing. Lead a team of 4 and maintain an open-source address library used by 40 Vietnamese shops.\u003c/p\u003e"
+                  }
+                ]
+              },
+              "project": {
+                "sectionType": "project",
+                "displayName": "Projects",
+                "iconKey": "folder",
+                "entries": [
+                  {
+                    "dates": {
+                      "end": null,
+                      "present": true,
+                      "start": {
+                        "m": 1,
+                        "y": 2024
+                      }
+                    },
+                    "description": "\u003cp\u003eVietnamese address library in TypeScript that parses and normalizes addresses after the 2025 province merger: 300 GitHub stars, 3,000 npm downloads a week.\u003c/p\u003e",
+                    "id": "8c8b959a-0df4-59de-88d9-2ce01b88fb86",
+                    "link": "https://example.com/do-hoang-nam/vn-address-kit",
+                    "title": "vn-address-kit"
+                  }
+                ]
+              },
+              "skill": {
+                "sectionType": "skill",
+                "displayName": "Skills",
+                "iconKey": "code",
+                "entries": [
+                  {
+                    "id": "77fe74f5-ccbe-53a0-a79d-6d8f7b079d44",
+                    "level": 5,
+                    "name": "React"
+                  },
+                  {
+                    "id": "362339f1-ff6b-5a66-9be6-dd1b1a940f4c",
+                    "level": 5,
+                    "name": "TypeScript"
+                  },
+                  {
+                    "id": "8873ef68-9180-5606-a5ef-7c6ba6c4e431",
+                    "level": 4,
+                    "name": "Next.js"
+                  },
+                  {
+                    "id": "05a01e10-7242-5b6c-9f17-588ce98a4367",
+                    "level": 4,
+                    "name": "Playwright"
+                  },
+                  {
+                    "id": "b1fecc66-2441-50ad-88a4-f57419bc9619",
+                    "level": 4,
+                    "name": "Tailwind CSS"
+                  },
+                  {
+                    "id": "61dcb600-2164-54a4-b85b-e7a162df8140",
+                    "level": 4,
+                    "name": "Vitest"
+                  },
+                  {
+                    "id": "604262ec-7b19-5f41-a2b7-f267bf89a3de",
+                    "level": 3,
+                    "name": "Node.js"
+                  },
+                  {
+                    "id": "1e31b9eb-258b-59b0-a113-215326ae0611",
+                    "level": 3,
+                    "name": "GraphQL"
+                  }
+                ]
+              },
+              "work": {
+                "sectionType": "work",
+                "displayName": "Experience",
+                "iconKey": "briefcase",
+                "entries": [
+                  {
+                    "city": "Hanoi",
+                    "country": "Vietnam",
+                    "dates": {
+                      "end": null,
+                      "present": true,
+                      "start": {
+                        "m": 4,
+                        "y": 2024
+                      }
+                    },
+                    "description": "\u003cul\u003e\u003cli\u003eLead a team of 4 moving the shopping app from a React SPA to Next.js; LCP fell from 4.1 s to 1.9 s.\u003c/li\u003e\u003cli\u003eMaintain a 60-component React and TypeScript design system for 5 product teams, which cut feature build time by about 30%.\u003c/li\u003e\u003cli\u003eRun A/B tests on the checkout flow; 6 tests raised conversion by 9%.\u003c/li\u003e\u003cli\u003eCut the home page JavaScript bundle from 480 KB to 210 KB with code splitting.\u003c/li\u003e\u003cli\u003eKeep the checkout at WCAG 2.1 AA with axe checks in CI, after fixing 140 accessibility issues in 3 months.\u003c/li\u003e\u003c/ul\u003e",
+                    "employer": "An e-commerce company (500 staff)",
+                    "id": "d1aa2a3b-dfbe-5c4b-8a11-3f5289b0d3d9",
+                    "jobTitle": "Senior Frontend Engineer"
+                  },
+                  {
+                    "city": "Hanoi",
+                    "country": "Vietnam",
+                    "dates": {
+                      "end": {
+                        "m": 3,
+                        "y": 2024
+                      },
+                      "present": false,
+                      "start": {
+                        "m": 1,
+                        "y": 2022
+                      }
+                    },
+                    "description": "\u003cul\u003e\u003cli\u003eBuilt the inventory dashboard in React and GraphQL for 800 retail businesses.\u003c/li\u003e\u003cli\u003eSet up Playwright end-to-end tests in GitLab CI, cutting regressions that reached production by 70%.\u003c/li\u003e\u003cli\u003eAdded virtual scrolling to a 10,000-row table, bringing scroll lag down from 3 s to 0.3 s.\u003c/li\u003e\u003cli\u003eBuilt an offline-first point-of-sale screen with IndexedDB, so 300 stores kept selling through network outages.\u003c/li\u003e\u003c/ul\u003e",
+                    "employer": "A retail SaaS company (120 staff)",
+                    "id": "39159c90-3b96-5a8d-8768-8724df347584",
+                    "jobTitle": "Frontend Developer"
+                  },
+                  {
+                    "city": "Hanoi",
+                    "country": "Vietnam",
+                    "dates": {
+                      "end": {
+                        "m": 12,
+                        "y": 2021
+                      },
+                      "present": false,
+                      "start": {
+                        "m": 7,
+                        "y": 2020
+                      }
+                    },
+                    "description": "\u003cul\u003e\u003cli\u003eBooking system for a Japanese clinic chain (8 months): built 12 admin screens in React.\u003c/li\u003e\u003cli\u003eRecruitment website for a Singapore client (6 months): built the responsive UI in Vue.js, scoring 95 in mobile Lighthouse.\u003c/li\u003e\u003cli\u003eWrote Jest unit tests for the booking flow, raising coverage from 30% to 80%.\u003c/li\u003e\u003c/ul\u003e",
+                    "employer": "A Japan-focused software outsourcing company",
+                    "id": "8c53131a-bf53-5953-a5a7-8773fcc88ca8",
+                    "jobTitle": "Junior Frontend Developer"
+                  }
+                ]
+              }
+            },
+            "customization": {
+              "colors": {
+                "accent": "#0d5a73",
+                "background": "#ffffff",
+                "primary": "#10394d",
+                "text": "#1a1f24"
+              },
+              "dateFormat": "Mon YYYY",
+              "font": {
+                "baseSizePx": 13,
+                "family": "source-sans-3"
+              },
+              "header": {
+                "align": "left",
+                "detailsLayout": "inline",
+                "iconStyle": "outline"
+              },
+              "heading": {
+                "showRule": true,
+                "style": "uppercase"
+              },
+              "layout": {
+                "columns": 2,
+                "sections": {
+                  "main": [
+                    "profile",
+                    "work",
+                    "project"
+                  ],
+                  "sidebar": [
+                    "skill",
+                    "certificate",
+                    "language",
+                    "education"
+                  ]
+                },
+                "surfaceTarget": "none"
+              },
+              "pageFormat": "a4",
+              "sectionDisplay": {
+                "language": {
+                  "style": "dots"
+                },
+                "skill": {
+                  "style": "bar"
+                }
+              },
+              "spacing": {
+                "entryGap": 6,
+                "lineHeight": 1.3,
+                "pageMargin": {
+                  "x": 11,
+                  "y": 12
+                },
+                "sectionGap": 12
+              }
+            }
+          }
+        },
+        "mode": "continuous",
+        "canonicalOrigin": "https://aboutme.example",
+        "discoveryEnabled": true,
+        "pageTitle": "Đỗ Hoàng Nam — Resume",
+        "faviconHref": "",
+        "preview": {
+          "title": "Đỗ Hoàng Nam",
+          "description": "Senior Frontend Engineer with 6 years on e-commerce and SaaS web apps for more than 2 million users a month.",
+          "locale": "en_US",
+          "imageAlt": "Đỗ Hoàng Nam · Senior Frontend Engineer · React, TypeScript, Next.js",
+          "imageUrl": "https://aboutme.example/api/v1/public/resumes/do-hoang-nam/og/0123456789abcdef.png"
+        },
+        "projectLinks": [
+          {
+            "entryId": "8c8b959a-0df4-59de-88d9-2ce01b88fb86",
+            "url": "https://aboutme.example/do-hoang-nam/projects/vn-address-kit"
+          }
+        ],
+        "projectsUrl": "https://aboutme.example/do-hoang-nam/projects"
+      }
+    },
+    {
+      "name": "en-no-available-project",
+      "envelope": {
+        "publicResume": {
+          "slug": "do-hoang-nam",
+          "revision": "9",
+          "lng": "en",
+          "downloadEnabled": true,
+          "document": {
+            "schemaVersion": 6,
+            "personalDetails": {
+              "details": [
+                {
+                  "id": "9fc208cb-2a62-5fb1-b526-bca31b915ea5",
+                  "type": "email",
+                  "value": "nam.do@example.com"
+                },
+                {
+                  "id": "a6e149f6-a159-5049-a4e7-b46694ccada5",
+                  "type": "phone",
+                  "value": "+84 90 000 0521"
+                },
+                {
+                  "id": "342384e9-1edc-5d3e-b980-41a26fca8fcc",
+                  "type": "location",
+                  "value": "Cau Giay, Hanoi"
+                },
+                {
+                  "id": "9d5f2dcc-cbe0-50a1-8f50-3398475a490a",
+                  "type": "github",
+                  "value": "https://example.com/do-hoang-nam"
+                }
+              ],
+              "fullName": "Đỗ Hoàng Nam",
+              "headline": "Senior Frontend Engineer · React, TypeScript, Next.js"
+            },
+            "content": {
+              "certificate": {
+                "sectionType": "certificate",
+                "displayName": "Certifications",
+                "iconKey": "award",
+                "entries": [
+                  {
+                    "date": {
+                      "m": 5,
+                      "y": 2024
+                    },
+                    "id": "579c86a2-a274-55d6-8792-d8d946ceca99",
+                    "issuer": "Amazon Web Services",
+                    "title": "AWS Certified Developer – Associate"
+                  }
+                ]
+              },
+              "education": {
+                "sectionType": "education",
+                "displayName": "Education",
+                "iconKey": "graduation-cap",
+                "entries": [
+                  {
+                    "city": "Hanoi",
+                    "country": "Vietnam",
+                    "dates": {
+                      "end": {
+                        "m": 6,
+                        "y": 2020
+                      },
+                      "present": false,
+                      "start": {
+                        "m": 9,
+                        "y": 2015
+                      }
+                    },
+                    "degree": "B.Eng. in Information Technology",
+                    "id": "bfdc168e-1288-5440-b38b-3a0448c8b95c",
+                    "school": "Song Hong University of Technology"
+                  }
+                ]
+              },
+              "language": {
+                "sectionType": "language",
+                "displayName": "Languages",
+                "iconKey": "languages",
+                "entries": [
+                  {
+                    "id": "34cdc1c2-bae2-548f-9250-e0f815ed7f19",
+                    "level": 4,
+                    "name": "English (IELTS 7.0)"
+                  }
+                ]
+              },
+              "profile": {
+                "sectionType": "profile",
+                "displayName": "Summary",
+                "iconKey": "user",
+                "entries": [
+                  {
+                    "id": "bf6f1a37-a8f2-5528-b56a-bbb0a89f5a07",
+                    "text": "\u003cp\u003eSenior Frontend Engineer with 6 years on e-commerce and SaaS web apps for more than 2 million users a month. Strong in web performance, design systems, accessibility, and Playwright testing. Lead a team of 4 and maintain an open-source address library used by 40 Vietnamese shops.\u003c/p\u003e"
+                  }
+                ]
+              },
+              "project": {
+                "sectionType": "project",
+                "displayName": "Projects",
+                "iconKey": "folder",
+                "entries": [
+                  {
+                    "dates": {
+                      "end": null,
+                      "present": true,
+                      "start": {
+                        "m": 1,
+                        "y": 2024
+                      }
+                    },
+                    "description": "\u003cp\u003eVietnamese address library in TypeScript that parses and normalizes addresses after the 2025 province merger: 300 GitHub stars, 3,000 npm downloads a week.\u003c/p\u003e",
+                    "id": "8c8b959a-0df4-59de-88d9-2ce01b88fb86",
+                    "link": "https://example.com/do-hoang-nam/vn-address-kit",
+                    "title": "vn-address-kit"
+                  },
+                  {
+                    "dates": {
+                      "end": {
+                        "m": 2,
+                        "y": 2025
+                      },
+                      "present": false,
+                      "start": {
+                        "m": 9,
+                        "y": 2024
+                      }
+                    },
+                    "description": "\u003cp\u003eOpen checklist and demo repository for Core Web Vitals in Next.js; used by 3 local teams, 1,200 GitHub stars.\u003c/p\u003e",
+                    "id": "2ffd46bf-7cc3-5497-bd46-13fbe94653a4",
+                    "link": "https://example.com/do-hoang-nam/nextjs-perf",
+                    "title": "Next.js performance checklist"
+                  }
+                ]
+              },
+              "skill": {
+                "sectionType": "skill",
+                "displayName": "Skills",
+                "iconKey": "code",
+                "entries": [
+                  {
+                    "id": "77fe74f5-ccbe-53a0-a79d-6d8f7b079d44",
+                    "level": 5,
+                    "name": "React"
+                  },
+                  {
+                    "id": "362339f1-ff6b-5a66-9be6-dd1b1a940f4c",
+                    "level": 5,
+                    "name": "TypeScript"
+                  },
+                  {
+                    "id": "8873ef68-9180-5606-a5ef-7c6ba6c4e431",
+                    "level": 4,
+                    "name": "Next.js"
+                  },
+                  {
+                    "id": "05a01e10-7242-5b6c-9f17-588ce98a4367",
+                    "level": 4,
+                    "name": "Playwright"
+                  },
+                  {
+                    "id": "b1fecc66-2441-50ad-88a4-f57419bc9619",
+                    "level": 4,
+                    "name": "Tailwind CSS"
+                  },
+                  {
+                    "id": "61dcb600-2164-54a4-b85b-e7a162df8140",
+                    "level": 4,
+                    "name": "Vitest"
+                  },
+                  {
+                    "id": "604262ec-7b19-5f41-a2b7-f267bf89a3de",
+                    "level": 3,
+                    "name": "Node.js"
+                  },
+                  {
+                    "id": "1e31b9eb-258b-59b0-a113-215326ae0611",
+                    "level": 3,
+                    "name": "GraphQL"
+                  }
+                ]
+              },
+              "work": {
+                "sectionType": "work",
+                "displayName": "Experience",
+                "iconKey": "briefcase",
+                "entries": [
+                  {
+                    "city": "Hanoi",
+                    "country": "Vietnam",
+                    "dates": {
+                      "end": null,
+                      "present": true,
+                      "start": {
+                        "m": 4,
+                        "y": 2024
+                      }
+                    },
+                    "description": "\u003cul\u003e\u003cli\u003eLead a team of 4 moving the shopping app from a React SPA to Next.js; LCP fell from 4.1 s to 1.9 s.\u003c/li\u003e\u003cli\u003eMaintain a 60-component React and TypeScript design system for 5 product teams, which cut feature build time by about 30%.\u003c/li\u003e\u003cli\u003eRun A/B tests on the checkout flow; 6 tests raised conversion by 9%.\u003c/li\u003e\u003cli\u003eCut the home page JavaScript bundle from 480 KB to 210 KB with code splitting.\u003c/li\u003e\u003cli\u003eKeep the checkout at WCAG 2.1 AA with axe checks in CI, after fixing 140 accessibility issues in 3 months.\u003c/li\u003e\u003c/ul\u003e",
+                    "employer": "An e-commerce company (500 staff)",
+                    "id": "d1aa2a3b-dfbe-5c4b-8a11-3f5289b0d3d9",
+                    "jobTitle": "Senior Frontend Engineer"
+                  },
+                  {
+                    "city": "Hanoi",
+                    "country": "Vietnam",
+                    "dates": {
+                      "end": {
+                        "m": 3,
+                        "y": 2024
+                      },
+                      "present": false,
+                      "start": {
+                        "m": 1,
+                        "y": 2022
+                      }
+                    },
+                    "description": "\u003cul\u003e\u003cli\u003eBuilt the inventory dashboard in React and GraphQL for 800 retail businesses.\u003c/li\u003e\u003cli\u003eSet up Playwright end-to-end tests in GitLab CI, cutting regressions that reached production by 70%.\u003c/li\u003e\u003cli\u003eAdded virtual scrolling to a 10,000-row table, bringing scroll lag down from 3 s to 0.3 s.\u003c/li\u003e\u003cli\u003eBuilt an offline-first point-of-sale screen with IndexedDB, so 300 stores kept selling through network outages.\u003c/li\u003e\u003c/ul\u003e",
+                    "employer": "A retail SaaS company (120 staff)",
+                    "id": "39159c90-3b96-5a8d-8768-8724df347584",
+                    "jobTitle": "Frontend Developer"
+                  },
+                  {
+                    "city": "Hanoi",
+                    "country": "Vietnam",
+                    "dates": {
+                      "end": {
+                        "m": 12,
+                        "y": 2021
+                      },
+                      "present": false,
+                      "start": {
+                        "m": 7,
+                        "y": 2020
+                      }
+                    },
+                    "description": "\u003cul\u003e\u003cli\u003eBooking system for a Japanese clinic chain (8 months): built 12 admin screens in React.\u003c/li\u003e\u003cli\u003eRecruitment website for a Singapore client (6 months): built the responsive UI in Vue.js, scoring 95 in mobile Lighthouse.\u003c/li\u003e\u003cli\u003eWrote Jest unit tests for the booking flow, raising coverage from 30% to 80%.\u003c/li\u003e\u003c/ul\u003e",
+                    "employer": "A Japan-focused software outsourcing company",
+                    "id": "8c53131a-bf53-5953-a5a7-8773fcc88ca8",
+                    "jobTitle": "Junior Frontend Developer"
+                  }
+                ]
+              }
+            },
+            "customization": {
+              "colors": {
+                "accent": "#0d5a73",
+                "background": "#ffffff",
+                "primary": "#10394d",
+                "text": "#1a1f24"
+              },
+              "dateFormat": "Mon YYYY",
+              "font": {
+                "baseSizePx": 13,
+                "family": "source-sans-3"
+              },
+              "header": {
+                "align": "left",
+                "detailsLayout": "inline",
+                "iconStyle": "outline"
+              },
+              "heading": {
+                "showRule": true,
+                "style": "uppercase"
+              },
+              "layout": {
+                "columns": 2,
+                "sections": {
+                  "main": [
+                    "profile",
+                    "work",
+                    "project"
+                  ],
+                  "sidebar": [
+                    "skill",
+                    "certificate",
+                    "language",
+                    "education"
+                  ]
+                },
+                "surfaceTarget": "none"
+              },
+              "pageFormat": "a4",
+              "sectionDisplay": {
+                "language": {
+                  "style": "dots"
+                },
+                "skill": {
+                  "style": "bar"
+                }
+              },
+              "spacing": {
+                "entryGap": 6,
+                "lineHeight": 1.3,
+                "pageMargin": {
+                  "x": 11,
+                  "y": 12
+                },
+                "sectionGap": 12
+              }
+            }
+          }
+        },
+        "mode": "continuous",
+        "canonicalOrigin": "https://aboutme.example",
+        "discoveryEnabled": true,
+        "pageTitle": "Đỗ Hoàng Nam — Resume",
+        "faviconHref": "",
+        "preview": {
+          "title": "Đỗ Hoàng Nam",
+          "description": "Senior Frontend Engineer with 6 years on e-commerce and SaaS web apps for more than 2 million users a month.",
+          "locale": "en_US",
+          "imageAlt": "Đỗ Hoàng Nam · Senior Frontend Engineer · React, TypeScript, Next.js",
+          "imageUrl": "https://aboutme.example/api/v1/public/resumes/do-hoang-nam/og/0123456789abcdef.png"
+        },
+        "projectsUrl": "https://aboutme.example/do-hoang-nam/projects"
+      }
+    },
+    {
+      "name": "vi-linked-entries",
+      "envelope": {
+        "publicResume": {
+          "slug": "do-hoang-nam",
+          "revision": "12",
+          "lng": "vi",
+          "downloadEnabled": false,
+          "document": {
+            "schemaVersion": 6,
+            "personalDetails": {
+              "details": [
+                {
+                  "id": "644e0050-c834-5583-a1f2-4398a069d342",
+                  "type": "email",
+                  "value": "nam.do@example.com"
+                },
+                {
+                  "id": "3b10fbd7-e078-55a1-8e31-8661e53b5d6b",
+                  "type": "phone",
+                  "value": "+84 90 000 0521"
+                },
+                {
+                  "id": "64566683-92a4-5f87-ba9d-2773a563346a",
+                  "label": "Zalo",
+                  "type": "custom",
+                  "value": "cùng số"
+                },
+                {
+                  "id": "4eea8928-c61b-56ee-b47c-326f6d13da06",
+                  "type": "location",
+                  "value": "Cầu Giấy, Hà Nội"
+                },
+                {
+                  "id": "1753e7cf-02ee-52aa-86ae-01467138c6f8",
+                  "type": "github",
+                  "value": "https://example.com/do-hoang-nam"
+                }
+              ],
+              "fullName": "Đỗ Hoàng Nam",
+              "headline": "Senior Frontend Engineer · React, TypeScript, Next.js"
+            },
+            "content": {
+              "certificate": {
+                "sectionType": "certificate",
+                "displayName": "Chứng chỉ",
+                "iconKey": "award",
+                "entries": [
+                  {
+                    "date": {
+                      "m": 5,
+                      "y": 2024
+                    },
+                    "id": "de116ed8-aeee-5689-895b-a5783ab5fb23",
+                    "issuer": "Amazon Web Services",
+                    "title": "AWS Certified Developer – Associate"
+                  }
+                ]
+              },
+              "education": {
+                "sectionType": "education",
+                "displayName": "Học vấn",
+                "iconKey": "graduation-cap",
+                "entries": [
+                  {
+                    "city": "Hà Nội",
+                    "country": "Việt Nam",
+                    "dates": {
+                      "end": {
+                        "m": 6,
+                        "y": 2020
+                      },
+                      "present": false,
+                      "start": {
+                        "m": 9,
+                        "y": 2015
+                      }
+                    },
+                    "degree": "Kỹ sư Công nghệ Thông tin",
+                    "id": "8701860c-c671-5457-82fb-0d62683107ee",
+                    "school": "Trường Đại học Kỹ thuật Sông Hồng"
+                  }
+                ]
+              },
+              "language": {
+                "sectionType": "language",
+                "displayName": "Ngoại ngữ",
+                "iconKey": "languages",
+                "entries": [
+                  {
+                    "id": "cdab1e70-b785-5f72-9946-1e48cfa9de47",
+                    "level": 4,
+                    "name": "Tiếng Anh (IELTS 7.0)"
+                  }
+                ]
+              },
+              "profile": {
+                "sectionType": "profile",
+                "displayName": "Giới thiệu",
+                "iconKey": "user",
+                "entries": [
+                  {
+                    "id": "dbbb38d7-53aa-5118-84b3-af166367acdd",
+                    "text": "\u003cp\u003eSenior Frontend Engineer với 6 năm làm web thương mại điện tử và SaaS cho hơn 2 triệu người dùng mỗi tháng. Thế mạnh: hiệu năng web, design system, accessibility và kiểm thử bằng Playwright. Dẫn dắt nhóm 4 người, duy trì một thư viện địa chỉ mã nguồn mở được 40 shop Việt Nam sử dụng.\u003c/p\u003e"
+                  }
+                ]
+              },
+              "project": {
+                "sectionType": "project",
+                "displayName": "Dự án",
+                "iconKey": "folder",
+                "entries": [
+                  {
+                    "dates": {
+                      "end": null,
+                      "present": true,
+                      "start": {
+                        "m": 1,
+                        "y": 2024
+                      }
+                    },
+                    "description": "\u003cp\u003eThư viện TypeScript tách và chuẩn hóa địa chỉ Việt Nam theo đơn vị hành chính sau sáp nhập tỉnh năm 2025: 300 sao GitHub, 3.000 lượt tải npm mỗi tuần.\u003c/p\u003e",
+                    "id": "01d02e4d-4bb6-5109-83a1-4cf877ad555d",
+                    "link": "https://example.com/do-hoang-nam/vn-address-kit",
+                    "title": "vn-address-kit"
+                  },
+                  {
+                    "dates": {
+                      "end": {
+                        "m": 2,
+                        "y": 2025
+                      },
+                      "present": false,
+                      "start": {
+                        "m": 9,
+                        "y": 2024
+                      }
+                    },
+                    "description": "\u003cp\u003eChecklist và repo demo tối ưu Core Web Vitals cho Next.js; 3 nhóm trong nước áp dụng, 1.200 sao GitHub.\u003c/p\u003e",
+                    "id": "07466edf-fe8c-5029-a421-2f27b58b4dd8",
+                    "link": "https://example.com/do-hoang-nam/nextjs-perf",
+                    "title": "Next.js performance checklist"
+                  }
+                ]
+              },
+              "skill": {
+                "sectionType": "skill",
+                "displayName": "Kỹ năng",
+                "iconKey": "code",
+                "entries": [
+                  {
+                    "id": "6f7164ee-cfbc-5ccd-84e3-a59f3a2a4281",
+                    "level": 5,
+                    "name": "React"
+                  },
+                  {
+                    "id": "528a561b-4a05-5159-98f7-23a47f9a51f5",
+                    "level": 5,
+                    "name": "TypeScript"
+                  },
+                  {
+                    "id": "e4a1c867-340d-5bac-afd4-8519d1d0b135",
+                    "level": 4,
+                    "name": "Next.js"
+                  },
+                  {
+                    "id": "b653cae9-3932-54c2-bd42-708c2ad2a954",
+                    "level": 4,
+                    "name": "Playwright"
+                  },
+                  {
+                    "id": "2ae72192-7243-5a56-b9ca-88a0739ec9bc",
+                    "level": 4,
+                    "name": "Tailwind CSS"
+                  },
+                  {
+                    "id": "84539170-c2a9-576b-84c3-adf64902097c",
+                    "level": 4,
+                    "name": "Vitest"
+                  },
+                  {
+                    "id": "0d4dbad9-4735-54a3-b157-e7d68f2775bb",
+                    "level": 3,
+                    "name": "Node.js"
+                  },
+                  {
+                    "id": "ad31b042-6765-57e8-8caa-37007c686125",
+                    "level": 3,
+                    "name": "GraphQL"
+                  }
+                ]
+              },
+              "work": {
+                "sectionType": "work",
+                "displayName": "Kinh nghiệm làm việc",
+                "iconKey": "briefcase",
+                "entries": [
+                  {
+                    "city": "Hà Nội",
+                    "country": "Việt Nam",
+                    "dates": {
+                      "end": null,
+                      "present": true,
+                      "start": {
+                        "m": 4,
+                        "y": 2024
+                      }
+                    },
+                    "description": "\u003cul\u003e\u003cli\u003eDẫn dắt nhóm 4 người chuyển ứng dụng mua sắm từ React SPA sang Next.js, giảm LCP từ 4,1 giây xuống 1,9 giây.\u003c/li\u003e\u003cli\u003eDuy trì design system 60 component bằng React và TypeScript cho 5 nhóm sản phẩm, rút ngắn khoảng 30% thời gian làm tính năng mới.\u003c/li\u003e\u003cli\u003eChạy 6 A/B test trên luồng thanh toán, tăng tỷ lệ chuyển đổi 9%.\u003c/li\u003e\u003cli\u003eGiảm bundle JavaScript trang chủ từ 480 KB xuống 210 KB bằng code splitting.\u003c/li\u003e\u003cli\u003eĐưa luồng thanh toán đạt chuẩn WCAG 2.1 AA, thêm kiểm tra axe vào CI và sửa 140 lỗi accessibility trong 3 tháng.\u003c/li\u003e\u003c/ul\u003e",
+                    "employer": "Công ty thương mại điện tử (500 nhân sự)",
+                    "id": "26999a68-30eb-535a-a671-7018d95c626d",
+                    "jobTitle": "Senior Frontend Engineer"
+                  },
+                  {
+                    "city": "Hà Nội",
+                    "country": "Việt Nam",
+                    "dates": {
+                      "end": {
+                        "m": 3,
+                        "y": 2024
+                      },
+                      "present": false,
+                      "start": {
+                        "m": 1,
+                        "y": 2022
+                      }
+                    },
+                    "description": "\u003cul\u003e\u003cli\u003eLàm dashboard quản lý kho bằng React và GraphQL cho 800 nhà bán lẻ.\u003c/li\u003e\u003cli\u003eThiết lập E2E test bằng Playwright trong GitLab CI, giảm 70% lỗi regression lọt lên production.\u003c/li\u003e\u003cli\u003eÁp dụng virtual scrolling cho bảng 10.000 dòng, giảm độ trễ khi cuộn từ 3 giây xuống 0,3 giây.\u003c/li\u003e\u003cli\u003eXây dựng màn hình bán hàng offline-first bằng IndexedDB, giúp 300 cửa hàng vẫn bán được khi mất mạng.\u003c/li\u003e\u003c/ul\u003e",
+                    "employer": "Công ty SaaS quản lý bán lẻ (120 nhân sự)",
+                    "id": "d25c8861-1fa2-5086-b068-81083b0e2602",
+                    "jobTitle": "Frontend Developer"
+                  },
+                  {
+                    "city": "Hà Nội",
+                    "country": "Việt Nam",
+                    "dates": {
+                      "end": {
+                        "m": 12,
+                        "y": 2021
+                      },
+                      "present": false,
+                      "start": {
+                        "m": 7,
+                        "y": 2020
+                      }
+                    },
+                    "description": "\u003cul\u003e\u003cli\u003eĐặt lịch khám cho chuỗi phòng khám Nhật (8 tháng): 12 màn hình quản trị bằng React.\u003c/li\u003e\u003cli\u003eDự án website tuyển dụng cho khách hàng Singapore (6 tháng): làm giao diện responsive bằng Vue.js, đạt 95 điểm Lighthouse trên mobile.\u003c/li\u003e\u003cli\u003eViết unit test bằng Jest cho luồng đặt lịch, tăng coverage từ 30% lên 80%.\u003c/li\u003e\u003c/ul\u003e",
+                    "employer": "Công ty outsourcing phần mềm thị trường Nhật",
+                    "id": "0432218a-7a97-555a-859c-f5ef154ca838",
+                    "jobTitle": "Junior Frontend Developer"
+                  }
+                ]
+              }
+            },
+            "customization": {
+              "colors": {
+                "accent": "#0d5a73",
+                "background": "#ffffff",
+                "primary": "#10394d",
+                "text": "#1a1f24"
+              },
+              "dateFormat": "MM/YYYY",
+              "font": {
+                "baseSizePx": 13,
+                "family": "source-sans-3"
+              },
+              "header": {
+                "align": "left",
+                "detailsLayout": "inline",
+                "iconStyle": "outline"
+              },
+              "heading": {
+                "showRule": true,
+                "style": "uppercase"
+              },
+              "layout": {
+                "columns": 2,
+                "sections": {
+                  "main": [
+                    "profile",
+                    "work",
+                    "project"
+                  ],
+                  "sidebar": [
+                    "skill",
+                    "certificate",
+                    "language",
+                    "education"
+                  ]
+                },
+                "surfaceTarget": "none"
+              },
+              "pageFormat": "a4",
+              "sectionDisplay": {
+                "language": {
+                  "style": "dots"
+                },
+                "skill": {
+                  "style": "bar"
+                }
+              },
+              "spacing": {
+                "entryGap": 6,
+                "lineHeight": 1.3,
+                "pageMargin": {
+                  "x": 11,
+                  "y": 12
+                },
+                "sectionGap": 12
+              }
+            }
+          }
+        },
+        "mode": "continuous",
+        "canonicalOrigin": "https://aboutme.example",
+        "discoveryEnabled": false,
+        "pageTitle": "Đỗ Hoàng Nam — Resume",
+        "faviconHref": "",
+        "preview": {
+          "title": "Đỗ Hoàng Nam",
+          "description": "Senior Frontend Engineer với 6 năm làm web thương mại điện tử và SaaS cho hơn 2 triệu người dùng mỗi tháng.",
+          "locale": "vi_VN",
+          "imageAlt": "Đỗ Hoàng Nam · Senior Frontend Engineer · React, TypeScript, Next.js",
+          "imageUrl": "https://aboutme.example/api/v1/public/resumes/do-hoang-nam/og/0123456789abcdef.png"
+        },
+        "projectLinks": [
+          {
+            "entryId": "01d02e4d-4bb6-5109-83a1-4cf877ad555d",
+            "url": "https://aboutme.example/do-hoang-nam/projects/vn-address-kit"
+          },
+          {
+            "entryId": "07466edf-fe8c-5029-a421-2f27b58b4dd8",
+            "url": "https://aboutme.example/do-hoang-nam/projects/nextjs-perf-checklist"
+          }
+        ],
+        "projectsUrl": "https://aboutme.example/do-hoang-nam/projects"
+      }
+    }
+  ]
+}

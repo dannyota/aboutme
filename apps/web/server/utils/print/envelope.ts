@@ -16,14 +16,24 @@ export const PRINT_FAILURE = 'print failed';
 export type PublicResumeDocument
   = components['schemas']['PublicResumeDocument'];
 
-export interface PrintEnvelope {
-  version: 1;
+interface PrintEnvelopeFields {
   resumeId: string;
   revision: string;
   publicGeneration: string | null;
   lng: string;
   document: PublicResumeDocument;
 }
+
+export interface PrintEnvelopeV1 extends PrintEnvelopeFields {
+  version: 1;
+}
+
+export interface PrintEnvelopeV2 extends PrintEnvelopeFields {
+  version: 2;
+  projectLinks: Record<string, string>;
+}
+
+export type PrintEnvelope = PrintEnvelopeV1 | PrintEnvelopeV2;
 
 /**
  * A link-preview card job: the closed envelope of
