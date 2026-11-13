@@ -71,7 +71,9 @@ GitHub CI cannot observe the deployed fence, the enrollment flag, or the
 production origin. The top manager runs each proof as the scripted Playwright
 proof QA authors, using the pinned browser image from
 `deploy/dev-https-browser/Dockerfile`, not a host install. No one drives the
-browser by hand.
+browser by hand. The proof runner keeps Playwright's failure-page ARIA snapshots
+(`error-context.md`) off, because a page snapshot could hold a secret; check
+that switch again whenever the pinned Playwright version changes.
 
 - After the flag-off deploy and before activation, run mode
   `totp-prod-flag-off`: health, existing sign-in without a second factor, and

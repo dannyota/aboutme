@@ -30,7 +30,11 @@ without database access. Parsed tokens get a digest lookup across both kinds; a
 miss returns `200`. Any retained row, including expired, rotated, or revoked
 ones, selects its own client, user, then grant locks. Revoke that grant and all
 its families atomically; return `200` after commit. Other grants survive.
-Concurrent refresh shares these locks: no successor survives revocation.
+Concurrent refresh shares these locks: no successor survives revocation. Every
+OAuth path locks in the order client, user, grant, authorization code, token;
+revoking a token family locks its grant first, and changing a client's rows
+locks the client first, which also makes the idle-client sweep skip a client
+that is being consented to.
 
 Compare claims only with the locked client: exact URL bytes for CIMD, parsed
 UUID equality with `metadata_url IS NULL` for DCR. Internal UUIDs never match
