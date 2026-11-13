@@ -1,7 +1,3 @@
-// These adversarial HTTP tests cover session ownership, liveness, revocation,
-// rotation delivery, and CSRF. Revoking one session or logging out everywhere
-// needs no recent reauthentication, because ending sessions only reduces
-// access. See docs/adr/0015-accounts-passwords-and-sessions.md.
 package auth_test
 
 import (
@@ -23,9 +19,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/testutil"
 )
 
-// ---- row and response helpers ---------------------------------------------
-
-// forceRotationGraceInFuture keeps one unrevoked predecessor inside grace.
 func forceRotationGraceInFuture(t *testing.T, sessionID uuid.UUID, delta time.Duration) {
 	t.Helper()
 	pool := newRowInspectorPool(t)
@@ -35,7 +28,6 @@ func forceRotationGraceInFuture(t *testing.T, sessionID uuid.UUID, delta time.Du
 	}
 }
 
-// listedSessionIDs returns device-list membership without copying entry fields.
 func listedSessionIDs(t *testing.T, resp *http.Response) map[string]bool {
 	t.Helper()
 	var body sessionsListEnvelope
@@ -49,12 +41,6 @@ func listedSessionIDs(t *testing.T, resp *http.Response) map[string]bool {
 	return ids
 }
 
-// ============================================================================
-// Session API adversarial cases.
-// ============================================================================
-
-// TestMe_CSRFTokenNotInAnyHeaderOrCookie proves GET /me returns the exact CSRF
-// token in its JSON body and nowhere in response headers or cookies.
 func TestMe_CSRFTokenNotInAnyHeaderOrCookie(t *testing.T) {
 	t.Parallel()
 	handler, q := newSessionAPITestService(t)
@@ -93,9 +79,6 @@ func TestMe_CSRFTokenNotInAnyHeaderOrCookie(t *testing.T) {
 	}
 }
 
-// TestLogout_ClearsSiteDataHeader proves logout revokes the server-side session,
-// expires its cookie, emits the exact Clear-Site-Data directives, and returns
-// an empty 204 response.
 func TestLogout_ClearsSiteDataHeader(t *testing.T) {
 	t.Parallel()
 	handler, q := newSessionAPITestService(t)
@@ -118,16 +101,12 @@ func TestLogout_ClearsSiteDataHeader(t *testing.T) {
 		t.Error("logout did not clear the __Host-session cookie (want a Set-Cookie with negative Max-Age)")
 	}
 
-	// Server-side revocation, not merely a client-side cookie clear: the
-	// session's own raw token must stop authenticating.
 	after := doJSON(t, handler, http.MethodGet, auth.MePath, "", "", "", sessionRequestCookie(rawSelf)) //nolint:bodyclose // doJSON closes the body itself before returning.
 	if after.StatusCode != http.StatusUnauthorized {
 		t.Errorf("GET %s with the logged-out session's raw token after logout status = %d, want %d", auth.MePath, after.StatusCode, http.StatusUnauthorized)
 	}
 }
 
-// TestRevokeAll_StaleReauth_Succeeds proves logout-everywhere needs no recent
-// reauthentication: a stale primary proof still revokes all three sessions.
 func TestRevokeAll_StaleReauth_Succeeds(t *testing.T) {
 	t.Parallel()
 	handler, q := newSessionAPITestService(t)
@@ -158,9 +137,6 @@ func TestRevokeAll_StaleReauth_Succeeds(t *testing.T) {
 	}
 }
 
-// TestSessionsList_NeverLeaksOtherUsersSessions checks both count and IDs.
-// Unequal per-user counts catch a wrong ownership filter that might otherwise
-// return the expected count by coincidence.
 func TestSessionsList_NeverLeaksOtherUsersSessions(t *testing.T) {
 	t.Parallel()
 	handler, q := newSessionAPITestService(t)
@@ -194,11 +170,6 @@ func TestSessionsList_NeverLeaksOtherUsersSessions(t *testing.T) {
 	}
 }
 
-// ==== ownership, liveness, rotation delivery, and CSRF ======================
-
-// TestDeleteSession_DDC5_IndistinguishableAcrossFailureModes requires another
-// user's ID, an unknown ID, and the caller's already-revoked ID to return the
-// same status and byte-identical body. This prevents an ownership oracle.
 func TestDeleteSession_DDC5_IndistinguishableAcrossFailureModes(t *testing.T) {
 	t.Parallel()
 	handler, q := newSessionAPITestService(t)
@@ -247,9 +218,6 @@ func TestDeleteSession_DDC5_IndistinguishableAcrossFailureModes(t *testing.T) {
 	}
 }
 
-// TestDeleteSession_StaleReauth_RevokesTargetSession proves per-session revoke
-// needs no recent reauthentication: a stale caller primary proof still
-// revokes a different named target session.
 func TestDeleteSession_StaleReauth_RevokesTargetSession(t *testing.T) {
 	t.Parallel()
 	handler, q := newSessionAPITestService(t)
@@ -273,10 +241,6 @@ func TestDeleteSession_StaleReauth_RevokesTargetSession(t *testing.T) {
 	}
 }
 
-// TestSessionsList_GraceDeadPredecessor_VisibleWithinGrace_AbsentAfterGrace
-// proves a predecessor stays listed while its grace interval is open and
-// disappears once the same interval expires. A non-null grace deadline alone
-// does not make the row dead.
 func TestSessionsList_GraceDeadPredecessor_VisibleWithinGrace_AbsentAfterGrace(t *testing.T) {
 	t.Parallel()
 	handler, q := newSessionAPITestService(t)
@@ -314,9 +278,6 @@ func TestSessionsList_GraceDeadPredecessor_VisibleWithinGrace_AbsentAfterGrace(t
 	}
 }
 
-// TestDeleteSession_RevokingCurrentSession_ClearsCookie proves revoking the
-// current session clears its cookie and makes the raw token fail at the HTTP
-// boundary.
 func TestDeleteSession_RevokingCurrentSession_ClearsCookie(t *testing.T) {
 	t.Parallel()
 	handler, q := newSessionAPITestService(t)
@@ -339,10 +300,6 @@ func TestDeleteSession_RevokingCurrentSession_ClearsCookie(t *testing.T) {
 	}
 }
 
-// TestRequireSession_RotatedRequest_CarriesSuccessorCookie proves a request
-// that triggers rotation succeeds and carries the successor cookie in the same
-// response. The response body must also contain the successor's CSRF token,
-// not the predecessor's.
 func TestRequireSession_RotatedRequest_CarriesSuccessorCookie(t *testing.T) {
 	t.Parallel()
 	pool := newTestPool(t)
@@ -362,7 +319,7 @@ func TestRequireSession_RotatedRequest_CarriesSuccessorCookie(t *testing.T) {
 		t.Fatalf("Issue() error = %v", err)
 	}
 
-	clk.Advance(25 * time.Hour) // past rotationAge (24h)
+	clk.Advance(25 * time.Hour)
 
 	resp := doJSON(t, handler, http.MethodGet, auth.MePath, "", "", "", sessionRequestCookie(rawOld)) //nolint:bodyclose // doJSON closes the body itself before returning.
 	if resp.StatusCode != http.StatusOK {
@@ -395,10 +352,6 @@ func TestRequireSession_RotatedRequest_CarriesSuccessorCookie(t *testing.T) {
 	}
 }
 
-// TestRequireSession_InvalidOrExpiredCookie_Returns401AndClearsCookie
-// covers two ErrSessionInvalid modes at the HTTP boundary: a well-shaped token
-// that was never issued and an idle-expired session. Both return the same 401
-// code and clear the session cookie.
 func TestRequireSession_InvalidOrExpiredCookie_Returns401AndClearsCookie(t *testing.T) {
 	t.Parallel()
 	handler, q := newSessionAPITestService(t)
@@ -441,9 +394,6 @@ func TestRequireSession_InvalidOrExpiredCookie_Returns401AndClearsCookie(t *test
 	})
 }
 
-// TestCSRF_CrossOrigin_RejectsAllThreeMutatingEndpoints covers cross-origin and
-// missing-token requests for logout, per-session revoke, and revoke-all. Every
-// case returns csrf_rejected and leaves its session row untouched.
 func TestCSRF_CrossOrigin_RejectsAllThreeMutatingEndpoints(t *testing.T) {
 	t.Parallel()
 	handler, q := newSessionAPITestService(t)

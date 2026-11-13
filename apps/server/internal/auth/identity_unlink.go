@@ -14,15 +14,10 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// MeIdentitiesPath is the collection of the caller's linked provider
-// identities; DELETE MeIdentitiesPath/{id} unlinks one.
 const MeIdentitiesPath = "/api/v1/me/identities"
 
-// lastSignInMethodCode refuses an unlink that would leave the account with no
-// password and no identity of an enabled provider.
 const lastSignInMethodCode = "last_sign_in_method"
 
-// Unlink admission matches account deletion: per (account, client IP).
 const (
 	unlinkRateLimitRequests = 5
 	unlinkRateLimitWindow   = time.Minute
@@ -33,9 +28,6 @@ var (
 	errLastSignInMethod = errors.New("auth: identity is the last sign-in method")
 )
 
-// unlinkRoute is cookie-authenticated: session, then the full CSRF rule set,
-// then the per-account-and-IP limiter. It never reads a bearer token, so an
-// agent cannot call it.
 func (s *Service) unlinkRoute() http.HandlerFunc {
 	limited := api.RateLimit(api.RateLimiterConfig{
 		Requests:       unlinkRateLimitRequests,
@@ -48,9 +40,6 @@ func (s *Service) unlinkRoute() http.HandlerFunc {
 	return route(http.MethodDelete, s.sessionChain(limited.ServeHTTP))
 }
 
-// handleUnlinkIdentity implements DELETE /api/v1/me/identities/{id}. Malformed,
-// absent, and foreign IDs share one not-found response that never echoes the
-// path. Other sessions stay live: sessions do not record a provider.
 func (s *Service) handleUnlinkIdentity(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	sess, ok := SessionFromContext(ctx)
@@ -91,13 +80,6 @@ func (s *Service) handleUnlinkIdentity(w http.ResponseWriter, r *http.Request) {
 	writeNoContent(w)
 }
 
-// unlinkIdentity deletes identityID for the caller's account under the
-// user-row lock that password mutations and session issuers also take, so two
-// concurrent unlinks cannot both pass the last-sign-in-method check. Under that
-// lock it rechecks the caller's session, epoch, and recent proofs as
-// docs/design/second-factor-authentication.md requires. The same transaction
-// writes one identity_unlinked lifecycle audit event. It returns the provider
-// of the removed identity.
 func (s *Service) unlinkIdentity(ctx context.Context, sess store.Session, identityID uuid.UUID) (string, error) {
 	userID := sess.UserID
 	now := s.sessionMgr.now()
@@ -150,7 +132,6 @@ func (s *Service) unlinkIdentity(ctx context.Context, sess store.Session, identi
 	return provider, err
 }
 
-// providerEnabled reports whether an identity of provider can still sign in.
 func (s *Service) providerEnabled(provider string) bool {
 	switch Provider(provider) {
 	case ProviderGoogle:

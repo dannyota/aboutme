@@ -1,4 +1,3 @@
-// Package realtimeapi serves authenticated and anonymous revision streams.
 package realtimeapi
 
 import (
@@ -23,11 +22,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/viewpass"
 )
 
-// errViewPassRequired marks a sign-in-to-view resume admitted with no valid
-// pass; servePublic reports it as the uniform public 404, exactly like a
-// missing or unpublished resume, and it is never counted
-// (docs/design/viewer-analytics/sign-in-to-view.md "Gated routes";
-// AC-VIEW-003).
 var errViewPassRequired = errors.New("realtimeapi: view pass required")
 
 const (
@@ -50,10 +44,8 @@ type wallTicker struct {
 	*time.Ticker
 }
 
-// Chan returns the ticker's delivery channel.
 func (t wallTicker) Chan() <-chan time.Time { return t.C }
 
-// Dependencies connects stream admission to the existing session and public fences.
 type Dependencies struct {
 	Hub            *realtime.Hub
 	Store          streamQueries
@@ -61,19 +53,15 @@ type Dependencies struct {
 	Coordinator    *publicstate.Coordinator
 	TrustedProxies api.TrustedProxies
 	Clock          func() time.Time
-	// ViewPassKey seals and opens the __Host-view-pass cookie
-	// (docs/design/viewer-analytics/sign-in-to-view.md "Pass cookie").
-	ViewPassKey []byte
+	ViewPassKey    []byte
 }
 
-// Service serves metadata streams. Writes continue through the resume API.
 type Service struct {
 	dependencies Dependencies
 	newTicker    func(time.Duration) streamTicker
 	public       http.Handler
 }
 
-// New requires the same coordinator and session store used by ordinary routes.
 func New(dependencies Dependencies) (*Service, error) {
 	if dependencies.Hub == nil || dependencies.Store == nil || dependencies.Sessions == nil || dependencies.Coordinator == nil {
 		return nil, errors.New("realtimeapi: missing dependencies")
@@ -100,7 +88,6 @@ func New(dependencies Dependencies) (*Service, error) {
 	return service, nil
 }
 
-// RegisterRoutes installs the authenticated account stream.
 func (s *Service) RegisterRoutes(mux *http.ServeMux) {
 	owner := auth.RequireSession(s.dependencies.Sessions)(http.HandlerFunc(s.owner))
 	mux.Handle("/api/v1/events", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -115,7 +102,6 @@ func (s *Service) RegisterRoutes(mux *http.ServeMux) {
 	}))
 }
 
-// PublicHandler ignores cookies and admits the current live slug only.
 func (s *Service) PublicHandler() http.Handler { return s.public }
 
 func (s *Service) owner(w http.ResponseWriter, r *http.Request) {
@@ -175,8 +161,6 @@ func (s *Service) servePublic(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer subscription.Close()
-	// The synchronous writer returns before releasing its lease. Its deadline
-	// bounds cancellation even if a peer stops reading during a flush.
 	//nolint:contextcheck // The lease context derives from r.Context and adds revocation cancellation.
 	s.stream(lease.Context(), w, r, subscription, nil, false)
 }
@@ -193,9 +177,6 @@ func (s *Service) admitPublic(r *http.Request, slug string) (store.GetPublicReal
 		if row.ID == uuid.Nil || row.Revision <= 0 {
 			return row, nil, errors.New("realtimeapi: invalid public state")
 		}
-		// The pass check runs after admission and before the stream opens
-		// (docs/design/viewer-analytics/sign-in-to-view.md "Gated routes";
-		// AC-VIEW-003).
 		if row.SignInToView && !hasValidPass(r, s.dependencies.ViewPassKey, row.ID, row.ViewPassEpoch, s.dependencies.Clock) {
 			return row, nil, errViewPassRequired
 		}
@@ -257,8 +238,6 @@ func (s *Service) stream(ctx context.Context, w http.ResponseWriter, r *http.Req
 			if !ok || ctx.Err() != nil || (sessionLive != nil && !sessionLive(ctx)) {
 				return
 			}
-			// A disconnect wins over queued events; no stale queue is drained
-			// after listener loss or eviction.
 			select {
 			case <-subscription.Done:
 				return
@@ -302,10 +281,6 @@ func revisionFrame(change realtime.Change, owner bool) (string, error) {
 	return "event: revision\nid: " + id + "\ndata: " + string(encoded) + "\n\n", nil
 }
 
-// hasValidPass reports whether r carries a __Host-view-pass cookie with a
-// pass for resumeID at exactly passEpoch, not expired as of clock()
-// (docs/design/viewer-analytics/sign-in-to-view.md "Pass cookie", "Gated
-// routes"; AC-VIEW-003, AC-VIEW-007). A nil clock uses time.Now.
 func hasValidPass(r *http.Request, key []byte, resumeID uuid.UUID, passEpoch int32, clock func() time.Time) bool {
 	cookie, err := r.Cookie(viewpass.CookieName)
 	if err != nil {

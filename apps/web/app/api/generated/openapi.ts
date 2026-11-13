@@ -140,7 +140,7 @@ export interface paths {
          * Begin "Sign in with Google"
          * @description Registered only when `PROVIDER_LOGIN_ENABLED` enables `google`; otherwise this path returns the uniform not-found response (ADR 0016). Begins a fresh OAuth2/OIDC login transaction (PKCE S256, an OIDC nonce) and redirects the browser to Google's own authorize endpoint. Sets the `__Host-oauth-tx` cookie (opaque transaction handle, 10-minute TTL) that the matching `GET /auth/google/callback` consumes.
          *
-         *     A `HEAD` request is rejected with `405`, not treated as a bodyless `GET`, because a successful request creates a database-backed transaction. `GET` accepts the login and view purposes. A `link` or `reauth` purpose returns `405` with `Allow: POST` before a session lookup, database write, or cookie is set. `purpose=view` requires `slug` and requests scope `openid` only, so Google returns no name or email (see `AuthPurpose`, `AuthViewSlug`).
+         *     A `HEAD` request is rejected with `405`, not treated as a bodyless `GET`, because a successful request creates a database-backed transaction. `GET` accepts the login and view purposes. A `link` or `reauth` purpose returns `405` with `Allow: POST` before a session lookup, database write, or cookie is set. `purpose=view` requires `slug`, may name a project `page`, and requests scope `openid` only, so Google returns no name or email (see `AuthPurpose`, `AuthViewSlug`, `AuthViewPage`).
          */
         get: operations["getAuthGoogleStart"];
         put?: never;
@@ -288,7 +288,7 @@ export interface paths {
         };
         /**
          * Begin "Sign in with LinkedIn"
-         * @description Registered only when `PROVIDER_LOGIN_ENABLED` enables `linkedin`; otherwise this path returns the uniform not-found response (ADR 0016). Begins a fresh OAuth2/OIDC login transaction (an OIDC nonce, no PKCE: LinkedIn's token endpoint takes client credentials in the request body, ADR 0016) and redirects the browser to LinkedIn's own authorize endpoint. Sets the `__Host-oauth-tx` cookie (opaque transaction handle, 10-minute TTL) that the matching `GET /auth/linkedin/callback` consumes. `HEAD` is rejected with `405`. `GET` accepts the login and view purposes. `link` and `reauth` return `405` with `Allow: POST` before any transaction is created. `purpose=view` requires `slug`, requests scope `openid` only, and offers LinkedIn on the gate whenever LinkedIn account login is on (see `AuthPurpose`, `AuthViewSlug`).
+         * @description Registered only when `PROVIDER_LOGIN_ENABLED` enables `linkedin`; otherwise this path returns the uniform not-found response (ADR 0016). Begins a fresh OAuth2/OIDC login transaction (an OIDC nonce, no PKCE: LinkedIn's token endpoint takes client credentials in the request body, ADR 0016) and redirects the browser to LinkedIn's own authorize endpoint. Sets the `__Host-oauth-tx` cookie (opaque transaction handle, 10-minute TTL) that the matching `GET /auth/linkedin/callback` consumes. `HEAD` is rejected with `405`. `GET` accepts the login and view purposes. `link` and `reauth` return `405` with `Allow: POST` before any transaction is created. `purpose=view` requires `slug`, may name a project `page`, requests scope `openid` only, and offers LinkedIn on the gate whenever LinkedIn account login is on (see `AuthPurpose`, `AuthViewSlug`, `AuthViewPage`).
          */
         get: operations["getAuthLinkedInStart"];
         put?: never;
@@ -5044,6 +5044,11 @@ export interface components {
          */
         AuthViewSlug: string;
         /**
+         * @description The project page a sign-in-to-view start returns to below its resume: `projects` for the project list or `projects/{project-slug}` for one project, written without any percent-encoding. Absent returns to the resume page. Read only with `purpose=view`; an empty, repeated, encoded, or any other value returns `400 bad_request` before any transaction is created. The callback, and a start that creates no transaction, redirects to `/{slug}/{page}` under the resume's current slug; a failed or cancelled sign-in adds `?signin=failed` or `?signin=cancelled`. See `docs/design/projects-contract.md`.
+         * @example projects/analytical-engine
+         */
+        AuthViewPage: string;
+        /**
          * @description Same-origin relative path to open after a successful provider login. The server accepts at most 2,048 bytes, requires one leading `/`, and rejects a leading `//`, any URI scheme, malformed URL syntax, or a backslash. An absent or invalid value is bound as `/app/resumes` in the OAuth transaction. Link and reauthentication callbacks ignore it.
          * @example /oauth/authorize?client_id=018f5b6a-9a3e-7c21-8b1e-000000000001
          */
@@ -5483,6 +5488,11 @@ export interface operations {
                  * @example ada-lovelace
                  */
                 slug?: components["parameters"]["AuthViewSlug"];
+                /**
+                 * @description The project page a sign-in-to-view start returns to below its resume: `projects` for the project list or `projects/{project-slug}` for one project, written without any percent-encoding. Absent returns to the resume page. Read only with `purpose=view`; an empty, repeated, encoded, or any other value returns `400 bad_request` before any transaction is created. The callback, and a start that creates no transaction, redirects to `/{slug}/{page}` under the resume's current slug; a failed or cancelled sign-in adds `?signin=failed` or `?signin=cancelled`. See `docs/design/projects-contract.md`.
+                 * @example projects/analytical-engine
+                 */
+                page?: components["parameters"]["AuthViewPage"];
             };
             header?: never;
             path?: never;
@@ -5490,7 +5500,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Success: a redirect to Google's own authorize endpoint, or, for `purpose=view` naming a slug that is not currently a live resume with the sign-in-to-view switch on, a redirect back to `/{slug}` with no transaction created. */
+            /** @description Success: a redirect to Google's own authorize endpoint, or, for `purpose=view` naming a slug that is not currently a live resume with the sign-in-to-view switch on, a redirect back to `/{slug}`, or to the project `page` below it, with no transaction created. */
             302: {
                 headers: {
                     /** @example https://accounts.google.com/o/oauth2/v2/auth?... */
@@ -5499,7 +5509,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description `purpose=view` with a malformed `slug`. */
+            /** @description `purpose=view` with a malformed `slug` or `page`. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -5687,6 +5697,11 @@ export interface operations {
                  * @example ada-lovelace
                  */
                 slug?: components["parameters"]["AuthViewSlug"];
+                /**
+                 * @description The project page a sign-in-to-view start returns to below its resume: `projects` for the project list or `projects/{project-slug}` for one project, written without any percent-encoding. Absent returns to the resume page. Read only with `purpose=view`; an empty, repeated, encoded, or any other value returns `400 bad_request` before any transaction is created. The callback, and a start that creates no transaction, redirects to `/{slug}/{page}` under the resume's current slug; a failed or cancelled sign-in adds `?signin=failed` or `?signin=cancelled`. See `docs/design/projects-contract.md`.
+                 * @example projects/analytical-engine
+                 */
+                page?: components["parameters"]["AuthViewPage"];
             };
             header?: never;
             path?: never;
@@ -5891,6 +5906,11 @@ export interface operations {
                  * @example ada-lovelace
                  */
                 slug?: components["parameters"]["AuthViewSlug"];
+                /**
+                 * @description The project page a sign-in-to-view start returns to below its resume: `projects` for the project list or `projects/{project-slug}` for one project, written without any percent-encoding. Absent returns to the resume page. Read only with `purpose=view`; an empty, repeated, encoded, or any other value returns `400 bad_request` before any transaction is created. The callback, and a start that creates no transaction, redirects to `/{slug}/{page}` under the resume's current slug; a failed or cancelled sign-in adds `?signin=failed` or `?signin=cancelled`. See `docs/design/projects-contract.md`.
+                 * @example projects/analytical-engine
+                 */
+                page?: components["parameters"]["AuthViewPage"];
             };
             header?: never;
             path?: never;
@@ -5898,7 +5918,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Success: a redirect to LinkedIn's own authorize endpoint, or, for `purpose=view` naming a slug that is not currently a live resume with the sign-in-to-view switch on, a redirect back to `/{slug}` with no transaction created. */
+            /** @description Success: a redirect to LinkedIn's own authorize endpoint, or, for `purpose=view` naming a slug that is not currently a live resume with the sign-in-to-view switch on, a redirect back to `/{slug}`, or to the project `page` below it, with no transaction created. */
             302: {
                 headers: {
                     /** @example https://www.linkedin.com/oauth/v2/authorization?... */
@@ -5907,7 +5927,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description `purpose=view` with a malformed `slug`. */
+            /** @description `purpose=view` with a malformed `slug` or `page`. */
             400: {
                 headers: {
                     [name: string]: unknown;

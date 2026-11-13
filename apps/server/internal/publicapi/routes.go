@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"danny.vn/aboutme/apps/server/internal/api"
+	"danny.vn/aboutme/apps/server/internal/project"
 	"danny.vn/aboutme/apps/server/internal/publicroots"
 )
 
@@ -24,9 +25,10 @@ const (
 	publicRouteLLMS
 	publicRouteLive
 	publicRouteShowcase
+	publicRouteProjectList
+	publicRouteProject
 )
 
-// Recognizes reports whether escapedPath belongs to a public route.
 func (s *Service) Recognizes(escapedPath string) bool {
 	return classifyPublicRoute(escapedPath) != publicRouteNone
 }
@@ -59,6 +61,10 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, request *http.Request) {
 		s.card.ServeHTTP(w, request)
 	case publicRouteHTML:
 		s.html.ServeHTTP(w, request)
+	case publicRouteProjectList:
+		s.projectList.ServeHTTP(w, request)
+	case publicRouteProject:
+		s.project.ServeHTTP(w, request)
 	case publicRouteMarkdown:
 		s.markdown.ServeHTTP(w, request)
 	case publicRouteSitemap:
@@ -121,6 +127,9 @@ func classifyPublicRoute(path string) publicRoute {
 		}
 		return publicRouteNone
 	}
+	if route := classifyProjectRoute(path); route != publicRouteNone {
+		return route
+	}
 	if !strings.HasPrefix(path, "/") || strings.Count(path, "/") != 1 {
 		return publicRouteNone
 	}
@@ -132,6 +141,25 @@ func classifyPublicRoute(path string) publicRoute {
 		return publicRouteHTML
 	}
 	return publicRouteNone
+}
+
+func classifyProjectRoute(path string) publicRoute {
+	slug, rest, found := strings.Cut(strings.TrimPrefix(path, "/"), "/")
+	if !strings.HasPrefix(path, "/") || !found || !validPublicSlug(slug) {
+		return publicRouteNone
+	}
+	if rest == "projects" {
+		return publicRouteProjectList
+	}
+	if projectSlug, ok := strings.CutPrefix(rest, "projects/"); ok && project.ValidSlug(projectSlug) {
+		return publicRouteProject
+	}
+	return publicRouteNone
+}
+
+func projectRouteSlugs(path string) (slug, projectSlug string) {
+	slug, rest, _ := strings.Cut(strings.TrimPrefix(path, "/"), "/")
+	return slug, strings.TrimPrefix(strings.TrimPrefix(rest, "projects"), "/")
 }
 
 func publicSlug(path string) string {

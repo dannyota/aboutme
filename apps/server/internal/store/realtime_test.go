@@ -126,8 +126,6 @@ func TestResumeNotificationsAreCommittedMetadataOnly(t *testing.T) {
 	if err := rollbackTx.Rollback(ctx); err != nil {
 		t.Fatal(err)
 	}
-	// A later committed marker proves the rolled-back transaction emitted no
-	// notification without relying on a quiet timeout to establish absence.
 	barrier := "barrier-" + uuid.NewString()
 	if _, err := writer.Exec(ctx, "SELECT pg_notify('aboutme_resume_revision', $1)", barrier); err != nil {
 		t.Fatal(err)

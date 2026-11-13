@@ -1,5 +1,3 @@
-// Package sanitizetest provides independent structural checks for sanitized
-// rich-text fragments.
 package sanitizetest
 
 import (
@@ -12,7 +10,6 @@ import (
 	"golang.org/x/net/html/atom"
 )
 
-// AssertNeutralized verifies the generated rich-text structural policy.
 func AssertNeutralized(fragment string) error {
 	context := &html.Node{Type: html.ElementNode, DataAtom: atom.Div, Data: "div"}
 	nodes, err := html.ParseFragment(strings.NewReader(fragment), context)

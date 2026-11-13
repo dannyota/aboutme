@@ -5,8 +5,6 @@ import (
 	"testing"
 )
 
-// v3Document returns the v3 minimal fixture with every v3-only field set:
-// a detail per display mode and justified body text.
 func v3Document(t *testing.T) map[string]any {
 	t.Helper()
 	doc := decodeFontTestMap(t, readFontV2Fixture(t, "packages", "schema", "fixtures", "v3", "minimal.json"))
@@ -29,7 +27,6 @@ func v3Document(t *testing.T) map[string]any {
 	return doc
 }
 
-// withoutV3Fields strips exactly what v2 cannot represent.
 func withoutV3Fields(t *testing.T, doc map[string]any) map[string]any {
 	t.Helper()
 	out := decodeFontTestMap(t, mustJSON(t, doc))

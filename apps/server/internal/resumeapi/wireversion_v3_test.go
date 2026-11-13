@@ -10,10 +10,6 @@ import (
 	schema "danny.vn/aboutme/packages/schema/gen/go"
 )
 
-// Document v3 adds details[].display and customization.font.textAlign
-// (docs/adr/0013-resume-header-and-contacts.md). A v1 or v2 client
-// cannot express either field, so its writes must keep the stored values.
-
 const (
 	v3DetailKept    = "018f0000-0000-7000-8000-0000000000b1"
 	v3DetailDropped = "018f0000-0000-7000-8000-0000000000b2"

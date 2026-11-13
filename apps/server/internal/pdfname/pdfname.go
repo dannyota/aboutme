@@ -1,5 +1,3 @@
-// Package pdfname builds the download name of a resume PDF from the owner's
-// full name. See docs/adr/0011-print-capability-and-pdf-output.md.
 package pdfname
 
 import (
@@ -11,16 +9,10 @@ import (
 )
 
 const (
-	suffix = "-Resume.pdf"
-	// maxBaseRunes caps the name part so the decoded filename stays well
-	// under the common 255-byte file name limit.
+	suffix       = "-Resume.pdf"
 	maxBaseRunes = 64
 )
 
-// Disposition returns the Content-Disposition value for a resume PDF.
-// filename carries the name folded to ASCII letters and digits, words joined
-// by hyphens. filename* (RFC 5987) carries the same words in UTF-8. A name
-// with no usable words downloads as Resume.pdf.
 func Disposition(fullName string) string {
 	words := nameWords(fullName)
 	ascii := make([]string, 0, len(words))
@@ -43,9 +35,6 @@ func withSuffix(words []string) string {
 	return strings.Join(words, "-") + suffix
 }
 
-// nameWords splits the NFC name on every rune that is not a letter, mark, or
-// number, and keeps whole words while the hyphen-joined result fits
-// maxBaseRunes.
 func nameWords(fullName string) []string {
 	fields := strings.FieldsFunc(norm.NFC.String(fullName), func(r rune) bool {
 		return !unicode.IsLetter(r) && !unicode.IsMark(r) && !unicode.IsNumber(r)
@@ -66,8 +55,6 @@ func nameWords(fullName string) []string {
 	return words
 }
 
-// foldASCII removes diacritics and keeps ASCII letters and digits. The
-// Vietnamese d with stroke has no decomposition, so it maps explicitly.
 func foldASCII(word string) string {
 	var out strings.Builder
 	for _, r := range norm.NFD.String(word) {
@@ -83,7 +70,6 @@ func foldASCII(word string) string {
 	return out.String()
 }
 
-// percentEncode keeps RFC 5987 attr-char bytes and percent-encodes the rest.
 func percentEncode(value string) string {
 	const hex = "0123456789ABCDEF"
 	var out strings.Builder

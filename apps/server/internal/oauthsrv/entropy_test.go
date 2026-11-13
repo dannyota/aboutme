@@ -8,8 +8,6 @@ import (
 	"testing"
 )
 
-// indexedEntropy returns chunks 32-byte blocks, each starting with its own
-// big-endian index, so every secret drawn from it names the block it read.
 func indexedEntropy(chunks int) *bytes.Reader {
 	buf := make([]byte, chunks*secretEntropyBytes)
 	for i := range chunks {
@@ -18,7 +16,6 @@ func indexedEntropy(chunks int) *bytes.Reader {
 	return bytes.NewReader(buf)
 }
 
-// entropyIndex decodes the block index from a secret's trailing body.
 func entropyIndex(t *testing.T, raw string) uint32 {
 	t.Helper()
 	if len(raw) < secretBodyChars {
@@ -31,10 +28,6 @@ func entropyIndex(t *testing.T, raw string) uint32 {
 	return binary.BigEndian.Uint32(decoded)
 }
 
-// TestServiceSerializesEntropyReads draws codes and token pairs from many
-// goroutines through one Service whose reader is not safe for concurrent use.
-// The race detector fails an unserialized read; every draw must also read its
-// own block, and a token pair must read two adjacent blocks.
 func TestServiceSerializesEntropyReads(t *testing.T) {
 	const workers = 16
 	s := &Service{entropy: &lockedEntropy{reader: indexedEntropy(workers * 3)}}

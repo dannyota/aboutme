@@ -12,7 +12,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// ReadOperatorSnapshot bounds operator reads without locking account rows.
 func ReadOperatorSnapshot(ctx context.Context, pool *store.Pool, read func(context.Context, pgx.Tx) error) error {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
@@ -23,7 +22,6 @@ func ReadOperatorSnapshot(ctx context.Context, pool *store.Pool, read func(conte
 	defer func() {
 		cleanup, stop := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer stop()
-		// Rollback is also safe after a successful commit.
 		if rollbackErr := tx.Rollback(cleanup); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
 			slog.ErrorContext(cleanup, "operator snapshot rollback failed")
 		}
@@ -37,7 +35,6 @@ func ReadOperatorSnapshot(ctx context.Context, pool *store.Pool, read func(conte
 	return tx.Commit(ctx)
 }
 
-// AccountExists returns only UUID existence, independent of mutable slugs.
 func AccountExists(ctx context.Context, pool *store.Pool, id uuid.UUID) (bool, error) {
 	var present bool
 	err := ReadOperatorSnapshot(ctx, pool, func(readCtx context.Context, tx pgx.Tx) error {

@@ -1,12 +1,5 @@
 package auth
 
-// Password HTTP handlers and their route chains. Unauthenticated operations run
-// media-type (415) -> body (413) -> strict JSON (400) -> exact Origin (403)
-// before any policy, hash, HIBP, or storage work. Authenticated operations run
-// the password session (401) -> password CSRF (403/415) -> strict JSON (400)
-// chain first. Every handler maps only the closed service sentinels to wire
-// responses; raw dependency errors never cross the boundary.
-
 import (
 	"errors"
 	"net/http"
@@ -14,28 +7,19 @@ import (
 	"danny.vn/aboutme/apps/server/internal/api"
 )
 
-// passwordAcceptedBody is the fixed 202 body shared by register and forgot.
 type passwordAcceptedBody struct {
 	Accepted bool `json:"accepted"`
 }
 
-// passwordSecondFactorRequiredBody is the fixed 202 body for an enrolled
-// account's login or reauthentication. See
-// docs/design/passkey-second-factor-contract.md.
 type passwordSecondFactorRequiredBody struct {
 	SecondFactorRequired bool `json:"secondFactorRequired"`
 }
 
-// writePasswordSecondFactorRequired sets the pending cookie and writes the
-// fixed 202. It never writes a session cookie.
 func writePasswordSecondFactorRequired(w http.ResponseWriter, pendingRaw string) {
 	SetPendingAuthenticationCookie(w, pendingRaw)
 	api.WriteData(w, http.StatusAccepted, passwordSecondFactorRequiredBody{SecondFactorRequired: true})
 }
 
-// requirePasswordSession authenticates the session and stores it in context,
-// returning the password 401 (authentication_required) — distinct from the OAuth
-// session routes' session_required — and delivering any rotated cookie.
 func (s *PasswordService) requirePasswordSession(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		sess, rotated, err := readAndAuthenticateSession(r, s.sessions)
@@ -56,23 +40,15 @@ func (s *PasswordService) requirePasswordSession(next http.Handler) http.Handler
 	})
 }
 
-// requirePasswordCSRF is RequireCSRF with the password media-type rejection
-// (415 media_type_unsupported instead of the OAuth/resume 400). Origin and
-// synchronizer-token failures keep the existing 403 csrf_rejected.
 func requirePasswordCSRF(allowedOrigin string) api.Middleware {
 	return requireCSRF(allowedOrigin, jsonContentTypeAllowed, writePasswordMediaTypeUnsupported, false)
 }
 
-// passwordSessionChain authenticates before CSRF enforcement, matching the OAuth
-// sessionChain ordering for the two authenticated password routes.
 func (s *PasswordService) passwordSessionChain(h http.HandlerFunc) http.HandlerFunc {
 	wrapped := s.requirePasswordSession(requirePasswordCSRF(s.publicOrigin)(h))
 	return wrapped.ServeHTTP
 }
 
-// decodeUnauthenticatedBody runs the unauthenticated password route chain:
-// media type, body cap, strict JSON, then exact Origin. On any failure it writes
-// the response and returns false.
 func (s *PasswordService) decodeUnauthenticatedBody(w http.ResponseWriter, r *http.Request, fields map[string]*string) bool {
 	if !jsonContentTypeAllowed(r.Header) {
 		writePasswordMediaTypeUnsupported(w)
@@ -93,9 +69,6 @@ func (s *PasswordService) decodeUnauthenticatedBody(w http.ResponseWriter, r *ht
 	return true
 }
 
-// decodeAuthedBody runs the strict JSON body decode after requirePasswordCSRF
-// has already checked media type. On any failure it writes the response and
-// returns false.
 func (s *PasswordService) decodeAuthedBody(w http.ResponseWriter, r *http.Request, fields map[string]*string) bool {
 	body, err := readPasswordBody(w, r)
 	if err != nil {
@@ -136,9 +109,6 @@ func (s *PasswordService) handleVerify(w http.ResponseWriter, r *http.Request) {
 	writeNoContent(w)
 }
 
-// handleLogin returns 204 and a session for an unenrolled account, or 202 and
-// a pending cookie for an enrolled one. The optional next field is validated
-// like a provider-login return path before it is stored.
 func (s *PasswordService) handleLogin(w http.ResponseWriter, r *http.Request) {
 	var req passwordLoginRequest
 	var next string
@@ -231,8 +201,6 @@ func (s *PasswordService) handleChange(w http.ResponseWriter, r *http.Request) {
 	if !s.decodeAuthedBody(w, r, map[string]*string{"password": &req.Password}) {
 		return
 	}
-	// This precheck avoids hashing for a stale primary proof. change rechecks
-	// both proofs under the user lock.
 	if err := RequireRecentReauth(sess, s.clock()); err != nil {
 		writePasswordReauthRequired(w)
 		return

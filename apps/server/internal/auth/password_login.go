@@ -1,10 +1,5 @@
 package auth
 
-// Password login: credential verification, the snapshot re-check inside the
-// session-issuing transaction, the deferred password rehash, and the pending
-// login an enrolled account receives instead of a session. See
-// docs/design/second-factor-authentication.md.
-
 import (
 	"bytes"
 	"context"
@@ -18,10 +13,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// ---- login ----
-
-// passwordLoginInput is one password login request. ReturnPath is already
-// validated. PreviousPending is the browser's pending cookie, if any.
 type passwordLoginInput struct {
 	Email           string
 	Password        string
@@ -31,20 +22,13 @@ type passwordLoginInput struct {
 	PreviousPending string
 }
 
-// passwordLoginOutcome carries exactly one of a session token for an
-// unenrolled account or a pending token for an enrolled account.
 type passwordLoginOutcome struct {
 	SessionRaw string
 	PendingRaw string
 }
 
-// errPasswordSecondFactorPending tells a caller of login that the account is
-// enrolled and received a pending login instead of a session.
 var errPasswordSecondFactorPending = errors.New("auth: password login requires a second factor")
 
-// login returns the session token for an unenrolled account. For an enrolled
-// account it returns errPasswordSecondFactorPending; the HTTP handler uses
-// loginWithSecondFactor to deliver the pending cookie.
 func (s *PasswordService) login(ctx context.Context, email, rawPassword, ua, clientIP string) (string, error) {
 	out, err := s.loginWithSecondFactor(ctx, passwordLoginInput{
 		Email: email, Password: rawPassword, UA: ua, ClientIP: clientIP, ReturnPath: defaultLoginReturnPath,
@@ -58,9 +42,6 @@ func (s *PasswordService) login(ctx context.Context, email, rawPassword, ua, cli
 	return out.SessionRaw, nil
 }
 
-// loginWithSecondFactor verifies the primary credential. An unenrolled account
-// receives a session. An enrolled account receives a pending login bound to
-// the validated return path and no session.
 func (s *PasswordService) loginWithSecondFactor(ctx context.Context, in passwordLoginInput) (passwordLoginOutcome, error) {
 	now := s.clock()
 	email, rawPassword, ua, clientIP := in.Email, in.Password, in.UA, in.ClientIP
@@ -77,7 +58,6 @@ func (s *PasswordService) loginWithSecondFactor(ctx context.Context, in password
 		return passwordLoginOutcome{}, &passwordRateLimitedError{retryAfterSeconds: d.RetryAfterSeconds}
 	}
 
-	// Credential snapshot (or the dummy path for unknown/provider-only accounts).
 	var user store.User
 	var snapshotHash []byte
 	var needsRehash bool
@@ -111,7 +91,6 @@ func (s *PasswordService) loginWithSecondFactor(ctx context.Context, in password
 	issued, enrolled, err := s.issueLoginSession(ctx, user, snapshotHash, normalized, ua, clientIP, needsRehash, now)
 	if err != nil {
 		if errors.Is(err, errPasswordCredentialChanged) {
-			// Re-read and re-verify once, outside the transaction.
 			cred, cerr := s.q.GetPasswordCredential(ctx, user.ID)
 			if cerr != nil {
 				if errors.Is(cerr, pgx.ErrNoRows) {
@@ -156,14 +135,11 @@ func (s *PasswordService) loginWithSecondFactor(ctx context.Context, in password
 	return passwordLoginOutcome{PendingRaw: pending.RawToken}, nil
 }
 
-// lookupLoginUser fills user and snapshotHash (nil for unknown/provider-only
-// accounts). It never returns a password-package error; the caller runs the
-// dummy verify.
 func (s *PasswordService) lookupLoginUser(ctx context.Context, canonicalEmail string, user *store.User, snapshotHash *[]byte) error {
 	u, err := s.q.GetUserByCanonicalEmail(ctx, canonicalEmail)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil // unknown account
+			return nil
 		}
 		return errPasswordUnavailable
 	}
@@ -174,17 +150,11 @@ func (s *PasswordService) lookupLoginUser(ctx context.Context, canonicalEmail st
 		return nil
 	}
 	if errors.Is(cerr, pgx.ErrNoRows) {
-		return nil // provider-only account
+		return nil
 	}
 	return errPasswordUnavailable
 }
 
-// issueLoginSession locks the user, rechecks the credential against the
-// snapshot, optionally commits a prepared rehash, and then either issues the
-// session or, for an enrolled account, reports enrolled without issuing one,
-// all in one transaction. It returns errPasswordCredentialChanged when the
-// snapshot no longer matches so the caller re-verifies outside the
-// transaction.
 func (s *PasswordService) issueLoginSession(ctx context.Context, user store.User, snapshotHash []byte, normalized, ua, ip string, needsRehash bool, now time.Time) (SessionIssue, bool, error) {
 	rehash, err := s.prepareRehash(ctx, normalized, needsRehash)
 	if err != nil {
@@ -251,8 +221,6 @@ func (s *PasswordService) issueLoginSession(ctx context.Context, user store.User
 	return issued, enrolled, nil
 }
 
-// prepareRehash derives a fresh encoding for normalized only when the verified
-// snapshot needs it, outside any transaction.
 func (s *PasswordService) prepareRehash(ctx context.Context, normalized string, needsRehash bool) (string, error) {
 	if !needsRehash {
 		return "", nil

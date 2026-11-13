@@ -1,19 +1,3 @@
-// backfill_test.go proves the CAS backfill's three outcomes against a live
-// database and, above all, what BackfillLostRace means:
-// a retry signal, never "already done".
-//
-// The interleavings are staged, not raced: BackfillOneForTest (export_test.go)
-// runs the real backfillOne with a pause callback between the read and the
-// CAS, so "a concurrent autosave landed in the gap" is a deterministic fact of
-// the test rather than a scheduling accident. There is no sleep anywhere in
-// this file.
-//
-// Every identifier here is prefixed `bf` so this file never collides with the
-// sibling suites that share package resume_test. It reuses projection_test.go's
-// `pj` helpers for the synthetic two-version projector and the row snapshots:
-// a row the store itself wrote with this suite's fixture is at v2. Pointing the
-// store at the suite's synthetic current-v3 projector makes that row eligible
-// for backfill without coupling these tests to the production font converter.
 package resume_test
 
 import (
@@ -29,10 +13,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// bfSeedOldVersionRow creates a resume through s (whose projector's current
-// version is 7) and returns it. The row lands at production schema_version 6,
-// so it is exactly the "stored
-// below current" shape the backfill exists for.
 func bfSeedOldVersionRow(ctx context.Context, t *testing.T, s *resume.Store, userID uuid.UUID, title string) resume.Resume {
 	t.Helper()
 	created, err := s.Create(ctx, userID, title, validDocForTest(t))
@@ -42,8 +22,6 @@ func bfSeedOldVersionRow(ctx context.Context, t *testing.T, s *resume.Store, use
 	return created
 }
 
-// bfProjectedDoc marshals what a reader is served for id right now, so "the
-// backfill changed nothing observable" can be compared as bytes.
 func bfProjectedDoc(ctx context.Context, t *testing.T, s *resume.Store, userID, id uuid.UUID) []byte {
 	t.Helper()
 	got, err := s.Get(ctx, userID, id)
@@ -66,13 +44,6 @@ func bfSchemaVersion(ctx context.Context, t *testing.T, pool *store.Pool, id uui
 	return v
 }
 
-// --- Applied ---
-
-// TestStore_Integration_BackfillOne_OldVersionRow_Applied proves the row's
-// stored bytes move to the current version while revision
-// and updated_at do not move at all, and -- the assertion that makes
-// "nothing observable changes" more than a claim -- a reader is served
-// byte-identical documents immediately before and immediately after.
 func TestStore_Integration_BackfillOne_OldVersionRow_Applied(t *testing.T) {
 	t.Parallel()
 	s, q, pool, ctx := pjStore(t, pjSyntheticProjector(t))
@@ -107,15 +78,11 @@ func TestStore_Integration_BackfillOne_OldVersionRow_Applied(t *testing.T) {
 		t.Errorf("personal_details was not rewritten; the backfill persisted nothing new:\n %s", after.PersonalDetails)
 	}
 
-	// The projected document a reader is served is byte-identical
-	// across the backfill. Before, it was converted on the fly; after, it is
-	// read straight from storage.
 	docAfter := bfProjectedDoc(ctx, t, s, userID, created.ID)
 	if string(docBefore) != string(docAfter) {
 		t.Errorf("the projected document changed across the backfill:\n before %s\n after  %s", docBefore, docAfter)
 	}
 
-	// Running it again is a no-op: the row is now current.
 	again, err := s.BackfillOne(ctx, created.ID)
 	if err != nil {
 		t.Fatalf("second BackfillOne() error: %v", err)
@@ -126,11 +93,6 @@ func TestStore_Integration_BackfillOne_OldVersionRow_Applied(t *testing.T) {
 	pjAssertRowUntouched(t, after, pjSnapshot(ctx, t, pool, created.ID), "after the second BackfillOne")
 }
 
-// --- SkippedCurrent ---
-
-// TestStore_Integration_BackfillOne_AlreadyCurrent_SkippedCurrent proves the
-// already-current path writes NOTHING: not the parts, not schema_version, not
-// revision, not updated_at.
 func TestStore_Integration_BackfillOne_AlreadyCurrent_SkippedCurrent(t *testing.T) {
 	t.Parallel()
 	s, q, pool, ctx := pjStore(t, docmigrate.NewIdentityProjector())
@@ -148,13 +110,6 @@ func TestStore_Integration_BackfillOne_AlreadyCurrent_SkippedCurrent(t *testing.
 	pjAssertRowUntouched(t, before, pjSnapshot(ctx, t, pool, created.ID), "after BackfillOne on an already-current row")
 }
 
-// --- LostRace: a concurrent autosave in the read/CAS gap ---
-
-// TestStore_Integration_BackfillOne_ConcurrentAutosaveInGap_LostRace stages the
-// required interleaving: the backfill reads (schema_version=vOld,
-// revision=R), a user's autosave commits R+1, and only then does the CAS run.
-// The CAS matches no row, nothing is written, and the caller is told to
-// re-observe -- not that the row is done.
 func TestStore_Integration_BackfillOne_ConcurrentAutosaveInGap_LostRace(t *testing.T) {
 	t.Parallel()
 	s, q, pool, ctx := pjStore(t, pjSyntheticProjector(t))
@@ -182,14 +137,10 @@ func TestStore_Integration_BackfillOne_ConcurrentAutosaveInGap_LostRace(t *testi
 	if after.Revision != created.Revision+1 {
 		t.Errorf("revision = %d, want %d (only the autosave wrote)", after.Revision, created.Revision+1)
 	}
-	// The lost race is NOT "already done": the row is still at the old
-	// version, so a job that treated BackfillLostRace as terminal would
-	// abandon a row that still needs migrating.
 	if after.SchemaVersion != 6 {
 		t.Errorf("schema_version = %d, want 6 (the backfill must have written nothing)", after.SchemaVersion)
 	}
 
-	// Retryable: a fresh observation succeeds.
 	retry, err := s.BackfillOne(ctx, created.ID)
 	if err != nil {
 		t.Fatalf("retry BackfillOne() error: %v", err)
@@ -205,13 +156,6 @@ func TestStore_Integration_BackfillOne_ConcurrentAutosaveInGap_LostRace(t *testi
 	}
 }
 
-// --- LostRace: a title-only write in the read/CAS gap ---
-
-// TestStore_Integration_BackfillOne_TitleOnlyWriteInGap_LostRace proves a title
-// write touches `title` and `revision` and never `schema_version`, so the CAS
-// misses on the revision leg alone. This is the case that proves
-// BackfillLostRace cannot be read as "the row became current underneath me":
-// nothing about this interleaving migrated anything.
 func TestStore_Integration_BackfillOne_TitleOnlyWriteInGap_LostRace(t *testing.T) {
 	t.Parallel()
 	s, q, pool, ctx := pjStore(t, pjSyntheticProjector(t))
@@ -259,13 +203,6 @@ func TestStore_Integration_BackfillOne_TitleOnlyWriteInGap_LostRace(t *testing.T
 	}
 }
 
-// --- An autosave AFTER a successful backfill still holds its revision ---
-
-// TestStore_Integration_BackfillOne_AutosaveAfterBackfill_KeepsRevision is the
-// user-visible consequence of not bumping revision: a client that read the row
-// before the backfill, and saves after it, must NOT be told its revision is
-// stale. A backfill that bumped revision would reject every open
-// editor on the migrated row.
 func TestStore_Integration_BackfillOne_AutosaveAfterBackfill_KeepsRevision(t *testing.T) {
 	t.Parallel()
 	s, q, pool, ctx := pjStore(t, pjSyntheticProjector(t))
@@ -280,7 +217,6 @@ func TestStore_Integration_BackfillOne_AutosaveAfterBackfill_KeepsRevision(t *te
 		t.Fatalf("BackfillOne() = %v, want %v", result, resume.BackfillApplied)
 	}
 
-	// created.Revision was observed BEFORE the backfill ran.
 	newRev, err := s.SaveDocument(ctx, userID, created.ID, validDocForTest(t), created.Revision)
 	if err != nil {
 		var mismatch *resume.RevisionMismatchError
@@ -298,13 +234,6 @@ func TestStore_Integration_BackfillOne_AutosaveAfterBackfill_KeepsRevision(t *te
 	}
 }
 
-// --- A corrupt projection surfaces; it is never persisted ---
-
-// TestStore_Integration_BackfillOne_CorruptDocument_ErrorsWithoutWriting: a row
-// whose stored bytes cannot be projected and strictly decoded must fail the
-// backfill loudly. Silently persisting whatever survived would launder
-// corruption into the current version, where nothing would ever look at it
-// again.
 func TestStore_Integration_BackfillOne_CorruptDocument_ErrorsWithoutWriting(t *testing.T) {
 	t.Parallel()
 	s, q, pool, ctx := pjStore(t, pjSyntheticProjector(t))
@@ -324,8 +253,6 @@ func TestStore_Integration_BackfillOne_CorruptDocument_ErrorsWithoutWriting(t *t
 	}
 	pjAssertRowUntouched(t, before, pjSnapshot(ctx, t, pool, created.ID), "after a failed BackfillOne")
 }
-
-// --- An id that does not exist ---
 
 func TestStore_Integration_BackfillOne_UnknownID_NotFound(t *testing.T) {
 	t.Parallel()

@@ -376,7 +376,6 @@ func assertPhotoCropChangedBodyReuse(t *testing.T) {
 
 	before := snapshotPhotoCropExitState(t, h, backend.delegate, created.ID)
 	beforeCalls := backend.snapshotCalls()
-	// The command is semantically identical but its raw JSON bytes differ.
 	reused := h.mutationRequest(t, http.MethodPatch, path,
 		bytes.NewBufferString(`{"crop": {"x":0.1,"y":0.2,"width":0.7,"height":0.6}}`),
 		2, idempotencyKey)
@@ -572,8 +571,6 @@ func assertPhotoCropReplacementRace(t *testing.T) {
 			results <- namedResult{name: name, response: response, err: err}
 		}()
 	}
-	// Force the former deadlock schedule: crop completes its fresh Inspect
-	// before replacement is allowed to start transition ownership.
 	perform("crop", cropRequest)
 	select {
 	case <-ordered.cropInspected:

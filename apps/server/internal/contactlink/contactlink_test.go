@@ -7,8 +7,6 @@ import (
 	"testing"
 )
 
-// The corpus is shared with the web renderer tests, so the Go and TS rules
-// agree on every case (docs/adr/0013-resume-header-and-contacts.md).
 func TestHrefCorpus(t *testing.T) {
 	raw, err := os.ReadFile(filepath.Join("testdata", "contact-link-corpus.json"))
 	if err != nil {

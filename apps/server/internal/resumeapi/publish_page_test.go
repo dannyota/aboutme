@@ -13,10 +13,6 @@ import (
 	schema "danny.vn/aboutme/packages/schema/gen/go"
 )
 
-// The public page title and emoji favicon are publication settings
-// (docs/adr/0014-public-page-head-and-link-preview.md): absent keeps the stored
-// value, "" clears it, and any other value is validated.
-
 const publishFlags = `"live":false,"downloadEnabled":true,"seoGeoEnabled":false`
 
 func TestPublishDecodePublicPageFields(t *testing.T) {

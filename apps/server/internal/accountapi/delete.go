@@ -27,12 +27,6 @@ const (
 
 var errAccountChanged = errors.New("accountapi: account changed")
 
-// deletionRequest names the account to delete and the authority for it. A
-// session means a self-delete, which proves recent reauthentication and
-// revokes public state through the in-process coordinator. A reportedSlug
-// means the operator command, which has no session and runs in another
-// process than the server. Exactly one of the two is set; reportedSlug alone
-// decides which path runs.
 type deletionRequest struct {
 	userID       uuid.UUID
 	session      *store.Session
@@ -55,7 +49,6 @@ type accountDeletionPlan struct {
 	occurredAt          time.Time
 }
 
-// DeleteHandler returns the complete protected DELETE /api/v1/me handler.
 func (s *Service) DeleteHandler() http.Handler {
 	var handler http.Handler = http.HandlerFunc(s.handleDelete)
 	if s.deleteAdmission != nil {
@@ -124,8 +117,6 @@ func (s *Service) deleteAccount(ctx context.Context, sess store.Session) error {
 	return err
 }
 
-// deleteAccountForUser is the one deletion path, keyed by user ID. It returns
-// the plan that committed.
 func (s *Service) deleteAccountForUser(ctx context.Context, req deletionRequest) (accountDeletionPlan, error) {
 	if !req.valid() {
 		return accountDeletionPlan{}, errDeletionRequestInvalid

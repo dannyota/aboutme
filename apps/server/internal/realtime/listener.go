@@ -77,8 +77,6 @@ func stopListenerIfCanceled(ctx context.Context, hub *Hub) bool {
 	return true
 }
 
-// RunListener keeps one pool connection in LISTEN mode and forwards validated
-// revision metadata to hub. Cancellation returns nil after releasing it.
 func RunListener(ctx context.Context, pool *store.Pool, hub *Hub) error {
 	return runListener(ctx, pool, hub, listenerDeps{acquire: acquireListenerConn, backoff: waitBackoff})
 }

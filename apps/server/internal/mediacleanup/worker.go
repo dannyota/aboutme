@@ -1,5 +1,3 @@
-// Package mediacleanup drains exact-key media deletion work and reconciles
-// old private objects against current PostgreSQL ownership state.
 package mediacleanup
 
 import (
@@ -34,18 +32,11 @@ const (
 )
 
 var (
-	// ErrDatabase reports a cleanup database failure without exposing database
-	// details through a command diagnostic.
-	ErrDatabase = errors.New("mediacleanup: database operation failed")
-	// ErrBackend reports an invalid or failed listing without exposing an
-	// object key or backend response.
-	ErrBackend = errors.New("mediacleanup: media backend operation failed")
-	// ErrLockRelease reports that a run could not prove its advisory lock was
-	// released. The locked connection is destroyed before this is returned.
+	ErrDatabase    = errors.New("mediacleanup: database operation failed")
+	ErrBackend     = errors.New("mediacleanup: media backend operation failed")
 	ErrLockRelease = errors.New("mediacleanup: advisory lock release failed")
 )
 
-// Config provides the cleanup worker's production dependencies.
 type Config struct {
 	Pool   *store.Pool
 	Media  media.Backend
@@ -53,9 +44,6 @@ type Config struct {
 	Now    func() time.Time
 }
 
-// Result is the fixed, identifier-free command result surface used by both
-// cleanup modes. Backlog is the pending-job count for deletion and 1 when an
-// orphan run stops at its ceiling with another page available.
 type Result struct {
 	Overlap    bool
 	Scanned    int64
@@ -74,7 +62,6 @@ type Result struct {
 	Duration   time.Duration
 }
 
-// Worker runs bounded one-shot media cleanup jobs.
 type Worker struct {
 	pool   *store.Pool
 	media  media.Backend
@@ -89,7 +76,6 @@ type workerHooks struct {
 	afterOrphanClaim func(store.MediaDeletionJob)
 }
 
-// New constructs a worker and rejects missing stateful dependencies.
 func New(config Config) (*Worker, error) {
 	if config.Pool == nil {
 		return nil, errors.New("mediacleanup: nil pool")

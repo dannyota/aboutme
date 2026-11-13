@@ -59,11 +59,6 @@ func newAuthorizeHarness(t *testing.T) (*Service, *store.Queries, store.OAuthCli
 	return s, q, client, user
 }
 
-// issueTestSession issues a real database-backed session for userID and pins
-// its primary and, when factorVerifiedAt is non-nil, second-factor
-// verification timestamps to deterministic values, so a reauthentication-
-// window check compares against the fixture's injected clock rather than the
-// real wall clock the session manager's default Issue path would use.
 func issueTestSession(t *testing.T, pool *store.Pool, userID uuid.UUID, now time.Time, factorVerifiedAt *time.Time) store.Session {
 	t.Helper()
 	_, sess, err := auth.NewSessionManagerWithPool(pool).Issue(t.Context(), userID, "oauthsrv-test", "127.0.0.1")
@@ -78,9 +73,6 @@ func issueTestSession(t *testing.T, pool *store.Pool, userID uuid.UUID, now time
 	return sess
 }
 
-// enrollTestSecondFactor gives userID a second-factor policy so the recent
-// reauthentication gate requires both primary and factor proof. The random
-// handle carries no meaning beyond the required-unique 32-byte shape.
 func enrollTestSecondFactor(t *testing.T, q *store.Queries, userID uuid.UUID, now time.Time) {
 	t.Helper()
 	handle := make([]byte, 32)
@@ -218,10 +210,6 @@ func TestAuthorize_ValidationAndSessionBranches(t *testing.T) {
 	}
 }
 
-// This catches the silent-reuse path minting a code from a live grant without
-// the recent second-factor proof an enrolled account needs, and pins the
-// grant and code it does issue to the account's current authentication
-// epoch. See docs/design/second-factor-authentication.md.
 func TestAuthorize_SilentReuseRequiresRecentSecondFactorProof(t *testing.T) {
 	s, q, client, user := newAuthorizeHarness(t)
 	enrollTestSecondFactor(t, q, user.ID, s.clock())
@@ -356,18 +344,12 @@ func TestAuthorize_TrustedAndUntrustedValidationMatrix(t *testing.T) {
 	}
 }
 
-// resourceCase is one resource query or form suffix. Rule 1 of
-// docs/design/mcp-client-compatibility.md accepts only the origin and
-// origin + "/mcp", each in the exact raw form url.QueryEscape produces.
 type resourceCase struct {
 	name   string
 	suffix string
 	valid  bool
 }
 
-// resourceCases lists both accepted spellings and the rejected neighbors that
-// a lenient comparison (URL normalization, case folding, or decoding before
-// comparing) would let through.
 var resourceCases = []resourceCase{
 	{"missing", "", true},
 	{"origin", "&resource=https%3A%2F%2Faboutme.example", true},
@@ -408,8 +390,6 @@ func TestCanonicalResource_ExactSpellings(t *testing.T) {
 			}
 		})
 	}
-	// An encoded key decodes to "resource" but has no raw "resource=" field
-	// to check, so it fails closed.
 	raw := "%72esource=https%3A%2F%2Faboutme.example%2Fmcp"
 	values, err := url.ParseQuery(raw)
 	if err != nil || s.canonicalResource(values, raw) {

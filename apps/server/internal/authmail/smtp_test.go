@@ -28,8 +28,6 @@ const (
 	stubTo       = "recipient-secret@example.com"
 )
 
-// testPKI issues a throwaway CA and a 127.0.0.1 leaf at test time, so no key
-// material is ever committed.
 func testPKI(t *testing.T) (*x509.CertPool, tls.Certificate) {
 	t.Helper()
 	caKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -69,15 +67,11 @@ func testPKI(t *testing.T) (*x509.CertPool, tls.Certificate) {
 	return pool, tls.Certificate{Certificate: [][]byte{leafDER}, PrivateKey: leafKey}
 }
 
-// stubCommand is one command the stub received and whether TLS was up.
 type stubCommand struct {
 	line string
 	tls  bool
 }
 
-// smtpStub is a scripted SMTP server on 127.0.0.1:0. replies overrides the
-// reply to a verb ("AUTH", "MAIL", "RCPT", "DATA", or "END" for the reply after
-// the message body).
 type smtpStub struct {
 	implicit, offerSTARTTLS, silent bool
 	replies                         map[string]string
@@ -235,8 +229,6 @@ func (s *smtpStub) count(verb string) int {
 
 var stubNow = time.Date(2026, 10, 10, 9, 30, 0, 0, time.UTC)
 
-// fixedRandom returns the same bytes on every call, so a test can render the
-// message the sender will send.
 type fixedRandom struct{}
 
 func (fixedRandom) Read(p []byte) (int, error) {
@@ -330,7 +322,7 @@ func TestSMTPSenderRejectsUntrustedCertificate(t *testing.T) {
 	_, cert := testPKI(t)
 	for _, implicit := range []bool{true, false} {
 		stub := startStub(t, cert, func(s *smtpStub) { s.implicit = implicit })
-		sender, _ := newStubSender(t, stub, nil) // system roots do not hold the test CA
+		sender, _ := newStubSender(t, stub, nil)
 		res, err := sender.Send(context.Background(), stubMessage())
 		if err != nil || res.Outcome != SendTemporaryFailure {
 			t.Errorf("implicit=%v: Send = %v, %v; want temporary", implicit, res, err)

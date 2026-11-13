@@ -8,8 +8,6 @@ import (
 	schema "danny.vn/aboutme/packages/schema/gen/go"
 )
 
-// entryLinkSchema is the current schema's $defs/link, compiled once at
-// package init like compiledSchema.
 var entryLinkSchema = mustCompileEntryLink()
 
 func mustCompileEntryLink() *jsonschema.Schema {
@@ -28,8 +26,6 @@ func mustCompileEntryLink() *jsonschema.Schema {
 	return compiled
 }
 
-// ValidEntryLink reports whether s satisfies the entry link contract every
-// document write validates, so a copied value cannot fail the write.
 func ValidEntryLink(s string) bool {
 	return entryLinkSchema.Validate(s) == nil
 }

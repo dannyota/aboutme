@@ -13,68 +13,31 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// Re-encryption run bounds from docs/design/totp-key-management.md
-// "Rotation" and docs/design/budgets.md "TOTP re-encryption" (AC-SEC-008):
-// at most 200 rows locked per transaction, and at most 10,000 rows across at
-// most 30 minutes per run.
 const (
 	totpReencryptBatchRows     int32 = 200
 	totpReencryptMaxRowsPerRun int64 = 10_000
 	totpReencryptMaxDuration         = 30 * time.Minute
 )
 
-// ErrTOTPReencryptFailed reports that a proactive re-encryption run ended
-// with at least one row it could not move onto the active key. A decrypt
-// failure leaves that row unchanged, so the run still fails even though it
-// finishes every other row its row and time budget allowed
-// (docs/design/totp-key-management.md "Rotation").
 var ErrTOTPReencryptFailed = errors.New("secondfactor: totp re-encryption run failed")
 
-// TOTPReencryptFailure names one row a re-encryption run could not decrypt.
-// It carries no key, secret, nonce, ciphertext, email, or account ID
-// (docs/design/totp-key-management.md "Rotation").
 type TOTPReencryptFailure struct {
-	// Kind is the record kind the row belongs to: credential or enrollment.
 	Kind TOTPRecordKind
-	// ID is the row's own internal ID, never the account ID.
-	ID uuid.UUID
+	ID   uuid.UUID
 }
 
-// TOTPReencryptResult reports one proactive re-encryption run's counts and
-// touched row IDs only, never a key, secret, nonce, ciphertext, email, or
-// account ID (docs/design/totp-key-management.md "Rotation").
 type TOTPReencryptResult struct {
-	// CredentialsReencrypted counts credential rows this run moved onto the
-	// active key.
-	CredentialsReencrypted int64
-	// EnrollmentsReencrypted counts unexpired enrollment rows this run moved
-	// onto the active key.
-	EnrollmentsReencrypted int64
-	// EnrollmentsExpiredDeleted counts expired enrollment rows this run
-	// deleted without decrypting.
+	CredentialsReencrypted    int64
+	EnrollmentsReencrypted    int64
 	EnrollmentsExpiredDeleted int64
-	// DecryptFailures lists every row this run could not decrypt and left
-	// unchanged.
-	DecryptFailures []TOTPReencryptFailure
-	// CredentialsOffActiveKey is the unlocked count(*) of every credential
-	// row off the active key, taken after the batches.
-	CredentialsOffActiveKey int64
-	// EnrollmentsOffActiveKey is the unlocked count(*) of every enrollment
-	// row off the active key, taken after the batches.
-	EnrollmentsOffActiveKey int64
-	// Batches counts the transactions this run committed, credentials first
-	// and then enrollments.
-	Batches int64
-	// LimitReached reports whether the run stopped because it reached the
-	// 10,000-row or 30-minute bound rather than exhausting every row off the
-	// active key.
-	LimitReached bool
-	// DurationMilliseconds is the run's wall time under the injected clock.
-	DurationMilliseconds int64
+	DecryptFailures           []TOTPReencryptFailure
+	CredentialsOffActiveKey   int64
+	EnrollmentsOffActiveKey   int64
+	Batches                   int64
+	LimitReached              bool
+	DurationMilliseconds      int64
 }
 
-// TOTPRotationConfig supplies the proactive re-encryption runner's fixed
-// dependencies. Logger may be nil.
 type TOTPRotationConfig struct {
 	Pool   *store.Pool
 	Ring   *TOTPKeyRing
@@ -83,12 +46,6 @@ type TOTPRotationConfig struct {
 	Logger *slog.Logger
 }
 
-// TOTPRotationRunner runs the bounded proactive re-encryption command
-// (docs/design/totp-key-management.md "Rotation"; AC-SEC-008). It takes no
-// user lock: every row it touches is locked directly with FOR UPDATE SKIP
-// LOCKED, so it never waits behind a live factor transaction's user,
-// session, policy, or credential lock. A skipped row belongs to a live
-// factor transaction and waits for a later run.
 type TOTPRotationRunner struct {
 	pool   *store.Pool
 	ring   *TOTPKeyRing
@@ -96,13 +53,9 @@ type TOTPRotationRunner struct {
 	signal *TOTPUnavailableSignal
 	logger *slog.Logger
 
-	// batchRows is the per-transaction row limit. It defaults to
-	// totpReencryptBatchRows; tests in this package may set it directly to
-	// exercise afterID paging without inserting hundreds of rows.
 	batchRows int32
 }
 
-// NewTOTPRotationRunner validates config and returns the runner.
 func NewTOTPRotationRunner(config TOTPRotationConfig) (*TOTPRotationRunner, error) {
 	if config.Pool == nil || config.Ring == nil || config.Now == nil || config.Signal == nil {
 		return nil, errors.New("secondfactor: totp rotation runner missing dependency")
@@ -113,14 +66,6 @@ func NewTOTPRotationRunner(config TOTPRotationConfig) (*TOTPRotationRunner, erro
 	}, nil
 }
 
-// Run processes at most 10,000 rows in at most 30 minutes by the injected
-// clock: every credential batch first, then every enrollment batch, each
-// batch its own transaction of at most 200 rows locked FOR UPDATE SKIP
-// LOCKED in id order. Enrollments already expired are deleted without
-// decrypting; unexpired enrollments are resealed like credentials. A run
-// with nothing to rewrite only counts. Run returns ErrTOTPReencryptFailed
-// when any row failed to decrypt, after finishing every other row the run's
-// budget allowed (docs/design/totp-key-management.md "Rotation").
 func (r *TOTPRotationRunner) Run(ctx context.Context) (TOTPReencryptResult, error) {
 	started := r.now()
 	deadline := started.Add(totpReencryptMaxDuration)
@@ -187,8 +132,6 @@ func (r *TOTPRotationRunner) Run(ctx context.Context) (TOTPReencryptResult, erro
 	return r.finish(ctx, started, result, runErr)
 }
 
-// totpReencryptBatchLimit returns the next batch's row limit: at most
-// batchRows, and never more than the run's remaining 10,000-row budget.
 func totpReencryptBatchLimit(rowsProcessed int64, batchRows int32) int32 {
 	remaining := totpReencryptMaxRowsPerRun - rowsProcessed
 	if remaining >= int64(batchRows) {
@@ -197,19 +140,9 @@ func totpReencryptBatchLimit(rowsProcessed int64, batchRows int32) int32 {
 	if remaining <= 0 {
 		return 0
 	}
-	// remaining is strictly less than batchRows, an int32, in this branch,
-	// so it always fits without truncation.
 	return int32(remaining) //nolint:gosec // G115: bounded above by batchRows (int32) by the branch condition above, so this cannot overflow
 }
 
-// reencryptCredentialBatch locks and processes one batch of credential rows
-// off the active key, in id order after afterID, in one transaction. It
-// returns the number of rows the batch locked, whether resealed or left
-// unchanged after a decrypt failure, so the caller's row budget counts
-// every row this run touched, and the batch's last row ID so the caller can
-// page past it: a row that stays off the active key (a decrypt failure)
-// would otherwise be reselected by every later batch of the same run
-// (docs/design/totp-key-management.md "Rotation").
 func (r *TOTPRotationRunner) reencryptCredentialBatch(ctx context.Context, activeKeyID string, afterID uuid.UUID, limit int32, result *TOTPReencryptResult) (int64, uuid.UUID, error) {
 	var locked int64
 	lastID := afterID
@@ -237,11 +170,6 @@ func (r *TOTPRotationRunner) reencryptCredentialBatch(ctx context.Context, activ
 	return locked, lastID, nil
 }
 
-// reencryptCredentialRow opens row under its stored key and, on success,
-// reseals it under the active key with a fresh nonce, the same row ID, and
-// the same credential binding (docs/design/totp-key-management.md
-// "Sealing"). A decrypt failure leaves the row unchanged, is counted in
-// result, and does not stop the batch.
 func (r *TOTPRotationRunner) reencryptCredentialRow(ctx context.Context, qtx *store.Queries, row store.TotpCredential, now time.Time, result *TOTPReencryptResult) error {
 	sealed := SealedTOTPSecret{KeyID: row.KeyID, Ciphertext: row.Ciphertext, Version: int(row.FormatVersion)}
 	copy(sealed.Nonce[:], row.Nonce)
@@ -268,9 +196,6 @@ func (r *TOTPRotationRunner) reencryptCredentialRow(ctx context.Context, qtx *st
 	return nil
 }
 
-// reencryptEnrollmentBatch locks and processes one batch of enrollment rows
-// off the active key, in id order after afterID, in one transaction, the
-// same shape and afterID paging as reencryptCredentialBatch.
 func (r *TOTPRotationRunner) reencryptEnrollmentBatch(ctx context.Context, activeKeyID string, afterID uuid.UUID, limit int32, result *TOTPReencryptResult) (int64, uuid.UUID, error) {
 	var locked int64
 	lastID := afterID
@@ -298,10 +223,6 @@ func (r *TOTPRotationRunner) reencryptEnrollmentBatch(ctx context.Context, activ
 	return locked, lastID, nil
 }
 
-// reencryptEnrollmentRow deletes row without decrypting when it is already
-// expired, and otherwise opens and reseals it exactly like
-// reencryptCredentialRow, under the enrollment binding
-// (docs/design/totp-key-management.md "Rotation").
 func (r *TOTPRotationRunner) reencryptEnrollmentRow(ctx context.Context, qtx *store.Queries, row store.TotpEnrollment, now time.Time, result *TOTPReencryptResult) error {
 	if !row.ExpiresAt.After(now) {
 		affected, err := qtx.DeleteTOTPEnrollmentByID(ctx, row.ID)
@@ -336,16 +257,12 @@ func (r *TOTPRotationRunner) reencryptEnrollmentRow(ctx context.Context, qtx *st
 	return nil
 }
 
-// finish sets result's duration under the injected clock, logs the run
-// summary, and returns result and err unchanged.
 func (r *TOTPRotationRunner) finish(ctx context.Context, started time.Time, result TOTPReencryptResult, err error) (TOTPReencryptResult, error) {
 	result.DurationMilliseconds = r.now().Sub(started).Milliseconds()
 	r.logResult(ctx, result, err)
 	return result, err
 }
 
-// logResult logs one summary line per run: counts and durations only, never
-// a key, secret, nonce, ciphertext, email, or account ID.
 func (r *TOTPRotationRunner) logResult(ctx context.Context, result TOTPReencryptResult, err error) {
 	if r.logger == nil {
 		return

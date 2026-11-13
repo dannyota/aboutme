@@ -1,5 +1,3 @@
-// Package publicstate coordinates public response admission across durable
-// resume and discovery generations.
 package publicstate
 
 import (
@@ -14,87 +12,63 @@ import (
 	"github.com/google/uuid"
 )
 
-// Representation identifies a publicly served resume or discovery response.
 type Representation string
 
 const (
-	// RepresentationJSON is the public JSON resume representation.
-	RepresentationJSON Representation = "json"
-	// RepresentationSSE is the public revision notification stream.
-	RepresentationSSE Representation = "sse"
-	// RepresentationPhoto is the public resume photo representation.
-	RepresentationPhoto Representation = "photo"
-	// RepresentationHTML is the public HTML resume representation.
-	RepresentationHTML Representation = "html"
-	// RepresentationMarkdown is the public Markdown resume representation.
+	RepresentationJSON     Representation = "json"
+	RepresentationSSE      Representation = "sse"
+	RepresentationPhoto    Representation = "photo"
+	RepresentationHTML     Representation = "html"
 	RepresentationMarkdown Representation = "markdown"
-	// RepresentationPDF is the download-gated public PDF representation.
-	RepresentationPDF Representation = "pdf"
-	// RepresentationPNG is the live-gated public share-image representation.
-	RepresentationPNG Representation = "png"
-	// RepresentationSitemap is the public sitemap representation.
-	RepresentationSitemap Representation = "sitemap"
-	// RepresentationRobots is the public robots.txt representation.
-	RepresentationRobots Representation = "robots"
-	// RepresentationLLMS is the public llms.txt representation.
-	RepresentationLLMS Representation = "llms"
+	RepresentationPDF      Representation = "pdf"
+	RepresentationPNG      Representation = "png"
+	RepresentationSitemap  Representation = "sitemap"
+	RepresentationRobots   Representation = "robots"
+	RepresentationLLMS     Representation = "llms"
 )
 
-// TransitionClass defines whether a transition cancels active public requests.
 type TransitionClass uint8
 
 const (
-	// NonDraining permits already admitted requests to complete.
 	NonDraining TransitionClass = iota
-	// Revoking cancels active requests before the transition can complete.
 	Revoking
 )
 
-// ResumeTarget identifies the revision and transition behavior for one resume.
 type ResumeTarget struct {
 	ID               uuid.UUID
 	ExpectedRevision int64
 	Class            TransitionClass
 }
 
-// Plan lists every public generation that one transition changes.
 type Plan struct {
 	DiscoveryGeneration *int64
 	Resumes             []ResumeTarget
 }
 
-// CommittedState is the durable state proven after a transition commits.
 type CommittedState struct {
 	DiscoveryGeneration *int64
 	ResumeRevisions     map[uuid.UUID]int64
 	RetiredResumes      []uuid.UUID
 }
 
-// RecoveryDisposition identifies whether durable work committed before recovery.
 type RecoveryDisposition uint8
 
 const (
-	// RecoveryCommitted proves that the transition's durable work committed.
 	RecoveryCommitted RecoveryDisposition = iota + 1
-	// RecoveryNotCommitted proves that the transition's durable work did not commit.
 	RecoveryNotCommitted
 )
 
-// RecoveryProof is the durable transition outcome returned during recovery.
 type RecoveryProof struct {
 	Disposition RecoveryDisposition
 	State       CommittedState
 }
 
-// RecoveryResolver resolves the durable result of a closed transition.
 type RecoveryResolver interface {
 	Resolve(context.Context) (RecoveryProof, error)
 }
 
-// ErrAdmissionClosed reports that a generation no longer admits public requests.
 var ErrAdmissionClosed = errors.New("publicstate: admission closed")
 
-// GenerationMismatchError reports an attempt to acquire a stale generation.
 type GenerationMismatchError struct {
 	Expected int64
 	Actual   int64
@@ -104,7 +78,6 @@ func (e *GenerationMismatchError) Error() string {
 	return fmt.Sprintf("publicstate: generation mismatch: expected %d, actual %d", e.Expected, e.Actual)
 }
 
-// DrainTimeoutError reports that active public requests exceeded a drain deadline.
 type DrainTimeoutError struct {
 	Deadline time.Time
 }
@@ -113,7 +86,6 @@ func (e *DrainTimeoutError) Error() string {
 	return fmt.Sprintf("publicstate: drain timed out at %s", e.Deadline.UTC().Format(time.RFC3339Nano))
 }
 
-// RecoveryUnresolvedError reports that a closed transition has no safe outcome.
 type RecoveryUnresolvedError struct {
 	Cause error
 }
@@ -127,13 +99,11 @@ func (e *RecoveryUnresolvedError) Error() string {
 
 func (e *RecoveryUnresolvedError) Unwrap() error { return e.Cause }
 
-// CoordinatorConfig defines the initial discovery generation and clock.
 type CoordinatorConfig struct {
 	DiscoveryGeneration int64
 	Now                 func() time.Time
 }
 
-// Coordinator admits public requests only for the current durable generations.
 type Coordinator struct {
 	mu      sync.Mutex
 	now     func() time.Time
@@ -142,7 +112,6 @@ type Coordinator struct {
 	metrics fenceMetrics
 }
 
-// NewCoordinator creates a coordinator for the given discovery generation.
 func NewCoordinator(config CoordinatorConfig) (*Coordinator, error) {
 	if config.DiscoveryGeneration <= 0 {
 		return nil, errors.New("publicstate: discovery generation must be positive")
@@ -157,7 +126,6 @@ func NewCoordinator(config CoordinatorConfig) (*Coordinator, error) {
 	}, nil
 }
 
-// AcquireResume admits one public resume response for its expected revision.
 func (c *Coordinator) AcquireResume(ctx context.Context, id uuid.UUID, expected int64, rep Representation) (*Lease, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -175,7 +143,6 @@ func (c *Coordinator) AcquireResume(ctx context.Context, id uuid.UUID, expected 
 	return f.acquire(ctx, expected, rep, &c.metrics)
 }
 
-// AcquireDiscovery admits one public discovery response for its expected generation.
 func (c *Coordinator) AcquireDiscovery(ctx context.Context, expected int64, rep Representation) (*Lease, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -186,7 +153,6 @@ func (c *Coordinator) AcquireDiscovery(ctx context.Context, expected int64, rep 
 	return c.global.acquire(ctx, expected, rep, &c.metrics)
 }
 
-// Ready reports whether every public fence is safe to admit traffic.
 func (c *Coordinator) Ready() error {
 	c.mu.Lock()
 	fences := make([]*fence, 0, len(c.resumes)+1)
@@ -203,7 +169,6 @@ func (c *Coordinator) Ready() error {
 	return nil
 }
 
-// Begin reserves all fences in plan for a single ordered transition.
 func (c *Coordinator) Begin(ctx context.Context, plan Plan) (*Transition, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err

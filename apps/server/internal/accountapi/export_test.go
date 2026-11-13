@@ -29,8 +29,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/testutil"
 )
 
-// TestExportRouteRejectsUnsupportedMethod catches a route that admits a
-// mutating account-export request or masks its method contract behind auth.
 func TestExportRouteRejectsUnsupportedMethod(t *testing.T) {
 	mux := http.NewServeMux()
 	(&Service{}).RegisterRoutes(mux)
@@ -94,9 +92,6 @@ func TestExportRouteProducesPortableFrozenAttachment(t *testing.T) {
 		}
 	}
 
-	// Second-factor material must never cross the export boundary: policy,
-	// credential, public key, recovery digest, and recovery code all stay
-	// server-side. See docs/design/passkey-second-factor-contract.md.
 	factorNow := time.Now().UTC()
 	handleSentinel := exportSecondFactorSentinel("sfhandlesentnl")
 	credentialIDSentinel := exportSecondFactorSentinel("sfcredentialid")
@@ -119,9 +114,6 @@ func TestExportRouteProducesPortableFrozenAttachment(t *testing.T) {
 		t.Fatalf("seed recovery code: %v", err)
 	}
 
-	// TOTP credential and enrollment ciphertext, nonce, and token digest must
-	// also never cross the export boundary
-	// (docs/design/totp-second-factor-contract.md#postgresql-shape-and-bounds).
 	totpNonceSentinel := exportTOTPSentinel("sftotpnonce1", 12)
 	totpCiphertextSentinel := exportTOTPSentinel("sftotpciphertext-sentinel", 36)
 	totpTokenDigestSentinel := exportSecondFactorSentinel("sftotpenrolltok")
@@ -656,10 +648,6 @@ func (exportTestFailReader) Read([]byte) (int, error) { return 0, errors.New("re
 
 type exportTestUnknownLengthReader struct{ io.Reader }
 
-// exportSecondFactorSentinel returns 32 bytes: a readable 16-byte marker
-// (zero-padded or truncated) followed by a fresh random 16-byte suffix, so a
-// second-factor column's uniqueness constraint never collides across test
-// runs while the marker stays searchable in a leak check.
 func exportSecondFactorSentinel(marker string) []byte {
 	out := make([]byte, 32)
 	copy(out, marker)
@@ -668,9 +656,6 @@ func exportSecondFactorSentinel(marker string) []byte {
 	return out
 }
 
-// exportTOTPSentinel returns exactly n bytes with marker at the front, for
-// the fixed-length nonce and ciphertext columns a TOTP row's check
-// constraints require.
 func exportTOTPSentinel(marker string, n int) []byte {
 	out := make([]byte, n)
 	copy(out, marker)
@@ -750,8 +735,6 @@ func (m *exportTestGatedMedia) ListPage(ctx context.Context, prefix, cursor stri
 	return m.delegate.ListPage(ctx, prefix, cursor, limit)
 }
 
-// AC-SHOW-015: the export carries each resume's showcase state (always listed),
-// role, and request time, null without an opt-in, and never an internal value.
 func TestExportRouteIncludesTheShowcaseState(t *testing.T) {
 	h := newExportTestHarness(t)
 	listed := h.insertResume(t, "listed", false, nil)

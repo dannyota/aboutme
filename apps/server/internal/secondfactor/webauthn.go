@@ -1,8 +1,3 @@
-// Package secondfactor implements passkey and recovery-code second factors:
-// the WebAuthn relying party, strict wire decoding, recovery codes, and the
-// transactional factor service behind the auth second-factor routes. The
-// contract is docs/design/passkey-second-factor-contract.md and the numeric
-// limits are in docs/design/budgets.md.
 package secondfactor
 
 import (
@@ -22,7 +17,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// WebAuthn decoded-byte bounds from docs/design/budgets.md.
 const (
 	challengeBytes          = 32
 	ceremonyTokenBytes      = 32
@@ -41,7 +35,6 @@ const (
 	relyingPartyDisplayName = "aboutme.vn"
 )
 
-// canonicalTransports is the closed transport set in its fixed order.
 var canonicalTransports = []string{"usb", "nfc", "ble", "smart-card", "hybrid", "internal"}
 
 var credentialParameters = []protocol.CredentialParameter{
@@ -49,19 +42,12 @@ var credentialParameters = []protocol.CredentialParameter{
 	{Type: protocol.PublicKeyCredentialType, Algorithm: webauthncose.AlgRS256},
 }
 
-// RelyingParty is the single WebAuthn relying-party policy: the canonical
-// origin's host as exact RP ID, the exact origin, required user verification,
-// no cross-origin or top-origin ceremonies, and no extensions.
 type RelyingParty struct {
 	id     string
 	origin string
 	lib    *webauthn.WebAuthn
 }
 
-// NewRelyingParty derives the relying party from the canonical public origin.
-// It accepts an https origin whose host is a DNS name, or an http or https
-// origin on localhost. An IP literal, path, query, fragment, or user info is
-// rejected, so an enabled enrollment flag fails startup closed.
 func NewRelyingParty(publicOrigin string) (*RelyingParty, error) {
 	u, err := url.Parse(publicOrigin)
 	if err != nil || u.Opaque != "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" ||
@@ -87,7 +73,6 @@ func NewRelyingParty(publicOrigin string) (*RelyingParty, error) {
 	return &RelyingParty{id: host, origin: origin, lib: lib}, nil
 }
 
-// ID returns the relying party ID.
 func (rp *RelyingParty) ID() string {
 	return rp.id
 }
@@ -114,83 +99,44 @@ func validRelyingPartyHost(host string) bool {
 	return true
 }
 
-// ---- options ----
-
-// credentialDescriptor is one WebAuthn credential descriptor in the options
-// JSON.
 type credentialDescriptor struct {
-	// Type is always "public-key".
-	Type string `json:"type"`
-	// ID is the stored credential ID, unpadded base64url.
-	ID string `json:"id"`
-	// Transports lists the stored transport hints in canonical order; it is
-	// omitted when none is stored.
+	Type       string   `json:"type"`
+	ID         string   `json:"id"`
 	Transports []string `json:"transports,omitempty"`
 }
 
-// registrationPublicKey is the publicKey options member of a passkey
-// registration ceremony.
 type registrationPublicKey struct {
-	// Challenge is the ceremony's 32-byte challenge, unpadded base64url.
 	Challenge string `json:"challenge"`
-	// RP names the relying party.
-	RP struct {
-		// Name is the relying-party display name.
+	RP        struct {
 		Name string `json:"name"`
-		// ID is the relying-party ID, the canonical origin's host.
-		ID string `json:"id"`
+		ID   string `json:"id"`
 	} `json:"rp"`
-	// User identifies the account that registers the passkey.
 	User struct {
-		// ID is the account's WebAuthn user handle, unpadded base64url.
-		ID string `json:"id"`
-		// Name is the account email.
-		Name string `json:"name"`
-		// DisplayName is the account display name.
+		ID          string `json:"id"`
+		Name        string `json:"name"`
 		DisplayName string `json:"displayName"`
 	} `json:"user"`
-	// PubKeyCredParams lists the accepted credential algorithms in order of
-	// preference: ES256, then RS256.
 	PubKeyCredParams []struct {
-		// Type is always "public-key".
 		Type string `json:"type"`
-		// Alg is the COSE algorithm identifier.
-		Alg int `json:"alg"`
+		Alg  int    `json:"alg"`
 	} `json:"pubKeyCredParams"`
-	// Timeout is the ceremony timeout in milliseconds.
-	Timeout int `json:"timeout"`
-	// ExcludeCredentials lists the account's active passkeys so an
-	// authenticator that already holds one of them does not register again.
-	ExcludeCredentials []credentialDescriptor `json:"excludeCredentials"`
-	// AuthenticatorSelection requires a discoverable credential and user
-	// verification.
+	Timeout                int                    `json:"timeout"`
+	ExcludeCredentials     []credentialDescriptor `json:"excludeCredentials"`
 	AuthenticatorSelection struct {
-		// ResidentKey is always "required".
 		ResidentKey string `json:"residentKey"`
-		// RequireResidentKey is always true; it repeats ResidentKey for
-		// WebAuthn Level 1 clients.
-		RequireResidentKey bool `json:"requireResidentKey"`
-		// UserVerification is always "required".
-		UserVerification string `json:"userVerification"`
+		// WebAuthn Level 1 clients read requireResidentKey instead of residentKey.
+		RequireResidentKey bool   `json:"requireResidentKey"`
+		UserVerification   string `json:"userVerification"`
 	} `json:"authenticatorSelection"`
-	// Attestation is always "none".
 	Attestation string `json:"attestation"`
 }
 
-// assertionPublicKey is the publicKey options member of a pending passkey
-// assertion ceremony.
 type assertionPublicKey struct {
-	// Challenge is the ceremony's 32-byte challenge, unpadded base64url.
-	Challenge string `json:"challenge"`
-	// Timeout is the ceremony timeout in milliseconds.
-	Timeout int `json:"timeout"`
-	// RPID is the relying-party ID, the canonical origin's host.
-	RPID string `json:"rpId"`
-	// AllowCredentials lists the account's active passkeys; it is never
-	// empty.
+	Challenge        string                 `json:"challenge"`
+	Timeout          int                    `json:"timeout"`
+	RPID             string                 `json:"rpId"`
 	AllowCredentials []credentialDescriptor `json:"allowCredentials"`
-	// UserVerification is always "required".
-	UserVerification string `json:"userVerification"`
+	UserVerification string                 `json:"userVerification"`
 }
 
 func descriptors(credentials []store.WebauthnCredential) []credentialDescriptor {

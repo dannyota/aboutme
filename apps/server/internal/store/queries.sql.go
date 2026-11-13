@@ -3131,6 +3131,143 @@ func (q *Queries) GetPublicResumeBySlug(ctx context.Context, slug string) (GetPu
 	return i, err
 }
 
+const getPublicResumeProject = `-- name: GetPublicResumeProject :one
+SELECT r.id, r.user_id, r.title, r.slug, r.live, r.download_enabled, r.seo_geo_enabled, r.schema_version, r.revision, r.lng, r.personal_details, r.content, r.customization, r.created_at, r.updated_at, r.public_title, r.favicon_emoji, r.sign_in_to_view, r.view_pass_epoch, COALESCE((
+    SELECT jsonb_agg(jsonb_build_object(
+        'entryId', e.entry->>'id',
+        'projectSlug', p.slug,
+        'document', jsonb_set(p.document, '{text}', COALESCE((
+            SELECT jsonb_object_agg(t.key, t.value - 'description')
+            FROM jsonb_each(p.document->'text') AS t(key, value)
+        ), '{}'::jsonb))
+    ))
+    FROM jsonb_each(r.content) AS s(key, section)
+    CROSS JOIN LATERAL jsonb_array_elements(s.section->'entries') AS e(entry)
+    JOIN projects AS p
+        ON p.user_id = r.user_id AND p.id::text = lower(e.entry->>'projectId')
+    WHERE s.section->>'sectionType' = 'project'
+        AND (e.entry->'isHidden') IS DISTINCT FROM 'true'::jsonb
+), '[]'::jsonb)::jsonb AS project_links, COALESCE((
+    SELECT jsonb_agg(jsonb_build_object('entryId', e.entry->>'id', 'projectSlug', p.slug, 'document', p.document))
+    FROM jsonb_each(r.content) AS s(key, section)
+    CROSS JOIN LATERAL jsonb_array_elements(s.section->'entries') AS e(entry)
+    JOIN projects AS p
+        ON p.user_id = r.user_id AND p.id::text = lower(e.entry->>'projectId')
+    WHERE s.section->>'sectionType' = 'project'
+        AND (e.entry->'isHidden') IS DISTINCT FROM 'true'::jsonb
+        AND p.slug = $1::text
+), '[]'::jsonb)::jsonb AS projects
+FROM resumes AS r
+WHERE r.slug = $2::text AND r.live = true
+`
+
+type GetPublicResumeProjectParams struct {
+	ProjectSlug string
+	Slug        string
+}
+
+type GetPublicResumeProjectRow struct {
+	Resume       Resume
+	ProjectLinks json.RawMessage
+	Projects     json.RawMessage
+}
+
+// One project page's snapshot: the live resume; its project link context as
+// the list reads it, each linked document without its descriptions; and the
+// whole document of the requested project, only when an entry that is not
+// hidden in a project section links it. The page reads the other documents
+// only to know whether another project has a name to show. The project id
+// never leaves the statement.
+func (q *Queries) GetPublicResumeProject(ctx context.Context, arg GetPublicResumeProjectParams) (GetPublicResumeProjectRow, error) {
+	row := q.db.QueryRow(ctx, getPublicResumeProject, arg.ProjectSlug, arg.Slug)
+	var i GetPublicResumeProjectRow
+	err := row.Scan(
+		&i.Resume.ID,
+		&i.Resume.UserID,
+		&i.Resume.Title,
+		&i.Resume.Slug,
+		&i.Resume.Live,
+		&i.Resume.DownloadEnabled,
+		&i.Resume.SEOGeoEnabled,
+		&i.Resume.SchemaVersion,
+		&i.Resume.Revision,
+		&i.Resume.Lng,
+		&i.Resume.PersonalDetails,
+		&i.Resume.Content,
+		&i.Resume.Customization,
+		&i.Resume.CreatedAt,
+		&i.Resume.UpdatedAt,
+		&i.Resume.PublicTitle,
+		&i.Resume.FaviconEmoji,
+		&i.Resume.SignInToView,
+		&i.Resume.ViewPassEpoch,
+		&i.ProjectLinks,
+		&i.Projects,
+	)
+	return i, err
+}
+
+const getPublicResumeProjectList = `-- name: GetPublicResumeProjectList :one
+SELECT r.id, r.user_id, r.title, r.slug, r.live, r.download_enabled, r.seo_geo_enabled, r.schema_version, r.revision, r.lng, r.personal_details, r.content, r.customization, r.created_at, r.updated_at, r.public_title, r.favicon_emoji, r.sign_in_to_view, r.view_pass_epoch, COALESCE((
+    SELECT jsonb_agg(jsonb_build_object(
+        'entryId', e.entry->>'id',
+        'projectSlug', p.slug,
+        'document', jsonb_set(p.document, '{text}', COALESCE((
+            SELECT jsonb_object_agg(t.key, t.value - 'description')
+            FROM jsonb_each(p.document->'text') AS t(key, value)
+        ), '{}'::jsonb))
+    ))
+    FROM jsonb_each(r.content) AS s(key, section)
+    CROSS JOIN LATERAL jsonb_array_elements(s.section->'entries') AS e(entry)
+    JOIN projects AS p
+        ON p.user_id = r.user_id AND p.id::text = lower(e.entry->>'projectId')
+    WHERE s.section->>'sectionType' = 'project'
+        AND (e.entry->'isHidden') IS DISTINCT FROM 'true'::jsonb
+), '[]'::jsonb)::jsonb AS projects
+FROM resumes AS r
+WHERE r.slug = $1::text AND r.live = true
+`
+
+type GetPublicResumeProjectListRow struct {
+	Resume   Resume
+	Projects json.RawMessage
+}
+
+// The project list's snapshot: the live resume and, for each entry that is
+// not hidden in a project section and names a project of the same owner, the
+// entry id, the project slug and the project document with every
+// description removed. One statement reads both, so the projects belong to
+// the returned revision (docs/design/projects-contract.md "Project link
+// context"). The project id never leaves the statement, and the id is
+// compared as text, as in GetPublicResumeBySlug.
+func (q *Queries) GetPublicResumeProjectList(ctx context.Context, slug string) (GetPublicResumeProjectListRow, error) {
+	row := q.db.QueryRow(ctx, getPublicResumeProjectList, slug)
+	var i GetPublicResumeProjectListRow
+	err := row.Scan(
+		&i.Resume.ID,
+		&i.Resume.UserID,
+		&i.Resume.Title,
+		&i.Resume.Slug,
+		&i.Resume.Live,
+		&i.Resume.DownloadEnabled,
+		&i.Resume.SEOGeoEnabled,
+		&i.Resume.SchemaVersion,
+		&i.Resume.Revision,
+		&i.Resume.Lng,
+		&i.Resume.PersonalDetails,
+		&i.Resume.Content,
+		&i.Resume.Customization,
+		&i.Resume.CreatedAt,
+		&i.Resume.UpdatedAt,
+		&i.Resume.PublicTitle,
+		&i.Resume.FaviconEmoji,
+		&i.Resume.SignInToView,
+		&i.Resume.ViewPassEpoch,
+		&i.Projects,
+	)
+	return i, err
+}
+
 const getPublicState = `-- name: GetPublicState :one
 SELECT singleton, discovery_generation
 FROM public_state

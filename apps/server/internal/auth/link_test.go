@@ -1,7 +1,3 @@
-// Package auth_test exercises link and reauthentication invariants:
-// reauthentication never attaches an identity, each provider callback
-// passes the correct identity to the shared link algorithm, and link or
-// reauthentication starts require a live session.
 package auth_test
 
 import (
@@ -21,13 +17,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/testutil"
 )
 
-// Link and reauthentication starts are CSRF-protected POST requests. GET
-// starts accept login only; start_test.go covers the method boundary.
-
-// doGetWithHeaders is doGet's (handlers_test.go) sibling for tests that
-// need to set Sec-Fetch-Site/Origin directly -- a capability neither doGet
-// nor doJSON (me_test.go) exposes (doJSON sets Origin only, via its own
-// dedicated parameter, and has no way to set Sec-Fetch-Site at all).
 func doGetWithHeaders(t *testing.T, handler http.Handler, path string, headers map[string]string, cookies ...*http.Cookie) *http.Response {
 	t.Helper()
 
@@ -47,9 +36,6 @@ func doGetWithHeaders(t *testing.T, handler http.Handler, path string, headers m
 	return resp
 }
 
-// TestStart_PurposeLogin_UnaffectedBySameSiteEnforcement proves login
-// remains reachable from a cross-site navigation. Link and
-// reauthentication protections must not block the default login purpose.
 func TestStart_PurposeLogin_UnaffectedBySameSiteEnforcement(t *testing.T) {
 	t.Parallel()
 
@@ -68,11 +54,6 @@ func TestStart_PurposeLogin_UnaffectedBySameSiteEnforcement(t *testing.T) {
 	}
 }
 
-// Reauthentication against an unclaimed identity must reject.
-
-// TestPurposeReauth_RejectsUnclaimedIdentity_NoIdentityCreatedNoReauthBump
-// proves reauthentication cannot attach an unclaimed identity or refresh the
-// session. Otherwise reauthentication would become an ungated link path.
 func TestPurposeReauth_RejectsUnclaimedIdentity_NoIdentityCreatedNoReauthBump(t *testing.T) {
 	t.Parallel()
 
@@ -87,7 +68,7 @@ func TestPurposeReauth_RejectsUnclaimedIdentity_NoIdentityCreatedNoReauthBump(t 
 
 	txCookie, tx := beginGoogleTransaction(t, q, auth.PurposeReauth, userID)
 
-	subject := uniqueSubject(t) // brand new -- never linked to ANY user.
+	subject := uniqueSubject(t)
 	code := "code-reauth-unclaimed-" + uuid.NewString()
 	p.RegisterCode(code, oidctest.Claims{
 		Subject:       subject,
@@ -118,18 +99,10 @@ func TestPurposeReauth_RejectsUnclaimedIdentity_NoIdentityCreatedNoReauthBump(t 
 	}
 }
 
-// GitHub's link callback must use the correct provider identity.
-
-// TestGitHubCallback_LinkPurpose_AttachesUnclaimedIdentityToLinkingUser proves
-// GitHub passes its own provider and subject to shared link resolution.
-//
-// Carries a live __Host-session cookie for linkingUserID on the completing
-// callback. A link callback with no session, or one for a different user,
-// must reject rather than trust tx.LinkingUserID alone.
 func TestGitHubCallback_LinkPurpose_AttachesUnclaimedIdentityToLinkingUser(t *testing.T) {
 	t.Parallel()
 
-	gi := newGitHubIdentity(t, uniqueEmail(t)) // link has no email check at all (design spec) -- this email is never read.
+	gi := newGitHubIdentity(t, uniqueEmail(t))
 	handler, q := newTestService(t, withGitHubEndpoint(gi.stub.URL))
 	ctx := context.Background()
 
@@ -167,13 +140,6 @@ func TestGitHubCallback_LinkPurpose_AttachesUnclaimedIdentityToLinkingUser(t *te
 	}
 }
 
-// Link and reauthentication starts require a session.
-
-// TestStartPOST_PurposeLinkOrReauth_NoSession_401NothingAnnounced proves
-// a link or reauthentication start without a session returns the ordinary
-// 401 session_required, identical to every other session-authenticated
-// endpoint. The response does not disclose the attempted provider or
-// purpose in a redirect URL.
 func TestStartPOST_PurposeLinkOrReauth_NoSession_401NothingAnnounced(t *testing.T) {
 	t.Parallel()
 
@@ -185,7 +151,7 @@ func TestStartPOST_PurposeLinkOrReauth_NoSession_401NothingAnnounced(t *testing.
 			handler, _ := newTestService(t, withGoogleIssuer(p.URL))
 
 			resp := doJSON(t, handler, http.MethodPost, auth.GoogleStartPath+"?purpose="+string(purpose), //nolint:bodyclose // doJSON closes the body itself before returning.
-				testPublicOrigin, "any-token", "") // deliberately no cookies at all.
+				testPublicOrigin, "any-token", "")
 
 			if resp.StatusCode != http.StatusUnauthorized {
 				t.Fatalf("status = %d, want %d (RequireSession's own rejection)", resp.StatusCode, http.StatusUnauthorized)
@@ -208,17 +174,6 @@ func TestStartPOST_PurposeLinkOrReauth_NoSession_401NothingAnnounced(t *testing.
 	}
 }
 
-// A pending link transaction must not survive logout everywhere. The
-// callback reauthenticates its session instead of trusting the user id
-// captured when the transaction began. Otherwise a transaction could
-// attach an identity for up to ten minutes after all sessions were revoked.
-
-// TestGoogleCallback_LinkPurpose_RejectedAfterLogoutEverywhere starts a link
-// transaction under a live session, revoke every session for that user via
-// DELETE /api/v1/sessions, then complete the /callback still presenting
-// the now-dead session cookie (a browser tab left open on the settings
-// page would do exactly this) -- the identity must NOT be created, and no
-// session may be issued.
 func TestGoogleCallback_LinkPurpose_RejectedAfterLogoutEverywhere(t *testing.T) {
 	t.Parallel()
 
@@ -231,8 +186,6 @@ func TestGoogleCallback_LinkPurpose_RejectedAfterLogoutEverywhere(t *testing.T) 
 
 	txCookie, tx := beginGoogleTransaction(t, q, auth.PurposeLink, linkingUserID)
 
-	// "Log out everywhere," BEFORE the link transaction is ever completed --
-	// a pending link must not bypass this recovery control.
 	revokeResp := doJSON(t, handler, http.MethodDelete, auth.SessionsPath, testPublicOrigin, csrfTokenFor(sess), "", sessionRequestCookie(raw)) //nolint:bodyclose // doJSON closes the body itself before returning.
 	if revokeResp.StatusCode != http.StatusNoContent {
 		t.Fatalf("DELETE %s status = %d, want %d (setup: logout-everywhere must itself succeed)", auth.SessionsPath, revokeResp.StatusCode, http.StatusNoContent)
@@ -247,10 +200,6 @@ func TestGoogleCallback_LinkPurpose_RejectedAfterLogoutEverywhere(t *testing.T) 
 		Nonce:         tx.Nonce,
 	})
 
-	// The completing request still presents the NOW-REVOKED session cookie
-	// -- the realistic shape of the bug: nothing about this specific
-	// request looks any different from a legitimate completion; only the
-	// session row it depends on has since died.
 	resp := doGet(t, handler, auth.GoogleCallbackPath+"?code="+code+"&state="+tx.State, txCookie, sessionRequestCookie(raw)) //nolint:bodyclose // doGet closes the body itself before returning.
 
 	if resp.StatusCode != http.StatusFound {
@@ -266,25 +215,14 @@ func TestGoogleCallback_LinkPurpose_RejectedAfterLogoutEverywhere(t *testing.T) 
 		t.Errorf("response set a %s cookie (value=%q) on a rejected post-logout-everywhere link attempt, want none", auth.SessionCookieName, sc.Value)
 	}
 
-	// The hard invariant: no identity row was ever created for this
-	// (provider, subject), regardless of the exact wire shape above.
 	assertNoIdentityForProvider(t, q, auth.ProviderGoogle, subject)
 
-	// And no LIVE session exists for linkingUserID at all -- the point of
-	// "log out everywhere" is that it actually logs the account out
-	// everywhere, including in the face of an in-flight link.
 	sm := auth.NewSessionManager(q)
 	if _, _, err := sm.Authenticate(ctx, raw); err == nil {
 		t.Error("the revoked session token still authenticates after the rejected link attempt, want it to stay dead")
 	}
 }
 
-// A rotated successor cookie must survive a link authorization mismatch.
-
-// TestGoogleCallback_LinkOrReauth_RotatedRequest_MismatchStillCarriesSuccessorCookie
-// proves a persisted rotation reaches the browser even when the later
-// linking-user check rejects the callback. Otherwise the browser keeps a dead
-// predecessor token.
 func TestGoogleCallback_LinkOrReauth_RotatedRequest_MismatchStillCarriesSuccessorCookie(t *testing.T) {
 	t.Parallel()
 
@@ -306,13 +244,13 @@ func TestGoogleCallback_LinkOrReauth_RotatedRequest_MismatchStillCarriesSuccesso
 	handler := api.New(testLogger(), noopPinger{}, api.Options{}, nil, svc.RegisterRoutes)
 	ctx := context.Background()
 
-	linkingUserID := createTestUser(t, q)        // named by the transaction below.
-	currentBrowserUserID := createTestUser(t, q) // who this browser is ACTUALLY signed in as.
+	linkingUserID := createTestUser(t, q)
+	currentBrowserUserID := createTestUser(t, q)
 	rawOld, _, err := sm.Issue(ctx, currentBrowserUserID, "ua", "203.0.113.44")
 	if err != nil {
 		t.Fatalf("Issue() error = %v", err)
 	}
-	clk.Advance(25 * time.Hour) // past rotationAge (24h, session.go): the NEXT Authenticate must rotate.
+	clk.Advance(25 * time.Hour)
 
 	txStore := auth.NewTransactionStore(q)
 	handle, tx, err := txStore.Begin(ctx, auth.ProviderGoogle, auth.PurposeLink, linkingUserID, testPublicOrigin+auth.GoogleCallbackPath)
@@ -351,10 +289,6 @@ func TestGoogleCallback_LinkOrReauth_RotatedRequest_MismatchStillCarriesSuccesso
 		t.Errorf("successor cookie Secure=%v HttpOnly=%v, want both true", successor.Secure, successor.HttpOnly)
 	}
 
-	// The successor still authenticates, and still as the SAME user the
-	// predecessor did -- rotation carries the row forward, it never
-	// reassigns ownership, regardless of what this one request was
-	// rejected for.
 	again, _, err := sm.Authenticate(ctx, successor.Value)
 	if err != nil {
 		t.Fatalf("Authenticate(successor) error = %v, want the browser's rotated credential to keep working", err)

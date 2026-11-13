@@ -21,10 +21,8 @@ type orientedImage struct {
 	orientation int
 }
 
-// ColorModel implements image.Image.
 func (oriented orientedImage) ColorModel() color.Model { return oriented.source.ColorModel() }
 
-// Bounds implements image.Image with orientation-aware dimensions.
 func (oriented orientedImage) Bounds() image.Rectangle {
 	bounds := oriented.source.Bounds()
 	if oriented.orientation >= 5 {
@@ -33,7 +31,6 @@ func (oriented orientedImage) Bounds() image.Rectangle {
 	return image.Rect(0, 0, bounds.Dx(), bounds.Dy())
 }
 
-// At implements image.Image by mapping into the unrotated source.
 func (oriented orientedImage) At(x, y int) color.Color {
 	bounds := oriented.source.Bounds()
 	width, height := bounds.Dx(), bounds.Dy()

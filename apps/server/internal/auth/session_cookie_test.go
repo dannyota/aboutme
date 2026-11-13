@@ -1,4 +1,3 @@
-// Package auth_test exercises the hermetic __Host-session cookie helpers.
 package auth_test
 
 import (
@@ -9,7 +8,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/auth"
 )
 
-// setSessionCookie parses the emitted Set-Cookie header.
 func setSessionCookie(t *testing.T, fn func(http.ResponseWriter)) *http.Cookie {
 	t.Helper()
 
@@ -23,8 +21,6 @@ func setSessionCookie(t *testing.T, fn func(http.ResponseWriter)) *http.Cookie {
 	return cookies[0]
 }
 
-// TestSetSessionCookie_EmitsPinnedAttributes checks each attribute from
-// docs/design/security.md independently.
 func TestSetSessionCookie_EmitsPinnedAttributes(t *testing.T) {
 	t.Parallel()
 
@@ -49,18 +45,15 @@ func TestSetSessionCookie_EmitsPinnedAttributes(t *testing.T) {
 	if c.Path != "/" {
 		t.Errorf("Path = %q, want %q", c.Path, "/")
 	}
-	const wantMaxAge = 90 * 24 * 60 * 60 // 90 days, in seconds
+	const wantMaxAge = 90 * 24 * 60 * 60
 	if c.MaxAge != wantMaxAge {
 		t.Errorf("MaxAge = %d, want %d (90 days, matching session.go's absoluteTimeout)", c.MaxAge, wantMaxAge)
 	}
-	// __Host- is only meaningful with no Domain attribute at all.
 	if c.Domain != "" {
 		t.Errorf("Domain = %q, want empty (a __Host- cookie must not set Domain)", c.Domain)
 	}
 }
 
-// TestClearSessionCookie_ExpiresWithMatchingAttributes ensures the deletion
-// cookie matches the attributes that identify the stored cookie.
 func TestClearSessionCookie_ExpiresWithMatchingAttributes(t *testing.T) {
 	t.Parallel()
 

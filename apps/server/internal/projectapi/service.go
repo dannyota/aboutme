@@ -1,4 +1,3 @@
-// Package projectapi serves the session-authenticated private project library.
 package projectapi
 
 import (
@@ -18,37 +17,19 @@ import (
 
 const projectsPath = "/api/v1/projects"
 
-// Options supplies session authority and the shared resume admission policies.
 type Options struct {
-	// Sessions authenticates cookie requests.
-	Sessions *auth.SessionManager
-	// PublicOrigin is the exact CSRF origin.
+	Sessions     *auth.SessionManager
 	PublicOrigin string
-	// ReadLimit is the process-wide resume read limiter.
-	ReadLimit api.Middleware
-	// WriteLimit is the process-wide resume write limiter.
-	WriteLimit api.Middleware
-	// AllowSlug consumes the shared account slug-claim budget.
-	AllowSlug func(uuid.UUID, time.Time) bool
-	// Clock returns the current time; nil uses time.Now.
-	Clock func() time.Time
-	// Links reads the owner's resume links to library projects and runs the
-	// library mutations that change those resumes.
-	Links LinkedResumes
+	ReadLimit    api.Middleware
+	WriteLimit   api.Middleware
+	AllowSlug    func(uuid.UUID, time.Time) bool
+	Clock        func() time.Time
+	Links        LinkedResumes
 }
 
-// LinkedResumes is the resume side of the library: which resumes link a
-// project, the replacement that advances the linking live resumes, and the
-// deletion that unlinks a project from all of them.
 type LinkedResumes interface {
-	// LinkedResumeIDs maps each linked project to the owner's linking
-	// resume ids; q may be a pool or a transaction.
 	LinkedResumeIDs(context.Context, *store.Queries, uuid.UUID) (map[uuid.UUID][]uuid.UUID, error)
-	// ReplaceProject runs a project replacement under the public-state
-	// fences of the linking live resumes it advances.
 	ReplaceProject(context.Context, resumeapi.ProjectReplacement) (resume.ExecuteResult, error)
-	// RemoveProject runs a project deletion under the linking resumes'
-	// public-state fences.
 	RemoveProject(context.Context, resumeapi.ProjectRemoval) (resume.ExecuteResult, error)
 }
 
@@ -57,7 +38,6 @@ type idempotencyStore interface {
 	Execute(context.Context, uuid.UUID, string, uuid.UUID, [32]byte, func(*store.Queries) (resume.StoredResponse, error)) (resume.ExecuteResult, error)
 }
 
-// Service owns the private library's HTTP and transaction boundary.
 type Service struct {
 	q           *store.Queries
 	projects    *project.Store
@@ -71,7 +51,6 @@ type Service struct {
 	links       LinkedResumes
 }
 
-// New builds a library service using the shared resume limiter instances.
 func New(pool *store.Pool, idem *resume.IdempotencyStore, opts Options) *Service {
 	if opts.Clock == nil {
 		opts.Clock = time.Now
@@ -79,7 +58,6 @@ func New(pool *store.Pool, idem *resume.IdempotencyStore, opts Options) *Service
 	return &Service{q: store.New(pool), projects: project.NewStore(), idempotency: idem, sessions: opts.Sessions, origin: opts.PublicOrigin, readLimit: opts.ReadLimit, writeLimit: opts.WriteLimit, allowSlug: opts.AllowSlug, now: opts.Clock, links: opts.Links}
 }
 
-// RegisterRoutes attaches only session-authenticated owner library routes.
 func (s *Service) RegisterRoutes(mux *http.ServeMux) {
 	for _, path := range []string{projectsPath, projectsPath + "/{id}"} {
 		mux.Handle(path, http.HandlerFunc(s.dispatch))
@@ -118,11 +96,8 @@ func (s *Service) dispatch(w http.ResponseWriter, r *http.Request) {
 	handler.ServeHTTP(w, r)
 }
 
-// resource adds the explicit owner-only reference list to a project.
 type resource struct {
-	// Project is the canonical private project.
 	project.Project
-	// LinkedResumeIDs lists the owner's resumes that link the project.
 	LinkedResumeIDs []uuid.UUID `json:"linkedResumeIds"`
 }
 
@@ -157,7 +132,6 @@ func (s *Service) read(w http.ResponseWriter, r *http.Request) {
 			out[i] = resourceOf(p, links)
 		}
 		api.WriteData(w, 200, struct {
-			// Projects lists only this account's library.
 			Projects []resource `json:"projects"`
 		}{Projects: out})
 		return

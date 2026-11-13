@@ -38,10 +38,6 @@ func TestBuildStoresTheCardAndJoinsConcurrentRequests(t *testing.T) {
 			results <- err
 		}()
 	}
-	// Every caller must have joined the one flight before the gate opens.
-	// Releasing it as soon as the first render starts does not: a caller
-	// still on its way to join can arrive after that build finishes and
-	// its flight is removed, and start a second, redundant one.
 	waitUntil(t, func() bool {
 		service.mu.Lock()
 		defer service.mu.Unlock()
@@ -69,8 +65,6 @@ func TestBuildStoresTheCardAndJoinsConcurrentRequests(t *testing.T) {
 	}
 }
 
-// A build whose resume is unpublished while it renders stores nothing and
-// returns no bytes.
 func TestBuildStoresNothingAfterUnpublish(t *testing.T) {
 	t.Parallel()
 	cards, queue := newFakeStore(), &fakeQueue{gate: make(chan struct{})}
@@ -120,8 +114,6 @@ func TestBuildRefusedByTheStoreReturnsNoBytesUnlessOnlyStale(t *testing.T) {
 	}
 }
 
-// A caller that leaves does not cancel the build for the others: the card
-// is still stored.
 func TestBuildOutlivesALeavingCaller(t *testing.T) {
 	t.Parallel()
 	cards, queue := newFakeStore(), &fakeQueue{gate: make(chan struct{})}
@@ -177,8 +169,6 @@ func (f queueFunc) Render(ctx context.Context, request renderjob.Request) (rende
 	return f(ctx, request)
 }
 
-// A request never waits on a background build that owner exports may keep
-// out of the queue: it starts its own normal-priority build.
 func TestNormalBuildDoesNotJoinALowPriorityBuild(t *testing.T) {
 	t.Parallel()
 	cards, queue := newFakeStore(), &fakeQueue{gate: make(chan struct{})}
@@ -197,7 +187,6 @@ func TestNormalBuildDoesNotJoinALowPriorityBuild(t *testing.T) {
 		normal <- err
 	}()
 	waitUntil(t, func() bool { return queue.renderCalls() == 2 })
-	// A later low-priority caller joins the normal build.
 	if _, started := service.join(snapshot.ResumeID, mustVersion(t, snapshot), renderjob.PriorityLow); started != nil {
 		t.Fatal("a low-priority caller started a third build")
 	}

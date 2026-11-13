@@ -14,11 +14,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/publicstate"
 )
 
-// TestLeasedPublicRoutes_RevocationEndsABlockedWrite proves a revoking
-// transition ends every leased public response blocked on a reader that
-// stopped reading, fresh or cached: the lease's cancel hook sets the write
-// deadline, the write returns, the handler ends, and the lease drains before
-// the transition's deadline (docs/adr/0010-public-artifact-revocation.md).
 func TestLeasedPublicRoutes_RevocationEndsABlockedWrite(t *testing.T) {
 	for _, test := range leasedRouteCases() {
 		t.Run(test.name, func(t *testing.T) {
@@ -48,11 +43,6 @@ func TestLeasedPublicRoutes_RevocationEndsABlockedWrite(t *testing.T) {
 	}
 }
 
-// TestLeasedPublicRoutes_OnlyRevocationEndsABlockedWrite proves nothing but
-// a revocation cuts a leased write, and that a write blocked with no
-// revocation pending holds only its own lease: another viewer of the same
-// resume is served in full, and a non-revoking transition closes without
-// waiting for it or touching it. The revocation that follows still ends it.
 func TestLeasedPublicRoutes_OnlyRevocationEndsABlockedWrite(t *testing.T) {
 	for _, test := range leasedRouteCases() {
 		t.Run(test.name, func(t *testing.T) {
@@ -98,9 +88,6 @@ func TestLeasedPublicRoutes_OnlyRevocationEndsABlockedWrite(t *testing.T) {
 	}
 }
 
-// TestLeasedPublicRoutes_HealthyResponseSetsNoDeadline proves the leased
-// write arms nothing on a response whose lease is never revoked: the whole
-// body is written and no write deadline is ever set.
 func TestLeasedPublicRoutes_HealthyResponseSetsNoDeadline(t *testing.T) {
 	for _, test := range leasedRouteCases() {
 		t.Run(test.name, func(t *testing.T) {
@@ -118,8 +105,6 @@ func TestLeasedPublicRoutes_HealthyResponseSetsNoDeadline(t *testing.T) {
 	}
 }
 
-// deadlineCountingRecorder records a response and counts the write
-// deadlines http.ResponseController sets on it.
 type deadlineCountingRecorder struct {
 	*httptest.ResponseRecorder
 	deadlines atomic.Int32

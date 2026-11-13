@@ -1,4 +1,3 @@
-// Package accountapi owns authenticated account export and deletion.
 package accountapi
 
 import (
@@ -18,10 +17,8 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// ExportPath is the cookie-authenticated portable account export route.
 const ExportPath = "/api/v1/me/export"
 
-// Dependencies are shared by account export and deletion.
 type Dependencies struct {
 	Pool           *store.Pool
 	Sessions       *auth.SessionManager
@@ -34,7 +31,6 @@ type Dependencies struct {
 	Now            func() time.Time
 }
 
-// Service owns the authenticated account HTTP surface.
 type Service struct {
 	pool            *store.Pool
 	sessions        *auth.SessionManager
@@ -55,8 +51,6 @@ type Service struct {
 	afterUserLock   func()
 }
 
-// New constructs the account service and rejects an incomplete privacy
-// boundary before any route can be registered.
 func New(deps Dependencies) (*Service, error) {
 	switch {
 	case deps.Pool == nil:
@@ -93,8 +87,6 @@ func New(deps Dependencies) (*Service, error) {
 	return s, nil
 }
 
-// initDeletion sets the transaction, audit, and media queue hooks the deletion
-// path uses. Tests replace them to inject failures.
 func (s *Service) initDeletion() {
 	s.beginTx = s.pool.Begin
 	s.commitTx = func(ctx context.Context, tx pgx.Tx) error { return tx.Commit(ctx) }

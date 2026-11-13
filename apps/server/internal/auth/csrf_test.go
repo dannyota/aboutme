@@ -1,5 +1,3 @@
-// Package auth_test exercises the fail-closed CSRF checks for mutating,
-// cookie-authenticated requests. These tests are hermetic.
 package auth_test
 
 import (
@@ -19,20 +17,12 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// allowedTestOrigin has the scheme-and-host shape required by PublicOrigin.
 const allowedTestOrigin = "http://localhost"
 
-// csrfTokenFor returns the X-CSRF-Token header value a legitimate client
-// holding sess's csrf_secret would send: base64.RawURLEncoding of the raw
-// secret bytes, matching csrf.go's decode-then-compare step.
 func csrfTokenFor(sess store.Session) string {
 	return base64.RawURLEncoding.EncodeToString(sess.CSRFSecret)
 }
 
-// csrfTestSession returns a store.Session carrying a csrf_secret of the
-// production size (32 bytes), every byte set to fill so two sessions
-// built with different fill values are guaranteed to differ (these are
-// test fixtures, not real secrets -- no randomness needed).
 func csrfTestSession(fill byte) store.Session {
 	secret := make([]byte, 32)
 	for i := range secret {
@@ -41,7 +31,6 @@ func csrfTestSession(fill byte) store.Session {
 	return store.Session{ID: uuid.New(), CSRFSecret: secret}
 }
 
-// requestBody returns nil for a bodiless request so ContentLength remains zero.
 func requestBody(body string) io.Reader {
 	if body == "" {
 		return nil
@@ -58,18 +47,12 @@ func (body *trackingCSRFBody) Read([]byte) (int, error) {
 	return 0, io.EOF
 }
 
-// passThroughHandler is the downstream handler RequireCSRF wraps in these
-// tests: it just proves next.ServeHTTP ran.
 func passThroughHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 }
 
-// assertCSRFRejected fails the test unless rec's body is the standard
-// error envelope carrying code "csrf_rejected" -- the single code every
-// rejection reason returns (no oracle differentiating which check
-// failed).
 func assertCSRFRejected(t *testing.T, rec *httptest.ResponseRecorder) {
 	t.Helper()
 
@@ -90,9 +73,6 @@ func assertCSRFRejected(t *testing.T, rec *httptest.ResponseRecorder) {
 	}
 }
 
-// TestRequireCSRF_Matrix covers method, origin or Referer, body media type,
-// token value, and token encoding. The hostile origins catch substring and
-// normalization checks that would accept a different origin.
 func TestRequireCSRF_Matrix(t *testing.T) {
 	t.Parallel()
 
@@ -129,7 +109,6 @@ func TestRequireCSRF_Matrix(t *testing.T) {
 		{"bodiless POST (logout-shaped) skips content-type check", "POST", "http://localhost", "", "", validToken, "", http.StatusOK},
 		{"body present without content-type still rejected (form-style body)", "POST", "http://localhost", "", "", validToken, "foo=bar", http.StatusBadRequest},
 		{"same session's secret, wrong base64 encoding (standard alphabet/padding)", "POST", "http://localhost", "", "application/json", base64.StdEncoding.EncodeToString(sess.CSRFSecret), "{}", http.StatusForbidden},
-		// These rows require an exact origin match.
 		{"Origin: null (opaque origin -- sandboxed iframe, file://, etc.)", "POST", "null", "", "application/json", validToken, "{}", http.StatusForbidden},
 		{"suffix-host origin (allowed origin as a literal prefix, evil suffix appended)", "POST", "http://localhost.evil.test", "", "application/json", validToken, "{}", http.StatusForbidden},
 		{"trailing-slash origin", "POST", "http://localhost/", "", "application/json", validToken, "{}", http.StatusForbidden},
@@ -168,10 +147,6 @@ func TestRequireCSRF_Matrix(t *testing.T) {
 	}
 }
 
-// TestRequireCSRF_RejectsAmbiguousSecurityHeaders catches first-value wins
-// handling of repeated fields and Referer parsing that tolerates a folded
-// second value. Origin fallback is allowed only when Origin is absent, not when
-// it is present but empty.
 func TestRequireCSRF_RejectsAmbiguousSecurityHeaders(t *testing.T) {
 	t.Parallel()
 
@@ -241,9 +216,6 @@ func TestRequireCSRF_RejectsAmbiguousSecurityHeaders(t *testing.T) {
 	}
 }
 
-// TestRequireCSRF_SafeMethodsBypassWithoutSession proves GET, HEAD, and
-// OPTIONS pass through even without a session and with a cross-origin
-// Origin header.
 func TestRequireCSRF_SafeMethodsBypassWithoutSession(t *testing.T) {
 	t.Parallel()
 
@@ -253,8 +225,6 @@ func TestRequireCSRF_SafeMethodsBypassWithoutSession(t *testing.T) {
 
 			req := httptest.NewRequestWithContext(context.Background(), method, "/resume", nil)
 			req.Header.Set("Origin", "https://evil.example")
-			// Deliberately no auth.ContextWithSession call: a safe method
-			// must never need to read the session from context.
 
 			rec := httptest.NewRecorder()
 			handler := auth.RequireCSRF(allowedTestOrigin)(passThroughHandler())
@@ -267,12 +237,6 @@ func TestRequireCSRF_SafeMethodsBypassWithoutSession(t *testing.T) {
 	}
 }
 
-// TestRequireCSRF_MutatingWithoutSessionInContextRejects is a
-// defense-in-depth check beyond the matrix: RequireCSRF is documented to
-// run after RequireSession in the chain (so a session is always in
-// context by the time it runs on a mutating request), but if that
-// ordering were ever violated, a missing session must still fail closed
-// rather than panic or fall through.
 func TestRequireCSRF_MutatingWithoutSessionInContextRejects(t *testing.T) {
 	t.Parallel()
 
@@ -280,7 +244,6 @@ func TestRequireCSRF_MutatingWithoutSessionInContextRejects(t *testing.T) {
 	req.Header.Set("Origin", allowedTestOrigin)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set(auth.CSRFHeaderName, "irrelevant")
-	// Deliberately no auth.ContextWithSession call.
 
 	rec := httptest.NewRecorder()
 	handler := auth.RequireCSRF(allowedTestOrigin)(passThroughHandler())
@@ -292,10 +255,6 @@ func TestRequireCSRF_MutatingWithoutSessionInContextRejects(t *testing.T) {
 	assertCSRFRejected(t, rec)
 }
 
-// TestRequireCSRFMultipart_MediaTypeIsolation proves the photo upload entry
-// point accepts only multipart/form-data while the existing entry point stays
-// JSON-only. A shared permissive media-type check would let one route weaken
-// every cookie-authenticated mutation.
 func TestRequireCSRFMultipart_MediaTypeIsolation(t *testing.T) {
 	t.Parallel()
 

@@ -28,9 +28,6 @@ func ptrFalse() *bool {
 	return &b
 }
 
-// generateTestKey returns a fresh RSA-2048 key distinct from any
-// Provider's own key, for tests that need a signing key the Provider
-// never registered.
 func generateTestKey(t *testing.T) *rsa.PrivateKey {
 	t.Helper()
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
@@ -40,9 +37,6 @@ func generateTestKey(t *testing.T) *rsa.PrivateKey {
 	return key
 }
 
-// tokenResponseBody mirrors the /token endpoint's JSON success shape.
-// Shared by exchangeCode and tests that need fields beyond id_token (e.g.
-// expires_in).
 type tokenResponseBody struct {
 	IDToken     string `json:"id_token"`
 	AccessToken string `json:"access_token"`
@@ -50,10 +44,6 @@ type tokenResponseBody struct {
 	ExpiresIn   int64  `json:"expires_in"`
 }
 
-// exchangeCodeFull POSTs code to p's /token endpoint directly (no real
-// browser redirect, no oauth2.Config — this package's self-tests exercise
-// the HTTP surface and go-jose signing directly) and returns the decoded
-// response body. On a non-200 status it returns the zero body.
 func exchangeCodeFull(t *testing.T, p *oidctest.Provider, code string) (body tokenResponseBody, status int) {
 	t.Helper()
 
@@ -87,9 +77,6 @@ func exchangeCodeFull(t *testing.T, p *oidctest.Provider, code string) (body tok
 	return body, resp.StatusCode
 }
 
-// exchangeCode is exchangeCodeFull's common-case sibling: it also asserts
-// the wire-protocol fields every 200 response must carry, and returns just
-// the id_token most tests care about.
 func exchangeCode(t *testing.T, p *oidctest.Provider, code string) (idToken string, status int) {
 	t.Helper()
 
@@ -106,8 +93,6 @@ func exchangeCode(t *testing.T, p *oidctest.Provider, code string) (idToken stri
 	return body.IDToken, status
 }
 
-// TestProvider_DiscoveryAndTokenRoundTrip proves the harness passes real
-// go-oidc discovery, exchange, signature, issuer, and audience checks.
 func TestProvider_DiscoveryAndTokenRoundTrip(t *testing.T) {
 	p := oidctest.NewProvider(t)
 	p.RegisterCode("test-code", oidctest.Claims{
@@ -155,11 +140,6 @@ func TestProvider_DiscoveryAndTokenRoundTrip(t *testing.T) {
 	}
 }
 
-// TestProvider_RegisterCode_SingleUse proves an authorization code is
-// consumed on its first exchange, matching a real authorization server's
-// single-use codes — the property later Google/LinkedIn callback tests
-// rely on implicitly (a replayed callback must not mint a second
-// session).
 func TestProvider_RegisterCode_SingleUse(t *testing.T) {
 	p := oidctest.NewProvider(t)
 	p.RegisterCode("once-only", oidctest.Claims{Subject: "user-1"})
@@ -175,10 +155,6 @@ func TestProvider_RegisterCode_SingleUse(t *testing.T) {
 	}
 }
 
-// TestClaims_IssuerOverride proves Claims.Issuer overrides the default
-// (the Provider's own URL) and that go-oidc's own verification — not this
-// test — rejects the resulting issuer mismatch. Callback tests use this
-// mechanism to exercise wrong-issuer rejection.
 func TestClaims_IssuerOverride(t *testing.T) {
 	p := oidctest.NewProvider(t)
 	p.RegisterCode("code", oidctest.Claims{
@@ -203,10 +179,6 @@ func TestClaims_IssuerOverride(t *testing.T) {
 	}
 }
 
-// TestClaims_AudienceOverride proves Claims.Audience overrides the
-// default (the Provider's registered client id) and that go-oidc rejects
-// a token whose audience doesn't match the verifier's configured
-// ClientID.
 func TestClaims_AudienceOverride(t *testing.T) {
 	p := oidctest.NewProvider(t)
 	p.RegisterCode("code", oidctest.Claims{
@@ -231,8 +203,6 @@ func TestClaims_AudienceOverride(t *testing.T) {
 	}
 }
 
-// TestClaims_ExpiresAtOverride proves Claims.ExpiresAt overrides the
-// default (now+1h) and that go-oidc rejects an already-expired token.
 func TestClaims_ExpiresAtOverride(t *testing.T) {
 	p := oidctest.NewProvider(t)
 	p.RegisterCode("code", oidctest.Claims{
@@ -259,8 +229,6 @@ func TestClaims_ExpiresAtOverride(t *testing.T) {
 	}
 }
 
-// TestProvider_ExpiresIn_IndependentOfIDTokenExpiry proves OAuth2 access-token
-// lifetime does not derive from the ID token's exp claim.
 func TestProvider_ExpiresIn_IndependentOfIDTokenExpiry(t *testing.T) {
 	p := oidctest.NewProvider(t)
 	p.RegisterCode("code", oidctest.Claims{
@@ -290,10 +258,6 @@ func TestProvider_ExpiresIn_IndependentOfIDTokenExpiry(t *testing.T) {
 	}
 }
 
-// TestClaims_SigningKeyOverride proves Claims.SigningKey overrides the
-// default (the Provider's own key) and that go-oidc rejects a token
-// signed with a key other than the one published at /jwks.json — the
-// harness's stand-in for a tampered or forged signature.
 func TestClaims_SigningKeyOverride(t *testing.T) {
 	p := oidctest.NewProvider(t)
 
@@ -320,10 +284,6 @@ func TestClaims_SigningKeyOverride(t *testing.T) {
 	}
 }
 
-// TestClaims_EmailVerifiedNil_OmitsClaim proves the documented "nil =
-// omit the claim entirely" contract for EmailVerified (LinkedIn's
-// optional-email case), and that an empty Email is likewise omitted
-// rather than encoded as an empty string.
 func TestClaims_EmailVerifiedNil_OmitsClaim(t *testing.T) {
 	p := oidctest.NewProvider(t)
 	p.RegisterCode("code", oidctest.Claims{
@@ -361,10 +321,6 @@ func TestClaims_EmailVerifiedNil_OmitsClaim(t *testing.T) {
 	}
 }
 
-// TestClaims_EmailVerifiedFalse_IsDistinctFromNil proves EmailVerified
-// round-trips false (and is present, unlike the nil case) — guards
-// against a harness bug that would silently collapse "explicitly false"
-// and "absent" into the same wire representation.
 func TestClaims_EmailVerifiedFalse_IsDistinctFromNil(t *testing.T) {
 	p := oidctest.NewProvider(t)
 	p.RegisterCode("code", oidctest.Claims{
@@ -403,11 +359,6 @@ func TestClaims_EmailVerifiedFalse_IsDistinctFromNil(t *testing.T) {
 	}
 }
 
-// TestProvider_NonceRoundTrips proves Claims.Nonce is carried onto the
-// signed token unchanged. go-oidc does not validate nonce itself
-// (verify.go's Verify never inspects it); this only proves the harness
-// carries the value through so an application-level nonce check has
-// something real to compare against.
 func TestProvider_NonceRoundTrips(t *testing.T) {
 	p := oidctest.NewProvider(t)
 	p.RegisterCode("code", oidctest.Claims{
@@ -436,9 +387,6 @@ func TestProvider_NonceRoundTrips(t *testing.T) {
 	}
 }
 
-// TestProvider_UnregisteredCode_Rejected proves the token endpoint
-// rejects a code that was never registered, not just a previously-used
-// one.
 func TestProvider_UnregisteredCode_Rejected(t *testing.T) {
 	p := oidctest.NewProvider(t)
 
@@ -448,13 +396,6 @@ func TestProvider_UnregisteredCode_Rejected(t *testing.T) {
 	}
 }
 
-// TestProvider_ClientIDOverride proves Provider.ClientID can be changed
-// from its DefaultClientID default, that Claims.Audience then defaults to
-// the overridden value (not the original DefaultClientID) when signing a
-// token, and that go-oidc's own audience check enforces this: a verifier
-// configured with the overridden ClientID accepts the token, one still
-// configured with DefaultClientID rejects it. This lets tests point a Service
-// at a provider registered under a non-default client ID.
 func TestProvider_ClientIDOverride(t *testing.T) {
 	p := oidctest.NewProvider(t)
 	p.ClientID = "custom-client-id"
@@ -482,12 +423,6 @@ func TestProvider_ClientIDOverride(t *testing.T) {
 	}
 }
 
-// exchangeViaOAuth2Config builds a real oauth2.Config from p's discovery
-// endpoint (via go-oidc, exactly as production code does) and exchanges
-// code through it -- proving the mock is compatible with the actual
-// oauth2.Config.Exchange call path, not just a hand-rolled HTTP POST (see
-// exchangeCodeFull), and, when verifier is non-empty, exercising the PKCE
-// code_verifier send end to end.
 func exchangeViaOAuth2Config(t *testing.T, p *oidctest.Provider, code, verifier string) (*oauth2.Token, error) {
 	t.Helper()
 
@@ -508,10 +443,6 @@ func exchangeViaOAuth2Config(t *testing.T, p *oidctest.Provider, code, verifier 
 	return cfg.Exchange(ctx, code, opts...)
 }
 
-// TestProvider_PKCE_AcceptsMatchingVerifier proves the /token endpoint
-// accepts an exchange whose code_verifier hashes (S256) to the
-// code_challenge registered for the code. It uses the same
-// oauth2.Config.Exchange path as the production OIDC providers.
 func TestProvider_PKCE_AcceptsMatchingVerifier(t *testing.T) {
 	p := oidctest.NewProvider(t)
 
@@ -530,11 +461,6 @@ func TestProvider_PKCE_AcceptsMatchingVerifier(t *testing.T) {
 	}
 }
 
-// TestProvider_PKCE_RejectsMismatchedVerifier proves the /token endpoint
-// rejects an exchange whose code_verifier does NOT hash to the registered
-// code_challenge -- this is the property that makes the PKCE send in
-// google.go/linkedin.go's Exchange call actually proven, not merely
-// assumed to be sent.
 func TestProvider_PKCE_RejectsMismatchedVerifier(t *testing.T) {
 	p := oidctest.NewProvider(t)
 
@@ -555,10 +481,6 @@ func TestProvider_PKCE_RejectsMismatchedVerifier(t *testing.T) {
 	}
 }
 
-// TestProvider_PKCE_RejectsMissingVerifierWhenChallengeRegistered proves a
-// code registered with a CodeChallenge cannot be exchanged with no
-// code_verifier at all -- PKCE must not be silently skippable just by
-// omitting it.
 func TestProvider_PKCE_RejectsMissingVerifierWhenChallengeRegistered(t *testing.T) {
 	p := oidctest.NewProvider(t)
 
@@ -573,8 +495,6 @@ func TestProvider_PKCE_RejectsMissingVerifierWhenChallengeRegistered(t *testing.
 	}
 }
 
-// TestProvider_PKCE_NotRequiredWhenChallengeUnregistered proves PKCE is opt-in
-// per registered code.
 func TestProvider_PKCE_NotRequiredWhenChallengeUnregistered(t *testing.T) {
 	p := oidctest.NewProvider(t)
 	p.RegisterCode("code", oidctest.Claims{Subject: "user-1"})
@@ -585,8 +505,7 @@ func TestProvider_PKCE_NotRequiredWhenChallengeUnregistered(t *testing.T) {
 	}
 }
 
-// TestProvider_TokenError_IsJSONWithErrorCode proves JSON errors populate
-// oauth2.RetrieveError.ErrorCode; text/plain would be parsed as form data.
+// x/oauth2 fills RetrieveError.ErrorCode from a JSON error body and parses a text/plain body as form data.
 func TestProvider_TokenError_IsJSONWithErrorCode(t *testing.T) {
 	p := oidctest.NewProvider(t)
 

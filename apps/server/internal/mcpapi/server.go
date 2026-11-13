@@ -15,13 +15,10 @@ import (
 	"danny.vn/aboutme/apps/server/internal/resumeapi"
 )
 
-// AgentExecutor is the closed bridge to the resume validation and mutation
-// kernel.
 type AgentExecutor interface {
 	ExecuteAgent(context.Context, resumeapi.AgentPrincipal, resumeapi.AgentCall) resumeapi.AgentResponse
 }
 
-// ServerDependencies are the authenticated resource server dependencies.
 type ServerDependencies struct {
 	Bearer              *Bearer
 	Resumes             AgentExecutor
@@ -36,7 +33,6 @@ type requestAuthority struct {
 
 type requestAuthorityKey struct{}
 
-// NewServer returns the bearer-only, stateless Streamable HTTP MCP handler.
 func NewServer(dependencies ServerDependencies) (http.Handler, error) {
 	if dependencies.Bearer == nil || isNil(dependencies.Resumes) || dependencies.Rates == nil || dependencies.MaxRequestBodyBytes <= 0 {
 		return nil, errors.New("mcp server: invalid dependencies")
@@ -55,10 +51,7 @@ func NewServer(dependencies ServerDependencies) (http.Handler, error) {
 		Stateless:           true,
 		JSONResponse:        true,
 		MaxRequestBodyBytes: dependencies.MaxRequestBodyBytes,
-		// The server listens on loopback behind the public reverse proxy, so
-		// the SDK's localhost DNS-rebinding guard would refuse every public
-		// Host with 403. That guard protects unauthenticated local servers;
-		// this handler admits nothing without a valid bearer token.
+		// The MCP Go SDK's localhost DNS-rebinding guard refuses every non-localhost Host with 403.
 		DisableLocalhostProtection: true,
 	})
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -107,13 +100,6 @@ func NewServer(dependencies ServerDependencies) (http.Handler, error) {
 	}), nil
 }
 
-// serverImplementation names aboutme for the MCP initialize handshake so a
-// client's connector list shows the seal mark instead of a generic icon. The
-// website URL and icon sources are absolute on publicOrigin, the same
-// canonical origin the bearer boundary and OAuth metadata already serve, per
-// docs/design/api.md#agent-access-and-the-bearer-world. The icon file names
-// track the versioned set ADR 0020 records; Name and Version stay fixed so
-// registered clients and stored evidence keep identifying this server.
 func serverImplementation(publicOrigin string) *mcp.Implementation {
 	return &mcp.Implementation{
 		Name:       "aboutme",

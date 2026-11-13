@@ -10,8 +10,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/auth"
 )
 
-// sessionSecondFactorVerifiedAt reads one session's second_factor_verified_at
-// directly, for assertions the service's own API does not expose.
 func (h *harness) sessionSecondFactorVerifiedAt(sessionID uuid.UUID) *time.Time {
 	h.t.Helper()
 	var at *time.Time
@@ -21,18 +19,11 @@ func (h *harness) sessionSecondFactorVerifiedAt(sessionID uuid.UUID) *time.Time 
 	return at
 }
 
-// liveSessionCount counts a user's unrevoked sessions, for asserting that a
-// rejected step issues no session.
 func (h *harness) liveSessionCount(userID uuid.UUID) int {
 	h.t.Helper()
 	return h.count("SELECT count(*) FROM sessions WHERE user_id = $1 AND revoked_at IS NULL", userID)
 }
 
-// requirePendingVerificationFailure asserts err is a counted
-// PendingVerificationFailure wrapping ErrSecondFactorVerificationFailed, the
-// shape every rejected replay across flows must share
-// (docs/design/totp-second-factor-contract.md#totp-profile-and-code-verification;
-// AC-AUTH-026).
 func requirePendingVerificationFailure(t *testing.T, err error) {
 	t.Helper()
 	var failure *auth.PendingVerificationFailure
@@ -44,11 +35,6 @@ func requirePendingVerificationFailure(t *testing.T, err error) {
 	}
 }
 
-// TestTOTPCodeStep_EnrollmentProofStepRejectedAtLogin proves that the step
-// enrollment proof stores as the initial last_used_step makes that same code
-// unusable at a later login, because the greatest match must exceed
-// last_used_step (docs/design/totp-second-factor-contract.md#totp-profile-and-code-verification;
-// AC-AUTH-026).
 func TestTOTPCodeStep_EnrollmentProofStepRejectedAtLogin(t *testing.T) {
 	clock := newTOTPTestClock()
 	h := newTOTPHarness(t, clock, nil)
@@ -76,8 +62,6 @@ func TestTOTPCodeStep_EnrollmentProofStepRejectedAtLogin(t *testing.T) {
 		t.Fatal("rejected enrollment step did not count one credential failure")
 	}
 
-	// Control: a fresh step's code still succeeds, proving the rejection above
-	// came from the step rule and not from an unrelated fault.
 	clock.Advance(totpPeriodSeconds * time.Second)
 	fresh := h.newPending(acct.user.ID, nil)
 	issue, err = h.completeTOTPPendingCode(fresh.RawToken, nil, totpCodeAt(secret, clock.Now()))
@@ -89,11 +73,6 @@ func TestTOTPCodeStep_EnrollmentProofStepRejectedAtLogin(t *testing.T) {
 	}
 }
 
-// TestTOTPCodeStep_EnrollmentProofStepRejectedAtReauth proves the same
-// single-use enrollment step against a reauthentication pending, and that a
-// rejected step leaves the bound session's second_factor_verified_at
-// unchanged (docs/design/totp-second-factor-contract.md#totp-profile-and-code-verification;
-// AC-AUTH-026).
 func TestTOTPCodeStep_EnrollmentProofStepRejectedAtReauth(t *testing.T) {
 	clock := newTOTPTestClock()
 	h := newTOTPHarness(t, clock, nil)
@@ -122,7 +101,6 @@ func TestTOTPCodeStep_EnrollmentProofStepRejectedAtReauth(t *testing.T) {
 		t.Fatal("rejected enrollment step did not count one credential failure")
 	}
 
-	// Control: a fresh step's code still succeeds.
 	clock.Advance(totpPeriodSeconds * time.Second)
 	fresh := h.newPending(acct.user.ID, &sess.ID)
 	issue, err = h.completeTOTPPendingCode(fresh.RawToken, &sess.ID, totpCodeAt(secret, clock.Now()))
@@ -134,11 +112,6 @@ func TestTOTPCodeStep_EnrollmentProofStepRejectedAtReauth(t *testing.T) {
 	}
 }
 
-// TestTOTPCodeStep_LoginStepRejectedAtReauth proves that a step accepted at
-// login is single-use across flows: the same code rejected on a
-// reauthentication pending bound to the login's own session
-// (docs/design/totp-second-factor-contract.md#totp-profile-and-code-verification;
-// AC-AUTH-026).
 func TestTOTPCodeStep_LoginStepRejectedAtReauth(t *testing.T) {
 	clock := newTOTPTestClock()
 	h := newTOTPHarness(t, clock, nil)
@@ -171,7 +144,6 @@ func TestTOTPCodeStep_LoginStepRejectedAtReauth(t *testing.T) {
 		t.Fatal("rejected login step changed second_factor_verified_at")
 	}
 
-	// Control: the next step's code still succeeds on reauth.
 	clock.Advance(totpPeriodSeconds * time.Second)
 	fresh := h.newPending(acct.user.ID, &loginSessionID)
 	freshIssue, err := h.completeTOTPPendingCode(fresh.RawToken, &loginSessionID, totpCodeAt(secret, clock.Now()))
@@ -183,10 +155,6 @@ func TestTOTPCodeStep_LoginStepRejectedAtReauth(t *testing.T) {
 	}
 }
 
-// TestTOTPCodeStep_ReauthStepRejectedAtLogin proves the reverse direction: a
-// step accepted at reauthentication is rejected when replayed on a login
-// pending (docs/design/totp-second-factor-contract.md#totp-profile-and-code-verification;
-// AC-AUTH-026).
 func TestTOTPCodeStep_ReauthStepRejectedAtLogin(t *testing.T) {
 	clock := newTOTPTestClock()
 	h := newTOTPHarness(t, clock, nil)
@@ -216,10 +184,6 @@ func TestTOTPCodeStep_ReauthStepRejectedAtLogin(t *testing.T) {
 	}
 }
 
-// TestTOTPCodeStep_ConcurrentLoginAndReauthHaveOneWinner proves that
-// concurrent use of one code across login and reauthentication has one
-// winner (docs/design/totp-second-factor-contract.md#totp-profile-and-code-verification;
-// AC-AUTH-026).
 func TestTOTPCodeStep_ConcurrentLoginAndReauthHaveOneWinner(t *testing.T) {
 	clock := newTOTPTestClock()
 	h := newTOTPHarness(t, clock, nil)

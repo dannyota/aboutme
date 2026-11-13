@@ -276,6 +276,26 @@ async function verify(mode, path) {
       unpublishIdempotency: true,
       unpublishSchema: true,
     },
+    projects: {
+      errors: { certificate: 0, console: 0, externalRequest: 0, page: 0 },
+      steps: {
+        linked: true,
+        served: true,
+        unknownUniform: true,
+        hiddenUniform: true,
+        gate: true,
+        pass: true,
+        unpublishedUniform: true,
+        renamed: true,
+        cleanup: true,
+      },
+      counts: {
+        stylesheets: 4,
+        styleAttributes: 0,
+        uniformNotFound: 6,
+        gatedAddresses: 3,
+      },
+    },
   } : mode === 'entry' ? {
     ...common,
     scenario: 'entry-flow',

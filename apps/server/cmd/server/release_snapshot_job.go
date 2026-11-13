@@ -12,8 +12,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/releasesnapshots"
 )
 
-// runReleaseSnapshotSweep deletes deploy.sh release snapshots older than
-// releasesnapshots.MaxAge or beyond the newest releasesnapshots.KeepNewest, using the task role's credentials.
 func runReleaseSnapshotSweep(ctx context.Context, logger *slog.Logger) (any, error) {
 	cfg, err := awsconfig.LoadDefaultConfig(ctx, awsconfig.WithRegion(releasesnapshots.Region))
 	if err != nil {

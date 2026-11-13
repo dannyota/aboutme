@@ -10,8 +10,6 @@ import (
 	"testing"
 )
 
-// packageFailures lists every sentinel the runner can return. A new sentinel
-// must be added here and mapped in sentinelReasons.
 func packageFailures() map[string]error {
 	return map[string]error{
 		"arguments": errArguments, "control root": errControlRoot, "run root": errRunRoot,
@@ -110,10 +108,6 @@ func TestEvidenceFailureReportHidesDynamicText(t *testing.T) {
 	}
 }
 
-// Passkeys are live in production and the owner workflow signs in with
-// password only, so a 202 secondFactorRequired login response must read as
-// its own word rather than the generic browser-handoff failure a stuck
-// consent page or a rejected password also produces.
 func TestEvidenceFailureWordNamesSecondFactorDistinctly(t *testing.T) {
 	if got := failureReason(errSecondFactorRequired); got != reasonSecondFactor {
 		t.Fatalf("failureReason(errSecondFactorRequired) = %q, want %q", got, reasonSecondFactor)

@@ -1,9 +1,5 @@
 package secondfactor
 
-// Strict WebAuthn wire decoding: registration and assertion completion
-// envelopes, canonical base64url members, ceremony IDs, and transport hints.
-// Every rule runs before any CBOR or signature work.
-
 import (
 	"bytes"
 	"crypto/sha256"
@@ -18,32 +14,24 @@ import (
 	"danny.vn/aboutme/apps/server/internal/auth"
 )
 
-// passkeyRegistration is a decoded registration completion.
 type passkeyRegistration struct {
 	ceremonyDigest []byte
 	response       protocol.CredentialCreationResponse
 	transports     []string
 }
 
-// SecondFactorMethod names the passkey method.
 func (*passkeyRegistration) SecondFactorMethod() string { return auth.SecondFactorMethodPasskey }
 
-// passkeyAssertion is a decoded assertion completion.
 type passkeyAssertion struct {
 	ceremonyDigest []byte
 	rawID          []byte
 	response       protocol.CredentialAssertionResponse
 }
 
-// SecondFactorMethod names the passkey method.
 func (*passkeyAssertion) SecondFactorMethod() string { return auth.SecondFactorMethodPasskey }
 
 var errRequestInvalid = auth.ErrSecondFactorRequestInvalid
 
-// decodeRegistration strictly decodes a registration completion body. It
-// rejects invalid UTF-8, duplicate or unknown members, missing members,
-// noncanonical base64url, oversized fields, and trailing data before any CBOR
-// or signature work.
 func decodeRegistration(body []byte) (*passkeyRegistration, error) {
 	top, err := strictObject(body, "ceremonyId", "credential")
 	if err != nil {
@@ -83,8 +71,6 @@ func decodeRegistration(body []byte) (*passkeyRegistration, error) {
 	return reg, nil
 }
 
-// decodeAssertion strictly decodes an assertion completion body under the same
-// rules as decodeRegistration. userHandle is required and may be null or empty.
 func decodeAssertion(body []byte) (*passkeyAssertion, error) {
 	top, err := strictObject(body, "ceremonyId", "credential")
 	if err != nil {
@@ -114,8 +100,7 @@ func decodeAssertion(body []byte) (*passkeyAssertion, error) {
 	if err != nil {
 		return nil, err
 	}
-	// An empty user handle means absent in WebAuthn, exactly like null, so it
-	// decodes to no handle and never matches the stored one.
+	// WebAuthn treats an empty user handle as absent, like null.
 	var userHandle []byte
 	if !bytes.Equal(bytes.TrimSpace(fields["userHandle"]), []byte("null")) {
 		if userHandle, err = base64Member(fields["userHandle"], 0, maxUserHandleBytes); err != nil {
@@ -136,8 +121,6 @@ func decodeAssertion(body []byte) (*passkeyAssertion, error) {
 	return a, nil
 }
 
-// decodeCredentialEnvelope checks the shared credential members and returns
-// the id text, raw ID bytes, and the raw response object.
 func decodeCredentialEnvelope(raw json.RawMessage) (string, []byte, json.RawMessage, error) {
 	credential, err := strictObject(raw, "id", "rawId", "type", "response", "clientExtensionResults")
 	if err != nil {
@@ -158,15 +141,12 @@ func decodeCredentialEnvelope(raw json.RawMessage) (string, []byte, json.RawMess
 	if kind, kindErr := stringMember(credential["type"]); kindErr != nil || kind != string(protocol.PublicKeyCredentialType) {
 		return "", nil, nil, errRequestInvalid
 	}
-	// No extension is requested, so the client extension output must be empty.
 	if _, extErr := strictObject(credential["clientExtensionResults"]); extErr != nil {
 		return "", nil, nil, extErr
 	}
 	return id, rawID, credential["response"], nil
 }
 
-// strictObject decodes raw as exactly one JSON object whose member names are
-// exactly names, with no duplicates and no trailing data.
 func strictObject(raw []byte, names ...string) (map[string]json.RawMessage, error) {
 	if !utf8.Valid(raw) {
 		return nil, errRequestInvalid
@@ -227,9 +207,6 @@ func base64Member(raw json.RawMessage, minBytes, maxBytes int) ([]byte, error) {
 	return canonicalBase64(text, minBytes, maxBytes)
 }
 
-// canonicalBase64 decodes unpadded base64url and requires the text to be the
-// canonical encoding of the decoded bytes, which rejects padding, line breaks,
-// and nonzero trailing bits.
 func canonicalBase64(text string, minBytes, maxBytes int) ([]byte, error) {
 	if len(text) > base64.RawURLEncoding.EncodedLen(maxBytes) {
 		return nil, errRequestInvalid
@@ -242,7 +219,6 @@ func canonicalBase64(text string, minBytes, maxBytes int) ([]byte, error) {
 	return decoded, nil
 }
 
-// decodeCeremonyID returns the SHA-256 digest of the 32-byte ceremony token.
 func decodeCeremonyID(raw json.RawMessage) ([]byte, error) {
 	token, err := base64Member(raw, ceremonyTokenBytes, ceremonyTokenBytes)
 	if err != nil {
@@ -252,9 +228,6 @@ func decodeCeremonyID(raw json.RawMessage) ([]byte, error) {
 	return sum[:], nil
 }
 
-// transportMember decodes the required transport hint array. Hints never
-// grant authority; unknown hints are dropped and known ones are returned in
-// the fixed canonical order without duplicates.
 func transportMember(raw json.RawMessage) ([]string, error) {
 	var items []json.RawMessage
 	if len(raw) == 0 || raw[0] != '[' || json.Unmarshal(raw, &items) != nil || len(items) > maxTransportHints {

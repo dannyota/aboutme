@@ -18,16 +18,12 @@ import (
 	"danny.vn/aboutme/apps/server/internal/testutil"
 )
 
-// allowHandler is the downstream handler RateLimit wraps in these tests:
-// it just proves next.ServeHTTP ran.
 func allowHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 }
 
-// rateLimitedReq builds a request with a given socket peer address
-// (RemoteAddr) and, optionally, a claimed api.TrustedClientIPHeader value.
 func rateLimitedReq(remoteAddr, claimedIP string) *http.Request {
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	req.RemoteAddr = remoteAddr
@@ -92,12 +88,6 @@ func TestRateLimit_RejectsOverLimitWith429AndRetryAfter(t *testing.T) {
 	}
 }
 
-// TestRateLimit_UntrustedPeerForgedHeader_DoesNotBypassLimit proves the
-// core spoofing-resistance requirement: a request whose socket peer is not
-// a trusted proxy must be keyed on that peer address, never on
-// TrustedClientIPHeader; otherwise a direct client could send a fresh
-// forged value on every request and get a fresh bucket every time,
-// bypassing the limit entirely.
 func TestRateLimit_UntrustedPeerForgedHeader_DoesNotBypassLimit(t *testing.T) {
 	t.Parallel()
 
@@ -106,13 +96,8 @@ func TestRateLimit_UntrustedPeerForgedHeader_DoesNotBypassLimit(t *testing.T) {
 		Requests: 2,
 		Window:   time.Minute,
 		Clock:    clock.Now,
-		// No TrustedProxies configured: this peer is never trusted, no
-		// matter what it claims via TrustedClientIPHeader.
 	})(allowHandler())
 
-	// Same socket peer, a different forged claimed IP on every request. If
-	// the header were honored, each request would look like a distinct
-	// client and none would ever be rejected.
 	forgedIPs := []string{"1.1.1.1", "2.2.2.2", "3.3.3.3"}
 	var lastCode int
 	for i, forged := range forgedIPs {
@@ -130,11 +115,6 @@ func TestRateLimit_UntrustedPeerForgedHeader_DoesNotBypassLimit(t *testing.T) {
 	}
 }
 
-// TestRateLimit_TrustedPeer_KeysByCanonicalHeader proves the other half of
-// the requirement: when the socket peer IS a trusted proxy, distinct
-// TrustedClientIPHeader values are treated as distinct clients (so many
-// real users sharing one proxy aren't lumped into a single bucket), while
-// the same value from that trusted proxy is still limited normally.
 func TestRateLimit_TrustedPeer_KeysByCanonicalHeader(t *testing.T) {
 	t.Parallel()
 
@@ -146,8 +126,6 @@ func TestRateLimit_TrustedPeer_KeysByCanonicalHeader(t *testing.T) {
 		TrustedProxies: api.LoopbackTrustedProxies(),
 	})(allowHandler())
 
-	// Two different real clients behind the trusted proxy: each gets its
-	// own allowance.
 	rec1 := httptest.NewRecorder()
 	handler.ServeHTTP(rec1, rateLimitedReq("127.0.0.1:9000", "203.0.113.1"))
 	if rec1.Code != http.StatusOK {
@@ -161,8 +139,6 @@ func TestRateLimit_TrustedPeer_KeysByCanonicalHeader(t *testing.T) {
 			"distinct %s values must not share a bucket", rec2.Code, http.StatusOK, api.TrustedClientIPHeader)
 	}
 
-	// The first client again, still within the same window: now over its
-	// own budget.
 	rec3 := httptest.NewRecorder()
 	handler.ServeHTTP(rec3, rateLimitedReq("127.0.0.1:9000", "203.0.113.1"))
 	if rec3.Code != http.StatusTooManyRequests {
@@ -170,23 +146,17 @@ func TestRateLimit_TrustedPeer_KeysByCanonicalHeader(t *testing.T) {
 	}
 }
 
-// TestRateLimit_MissingOrMalformedCanonicalHeader_Rejected proves a trusted
-// proxy's request must carry exactly one syntactically valid bare-IP
-// TrustedClientIPHeader value, or the request is rejected outright (400)
-// rather than falling back to the socket peer address. A fallback would put
-// every viewer behind that proxy in one shared bucket, creating a cross-tenant
-// denial of service.
 func TestRateLimit_MissingOrMalformedCanonicalHeader_Rejected(t *testing.T) {
 	t.Parallel()
 
 	cases := []string{
-		"",                          // missing entirely
-		"not-an-ip",                 // not an address at all
-		"999.999.999.999",           // out-of-range octets
-		"1.2.3.4, 5.6.7.8",          // a comma-separated list is not a single address
-		"203.0.113.5:8080",          // host:port; the header must be a bare address, no port
-		"[::1]:8080",                // bracketed IPv6 host:port form, same rule
-		strings.Repeat("9", 10_000), // implausibly oversized
+		"",
+		"not-an-ip",
+		"999.999.999.999",
+		"1.2.3.4, 5.6.7.8",
+		"203.0.113.5:8080",
+		"[::1]:8080",
+		strings.Repeat("9", 10_000),
 	}
 	for i, claimed := range cases {
 		t.Run(strconv.Itoa(i)+"_"+claimed[:min(len(claimed), 24)], func(t *testing.T) {
@@ -213,10 +183,6 @@ func TestRateLimit_MissingOrMalformedCanonicalHeader_Rejected(t *testing.T) {
 	}
 }
 
-// TestRateLimit_MultipleCanonicalHeaderValues_Rejected proves more than one
-// TrustedClientIPHeader value on a single request is rejected, not silently
-// resolved by picking the first (or last) one; an ambiguous header must
-// never be trusted.
 func TestRateLimit_MultipleCanonicalHeaderValues_Rejected(t *testing.T) {
 	t.Parallel()
 
@@ -243,10 +209,6 @@ func TestRateLimit_MultipleCanonicalHeaderValues_Rejected(t *testing.T) {
 	}
 }
 
-// TestRateLimit_UntrustedPeer_UnparseableRemoteAddr_Rejected proves the
-// fail-closed contract also covers the untrusted-peer path: an unparseable
-// RemoteAddr must reject the request rather than being used verbatim as an
-// unbounded, unvalidated key.
 func TestRateLimit_UntrustedPeer_UnparseableRemoteAddr_Rejected(t *testing.T) {
 	t.Parallel()
 
@@ -255,8 +217,6 @@ func TestRateLimit_UntrustedPeer_UnparseableRemoteAddr_Rejected(t *testing.T) {
 		Requests: 1,
 		Window:   time.Minute,
 		Clock:    clock.Now,
-		// No TrustedProxies: every peer is untrusted, so RemoteAddr itself
-		// is what gets parsed.
 	})(allowHandler())
 
 	rec := httptest.NewRecorder()
@@ -266,9 +226,6 @@ func TestRateLimit_UntrustedPeer_UnparseableRemoteAddr_Rejected(t *testing.T) {
 	}
 }
 
-// TestRateLimit_NormalizesIPv4MappedIPv6 proves clientIP normalizes via
-// Unmap: an address and its IPv4-in-IPv6 form must key identically, per
-// the required normalization through Unmap().String().
 func TestRateLimit_NormalizesIPv4MappedIPv6(t *testing.T) {
 	t.Parallel()
 
@@ -294,14 +251,6 @@ func TestRateLimit_NormalizesIPv4MappedIPv6(t *testing.T) {
 	}
 }
 
-// TestRateLimit_FullSimulatedChain_ForgedHeaderChangesNothing simulates
-// the full deployment chain (an attacker-
-// supplied X-Forwarded-For, a real viewer IP, and a request arriving from
-// Caddy's trusted address carrying the single canonical header Caddy
-// itself determined) and proves two things at once: the viewer is keyed
-// correctly from the canonical header, and the raw X-Forwarded-For content
-// (whatever wrote it, upstream of Caddy) has zero effect because this
-// server never parses it.
 func TestRateLimit_FullSimulatedChain_ForgedHeaderChangesNothing(t *testing.T) {
 	t.Parallel()
 
@@ -314,9 +263,8 @@ func TestRateLimit_FullSimulatedChain_ForgedHeaderChangesNothing(t *testing.T) {
 	})(allowHandler())
 
 	viewer := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
-	viewer.RemoteAddr = "127.0.0.1:443"                           // Caddy, the trusted hop
-	viewer.Header.Set(api.TrustedClientIPHeader, "198.51.100.42") // what Caddy validated
-	// A raw X-Forwarded-For must not override the validated viewer address.
+	viewer.RemoteAddr = "127.0.0.1:443"
+	viewer.Header.Set(api.TrustedClientIPHeader, "198.51.100.42")
 	viewer.Header.Set("X-Forwarded-For", "203.0.113.66, 70.132.0.1")
 
 	rec1 := httptest.NewRecorder()
@@ -325,14 +273,10 @@ func TestRateLimit_FullSimulatedChain_ForgedHeaderChangesNothing(t *testing.T) {
 		t.Fatalf("viewer request 1: status = %d, want %d", rec1.Code, http.StatusOK)
 	}
 
-	// A second, distinct viewer behind the SAME edge/proxy (same
-	// X-Forwarded-For content an attacker or CloudFront might send) must
-	// get its own bucket, proving the shared edge address never became the
-	// key.
 	otherViewer := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	otherViewer.RemoteAddr = "127.0.0.1:443"
 	otherViewer.Header.Set(api.TrustedClientIPHeader, "198.51.100.99")
-	otherViewer.Header.Set("X-Forwarded-For", "203.0.113.66, 70.132.0.1") // identical XFF content
+	otherViewer.Header.Set("X-Forwarded-For", "203.0.113.66, 70.132.0.1")
 
 	rec2 := httptest.NewRecorder()
 	handler.ServeHTTP(rec2, otherViewer)
@@ -341,8 +285,6 @@ func TestRateLimit_FullSimulatedChain_ForgedHeaderChangesNothing(t *testing.T) {
 			"must not share a bucket with the first viewer", rec2.Code, http.StatusOK)
 	}
 
-	// The original viewer again, same instant: now over its own (size-1)
-	// budget.
 	rec3 := httptest.NewRecorder()
 	handler.ServeHTTP(rec3, viewer)
 	if rec3.Code != http.StatusTooManyRequests {
@@ -350,9 +292,6 @@ func TestRateLimit_FullSimulatedChain_ForgedHeaderChangesNothing(t *testing.T) {
 	}
 }
 
-// TestRateLimit_ResetsOnInjectedClockWithoutSleeping proves the limiter's
-// window expiry is driven entirely by the injected Clock, not real time:
-// advancing the fake clock unblocks a rejected key with no test sleep.
 func TestRateLimit_ResetsOnInjectedClockWithoutSleeping(t *testing.T) {
 	t.Parallel()
 
@@ -375,7 +314,7 @@ func TestRateLimit_ResetsOnInjectedClockWithoutSleeping(t *testing.T) {
 		t.Fatalf("second request within the window: status = %d, want %d", rec2.Code, http.StatusTooManyRequests)
 	}
 
-	clock.Advance(time.Minute) // full refill; no real time elapses
+	clock.Advance(time.Minute)
 
 	rec3 := httptest.NewRecorder()
 	handler.ServeHTTP(rec3, rateLimitedReq("203.0.113.5:1234", ""))
@@ -384,10 +323,6 @@ func TestRateLimit_ResetsOnInjectedClockWithoutSleeping(t *testing.T) {
 	}
 }
 
-// TestRateLimit_ExactBoundaryPlusMinusOneNanosecond proves refill lands
-// exactly at capacity when precisely Window has elapsed, not a hair before
-// or after: 1ns short of the boundary must still be denied, and exactly at
-// the boundary must be allowed.
 func TestRateLimit_ExactBoundaryPlusMinusOneNanosecond(t *testing.T) {
 	t.Parallel()
 
@@ -414,7 +349,7 @@ func TestRateLimit_ExactBoundaryPlusMinusOneNanosecond(t *testing.T) {
 			recBefore.Code, http.StatusTooManyRequests)
 	}
 
-	clock.Advance(time.Nanosecond) // now exactly Window since the initial request
+	clock.Advance(time.Nanosecond)
 	recAt := httptest.NewRecorder()
 	handler.ServeHTTP(recAt, req())
 	if recAt.Code != http.StatusOK {
@@ -422,12 +357,6 @@ func TestRateLimit_ExactBoundaryPlusMinusOneNanosecond(t *testing.T) {
 	}
 }
 
-// TestRateLimit_ClockRollback_DoesNotFreezeRefillForever proves the
-// documented failure mode of a hand-rolled "only refill when elapsed > 0"
-// bucket (a backward clock step permanently latching the bucket at a
-// stale high-water mark) does not happen here: after the clock moves
-// backward and then forward again to (at least) Window past the original
-// consuming request, the bucket must be refilled, not still stuck denying.
 func TestRateLimit_ClockRollback_DoesNotFreezeRefillForever(t *testing.T) {
 	t.Parallel()
 
@@ -446,8 +375,6 @@ func TestRateLimit_ClockRollback_DoesNotFreezeRefillForever(t *testing.T) {
 		t.Fatalf("initial request: status = %d, want %d", rec1.Code, http.StatusOK)
 	}
 
-	// Clock steps backward (e.g. an NTP correction) well before the
-	// initial request's own timestamp.
 	clock.Set(testutil.Epoch.Add(-30 * time.Second))
 	recRolledBack := httptest.NewRecorder()
 	handler.ServeHTTP(recRolledBack, req())
@@ -456,8 +383,6 @@ func TestRateLimit_ClockRollback_DoesNotFreezeRefillForever(t *testing.T) {
 			recRolledBack.Code, http.StatusTooManyRequests)
 	}
 
-	// Clock resumes moving forward and reaches (comfortably past) a full
-	// Window after the ORIGINAL request.
 	clock.Set(testutil.Epoch.Add(2 * time.Minute))
 	recAfter := httptest.NewRecorder()
 	handler.ServeHTTP(recAfter, req())
@@ -467,11 +392,6 @@ func TestRateLimit_ClockRollback_DoesNotFreezeRefillForever(t *testing.T) {
 	}
 }
 
-// TestRateLimit_ConcurrentSameKey_ExactAccounting drives many goroutines
-// at the same key concurrently (run with -race) and asserts exactly
-// cfg.Requests of them are admitted: no more (a race letting two
-// goroutines both observe "1 token left" and both consume it) and no
-// fewer (a race that drops a token that should have been available).
 func TestRateLimit_ConcurrentSameKey_ExactAccounting(t *testing.T) {
 	t.Parallel()
 
@@ -505,9 +425,6 @@ func TestRateLimit_ConcurrentSameKey_ExactAccounting(t *testing.T) {
 	}
 }
 
-// TestRateLimit_KeyStore_ReclaimsOnlyExpiredEntries proves the store
-// reclaims a slot from a key whose bucket is fully refilled (holds no
-// state worth preserving) to admit a new key once MaxKeys is reached.
 func TestRateLimit_KeyStore_ReclaimsOnlyExpiredEntries(t *testing.T) {
 	t.Parallel()
 
@@ -525,9 +442,6 @@ func TestRateLimit_KeyStore_ReclaimsOnlyExpiredEntries(t *testing.T) {
 		t.Fatalf("key A, request 1: status = %d, want %d", recA1.Code, http.StatusOK)
 	}
 
-	// A's bucket is now fully refilled (a full Window has passed with no
-	// further use): admitting a brand-new key B must be able to reclaim
-	// A's slot.
 	clock.Advance(time.Minute)
 
 	recB1 := httptest.NewRecorder()
@@ -537,9 +451,6 @@ func TestRateLimit_KeyStore_ReclaimsOnlyExpiredEntries(t *testing.T) {
 	}
 }
 
-// TestRateLimit_KeyStore_ReclaimsUnrefilledEntryAfterHardIdleExpiry proves
-// the 24-hour idle bound is independent of token refill. A very slow bucket
-// must not pin one of the bounded key slots forever after its client vanishes.
 func TestRateLimit_KeyStore_ReclaimsUnrefilledEntryAfterHardIdleExpiry(t *testing.T) {
 	t.Parallel()
 
@@ -568,9 +479,6 @@ func TestRateLimit_KeyStore_ReclaimsUnrefilledEntryAfterHardIdleExpiry(t *testin
 	}
 }
 
-// TestRateLimit_KeyStore_RejectionRefreshesIdleClock proves last activity is
-// recorded for denied requests too. Otherwise a caller continuously probing
-// an exhausted key would be granted a fresh private bucket at 24 hours.
 func TestRateLimit_KeyStore_RejectionRefreshesIdleClock(t *testing.T) {
 	t.Parallel()
 
@@ -671,11 +579,6 @@ func TestRateLimit_KeyStore_BackwardClockCannotExpireAnActiveEntry(t *testing.T)
 	}
 }
 
-// TestRateLimit_KeyStore_FullOfActiveEntries_OverflowsInsteadOfEvicting proves
-// that when the store is at MaxKeys and every entry is active, admitting a new
-// key must NOT evict an arbitrary active entry; that would hand an
-// attacker a fresh bucket via key churn. Key A's own budget must be
-// completely undisturbed by B's admission.
 func TestRateLimit_KeyStore_FullOfActiveEntries_OverflowsInsteadOfEvicting(t *testing.T) {
 	t.Parallel()
 
@@ -687,26 +590,18 @@ func TestRateLimit_KeyStore_FullOfActiveEntries_OverflowsInsteadOfEvicting(t *te
 		MaxKeys:  1,
 	})(allowHandler())
 
-	// Key A takes the store's one slot and consumes its one token and is still
-	// fully active (no time has passed).
 	recA1 := httptest.NewRecorder()
 	handler.ServeHTTP(recA1, rateLimitedReq("203.0.113.10:1", ""))
 	if recA1.Code != http.StatusOK {
 		t.Fatalf("key A, request 1: status = %d, want %d", recA1.Code, http.StatusOK)
 	}
 
-	// Key B arrives at the same instant: the store is full of an active
-	// entry, so B must fall back to the shared overflow limiter rather
-	// than evicting A.
 	recB1 := httptest.NewRecorder()
 	handler.ServeHTTP(recB1, rateLimitedReq("203.0.113.20:1", ""))
 	if recB1.Code != http.StatusOK {
 		t.Fatalf("key B, request 1 (via overflow): status = %d, want %d", recB1.Code, http.StatusOK)
 	}
 
-	// Key A again, same instant: if B had evicted A, this would be a fresh
-	// bucket (200). It must still be 429; A's own state was never
-	// touched.
 	recA2 := httptest.NewRecorder()
 	handler.ServeHTTP(recA2, rateLimitedReq("203.0.113.10:1", ""))
 	if recA2.Code != http.StatusTooManyRequests {
@@ -715,13 +610,6 @@ func TestRateLimit_KeyStore_FullOfActiveEntries_OverflowsInsteadOfEvicting(t *te
 	}
 }
 
-// TestRateLimit_MaxKeyChurn_BoundedThroughputViaOverflow proves that with the
-// store saturated by active entries, flooding in many additional distinct
-// (e.g. forged) keys must
-// not each get their own fresh bucket. Every key beyond the store's
-// capacity shares one overflow bucket, so their combined admitted
-// throughput is bounded at exactly one key's normal budget, however many
-// distinct keys are involved.
 func TestRateLimit_MaxKeyChurn_BoundedThroughputViaOverflow(t *testing.T) {
 	t.Parallel()
 
@@ -736,9 +624,6 @@ func TestRateLimit_MaxKeyChurn_BoundedThroughputViaOverflow(t *testing.T) {
 		MaxKeys:  maxKeys,
 	})(allowHandler())
 
-	// Fill the store with maxKeys genuinely active entries (each uses only
-	// one of its own overflowBudget tokens, so they stay active/non-
-	// expired for the rest of the test).
 	for i := 0; i < maxKeys; i++ {
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, rateLimitedReq("203.0.113."+strconv.Itoa(i)+":1", ""))
@@ -747,9 +632,6 @@ func TestRateLimit_MaxKeyChurn_BoundedThroughputViaOverflow(t *testing.T) {
 		}
 	}
 
-	// Flood in far more distinct keys than the store has room for. Every
-	// one of them shares the overflow bucket, whose budget is
-	// overflowBudget total, not overflowBudget per churned key.
 	const churnedKeys = 50
 	var admitted int
 	for i := 0; i < churnedKeys; i++ {
@@ -766,8 +648,6 @@ func TestRateLimit_MaxKeyChurn_BoundedThroughputViaOverflow(t *testing.T) {
 	}
 }
 
-// TestIPKeyFunc_DistinctIPsGetDistinctKeys is a focused unit check on the
-// default KeyFunc in isolation from RateLimit's HTTP wiring.
 func TestIPKeyFunc_DistinctIPsGetDistinctKeys(t *testing.T) {
 	t.Parallel()
 
@@ -781,10 +661,6 @@ func TestIPKeyFunc_DistinctIPsGetDistinctKeys(t *testing.T) {
 	}
 }
 
-// TestIPKeyFunc_TrustedPeerMissingHeader_Fails proves IPKeyFunc's own
-// contract in isolation: a trusted peer with no canonical header fails
-// (ok=false) rather than returning some fallback key; see RateLimit's use
-// of this to reject the request instead of admitting it under a shared key.
 func TestIPKeyFunc_TrustedPeerMissingHeader_Fails(t *testing.T) {
 	t.Parallel()
 
@@ -794,10 +670,6 @@ func TestIPKeyFunc_TrustedPeerMissingHeader_Fails(t *testing.T) {
 	}
 }
 
-// TestClientIP_UntrustedPeer_UsesRemoteAddr proves ClientIP resolves an
-// untrusted request's raw socket peer address, bare (no port), the shape
-// internal/auth's SessionManager.Issue requires (it hard-fails on a
-// "host:port" string).
 func TestClientIP_UntrustedPeer_UsesRemoteAddr(t *testing.T) {
 	t.Parallel()
 
@@ -810,10 +682,6 @@ func TestClientIP_UntrustedPeer_UsesRemoteAddr(t *testing.T) {
 	}
 }
 
-// TestClientIP_TrustedProxy_UsesCanonicalHeader proves ClientIP takes the
-// viewer address from TrustedClientIPHeader, never the trusted proxy's
-// own RemoteAddr, matching resolveClientIP/IPKeyFunc's own trust
-// decision exactly (this wrapper must not invent a different one).
 func TestClientIP_TrustedProxy_UsesCanonicalHeader(t *testing.T) {
 	t.Parallel()
 
@@ -827,11 +695,6 @@ func TestClientIP_TrustedProxy_UsesCanonicalHeader(t *testing.T) {
 	}
 }
 
-// TestClientIP_TrustedProxyMissingHeader_FailsClosed proves ClientIP fails
-// closed (ok=false) rather than falling back to the trusted proxy's own
-// RemoteAddr when the canonical header is absent. A
-// caller like session issuance must not silently record the proxy's own
-// address as if it were the viewer's.
 func TestClientIP_TrustedProxyMissingHeader_FailsClosed(t *testing.T) {
 	t.Parallel()
 
@@ -841,9 +704,6 @@ func TestClientIP_TrustedProxyMissingHeader_FailsClosed(t *testing.T) {
 	}
 }
 
-// TestAccountKeyFunc_DistinctAccountsGetDistinctKeys proves AccountKeyFunc
-// reads the account ID auth middleware stores in
-// context via WithAccountID.
 func TestAccountKeyFunc_DistinctAccountsGetDistinctKeys(t *testing.T) {
 	t.Parallel()
 
@@ -861,7 +721,6 @@ func TestAccountKeyFunc_DistinctAccountsGetDistinctKeys(t *testing.T) {
 		t.Fatalf("AccountKeyFunc for distinct accounts both = %q, want distinct keys", a)
 	}
 
-	// Same account, same key, regardless of IP; AccountKeyFunc ignores it.
 	sameAcctDifferentIP := rateLimitedReq("198.51.100.1:1", "")
 	sameAcctDifferentIP = sameAcctDifferentIP.WithContext(api.WithAccountID(sameAcctDifferentIP.Context(), "acct-alice"))
 	if got, ok := api.AccountKeyFunc(sameAcctDifferentIP, nil); got != a || !ok {
@@ -869,10 +728,6 @@ func TestAccountKeyFunc_DistinctAccountsGetDistinctKeys(t *testing.T) {
 	}
 }
 
-// TestCompositeKeyFunc_BothDimensionsMustMatchForSameKey proves design
-// the per-account-and-IP requirement: a composite key changes if either
-// the account or the IP changes, so neither dimension alone determines the
-// bucket.
 func TestCompositeKeyFunc_BothDimensionsMustMatchForSameKey(t *testing.T) {
 	t.Parallel()
 
@@ -908,10 +763,6 @@ func TestCompositeKeyFunc_BothDimensionsMustMatchForSameKey(t *testing.T) {
 	}
 }
 
-// TestRateLimit_CompositeKey_LimitsAccountAndIPIndependently proves
-// RateLimit itself honors a configured composite KeyFunc end to end: the
-// same account from a different IP (or a different account from the same
-// IP) gets its own budget, not a shared one.
 func TestRateLimit_CompositeKey_LimitsAccountAndIPIndependently(t *testing.T) {
 	t.Parallel()
 
@@ -934,21 +785,18 @@ func TestRateLimit_CompositeKey_LimitsAccountAndIPIndependently(t *testing.T) {
 		t.Fatalf("alice from IP 1, request 1: status = %d, want %d", rec1.Code, http.StatusOK)
 	}
 
-	// Same account, different IP: independent budget.
 	rec2 := httptest.NewRecorder()
 	handler.ServeHTTP(rec2, reqFor("acct-alice", "203.0.113.2:1"))
 	if rec2.Code != http.StatusOK {
 		t.Fatalf("alice from IP 2: status = %d, want %d", rec2.Code, http.StatusOK)
 	}
 
-	// Different account, same original IP: also independent.
 	rec3 := httptest.NewRecorder()
 	handler.ServeHTTP(rec3, reqFor("acct-bob", "203.0.113.1:1"))
 	if rec3.Code != http.StatusOK {
 		t.Fatalf("bob from IP 1: status = %d, want %d", rec3.Code, http.StatusOK)
 	}
 
-	// Alice from IP 1 again: this exact pair already used its budget.
 	rec4 := httptest.NewRecorder()
 	handler.ServeHTTP(rec4, reqFor("acct-alice", "203.0.113.1:1"))
 	if rec4.Code != http.StatusTooManyRequests {
@@ -956,17 +804,11 @@ func TestRateLimit_CompositeKey_LimitsAccountAndIPIndependently(t *testing.T) {
 	}
 }
 
-// TestCompositeKeyFunc_ComponentFailurePropagates proves CompositeKeyFunc
-// fails as a whole when any one component KeyFunc does, rather than
-// silently degrading to whichever components did succeed; an unresolvable
-// client IP must still reject the request even when composed with an
-// always-succeeding AccountKeyFunc.
 func TestCompositeKeyFunc_ComponentFailurePropagates(t *testing.T) {
 	t.Parallel()
 
 	key := api.CompositeKeyFunc(api.AccountKeyFunc, api.IPKeyFunc)
 
-	// A trusted peer with no canonical header: IPKeyFunc fails.
 	req := rateLimitedReq("127.0.0.1:9000", "")
 	req = req.WithContext(api.WithAccountID(req.Context(), "acct-alice"))
 
@@ -975,10 +817,6 @@ func TestCompositeKeyFunc_ComponentFailurePropagates(t *testing.T) {
 	}
 }
 
-// TestRateLimit_CompositeKey_UnresolvableIP_Rejected proves the same
-// propagation end to end through RateLimit: a composite (account, IP) key
-// on a trusted-but-header-less request is rejected with 400, not silently
-// admitted keyed on the account alone.
 func TestRateLimit_CompositeKey_UnresolvableIP_Rejected(t *testing.T) {
 	t.Parallel()
 
@@ -991,7 +829,7 @@ func TestRateLimit_CompositeKey_UnresolvableIP_Rejected(t *testing.T) {
 		Key:            api.CompositeKeyFunc(api.AccountKeyFunc, api.IPKeyFunc),
 	})(allowHandler())
 
-	req := rateLimitedReq("127.0.0.1:9000", "") // trusted peer, no header
+	req := rateLimitedReq("127.0.0.1:9000", "")
 	req = req.WithContext(api.WithAccountID(req.Context(), "acct-alice"))
 
 	rec := httptest.NewRecorder()
@@ -1001,10 +839,6 @@ func TestRateLimit_CompositeKey_UnresolvableIP_Rejected(t *testing.T) {
 	}
 }
 
-// TestRateLimit_RejectedRequestsDoNotOweTokens proves a burst of
-// rejected requests beyond the budget must not leave the bucket owing
-// anything beyond what was actually admitted: after exactly one Window,
-// exactly Requests admissions must succeed again, no fewer.
 func TestRateLimit_RejectedRequestsDoNotOweTokens(t *testing.T) {
 	t.Parallel()
 
@@ -1017,7 +851,6 @@ func TestRateLimit_RejectedRequestsDoNotOweTokens(t *testing.T) {
 
 	req := func() *http.Request { return rateLimitedReq("203.0.113.5:1234", "") }
 
-	// Exhaust the budget.
 	for i := 0; i < 2; i++ {
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req())
@@ -1026,8 +859,6 @@ func TestRateLimit_RejectedRequestsDoNotOweTokens(t *testing.T) {
 		}
 	}
 
-	// Several more requests, all rejected. None of these may create
-	// "phantom debt" that delays refill beyond one normal Window.
 	for i := 0; i < 5; i++ {
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req())
@@ -1036,7 +867,7 @@ func TestRateLimit_RejectedRequestsDoNotOweTokens(t *testing.T) {
 		}
 	}
 
-	clock.Advance(time.Minute) // exactly one Window past the admitted requests
+	clock.Advance(time.Minute)
 
 	for i := 0; i < 2; i++ {
 		rec := httptest.NewRecorder()
@@ -1053,22 +884,6 @@ func TestRateLimit_RejectedRequestsDoNotOweTokens(t *testing.T) {
 	}
 }
 
-// TestRateLimit_SaturatedStore_ScanIsAmortizedNotPerRequest proves that once a
-// saturated store's entry becomes expired, a flood of new distinct keys
-// arriving faster than the store's internal sweep cooldown must not each
-// pay a fresh O(MaxKeys) expired-entry scan; only the first is allowed to
-// reclaim the newly-expired slot; the rest fall through to the shared
-// overflow limiter exactly as if nothing had expired yet.
-//
-// This is proven with a deliberately tiny Window (far shorter than any
-// plausible sweep cooldown) so an entry can expire almost immediately,
-// combined with the shared overflow limiter's own budget as an observable
-// probe: if a second flood request had instead reclaimed its own dedicated
-// slot (i.e. the store re-scanned on every request), the overflow limiter's
-// meanwhile-refilled token would be
-// left untouched for a third request to also succeed. Amortized scanning
-// instead routes the second AND third requests through the shared overflow
-// limiter, so the third finds it already spent and is rejected.
 func TestRateLimit_SaturatedStore_ScanIsAmortizedNotPerRequest(t *testing.T) {
 	t.Parallel()
 
@@ -1080,46 +895,26 @@ func TestRateLimit_SaturatedStore_ScanIsAmortizedNotPerRequest(t *testing.T) {
 		MaxKeys:  1,
 	})(allowHandler())
 
-	// Key A takes the store's one slot.
 	recA := httptest.NewRecorder()
 	handler.ServeHTTP(recA, rateLimitedReq("203.0.113.10:1", ""))
 	if recA.Code != http.StatusOK {
 		t.Fatalf("key A: status = %d, want %d", recA.Code, http.StatusOK)
 	}
 
-	// Key X1: the store is full of an active entry (A), so this is the
-	// first saturated encounter: a scan runs (finds nothing expired yet)
-	// and starts the store's internal sweep cooldown. X1 falls back to the
-	// shared overflow limiter, consuming its only token.
 	recX1 := httptest.NewRecorder()
 	handler.ServeHTTP(recX1, rateLimitedReq("203.0.113.20:1", ""))
 	if recX1.Code != http.StatusOK {
 		t.Fatalf("key X1 (first overflow use): status = %d, want %d", recX1.Code, http.StatusOK)
 	}
 
-	// A full Window passes: A is now expired (fully refilled), and, since
-	// Window is far shorter than any plausible sweep cooldown, this is
-	// still well inside the cooldown window started above.
 	clock.Advance(time.Millisecond)
 
-	// Key X2: if the store re-scanned here, it would evict A and hand X2 a
-	// fresh dedicated slot, leaving the overflow limiter's meanwhile-
-	// refilled token untouched. The amortized store instead skips the scan
-	// and falls back to overflow again, which, by this same instant, has
-	// also refilled (same rate/window as any per-key bucket) and so still
-	// admits X2. This request alone can't distinguish the two cases; X3
-	// below can.
 	recX2 := httptest.NewRecorder()
 	handler.ServeHTTP(recX2, rateLimitedReq("203.0.113.30:1", ""))
 	if recX2.Code != http.StatusOK {
 		t.Fatalf("key X2: status = %d, want %d", recX2.Code, http.StatusOK)
 	}
 
-	// Key X3, same instant: if X2 had reclaimed its own dedicated slot (no
-	// amortization), the overflow limiter's refilled token would still be
-	// sitting unused and X3 would also succeed. Because X2 actually went
-	// through overflow (amortization skipped the scan), overflow's one
-	// token is already spent and X3 must be rejected.
 	recX3 := httptest.NewRecorder()
 	handler.ServeHTTP(recX3, rateLimitedReq("203.0.113.40:1", ""))
 	if recX3.Code != http.StatusTooManyRequests {
@@ -1128,11 +923,6 @@ func TestRateLimit_SaturatedStore_ScanIsAmortizedNotPerRequest(t *testing.T) {
 	}
 }
 
-// TestRateLimit_ConcurrentDistinctKeys_NoRaceUnderSaturation drives many
-// goroutines at many distinct keys concurrently, with MaxKeys small enough
-// that the store saturates during the run; run with -race to catch any
-// data race in the eviction-sweep/overflow bookkeeping under concurrent
-// admission, not just concurrent same-key accounting.
 func TestRateLimit_ConcurrentDistinctKeys_NoRaceUnderSaturation(t *testing.T) {
 	t.Parallel()
 
@@ -1160,33 +950,16 @@ func TestRateLimit_ConcurrentDistinctKeys_NoRaceUnderSaturation(t *testing.T) {
 	wg.Wait()
 }
 
-// TestRateLimit_ConcurrentDistinctKeys_AtomicAdmission_MaxKeysOne proves
-// lookup, expiry, and first-token consumption form one critical section. A
-// newly inserted entry must consume its first token before another key can
-// observe it as fully refilled and evict it. Under MaxKeys=1, at most one of
-// many concurrent distinct keys can occupy the dedicated slot; every other
-// key shares the overflow bucket.
 func TestRateLimit_ConcurrentDistinctKeys_AtomicAdmission_MaxKeysOne(t *testing.T) {
 	t.Parallel()
 
-	// The forbidden interleaving (insert a new entry, release the store lock,
-	// THEN consume its first token, leaving a window where another
-	// goroutine's admission can observe the still-unconsumed entry as
-	// "expired" and evict it) depends on real OS thread scheduling landing
-	// inside a very narrow gap. A single trial can miss it in a non-atomic
-	// implementation. Many independent trials, each against a
-	// fresh limiter (so no state bleeds between them), make detection reliable
-	// without any sleep or scheduler-hint hack. The outcome below is a
-	// mathematical guarantee when one critical section covers
-	// lookup, the expiry decision, and the first reserve, so every trial must
-	// pass identically.
 	const trials = 30
 	const distinctKeys = 50
 
 	for trial := 0; trial < trials; trial++ {
 		clock := testutil.NewClockAtEpoch()
 		handler := api.RateLimit(api.RateLimiterConfig{
-			Requests: 1, // burst 1: the shared overflow bucket also grants exactly one token
+			Requests: 1,
 			Window:   time.Minute,
 			Clock:    clock.Now,
 			MaxKeys:  1,
@@ -1199,7 +972,7 @@ func TestRateLimit_ConcurrentDistinctKeys_AtomicAdmission_MaxKeysOne(t *testing.
 			wg.Add(1)
 			go func(i int) {
 				defer wg.Done()
-				<-start // maximize real concurrent contention on the store lock
+				<-start
 				rec := httptest.NewRecorder()
 				handler.ServeHTTP(rec, rateLimitedReq("203.0.113."+strconv.Itoa(i)+":1", ""))
 				if rec.Code == http.StatusOK {
@@ -1210,9 +983,6 @@ func TestRateLimit_ConcurrentDistinctKeys_AtomicAdmission_MaxKeysOne(t *testing.
 		close(start)
 		wg.Wait()
 
-		// Exactly one key can land the store's single dedicated slot, and
-		// exactly one more can drain the shared overflow bucket's single
-		// token, never one full private grant per distinct key.
 		if got := admitted.Load(); got != 2 {
 			t.Fatalf("trial %d: admitted = %d of %d concurrent distinct keys at MaxKeys=1, want exactly 2 "+
 				"(one private entry + one shared overflow token); non-atomic admission lets "+
@@ -1222,17 +992,6 @@ func TestRateLimit_ConcurrentDistinctKeys_AtomicAdmission_MaxKeysOne(t *testing.
 	}
 }
 
-// TestRateLimit_ConcurrentRejections_DoNotOweTokens_Regression proves
-// concurrent rejected reservations do not leave phantom token debt. A
-// sequential test cannot observe this:
-// x/time/rate's ReserveN always advances the bucket's internal
-// bookkeeping, even for a reservation that will later be canceled, and
-// when many concurrent reservations interleave, a later one can advance
-// the bucket's lastEvent past an earlier one's timeToAct, so CancelAt
-// restores nothing: the earlier "rejected" request leaves the bucket
-// owing a token it never spent. Non-mutating denial (AllowN; see
-// reserveNow) has no reservation to cancel and so cannot leave phantom
-// debt, for any interleaving.
 func TestRateLimit_ConcurrentRejections_DoNotOweTokens_Regression(t *testing.T) {
 	t.Parallel()
 
@@ -1269,7 +1028,7 @@ func TestRateLimit_ConcurrentRejections_DoNotOweTokens_Regression(t *testing.T) 
 		}
 		wg.Wait()
 
-		clock.Advance(time.Minute) // exactly one Window past the last admission
+		clock.Advance(time.Minute)
 
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req())
@@ -1280,13 +1039,6 @@ func TestRateLimit_ConcurrentRejections_DoNotOweTokens_Regression(t *testing.T) 
 	}
 }
 
-// TestRateLimit_ClockRollback_NoEarlyTokenGranted_Regression proves a backward
-// clock step cannot manufacture a token ahead of schedule:
-// two requests admitted with real capacity to spare, a clock rollback, a
-// request whose wall-clock-relative due time has not yet arrived (must
-// still be rejected even once the clock resumes forward past the rollback
-// point but short of the real due time), and finally recovery at the real
-// due time.
 func TestRateLimit_ClockRollback_NoEarlyTokenGranted_Regression(t *testing.T) {
 	t.Parallel()
 
@@ -1299,15 +1051,12 @@ func TestRateLimit_ClockRollback_NoEarlyTokenGranted_Regression(t *testing.T) {
 
 	req := func() *http.Request { return rateLimitedReq("203.0.113.5:1234", "") }
 
-	// t=0: admit the sole token.
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req())
 	if rec.Code != http.StatusOK {
 		t.Fatalf("t=0 admission: status = %d, want %d", rec.Code, http.StatusOK)
 	}
 
-	// t=100s: more than one Window has genuinely passed; admitted, and the
-	// NEXT token is now correctly due at t=160s.
 	clock.Set(testutil.Epoch.Add(100 * time.Second))
 	rec = httptest.NewRecorder()
 	handler.ServeHTTP(rec, req())
@@ -1315,9 +1064,6 @@ func TestRateLimit_ClockRollback_NoEarlyTokenGranted_Regression(t *testing.T) {
 		t.Fatalf("t=100s admission: status = %d, want %d", rec.Code, http.StatusOK)
 	}
 
-	// Clock rolls back to t=70s (e.g. an NTP correction) and a request
-	// lands there: no spare capacity at t=70s relative to the real t=100s
-	// admission, so this must be rejected.
 	clock.Set(testutil.Epoch.Add(70 * time.Second))
 	rec = httptest.NewRecorder()
 	handler.ServeHTTP(rec, req())
@@ -1325,9 +1071,6 @@ func TestRateLimit_ClockRollback_NoEarlyTokenGranted_Regression(t *testing.T) {
 		t.Fatalf("t=70s (rolled back): status = %d, want %d", rec.Code, http.StatusTooManyRequests)
 	}
 
-	// Clock resumes forward to t=130s: still 30s short of the correct
-	// t=160s due time. An implementation that lets the t=70s rollback
-	// re-anchor the bucket's internal clock would admit here early.
 	clock.Set(testutil.Epoch.Add(130 * time.Second))
 	rec = httptest.NewRecorder()
 	handler.ServeHTTP(rec, req())
@@ -1336,7 +1079,6 @@ func TestRateLimit_ClockRollback_NoEarlyTokenGranted_Regression(t *testing.T) {
 			"a clock rollback must never grant a token early", rec.Code, http.StatusTooManyRequests)
 	}
 
-	// Recovery: at the correct t=160s due time, admission succeeds.
 	clock.Set(testutil.Epoch.Add(160 * time.Second))
 	rec = httptest.NewRecorder()
 	handler.ServeHTTP(rec, req())
@@ -1345,17 +1087,6 @@ func TestRateLimit_ClockRollback_NoEarlyTokenGranted_Regression(t *testing.T) {
 	}
 }
 
-// TestRateLimit_TrustedProxiesMismatch_LogsWarningOnceNotPerRequest proves that when
-// TrustedProxies is configured but doesn't match the request's real peer
-// (e.g. TRUSTED_PROXY_CIDRS set to the wrong subnet), RateLimit must log a
-// distinct, high-severity warning so an operator notices the
-// misconfiguration, throttled to at most once per trustMismatchWarnInterval
-// (see the const), never once per request. Five requests landing at the
-// same clock instant (the case here) all fall inside the same interval, so
-// this still asserts exactly one log line; see
-// TestRateLimit_TrustedProxiesMismatch_ReLogsAfterInterval for proof the
-// condition stays observable across a live incident rather than being
-// silenced after the first request.
 func TestRateLimit_TrustedProxiesMismatch_LogsWarningOnceNotPerRequest(t *testing.T) {
 	t.Parallel()
 
@@ -1364,12 +1095,10 @@ func TestRateLimit_TrustedProxiesMismatch_LogsWarningOnceNotPerRequest(t *testin
 
 	clock := testutil.NewClockAtEpoch()
 	handler := api.RateLimit(api.RateLimiterConfig{
-		Requests: 100,
-		Window:   time.Minute,
-		Clock:    clock.Now,
-		Logger:   logger,
-		// Configured trust exists but does not include this peer's real
-		// address, e.g. TRUSTED_PROXY_CIDRS was set to the wrong subnet.
+		Requests:       100,
+		Window:         time.Minute,
+		Clock:          clock.Now,
+		Logger:         logger,
 		TrustedProxies: api.TrustedProxies{netip.MustParsePrefix("192.0.2.0/24")},
 	})(allowHandler())
 
@@ -1391,9 +1120,6 @@ func TestRateLimit_TrustedProxiesMismatch_LogsWarningOnceNotPerRequest(t *testin
 	}
 }
 
-// TestRateLimit_TrustedProxiesMatch_NoWarningLogged is the negative
-// counterpart: when the peer DOES match the configured TrustedProxies (the
-// healthy, expected case), no mismatch warning is logged at all.
 func TestRateLimit_TrustedProxiesMatch_NoWarningLogged(t *testing.T) {
 	t.Parallel()
 
@@ -1419,11 +1145,6 @@ func TestRateLimit_TrustedProxiesMatch_NoWarningLogged(t *testing.T) {
 	}
 }
 
-// TestRateLimit_TrustedProxiesMismatch_ReLogsAfterInterval proves a persistent trust-boundary
-// mismatch must stay observable for as long as it persists, not fall
-// silent after the very first request the way a sync.Once-guarded warning
-// would. Once the injected clock advances past the throttle interval, a
-// further mismatched request must log again.
 func TestRateLimit_TrustedProxiesMismatch_ReLogsAfterInterval(t *testing.T) {
 	t.Parallel()
 
@@ -1448,7 +1169,6 @@ func TestRateLimit_TrustedProxiesMismatch_ReLogsAfterInterval(t *testing.T) {
 		t.Fatalf("after the first mismatched request: logged %d times, want 1", count)
 	}
 
-	// Still within the throttle interval: no second line yet.
 	rec = httptest.NewRecorder()
 	handler.ServeHTTP(rec, rateLimitedReq("203.0.113.5:1234", ""))
 	if rec.Code != http.StatusOK {
@@ -1458,9 +1178,6 @@ func TestRateLimit_TrustedProxiesMismatch_ReLogsAfterInterval(t *testing.T) {
 		t.Fatalf("still within the throttle interval: logged %d times, want 1 (no additional line yet)", count)
 	}
 
-	// Advance past the throttle interval: the still-ongoing mismatch must
-	// produce a fresh log line, proving the condition stays observable
-	// rather than being silenced forever after the first occurrence.
 	clock.Advance(time.Minute)
 	rec = httptest.NewRecorder()
 	handler.ServeHTTP(rec, rateLimitedReq("203.0.113.5:1234", ""))
@@ -1473,11 +1190,6 @@ func TestRateLimit_TrustedProxiesMismatch_ReLogsAfterInterval(t *testing.T) {
 	}
 }
 
-// TestRateLimit_InvalidClientIP_ChargesSendingPeersBucket proves the
-// invalid_client_ip path charges the sending peer. A trusted peer repeatedly
-// sending a missing or malformed canonical header must exhaust a bucket keyed
-// on its raw socket address and receive 429. This bounds handler work, not log
-// volume: RateLimit sits inside Logging, so a 429 is logged like a 400.
 func TestRateLimit_InvalidClientIP_ChargesSendingPeersBucket(t *testing.T) {
 	t.Parallel()
 
@@ -1489,8 +1201,6 @@ func TestRateLimit_InvalidClientIP_ChargesSendingPeersBucket(t *testing.T) {
 		TrustedProxies: api.LoopbackTrustedProxies(),
 	})(allowHandler())
 
-	// A trusted peer sending no canonical header: cfg.Key fails, so this
-	// takes the invalid_client_ip path every time.
 	req := func() *http.Request { return rateLimitedReq("127.0.0.1:9000", "") }
 
 	for i := 0; i < 2; i++ {
@@ -1505,9 +1215,6 @@ func TestRateLimit_InvalidClientIP_ChargesSendingPeersBucket(t *testing.T) {
 		}
 	}
 
-	// The peer's own (small, Requests=2) budget is now exhausted: the next
-	// malformed-header request must be metered like any other over-budget
-	// request, not another free 400.
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req())
 	if rec.Code != http.StatusTooManyRequests {
@@ -1520,12 +1227,6 @@ func TestRateLimit_InvalidClientIP_ChargesSendingPeersBucket(t *testing.T) {
 	}
 }
 
-// TestRateLimit_InvalidClientIP_DifferentPeersMeteredIndependently proves
-// the peer-keyed charge on the 400 path (see the test above) is scoped per
-// sending peer, not one shared bucket for the whole invalid_client_ip
-// path; otherwise one misbehaving trusted proxy could exhaust every other
-// trusted proxy's allowance for legitimately reporting the same failure
-// mode.
 func TestRateLimit_InvalidClientIP_DifferentPeersMeteredIndependently(t *testing.T) {
 	t.Parallel()
 
@@ -1546,8 +1247,6 @@ func TestRateLimit_InvalidClientIP_DifferentPeersMeteredIndependently(t *testing
 		t.Fatalf("peer 1, request 1: status = %d, want %d", rec1.Code, http.StatusBadRequest)
 	}
 
-	// A different trusted peer, same instant: must get its own budget, not
-	// share peer 1's already-spent one.
 	rec2 := httptest.NewRecorder()
 	handler.ServeHTTP(rec2, rateLimitedReq("127.0.0.2:9000", ""))
 	if rec2.Code != http.StatusBadRequest {
@@ -1556,25 +1255,13 @@ func TestRateLimit_InvalidClientIP_DifferentPeersMeteredIndependently(t *testing
 	}
 }
 
-// TestRateLimit_ClockRollback_DoesNotSuppressEvictionSweep proves the
-// saturated-store eviction sweep is gated on the injected clock
-// (nextSweepAt), so a backward clock
-// step must not suppress sweeps for the whole rollback span. The limiter
-// clamps the sweep clock to a monotonic high-water mark, so a rollback
-// can neither skip a due sweep nor let reclaimable capacity go unreclaimed.
-//
-// The scenario drives the clock forward through real requests to a high
-// water mark at which one tracked entry is fully refilled (reclaimable),
-// then rolls the clock back an hour and admits a brand-new key. The due sweep
-// must reclaim the idle entry instead of sending the new key to the spent
-// overflow bucket.
 func TestRateLimit_ClockRollback_DoesNotSuppressEvictionSweep(t *testing.T) {
 	t.Parallel()
 
 	clock := testutil.NewClockAtEpoch()
 	handler := api.RateLimit(api.RateLimiterConfig{
 		Requests: 1,
-		Window:   time.Second, // fast refill so an idle entry becomes reclaimable quickly
+		Window:   time.Second,
 		Clock:    clock.Now,
 		MaxKeys:  2,
 	})(allowHandler())
@@ -1585,44 +1272,28 @@ func TestRateLimit_ClockRollback_DoesNotSuppressEvictionSweep(t *testing.T) {
 		return rec.Code
 	}
 
-	// Fill the store to MaxKeys with keys A and B, then admit C: the store
-	// is saturated, so C trips the first sweep (setting nextSweepAt to
-	// Epoch+cooldown) and shares the overflow bucket, spending its one token.
-	if got := send("203.0.113.1"); got != http.StatusOK { // A
+	if got := send("203.0.113.1"); got != http.StatusOK {
 		t.Fatalf("A at Epoch: status = %d, want %d", got, http.StatusOK)
 	}
-	if got := send("203.0.113.2"); got != http.StatusOK { // B
+	if got := send("203.0.113.2"); got != http.StatusOK {
 		t.Fatalf("B at Epoch: status = %d, want %d", got, http.StatusOK)
 	}
-	if got := send("203.0.113.3"); got != http.StatusOK { // C -> overflow (its single token)
+	if got := send("203.0.113.3"); got != http.StatusOK {
 		t.Fatalf("C at Epoch (overflow token): status = %d, want %d", got, http.StatusOK)
 	}
 
-	// Advance the clock five windows and touch B. This moves the limiter's
-	// high-water mark forward WITHOUT triggering a sweep (B is found
-	// directly), and leaves A idle since Epoch, so A is now fully refilled
-	// and reclaimable at this later time, while B is freshly spent.
 	clock.Advance(5 * time.Second)
-	if got := send("203.0.113.2"); got != http.StatusOK { // B again, refilled
+	if got := send("203.0.113.2"); got != http.StatusOK {
 		t.Fatalf("B at Epoch+5s: status = %d, want %d", got, http.StatusOK)
 	}
 
-	// The clock jumps backward an hour (e.g. an NTP correction). A new key D
-	// arrives. The sweep IS due (A has been reclaimable for five windows of
-	// real time), so D must get a private bucket. Comparing the rolled-back
-	// clock directly with nextSweepAt would skip the sweep and send D to the
-	// overflow bucket whose only token C already spent.
 	clock.Set(testutil.Epoch.Add(5*time.Second - time.Hour))
-	if got := send("203.0.113.4"); got != http.StatusOK { // D
+	if got := send("203.0.113.4"); got != http.StatusOK {
 		t.Fatalf("D after a -1h clock step: status = %d, want %d; a backward clock step must not "+
 			"suppress a due eviction sweep and starve a new key of a reclaimable slot", got, http.StatusOK)
 	}
 }
 
-// TestPasswordRateBoundedLimiter_AllowsWithinBudgetAndRejectsOver proves the
-// exported ADR 0007 admission store used by the password rate policies maps
-// an allowed admission to (true, 0) and a rejected one to (false, >= 1), with
-// no phantom debt after rejection.
 func TestPasswordRateBoundedLimiter_AllowsWithinBudgetAndRejectsOver(t *testing.T) {
 	t.Parallel()
 
@@ -1643,8 +1314,6 @@ func TestPasswordRateBoundedLimiter_AllowsWithinBudgetAndRejectsOver(t *testing.
 		t.Fatalf("over-budget: (allowed=%v, retry=%d), want (false, >= 1)", allowed, retry)
 	}
 
-	// A full Window later the budget is refilled exactly; rejected requests
-	// left no debt.
 	l2 := api.NewBoundedRateLimiter(api.RateLimiterConfig{Requests: 1, Window: time.Minute})
 	if allowed, _ := l2.Admit(now, "k"); !allowed {
 		t.Fatal("initial admission denied")
@@ -1657,11 +1326,6 @@ func TestPasswordRateBoundedLimiter_AllowsWithinBudgetAndRejectsOver(t *testing.
 	}
 }
 
-// TestPasswordRateBoundedLimiter_DefaultsToTenThousandKeys proves the exported
-// store's default MaxKeys is the documented 10,000 active keys plus one shared
-// overflow bucket: the 10,001st distinct key shares the single overflow token
-// and the second overflow key is rejected, while a tracked key keeps its own
-// budget untouched.
 func TestPasswordRateBoundedLimiter_DefaultsToTenThousandKeys(t *testing.T) {
 	t.Parallel()
 
@@ -1677,8 +1341,6 @@ func TestPasswordRateBoundedLimiter_DefaultsToTenThousandKeys(t *testing.T) {
 		}
 	}
 
-	// Store is now full of active (just-admitted, not yet refilled) entries.
-	// A new distinct key shares the single overflow token.
 	if allowed, retry := l.Admit(now, "overflow-1"); !allowed {
 		t.Fatalf("first overflow key denied (allowed=%v, retry=%d); want one shared overflow grant", allowed, retry)
 	}
@@ -1688,7 +1350,6 @@ func TestPasswordRateBoundedLimiter_DefaultsToTenThousandKeys(t *testing.T) {
 		t.Fatalf("rejected overflow admission retry = %d, want >= 1", retry)
 	}
 
-	// A tracked key's own budget is undisturbed by the flood.
 	if allowed, _ := l.Admit(now, "k:0"); allowed {
 		t.Fatal("k:0 admitted again after its single token was spent")
 	}

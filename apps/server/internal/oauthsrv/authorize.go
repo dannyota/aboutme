@@ -25,8 +25,6 @@ const (
 	stateMaxBytes = 512
 )
 
-// HandleAuthorize validates an authorization-code request before redirecting
-// either to login, stateless consent, or an exact registered redirect URI.
 func (s *Service) HandleAuthorize(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store, no-transform")
 	if r.Method != http.MethodGet {
@@ -72,10 +70,6 @@ func (s *Service) HandleAuthorize(w http.ResponseWriter, r *http.Request) {
 			redirectIssuedCode(w, client, query, s.publicOrigin, redirectTo)
 			return
 		}
-		// A stale session or a missing recent second-factor proof cannot mint
-		// silent authority; fall back to the interactive consent page instead
-		// of a hard failure, mirroring the "no live grant" branch below. See
-		// docs/design/second-factor-authentication.md.
 		if errors.Is(issueErr, auth.ErrSessionInvalid) || errors.Is(issueErr, auth.ErrReauthRequired) {
 			redirectInternal(w, consentPath+"?"+query.values().Encode())
 			return
@@ -134,11 +128,6 @@ func (s *Service) authorizeRequest(ctx context.Context, values url.Values, rawQu
 	return query, client, true, nil
 }
 
-// canonicalResource accepts zero or one RFC 8707 resource naming the one
-// protected resource: the MCP endpoint URL or the bare origin, byte for byte.
-// The first raw resource field must also be the exact url.QueryEscape form of
-// that value, so no other percent-encoding, case, or normalization of an
-// accepted value passes. See docs/design/mcp-client-compatibility.md.
 func (s *Service) canonicalResource(values url.Values, raw string) bool {
 	resources, present := values["resource"]
 	if !present {
@@ -159,9 +148,6 @@ func (s *Service) canonicalResource(values url.Values, raw string) bool {
 	return false
 }
 
-// redirectIssuedCode permits only the exact result constructed from a
-// registered redirect URI. It keeps the authorize handler's redirect sink
-// separate from request-derived values.
 func redirectIssuedCode(w http.ResponseWriter, client store.OAuthClient, request ConsentQuery, issuer, target string) {
 	targetURL, err := url.Parse(target)
 	if err != nil || !consentRedirectMatches(client, request) {
@@ -176,7 +162,6 @@ func redirectIssuedCode(w http.ResponseWriter, client store.OAuthClient, request
 	writeFoundRedirect(w, target)
 }
 
-// redirectInternal only permits an absolute-path redirect on this origin.
 func redirectInternal(w http.ResponseWriter, target string) {
 	targetURL, err := url.ParseRequestURI(target)
 	if err != nil || !strings.HasPrefix(target, "/") || strings.HasPrefix(target, "//") || targetURL.IsAbs() || targetURL.Host != "" {

@@ -20,26 +20,17 @@ const seedDatabase = "aboutme_dev"
 //go:embed testdata/full.json
 var fullFixture []byte
 
-// Config holds the dev-seed command's validated flags.
 type Config struct {
-	// DatabaseURL is the --database-url value. parseConfig accepts it only
-	// when it names the aboutme_dev database on 127.0.0.1.
 	DatabaseURL string
 }
 
-// seedAccount is the fixed development account that seed creates.
 type seedAccount struct {
-	// ID is the fixed users.id of the account.
-	ID uuid.UUID
-	// Email is the sign-in email address.
-	Email string
-	// Name is the account display name.
-	Name string
-	// Password is the plain development password that seed hashes.
+	ID       uuid.UUID
+	Email    string
+	Name     string
 	Password string
 }
 
-// Frozen identities. The spec, runbook, and entry proof pin them.
 var (
 	seedUser = seedAccount{
 		ID:       uuid.MustParse("5d000000-0000-4000-8000-000000000001"),
@@ -101,8 +92,6 @@ func run(ctx context.Context, cmd string, cfg Config) error {
 	}
 }
 
-// runSeedWithDB creates the user, credential, and resume when their fixed IDs
-// are absent. It never updates an existing row.
 func runSeedWithDB(ctx context.Context, db *sql.DB) error {
 	var existingEmail string
 	err := db.QueryRowContext(ctx,
@@ -173,8 +162,6 @@ func runSeedWithDB(ctx context.Context, db *sql.DB) error {
 		return fmt.Errorf("check resume: %w", err)
 	}
 	if exists {
-		// Skipping also avoids the three-resume cap trigger, which fires on
-		// INSERT before ON CONFLICT resolution.
 		return nil
 	}
 	personalDetails, content, customization, err := splitResumeDoc(fullFixture)
@@ -193,8 +180,6 @@ func runSeedWithDB(ctx context.Context, db *sql.DB) error {
 	return nil
 }
 
-// runCleanupWithDB deletes exactly the two seed rows by ID; sessions,
-// credentials, and idempotency records cascade from the user.
 func runCleanupWithDB(ctx context.Context, db *sql.DB) error {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {

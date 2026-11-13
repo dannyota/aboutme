@@ -1,8 +1,3 @@
-// Live-database store tests for password authentication: cascade behavior,
-// SKIP LOCKED claim disjointness, stale-lease recovery, bounded cleanup, and
-// live key-ID listing, all against the real generated query layer (store.New)
-// so the sqlc contract and the password table constraints are proven
-// together. See docs/design/security.md.
 package store_test
 
 import (
@@ -23,9 +18,6 @@ import (
 
 var _ store.PasswordQueries = (*store.Queries)(nil)
 
-// newPasswordStoreTx returns a rolled-back transaction plus the underlying
-// pool, matching newPublicStoreTx. Every query and raw SQL goes through the
-// transaction so repeated runs never accumulate rows in the shared database.
 func newPasswordStoreTx(t *testing.T) (context.Context, *pgxpool.Pool, pgx.Tx, *store.Queries) {
 	t.Helper()
 	dsn := testutil.RequireMigratedTestDatabaseURL(t)
@@ -66,8 +58,6 @@ func newPasswordStoreUser(ctx context.Context, t *testing.T, q *store.Queries) u
 	return u.ID
 }
 
-// newPendingVerifyJob creates a pending verify job that is immediately due
-// (next_attempt_at == now), so claim tests observe it without a timing race.
 func newPendingVerifyJob(ctx context.Context, t *testing.T, q *store.Queries, regID uuid.UUID) store.AuthEmailJob {
 	t.Helper()
 	return newPendingVerifyJobAt(ctx, t, q, regID, time.Now().UTC())
@@ -195,11 +185,10 @@ func TestPasswordAuthUserDeleteCascades(t *testing.T) {
 func TestPasswordAuthClaimIsDisjointUnderSkipLocked(t *testing.T) {
 	dsn, _ := testutil.NewMigratedTestDatabase(t)
 	ctx, pool, _, _ := newPasswordStoreTxWithDSN(t, dsn)
-	seed := store.New(pool) // committed so both claimers can see the jobs
+	seed := store.New(pool)
 
 	unrelatedReg := newPasswordRegistration(ctx, t, seed)
 	newPendingVerifyJob(ctx, t, seed, unrelatedReg)
-	// Keep the unrelated job ineligible under this test's simulated clock.
 	fixtureNow := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
 	reg1 := newPasswordRegistration(ctx, t, seed)
 	reg2 := newPasswordRegistration(ctx, t, seed)
@@ -325,10 +314,6 @@ func TestPasswordAuthStaleLeaseRequeueDecrementsAttempts(t *testing.T) {
 func TestPasswordAuthCleanupIsBounded(t *testing.T) {
 	ctx, _, _, q := newPasswordStoreTx(t)
 
-	// Other packages commit expired registrations and run this cleanup with a
-	// wall-clock cutoff. If the page picked one of their rows, a concurrent
-	// delete would shrink the count below the limit. The simulated clock
-	// predates every other test clock, so only this test's rows qualify.
 	now := time.Date(1998, time.January, 1, 0, 0, 0, 0, time.UTC)
 	expired := now.Add(-time.Hour)
 	for i := 0; i < 5; i++ {
@@ -411,7 +396,4 @@ func bytesOf(n int, fill byte) []byte {
 	return b
 }
 
-// uniqueTokenDigest returns a fresh random 32-byte digest each call: the digest
-// is globally unique in the schema, so a shared constant would collide across
-// the parallel package tests that share the one migrated database.
 func uniqueTokenDigest() []byte { return []byte(uuid.NewString() + uuid.NewString())[:32] }

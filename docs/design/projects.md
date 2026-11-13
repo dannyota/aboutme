@@ -1,6 +1,7 @@
 # Projects
 
-Status: Accepted by the owner (2026-11-11); not yet implemented.
+Status: Accepted by the owner (2026-11-11). Implemented except the entry points:
+the page bar link, the title links and print.
 [ADR 0029](../adr/0029-account-project-library.md) records the decision and the
 [roadmap](../plans/roadmap.md#v09-show-the-work) the order. This document covers
 the product, the library and selection. The
@@ -111,8 +112,11 @@ by the upgrade.
 
 - `/{slug}/projects` lists the resume's available projects in entry order;
   `/{slug}/projects/{project-slug}` shows one.
-- A project is available on a resume when the resume is live and the linked
-  entry is visible. Any other state answers exactly as an unknown resume.
+- A project is available on a resume when the resume is live, the linked entry
+  is visible, and the chosen text has a name the page can show. Any other state
+  answers exactly as an unknown resume, except that a resume behind sign in to
+  view shows its gate on every project address to a viewer without a pass, so
+  the gate reveals no project.
 - The page shows name, role, dates, technologies, outcome, description, the
   repository and demo links, and a link back to the resume. It shows no contact
   details beyond the resume page and no account data.

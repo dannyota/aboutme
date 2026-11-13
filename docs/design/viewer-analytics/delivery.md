@@ -44,7 +44,7 @@ OpenAPI holds every route; the web client is regenerated with it.
 | `POST /api/v1/public/views/collect`                    | None; exact `Origin`, JSON | Token, challenge, solution; 204 always after validation         |
 | `GET /api/v1/views`                                    | Cookie session             | Owner summary: 7, 30, and 90 days per resume                    |
 | `GET /api/v1/views/{id}`                               | Cookie session             | One resume: 90 daily rows, 12 months, link previews by platform |
-| `GET /api/v1/auth/{provider}/start?purpose=view&slug=` | None                       | Viewer sign-in start (sign in to view)                          |
+| `GET /api/v1/auth/{provider}/start?purpose=view&slug=` | None                       | Viewer sign-in start (sign in to view); optional `page`         |
 | `POST /api/v1/resumes/{id}/publish`                    | Cookie session, CSRF       | Gains optional `signInToView` (sign in to view)                 |
 
 The public `POST` routes accept only a single `application/json` media type and

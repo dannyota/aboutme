@@ -1,8 +1,5 @@
 package resumeapi
 
-// Mutation-transaction session/token re-authentication, and the transition
-// helpers that decide a mutation's public-state class and lock its slugs.
-
 import (
 	"context"
 	"crypto/subtle"
@@ -21,8 +18,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// transactionMutation reauthenticates the transaction against the durable
-// session row immediately before a mutation callback can write.
 func (s *Service) transactionMutation(ctx context.Context, qtx *store.Queries, mutation mutationContext) (mutationContext, error) {
 	if qtx == nil {
 		return mutationContext{}, errors.New("resumeapi: mutation transaction is unavailable")
@@ -74,13 +69,6 @@ func (s *Service) transactionMutation(ctx context.Context, qtx *store.Queries, m
 	return mutation, nil
 }
 
-// requireSensitiveResumeAuthority locks the user, then the concrete caller
-// session, then the second-factor policy -- the lock order in
-// docs/design/second-factor-authentication.md -- and requires a fresh primary
-// and, for an enrolled account, factor proof before a slug-releasing resume
-// mutation (a rename or a delete) commits. Only a cookie-session mutation
-// reaches this check; an agent write authenticates through its OAuth grant
-// and token in transactionMutation instead.
 func (s *Service) requireSensitiveResumeAuthority(ctx context.Context, qtx *store.Queries, mutation mutationContext, now time.Time) error {
 	user, err := qtx.GetUserForUpdate(ctx, mutation.UserID)
 	if err != nil {
@@ -104,8 +92,6 @@ func (s *Service) requireSensitiveResumeAuthority(ctx context.Context, qtx *stor
 	case err == nil:
 		policyPtr = &policy
 	case errors.Is(err, pgx.ErrNoRows):
-		// Unenrolled account: RequireRecentSecondFactorReauth checks primary
-		// proof only.
 	default:
 		return fmt.Errorf("resumeapi: lock sensitive mutation factor policy: %w", err)
 	}
@@ -162,8 +148,6 @@ func (s *Service) replayCommittedState(ctx context.Context, userID uuid.UUID, pl
 	return state, nil
 }
 
-// mutationRequestKeys carries the already parsed idempotency key through the
-// request-local context without changing every resume operation signature.
 type mutationRequestKeyContext struct{}
 
 func mutationKeyFromContext(ctx context.Context) uuid.UUID {

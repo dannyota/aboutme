@@ -26,7 +26,6 @@ func TestNormalizeBounds(t *testing.T) {
 		if _, err := Normalize(strings.Repeat("a", 1025)); !errors.Is(err, ErrPasswordLength) {
 			t.Errorf("Normalize(1025 bytes) error = %v, want ErrPasswordLength", err)
 		}
-		// 1024 bytes passes the raw cap but fails the 128-code-point cap.
 		if _, err := Normalize(strings.Repeat("a", 1024)); !errors.Is(err, ErrPasswordLength) {
 			t.Errorf("Normalize(1024 ascii bytes) error = %v, want ErrPasswordLength", err)
 		}
@@ -60,7 +59,6 @@ func TestNormalizeBounds(t *testing.T) {
 
 	t.Run("astral code points", func(t *testing.T) {
 		t.Parallel()
-		// U+1F600 is one code point but four UTF-8 bytes.
 		if got, err := Normalize(strings.Repeat("😀", 15)); err != nil || got != strings.Repeat("😀", 15) {
 			t.Errorf("Normalize(15 astral) = %q, %v; want unchanged, nil", got, err)
 		}
@@ -71,7 +69,6 @@ func TestNormalizeBounds(t *testing.T) {
 
 	t.Run("NFC composition reduces code points", func(t *testing.T) {
 		t.Parallel()
-		// 129 raw code points: 127 'a' + one "e" + U+0301 pair composes to 128.
 		raw := strings.Repeat("a", 127) + "é"
 		got, err := Normalize(raw)
 		if err != nil {
@@ -80,7 +77,6 @@ func TestNormalizeBounds(t *testing.T) {
 		if want := strings.Repeat("a", 127) + "é"; got != want {
 			t.Errorf("Normalize = %q, want %q", got, want)
 		}
-		// 15 raw "e" + U+0301 pairs (30 code points) compose to 15 code points.
 		raw = strings.Repeat("é", 15)
 		if _, err := Normalize(raw); err != nil {
 			t.Errorf("Normalize(15 composing pairs) error = %v, want nil", err)
@@ -101,7 +97,7 @@ func TestNormalizeBounds(t *testing.T) {
 
 	t.Run("controls allowed as password data", func(t *testing.T) {
 		t.Parallel()
-		raw := "abc\x00def\x01ghi\x02jkl" // 15 code points including controls
+		raw := "abc\x00def\x01ghi\x02jkl"
 		got, err := Normalize(raw)
 		if err != nil {
 			t.Fatalf("Normalize(controls) error = %v, want nil", err)

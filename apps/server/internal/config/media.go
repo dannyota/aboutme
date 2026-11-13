@@ -18,10 +18,6 @@ type mediaConfig struct {
 	forcePathStyle  bool
 }
 
-// loadMediaConfig validates the selected backend as one closed mode. Values
-// for the other mode are rejected rather than ignored, so a stale credential
-// or path setting cannot silently take effect after a later backend switch.
-// Errors name variables only and never include credential or endpoint values.
 func loadMediaConfig(getenv func(string) string) (mediaConfig, error) {
 	cfg := mediaConfig{
 		backend:         strings.ToLower(strings.TrimSpace(getenv("MEDIA_BACKEND"))),

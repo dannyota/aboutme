@@ -20,14 +20,10 @@ import (
 )
 
 type projectInput struct {
-	// Slug is proposed on create and required on complete replacement.
 	Slug *string `json:"slug,omitempty"`
-	// Document is every replaceable project field.
 	project.Document
 }
 
-// slug is the requested slug, or "" for a create that asks the server to
-// propose one.
 func (i projectInput) slug() string {
 	if i.Slug == nil {
 		return ""
@@ -35,23 +31,17 @@ func (i projectInput) slug() string {
 	return *i.Slug
 }
 
-// changedResume is the revision response shared by replace and delete.
 type changedResume struct {
-	// ID identifies a changed owned resume.
-	ID uuid.UUID `json:"id"`
-	// Revision is the advanced revision as decimal text.
-	Revision int64 `json:"revision,string"`
+	ID       uuid.UUID `json:"id"`
+	Revision int64     `json:"revision,string"`
 }
 
 type replaceResult struct {
-	// Project is the canonical sanitized stored project.
-	Project resource `json:"project"`
-	// ChangedResumes lists the resume revisions the mutation advanced.
+	Project        resource        `json:"project"`
 	ChangedResumes []changedResume `json:"changedResumes"`
 }
 
 type deleteResult struct {
-	// ChangedResumes lists the resume revisions the deletion advanced.
 	ChangedResumes []changedResume `json:"changedResumes"`
 }
 
@@ -117,7 +107,6 @@ func (s *Service) mutate(w http.ResponseWriter, r *http.Request) {
 	writeStored(w, result.Response)
 }
 
-// boundApply carries the request context into the transaction callbacks.
 type boundApply struct {
 	service  *Service
 	ctx      context.Context
@@ -127,7 +116,6 @@ type boundApply struct {
 	input    projectInput
 }
 
-// run creates a project in the owner-locked transaction.
 func (b boundApply) run(q *store.Queries) (resume.StoredResponse, error) {
 	if err := b.service.reauthenticate(b.ctx, q, b.sess); err != nil {
 		return resume.StoredResponse{}, err
@@ -135,8 +123,6 @@ func (b boundApply) run(q *store.Queries) (resume.StoredResponse, error) {
 	return b.service.create(b.ctx, q, b.sess, b.input)
 }
 
-// authorizeDelete rechecks the session, the project precondition and recent
-// reauthentication before any linking resume is rewritten.
 func (b boundApply) authorizeDelete(ctx context.Context, q *store.Queries) error {
 	if err := b.service.reauthenticate(ctx, q, b.sess); err != nil {
 		return err
@@ -147,8 +133,6 @@ func (b boundApply) authorizeDelete(ctx context.Context, q *store.Queries) error
 	return b.service.requireRecent(ctx, q, b.sess, b.service.now())
 }
 
-// remove deletes the project after its links are gone and stores the
-// changed resumes as the response.
 func (b boundApply) remove(ctx context.Context, q *store.Queries, changed []resumeapi.ChangedResume) (resume.StoredResponse, error) {
 	if err := b.service.projects.DeleteTx(ctx, q, b.sess.UserID, b.id, b.revision, b.service.now()); err != nil {
 		return resume.StoredResponse{}, err
@@ -156,8 +140,6 @@ func (b boundApply) remove(ctx context.Context, q *store.Queries, changed []resu
 	return stored(200, deleteResult{ChangedResumes: changedResumes(changed)}, nil)
 }
 
-// changedResumes is the response list of the advanced resumes, empty and
-// never null when the mutation advanced none.
 func changedResumes(changed []resumeapi.ChangedResume) []changedResume {
 	out := make([]changedResume, len(changed))
 	for i, item := range changed {
@@ -166,8 +148,6 @@ func changedResumes(changed []resumeapi.ChangedResume) []changedResume {
 	return out
 }
 
-// match evaluates the project precondition; a failed one carries the
-// current project with its linked resume ids.
 func (s *Service) match(ctx context.Context, q *store.Queries, owner, id uuid.UUID, revision int64) (project.Project, error) {
 	current, err := s.projects.MatchTx(ctx, q, owner, id, revision)
 	var mismatch *project.RevisionMismatch

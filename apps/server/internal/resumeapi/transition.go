@@ -35,9 +35,6 @@ type recoveredResponseResolver interface {
 	recoveredResponse() (resume.StoredResponse, bool)
 }
 
-// runMutation is the sole transition-to-idempotency bridge. Its pre-close
-// recheck only decides replay/reuse; Execute remains the final transaction
-// authority after every affected public generation is closed.
 func (s *Service) runMutation(ctx context.Context, identity mutationIdentity, plan mutationPlan) (resume.ExecuteResult, error) {
 	if s.coordinator == nil || s.idempotency == nil || plan.Mutate == nil {
 		return resume.ExecuteResult{Outcome: resume.CommitNotAttempted}, errors.New("resumeapi: public transition dependencies are unavailable")
@@ -56,7 +53,6 @@ func (s *Service) runMutation(ctx context.Context, identity mutationIdentity, pl
 			case resume.RecheckReuse:
 				return resume.ExecuteResult{Outcome: resume.CommitNotAttempted}, resume.ErrIdempotencyKeyReuse
 			case resume.RecheckFresh:
-				// The stale plan remains a normal generation mismatch below.
 			default:
 				return resume.ExecuteResult{Outcome: resume.CommitNotAttempted}, errors.New("resumeapi: invalid idempotency recheck decision")
 			}
@@ -76,8 +72,6 @@ func (s *Service) runMutation(ctx context.Context, identity mutationIdentity, pl
 	}
 	switch recheck.Decision {
 	case resume.RecheckReplay:
-		// Recheck runs while ownership is Begun. Exact replay owns no fresh
-		// mutation, so it must release ownership without closing admission.
 		if rollbackErr := transition.Rollback(); rollbackErr != nil {
 			return resume.ExecuteResult{Outcome: resume.CommitNotAttempted}, rollbackErr
 		}

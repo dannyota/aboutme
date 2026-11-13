@@ -18,13 +18,9 @@ import (
 	"danny.vn/aboutme/apps/server/internal/media"
 )
 
-// Sentinel credential values: unique strings that must never surface in any
-// returned error or captured log output, whatever the remote service does.
 const (
 	sentinelAccessKeyID = "SENTINEL-AKID-9f3a7c11d2e5"
-	// Split the fake value so secret scanners do not mistake this leak-test
-	// fixture for an assigned credential.
-	sentinelSecret = "SENTINEL-" + "SECRET-4b8d0e6a91c7"
+	sentinelSecret      = "SENTINEL-" + "SECRET-4b8d0e6a91c7"
 )
 
 func stubConfig(endpoint string) media.S3Config {
@@ -49,8 +45,6 @@ func newStubBackend(t *testing.T, handler http.Handler) (media.Backend, *httptes
 	return b, server
 }
 
-// xmlError renders an S3-style error body. Code and message deliberately
-// carry attacker-controlled text in the leakage tests.
 func xmlError(code, message string) string {
 	return `<?xml version="1.0" encoding="UTF-8"?><Error><Code>` + code + `</Code><Message>` + message + `</Message></Error>`
 }
@@ -102,11 +96,6 @@ func TestNewS3_ConfigValidation(t *testing.T) {
 	}
 }
 
-// TestS3_PutOutcomeClassification drives every fault-injection class the
-// task file names through a stub service: a received rejection that proves
-// the conditional create did not occur is PutNotCreated (412 additionally
-// maps to ErrAlreadyExists); any dispatched request without a conclusive
-// service result — 5xx or a lost response — is PutUnknown.
 func TestS3_PutOutcomeClassification(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
@@ -145,15 +134,9 @@ func TestS3_PutOutcomeClassification(t *testing.T) {
 	}
 }
 
-// TestS3_PutLostResponseIsUnknown: the service accepted (or may have
-// accepted) the conditional write but the response never arrived. The
-// outcome must be PutUnknown so the request path never deletes a key that
-// could belong to a collision winner.
 func TestS3_PutLostResponseIsUnknown(t *testing.T) {
 	t.Parallel()
 	b, _ := newStubBackend(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Read the complete body — the write may have been applied — then
-		// drop the connection without any response.
 		copyExternalTestBody(t, io.Discard, r.Body)
 		hijacker, ok := w.(http.Hijacker)
 		if !ok {
@@ -172,10 +155,6 @@ func TestS3_PutLostResponseIsUnknown(t *testing.T) {
 	}
 }
 
-// TestS3_PutLostCollisionResponsePreservesWinner models a conditional write
-// that collided with an existing object, but whose 412 response was lost. The
-// client cannot prove the collision, so it must report PutUnknown and must not
-// issue cleanup that could delete the winner.
 func TestS3_PutLostCollisionResponsePreservesWinner(t *testing.T) {
 	t.Parallel()
 	winner := []byte("winner bytes")
@@ -194,8 +173,6 @@ func TestS3_PutLostCollisionResponsePreservesWinner(t *testing.T) {
 			}
 			seenBody <- body
 
-			// The winner already owns the key. Model a collision without
-			// changing its bytes, then lose the 412 before it reaches the client.
 			hijacker, ok := w.(http.Hijacker)
 			if !ok {
 				panic("test response writer does not support hijacking")
@@ -263,9 +240,7 @@ func TestS3_PutCancellationClassification(t *testing.T) {
 	release := make(chan struct{})
 	b, _ := newStubBackend(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests.Add(1)
-		// Stall until the client gives up. The explicit release is a bounded
-		// fallback for HTTP/1 transports that do not promptly cancel the
-		// server-side request context after the client returns.
+		// HTTP/1 transports may not cancel the server-side request context promptly after the client returns.
 		select {
 		case <-r.Context().Done():
 		case <-release:
@@ -273,7 +248,6 @@ func TestS3_PutCancellationClassification(t *testing.T) {
 	}))
 	t.Cleanup(func() { close(release) })
 
-	// Canceled before dispatch: proved non-create, and no request is sent.
 	canceled, cancel := context.WithCancel(context.Background())
 	cancel()
 	outcome, err := b.Put(canceled, "resumes/x/pre.jpg", "image/jpeg", bytes.NewReader([]byte("x")), 1)
@@ -285,8 +259,6 @@ func TestS3_PutCancellationClassification(t *testing.T) {
 		t.Errorf("pre-dispatch cancellation sent %d requests, want 0", n)
 	}
 
-	// Canceled after dispatch: the service may have accepted the write, so
-	// the outcome is unknown.
 	ctx, cancel2 := context.WithTimeout(context.Background(), 150*time.Millisecond)
 	defer cancel2()
 	outcome, err = b.Put(ctx, "resumes/x/mid.jpg", "image/jpeg", bytes.NewReader([]byte("x")), 1)
@@ -364,9 +336,6 @@ func TestS3_DeleteClassification(t *testing.T) {
 	}
 }
 
-// TestS3_ListPagePropagatesWindow asserts the exact listing window the
-// backend requests from the service: the validated prefix, the cursor as
-// start-after, and the limit as max-keys.
 func TestS3_ListPagePropagatesWindow(t *testing.T) {
 	t.Parallel()
 	var query atomic.Value
@@ -452,13 +421,7 @@ func TestS3_ListPageRejectsContractViolations(t *testing.T) {
 	}
 }
 
-// TestS3_SecretsNeverLeak injects the sentinel credentials into the backend
-// configuration AND into a hostile failing service response that echoes
-// both sentinels back in its error code and message. Neither sentinel may
-// appear in any returned error or in captured log output, for any
-// operation, including a transport-level failure.
 func TestS3_SecretsNeverLeak(t *testing.T) {
-	// Not parallel: it captures the process-global log output.
 	var logBuf bytes.Buffer
 	prev := log.Writer()
 	log.SetOutput(&logBuf)
@@ -476,8 +439,6 @@ func TestS3_SecretsNeverLeak(t *testing.T) {
 		copyExternalTestBody(t, io.Discard, r.Body)
 		w.Header().Set("Content-Type", "application/xml")
 		w.WriteHeader(500)
-		// Echo the credentials the request was signed with, plus the raw
-		// sentinels, into every field a lazy error path might surface.
 		writeExternalTestBody(t, w, xmlError(
 			"Denied-"+sentinelAccessKeyID,
 			"auth="+r.Header.Get("Authorization")+" secret="+sentinelSecret,
@@ -498,8 +459,6 @@ func TestS3_SecretsNeverLeak(t *testing.T) {
 	_, _, err = b.ListPage(context.Background(), "resumes/x", "", 10)
 	errs = append(errs, err)
 
-	// Transport-level failure (connection refused): grab a port that is
-	// closed by the time the backend dials it.
 	var listenConfig net.ListenConfig
 	listener, err := listenConfig.Listen(context.Background(), "tcp", "127.0.0.1:0")
 	if err != nil {

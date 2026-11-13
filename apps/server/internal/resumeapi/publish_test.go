@@ -36,7 +36,6 @@ func TestPublishDecode(t *testing.T) {
 		{name: "wrong slug type is malformed", body: `{"slug":4,"live":true,"downloadEnabled":true,"seoGeoEnabled":false}`, shape: "slug"},
 		{name: "trailing value is malformed", body: valid + ` {}`, shape: "body"},
 		{name: "body overflow is too large", body: strings.Repeat(" ", maxJSONBodyBytes+1), tooLarge: true},
-		// AC-VIEW-001: signInToView is optional and absent keeps the stored value.
 		{name: "signInToView true is present", body: `{"live":true,"downloadEnabled":true,"seoGeoEnabled":false,"signInToView":true}`, want: publishInput{Live: true, DownloadEnabled: true, SignInToView: optionalBool{Present: true, Value: true}}},
 		{name: "signInToView false is present", body: `{"live":true,"downloadEnabled":true,"seoGeoEnabled":false,"signInToView":false}`, want: publishInput{Live: true, DownloadEnabled: true, SignInToView: optionalBool{Present: true, Value: false}}},
 		{name: "null signInToView is malformed", body: `{"live":true,"downloadEnabled":true,"seoGeoEnabled":false,"signInToView":null}`, shape: "signInToView"},
@@ -123,9 +122,6 @@ func publishCompleteDocument(t *testing.T) schema.Resume {
 	return document
 }
 
-// AC-VIEW-001, AC-VIEW-007: an omitted signInToView field keeps the stored
-// value, and a flag-gated attempt to turn it on is a closed publish issue
-// while turning it off, or leaving it on, always succeeds.
 func TestMergeSignInToView(t *testing.T) {
 	t.Parallel()
 	stored := currentPublish{SignInToView: true}
@@ -168,8 +164,6 @@ func TestValidateSignInToView(t *testing.T) {
 		}
 	}
 
-	// Turning it off, or leaving it on, is always allowed regardless of the
-	// flag: gating never depends on the flag once a resume is already gated.
 	alreadyOn := currentPublish{Slug: &slug, SignInToView: true}
 	stillOn := mergeSignInToView(alreadyOn, publishInput{})
 	prepared = disabledService.validateSignInToView(alreadyOn, validatePublish(document, stillOn, publishInput{Live: true}))
@@ -187,8 +181,6 @@ func TestValidateSignInToView(t *testing.T) {
 	}
 }
 
-// AC-VIEW-010: the sign-in-to-view switch flipping alone changes aggregate
-// discovery membership, even when live and seoGeoEnabled do not change.
 func TestPublishChangesDiscovery_SignInToViewAlone(t *testing.T) {
 	t.Parallel()
 	before := currentPublish{Live: true, SEOGeoEnabled: true, SignInToView: false}

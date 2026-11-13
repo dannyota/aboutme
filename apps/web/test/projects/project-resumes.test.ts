@@ -8,7 +8,7 @@ import {
 } from '../../app/components/projects/projectLinks';
 import {
   useProjectResumes,
-} from '../../app/components/projects/projectResumes';
+} from '../../app/components/projects/projectResumesState';
 import type {
   ResumeListResult,
   ResumeSummary,

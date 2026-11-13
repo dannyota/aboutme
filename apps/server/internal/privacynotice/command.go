@@ -10,7 +10,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// Run executes only the four fixed operator actions and returns aggregates.
 func (s *Service) Run(ctx context.Context, action string) (Report, error) {
 	if action == "status" {
 		return s.Status(ctx)

@@ -32,9 +32,6 @@ type memorySlugAttemptLimiter struct {
 	overflow slugAttemptBucket
 }
 
-// newSlugAttemptLimiter creates the per-account, rolling-hour limiter. The
-// optional cap exists for deterministic bounded-state tests; production uses
-// the ADR 0007 maximum.
 func newSlugAttemptLimiter(maxKeys ...int) *memorySlugAttemptLimiter {
 	cap := defaultSlugAttemptKeys
 	if len(maxKeys) == 1 && maxKeys[0] > 0 {
@@ -43,7 +40,6 @@ func newSlugAttemptLimiter(maxKeys ...int) *memorySlugAttemptLimiter {
 	return &memorySlugAttemptLimiter{maxKeys: cap, buckets: make(map[uuid.UUID]*slugAttemptBucket)}
 }
 
-// AllowChangedSlug records and evaluates one account's changed-slug attempt.
 func (l *memorySlugAttemptLimiter) AllowChangedSlug(accountID uuid.UUID, now time.Time) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -88,8 +84,6 @@ func (b *slugAttemptBucket) allow(now time.Time) bool {
 		b.count++
 		return true
 	}
-	// Keep the newest thirty attempts. Replacing the oldest entry makes denied
-	// attempts part of the rolling window without an attacker-growing queue.
 	b.attempts[b.start] = now
 	b.start = (b.start + 1) % slugAttemptLimit
 	return false

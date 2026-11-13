@@ -14,8 +14,6 @@ import (
 func TestNewCodeSpelling(t *testing.T) {
 	t.Parallel()
 
-	// The reader holds 40 bytes so the test can prove NewCode consumes
-	// exactly 32 of them.
 	r := primEntropy(0x3c, 40)
 	raw, digest, err := NewCode(r)
 	if err != nil {
@@ -107,8 +105,6 @@ func TestParseCodeRejectsMalformedSpellings(t *testing.T) {
 func TestParseCodeDigestIsStable(t *testing.T) {
 	t.Parallel()
 
-	// Locks the stored-digest definition: SHA-256 over the canonical raw
-	// spelling. 32 zero bytes encode as 43 'A' characters.
 	digest, err := ParseCode(strings.Repeat("A", 43))
 	if err != nil {
 		t.Fatalf("ParseCode error = %v, want nil", err)

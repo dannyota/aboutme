@@ -11,7 +11,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/api"
 )
 
-// field and quotedField wrap one value under the property "v".
 type field[T any] struct {
 	V T `json:"v"`
 }
@@ -28,9 +27,6 @@ type namedChild struct {
 	Name string `json:"name"`
 }
 
-// TestJSONShapeOf_StringOptionQuotesOnlyScalars mirrors encoding/json, which
-// honors ",string" only for strings, numbers, and booleans: a quoted struct
-// keeps its exact names inside.
 func TestJSONShapeOf_StringOptionQuotesOnlyScalars(t *testing.T) {
 	t.Parallel()
 
@@ -64,12 +60,6 @@ func TestJSONShapeOf_StringOptionQuotesOnlyScalars(t *testing.T) {
 	}
 }
 
-// TestCheckJSONBinding_AgreesWithEncodingJSON decodes the same values with
-// encoding/json and with the checker, for every kind the checker models.
-// The checker never rejects a value encoding/json accepts. It may accept a
-// value whose content only the type's own decoder judges, such as base64
-// text or a number out of a small type's range; those inputs are listed per
-// kind, and the decode that follows the check still rejects them.
 func TestCheckJSONBinding_AgreesWithEncodingJSON(t *testing.T) {
 	t.Parallel()
 
@@ -85,9 +75,8 @@ func TestCheckJSONBinding_AgreesWithEncodingJSON(t *testing.T) {
 		}
 	}
 	cases := []struct {
-		name   string
-		target func() any
-		// lenient lists inputs whose content only the type's decoder checks.
+		name    string
+		target  func() any
 		lenient map[string]bool
 	}{
 		{"string", func() any { return &field[string]{} }, nil},

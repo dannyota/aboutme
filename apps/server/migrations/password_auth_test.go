@@ -1,10 +1,3 @@
-// Constraint tests for the password_credentials, password_registrations,
-// password_reset_tokens, and auth_email_jobs tables. Like
-// resume_schema_test.go, every insert here is raw parameterized SQL against
-// a live goose-migrated database, with no internal/store layer, because the
-// point is proving the database itself enforces every invariant, not that a
-// Go pass happens to agree with it. Byte boundaries are exercised at limit
-// and limit+1.
 package migrations_test
 
 import (
@@ -18,8 +11,6 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
-// passwordAuthRow helpers build exact-size byte values so boundary cases name
-// their lengths instead of hand-counting.
 func bytesOf(n int, fill byte) []byte {
 	b := make([]byte, n)
 	for i := range b {
@@ -33,8 +24,6 @@ const (
 	passwordAuthNow        = "2026-08-16T00:00:00Z"
 )
 
-// requirePGError fails t unless err wraps a *pgconn.PgError with the given
-// ConstraintName.
 func requirePGError(t *testing.T, err error, want string) {
 	t.Helper()
 	if err == nil {
@@ -49,8 +38,6 @@ func requirePGError(t *testing.T, err error, want string) {
 	}
 }
 
-// insertTestUser returns a fresh users row id through the same raw-SQL path the
-// other migration tests use.
 func insertPasswordAuthUser(ctx context.Context, t *testing.T, db sqlExecer, email string) uuid.UUID {
 	t.Helper()
 	var id uuid.UUID
@@ -66,16 +53,9 @@ func insertPasswordAuthUser(ctx context.Context, t *testing.T, db sqlExecer, ema
 
 func validPasswordAuthHash() []byte { return bytesOf(60, 'h') }
 
-// validTokenDigest returns a fresh random 32-byte digest each call: the digest
-// is globally unique in the schema, so a shared constant would collide across
-// the parallel package tests that share the one migrated database.
 func validTokenDigest() []byte { return []byte(uuid.NewString() + uuid.NewString())[:32] }
 func validCiphertext() []byte  { return bytesOf(64, 'c') }
 func validNonce() []byte       { return bytesOf(12, 'n') }
-
-// ---------------------------------------------------------------------------
-// password_credentials constraint matrix.
-// ---------------------------------------------------------------------------
 
 func TestPasswordCredentialConstraints(t *testing.T) {
 	t.Parallel()
@@ -114,10 +94,6 @@ func TestPasswordCredentialConstraints(t *testing.T) {
 		}
 	})
 }
-
-// ---------------------------------------------------------------------------
-// password_registrations constraint matrix.
-// ---------------------------------------------------------------------------
 
 func TestPasswordRegistrationConstraints(t *testing.T) {
 	t.Parallel()
@@ -163,10 +139,6 @@ func TestPasswordRegistrationConstraints(t *testing.T) {
 	})
 }
 
-// ---------------------------------------------------------------------------
-// password_reset_tokens constraint matrix.
-// ---------------------------------------------------------------------------
-
 func TestPasswordResetTokenConstraints(t *testing.T) {
 	t.Parallel()
 	tx, ctx := newResumeSchemaTx(t)
@@ -205,11 +177,6 @@ func TestPasswordResetTokenConstraints(t *testing.T) {
 	})
 }
 
-// ---------------------------------------------------------------------------
-// auth_email_jobs: closed kind/state, scope, token requirement, and the exact
-// state matrix.
-// ---------------------------------------------------------------------------
-
 func TestAuthEmailJobConstraints(t *testing.T) {
 	t.Parallel()
 	tx, ctx := newResumeSchemaTx(t)
@@ -227,7 +194,6 @@ func TestAuthEmailJobConstraints(t *testing.T) {
 		t.Fatalf("insert registration: %v", err)
 	}
 
-	// base builds a valid pending verify job; each case mutates one field.
 	base := func(sp pgx.Tx, mutate func(m map[string]any)) error {
 		cols := map[string]any{
 			"kind": "verify", "state": "pending",

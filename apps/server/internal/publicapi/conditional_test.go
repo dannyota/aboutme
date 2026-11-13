@@ -28,6 +28,12 @@ func (s admissionStore) GetPublicState(context.Context) (store.PublicState, erro
 func (s admissionStore) GetPublicResumeBySlug(context.Context, string) (store.GetPublicResumeBySlugRow, error) {
 	return store.GetPublicResumeBySlugRow{Resume: s.row, ProjectLinks: json.RawMessage(`[]`)}, nil
 }
+func (s admissionStore) GetPublicResumeProjectList(context.Context, string) (store.GetPublicResumeProjectListRow, error) {
+	return store.GetPublicResumeProjectListRow{}, errors.New("unused")
+}
+func (s admissionStore) GetPublicResumeProject(context.Context, store.GetPublicResumeProjectParams) (store.GetPublicResumeProjectRow, error) {
+	return store.GetPublicResumeProjectRow{}, errors.New("unused")
+}
 func (s admissionStore) GetPublicResumeByOwner(context.Context, store.GetPublicResumeByOwnerParams) (store.Resume, error) {
 	return store.Resume{}, errors.New("unused")
 }

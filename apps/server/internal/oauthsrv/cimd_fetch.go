@@ -23,7 +23,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/config"
 )
 
-// CIMDRateError carries only the closed admission failure and retry duration.
 type CIMDRateError struct{ RetryAfter int }
 
 func (e *CIMDRateError) Error() string { return "oauth client metadata rate limited" }
@@ -39,7 +38,6 @@ type cimdFlight struct {
 	err      error
 }
 
-// CIMDResolver owns one process-local cache, bounded admission, and fetch set.
 type CIMDResolver struct {
 	cfg                              config.CIMDConfig
 	publicHost                       string
@@ -57,7 +55,6 @@ type CIMDResolver struct {
 	flights                          map[string]*cimdFlight
 }
 
-// NewCIMDResolver uses system trust and the complete production address policy.
 func NewCIMDResolver(cfg config.CIMDConfig, publicOrigin string, clock func() time.Time, maxKeys int) (*CIMDResolver, error) {
 	return newCIMDResolver(cfg, publicOrigin, clock, maxKeys, cimdAddressAllowed, nil)
 }
@@ -86,14 +83,10 @@ func cloneCIMD(m CIMDMetadata) CIMDMetadata {
 	return m
 }
 
-// Resolve never queues distinct misses. Shared fetch cancellation is independent
-// of any one waiter, and its complete deadline starts before DNS.
 func (f *CIMDResolver) Resolve(ctx context.Context, raw string, address netip.Addr) (CIMDMetadata, error) {
 	if len(raw) > f.cfg.MaxURLBytes || ctx.Err() != nil {
 		return CIMDMetadata{}, errCIMDInvalid
 	}
-	// Query decoding can return a substring of a much larger request buffer.
-	// Own the bounded identifier before retaining its URL and hostname slices.
 	raw = strings.Clone(raw)
 	u, err := parseCIMDURL(raw, f.publicHost)
 	if err != nil {
@@ -136,8 +129,6 @@ func (f *CIMDResolver) Resolve(ctx context.Context, raw string, address netip.Ad
 				retry = seconds
 			}
 		}
-		// Resolve holds f.mu through the combined decision. Inspect global debt
-		// on every refusal, but charge it only when the other buckets admit.
 		globalAdmission := f.globalRate.Admit
 		if retry > 0 {
 			globalAdmission = f.globalRate.Check
@@ -185,8 +176,6 @@ func (f *CIMDResolver) removeEntry(element *list.Element) {
 }
 
 func (f *CIMDResolver) cacheMetadata(m CIMDMetadata, expires time.Time) {
-	// Include string bytes, slice capacity, entry, list, map and allocator
-	// overhead with a conservative per-entry reserve.
 	accounted := 512 + len(m.id) + len(m.host) + len(m.name) + cap(m.redirects)*16
 	for _, redirect := range m.redirects {
 		accounted += len(redirect) + 16
@@ -264,7 +253,6 @@ func (f *CIMDResolver) fetch(ctx context.Context, raw string, u *url.URL) (CIMDM
 	}
 	defer transport.CloseIdleConnections()
 	client := &http.Client{Transport: transport, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}
-	// Preserve the exact path spelling while targeting an approved literal.
 	requestTarget := "https://" + pinnedTarget + raw[len("https://")+len(u.Host):]
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestTarget, nil) //nolint:gosec // The address policy and pinned dial validate every destination; see docs/design/mcp-cimd-fetch.md.
 	if err != nil {

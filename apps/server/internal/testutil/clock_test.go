@@ -16,8 +16,6 @@ func TestClock_NowReturnsStartUntilAdvanced(t *testing.T) {
 	if got := clock.Now(); !got.Equal(start) {
 		t.Fatalf("Now() = %v, want %v", got, start)
 	}
-	// Calling Now() again must not itself advance the clock (unlike
-	// time.Now(), which never returns the same instant twice).
 	if got := clock.Now(); !got.Equal(start) {
 		t.Fatalf("second Now() = %v, want unchanged %v", got, start)
 	}

@@ -7,10 +7,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/config"
 )
 
-// testBase64URL32Alt is a second canonical 32-byte value, distinct from
-// testBase64URL32, so tests can prove TOTP_ACTIVE_KEY and TOTP_PREVIOUS_KEY
-// derive different key IDs when they hold different key bytes
-// (docs/design/totp-key-management.md "Key ring").
 const testBase64URL32Alt = "AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
 
 func TestLoad_TOTPEnrollmentFlag(t *testing.T) {
@@ -54,11 +50,6 @@ func TestLoad_TOTPEnrollmentFlagRejectsInvalidValueWithoutEcho(t *testing.T) {
 	}
 }
 
-// TestLoad_TOTPActiveKeyIsAlwaysRequired proves TOTP_ACTIVE_KEY is required
-// regardless of TOTP_ENROLLMENT_ENABLED: verification of an existing
-// credential must keep working when enrollment is off
-// (docs/design/totp-second-factor-contract.md "Migration, mixed versions,
-// and loss").
 func TestLoad_TOTPActiveKeyIsAlwaysRequired(t *testing.T) {
 	t.Parallel()
 	for _, enrollment := range []string{"", "true"} {
@@ -83,10 +74,6 @@ func TestLoad_TOTPActiveKeyRejectsMalformedValueWithoutEcho(t *testing.T) {
 		{"too short", "AAAA"},
 		{"wrong alphabet", strings.Repeat("!", 43)},
 		{"padded", testBase64URL32[:42] + "="},
-		// The last character's two low bits are unused padding bits in a
-		// 32-byte value's 43-character encoding; setting them nonzero still
-		// decodes to 32 bytes but re-encodes to a different (canonical)
-		// string, so DecodeTOTPKey's round-trip check rejects it.
 		{"non-canonical", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -146,11 +133,6 @@ func TestLoad_TOTPPreviousKeyRejectsMalformedValueWithoutEcho(t *testing.T) {
 	}
 }
 
-// TestLoad_TOTPKeysRejectDuplicateKeyID proves startup fails when the active
-// and previous keys derive the same key ID. The simplest colliding pair is
-// the same 32 key bytes given for both variables
-// (docs/design/totp-key-management.md "Key ring": "Startup fails ... when
-// ... both keys derive the same ID").
 func TestLoad_TOTPKeysRejectDuplicateKeyID(t *testing.T) {
 	t.Parallel()
 	vars := validDevEnv()
@@ -165,10 +147,6 @@ func TestLoad_TOTPKeysRejectDuplicateKeyID(t *testing.T) {
 	}
 }
 
-// TestLoad_TOTPAcceptsNoKeyIDVariable proves the loader never reads a
-// TOTP_ACTIVE_KEY_ID or TOTP_PREVIOUS_KEY_ID variable: the key ID is always
-// derived from the key value (docs/design/totp-key-management.md "Key
-// ring").
 func TestLoad_TOTPAcceptsNoKeyIDVariable(t *testing.T) {
 	t.Parallel()
 	vars := validDevEnv()

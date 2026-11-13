@@ -13,9 +13,6 @@ import (
 
 const idleClientGCBatch = 200
 
-// CollectIdleClients deletes one bounded page of clients with no live grant or
-// token. Candidate selection and deletion share the transaction so the query's
-// FOR UPDATE SKIP LOCKED reservation remains effective through the delete.
 func (s *Service) CollectIdleClients(ctx context.Context) (returnErr error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {

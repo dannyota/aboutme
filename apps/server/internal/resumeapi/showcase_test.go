@@ -52,10 +52,6 @@ func TestDecodePublishShowcaseFields(t *testing.T) {
 	}
 }
 
-// AC-SHOW-001, AC-SHOW-003: the switch is on only while the resume is live with
-// sign in to view off, omitted fields keep the stored state, and a stored
-// opt-in ends when the request leaves the resume not live or turns sign in to
-// view on.
 func TestResolveShowcase(t *testing.T) {
 	t.Parallel()
 	backend, qa := "backend", "qa"
@@ -136,8 +132,6 @@ func TestResolveShowcase(t *testing.T) {
 	}
 }
 
-// AC-SHOW-001: validatePublish carries the resolved state into the effective
-// publish settings.
 func TestValidatePublishCarriesShowcase(t *testing.T) {
 	t.Parallel()
 	role := "devops"
@@ -239,7 +233,6 @@ func newShowcasePublishEnv(t *testing.T) *showcasePublishEnv {
 	}
 }
 
-// publish sends one publish body and, on success, tracks the new revision.
 func (e *showcasePublishEnv) publish(t *testing.T, body string) testHTTPResponse {
 	t.Helper()
 	response := e.h.mutationRequest(t, http.MethodPost, e.path, strings.NewReader(body), e.revision, uuid.NewString())
@@ -278,9 +271,6 @@ func publishBody(slug string, fields string) string {
 	return body + "}"
 }
 
-// AC-SHOW-001, AC-SHOW-003, AC-SHOW-005: opting in lists at once, omitted
-// fields keep the state, and every ending path deletes the row, so publishing
-// again and opting in again start from nothing.
 func TestPublishShowcaseLifecycle(t *testing.T) {
 	env := newShowcasePublishEnv(t)
 
@@ -302,15 +292,12 @@ func TestPublishShowcaseLifecycle(t *testing.T) {
 		t.Fatalf("after role changes found %t requested %v, want the first opt-in time %v", found, requested, firstRequested)
 	}
 
-	// Turning sign in to view on ends the opt-in although the field is omitted.
 	env.publishOK(t, `{"live":true,"downloadEnabled":false,"seoGeoEnabled":false,"signInToView":true}`).requireState(t, "", "")
 	if found, _ := env.row(t); found {
 		t.Fatal("sign in to view left the showcase row")
 	}
-	// Turning it off again does not bring the opt-in back.
 	env.publishOK(t, `{"live":true,"downloadEnabled":false,"seoGeoEnabled":false,"signInToView":false}`).requireState(t, "", "")
 
-	// Opt in, opt out, opt in: the second request is a new opt-in.
 	env.publishOK(t, `{"live":true,"downloadEnabled":false,"seoGeoEnabled":false,"showcaseEnabled":true}`).requireState(t, "listed", "")
 	env.publishOK(t, `{"live":true,"downloadEnabled":false,"seoGeoEnabled":false,"showcaseEnabled":false}`).requireState(t, "", "")
 	if found, _ := env.row(t); found {
@@ -321,7 +308,6 @@ func TestPublishShowcaseLifecycle(t *testing.T) {
 		t.Fatalf("second opt-in = found %t requested %v, want a new row no older than %v", found, requested, firstRequested)
 	}
 
-	// Unpublishing ends the opt-in, and publishing again starts with it off.
 	env.publishOK(t, `{"live":false,"downloadEnabled":false,"seoGeoEnabled":false}`).requireState(t, "", "")
 	if found, _ := env.row(t); found {
 		t.Fatal("unpublish left the showcase row")
@@ -332,7 +318,6 @@ func TestPublishShowcaseLifecycle(t *testing.T) {
 	}
 }
 
-// AC-SHOW-001: the owner resource and list carry showcase, null until opted in.
 func TestOwnerResumeCarriesShowcase(t *testing.T) {
 	env := newShowcasePublishEnv(t)
 	got := env.h.request(t, http.MethodGet, apiResumePath+"/"+env.id.String(), nil, true, false)
@@ -385,8 +370,6 @@ func publishIssueList(t *testing.T, response testHTTPResponse) []string {
 	return issues
 }
 
-// AC-SHOW-001, AC-SHOW-003: the closed publish issues for the showcase fields,
-// and a rejected request leaves no row.
 func TestPublishShowcaseIssues(t *testing.T) {
 	env := newShowcasePublishEnv(t)
 
@@ -422,8 +405,6 @@ func TestPublishShowcaseIssues(t *testing.T) {
 	}
 }
 
-// AC-SHOW-006: an idempotent replay returns the stored response and does not
-// run the publish again, so a change made since stays.
 func TestPublishShowcaseIdempotentReplay(t *testing.T) {
 	env := newShowcasePublishEnv(t)
 	key := uuid.NewString()
@@ -447,9 +428,6 @@ func TestPublishShowcaseIdempotentReplay(t *testing.T) {
 	}
 }
 
-// AC-SHOW-006: a document write to an opted-in resume recomputes the card
-// version in the same transaction, and the resume stays listed with its opt-in
-// time.
 func TestDocumentWritesRecomputeShowcase(t *testing.T) {
 	env := newShowcasePublishEnv(t)
 	env.publishOK(t, publishBody(env.slug, `"showcaseEnabled":true`))
@@ -510,7 +488,6 @@ func TestDocumentWritesRecomputeShowcase(t *testing.T) {
 	}
 }
 
-// AC-SHOW-006: a write to a resume without a row touches no showcase row.
 func TestDocumentWriteWithoutOptInTouchesNoShowcaseRow(t *testing.T) {
 	h := newResumeAPITestHarness(t)
 	created := h.createResume(t)

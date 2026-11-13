@@ -1,6 +1,5 @@
 package authmail
 
-// PrivacyNoticeURL and the message copy are compiled, never payload-derived.
 const (
 	PrivacyNoticeURL       = "https://aboutme.vn/privacy"
 	PrivacyNoticeSubject   = "Cập nhật quyền riêng tư aboutme.vn / aboutme.vn privacy update"

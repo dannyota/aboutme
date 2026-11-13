@@ -100,7 +100,7 @@ const sources = [
   'components/projects/projectDocument.ts',
   'components/projects/ProjectResumes.vue',
   'components/projects/projectLinks.ts',
-  'components/projects/projectResumes.ts',
+  'components/projects/projectResumesState.ts',
   'composables/useProjects.ts',
   'composables/projectsApi.ts',
 ];

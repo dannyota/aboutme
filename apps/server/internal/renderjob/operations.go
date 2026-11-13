@@ -6,7 +6,6 @@ import (
 	"crypto/subtle"
 )
 
-// Render prepares, queues, renders, and completes one attempt.
 func (q *Queue) Render(ctx context.Context, request Request) (Result, error) {
 	if contextErr := ctx.Err(); contextErr != nil {
 		return Result{}, contextErr
@@ -20,7 +19,6 @@ func (q *Queue) Render(ctx context.Context, request Request) (Result, error) {
 	}
 	defer q.releaseAttempt(attempt)
 
-	// attempt.ctx is the context.WithCancel(ctx) child created by q.admit.
 	snapshot, prepareErr := callPrepare(attempt.ctx, request.Prepare) //nolint:contextcheck
 	if prepareErr != nil {
 		if attemptErr := q.attemptError(attempt); attemptErr != nil {
@@ -63,7 +61,6 @@ func (q *Queue) Render(ctx context.Context, request Request) (Result, error) {
 		return Result{}, err
 	}
 
-	// attempt.ctx is the context.WithCancel(ctx) child created by q.admit.
 	output, renderErr := callRenderer(attempt.ctx, q.renderer, Navigation{ //nolint:contextcheck
 		ResumeID: snapshot.ResumeID, JobID: jobID, Capability: capability, Format: request.Format,
 		RevisionTime: snapshot.RevisionTime,
@@ -78,11 +75,9 @@ func (q *Queue) Render(ctx context.Context, request Request) (Result, error) {
 	if err := q.attemptError(attempt); err != nil {
 		return Result{}, err
 	}
-	// attempt.ctx is the context.WithCancel(ctx) child created by q.admit.
 	return q.complete(attempt.ctx, jobID, controller, output) //nolint:contextcheck
 }
 
-// Redeem atomically consumes a matching one-use capability.
 func (q *Queue) Redeem(ctx context.Context, redemption Redemption) (Snapshot, error) {
 	if err := ctx.Err(); err != nil {
 		return Snapshot{}, ErrNotActive
@@ -121,7 +116,6 @@ func (q *Queue) Redeem(ctx context.Context, redemption Redemption) (Snapshot, er
 	return snapshot, nil
 }
 
-// Ready reports permanent shutdown or temporary admission saturation.
 func (q *Queue) Ready() error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -134,7 +128,6 @@ func (q *Queue) Ready() error {
 	return nil
 }
 
-// Close permanently stops admission, cancels all attempts, and joins callbacks.
 func (q *Queue) Close() error {
 	q.closeOnce.Do(func() {
 		q.mu.Lock()

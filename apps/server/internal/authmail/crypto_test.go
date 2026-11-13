@@ -13,9 +13,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// Fixed, non-secret test vectors shared across the package's tests. These are
-// deliberately public: they pin the AAD layout and the AES-256-GCM output
-// without ever exercising a production key.
 func fixedKey() [32]byte {
 	var k [32]byte
 	for i := range k {
@@ -68,14 +65,10 @@ func validPayloadForKind(k Kind) Payload {
 
 func validVerifyPayload() Payload { return validPayloadForKind(KindVerify) }
 
-// errReader fails every read, simulating entropy exhaustion.
 type errReader struct{}
 
 func (errReader) Read([]byte) (int, error) { return 0, errors.New("no entropy") }
 
-// sealWithKey seals arbitrary plaintext under a specific key and key ID, so
-// tests can produce blobs sealed under a previous/removed key or with a
-// deliberately invalid plaintext (unknown version, duplicate JSON key, ...).
 func sealWithKey(t *testing.T, key [32]byte, keyID string, jobID uuid.UUID, kind Kind, plaintext []byte) Sealed {
 	t.Helper()
 	nonce := fixedNonce()

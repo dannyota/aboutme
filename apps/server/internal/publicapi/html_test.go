@@ -25,7 +25,6 @@ type htmlRoundTrip func(*http.Request) (*http.Response, error)
 func (f htmlRoundTrip) RoundTrip(request *http.Request) (*http.Response, error) { return f(request) }
 
 func TestPublicHTMLDiscoverableValidatesWorkerDocumentAndConditionalResponse(t *testing.T) {
-	// This fails if an unvalidated worker document, or bytes without the strong body tag, reaches a viewer.
 	slug, reader, _ := formatTestReader(t, true)
 	snapshot, lease, err := reader.ReadResume(context.Background(), slug, publicstate.RepresentationHTML)
 	if err != nil {
@@ -73,7 +72,6 @@ func TestPublicHTMLDiscoverableValidatesWorkerDocumentAndConditionalResponse(t *
 }
 
 func TestPublicHTMLNondiscoverableRejectsUnexpectedScript(t *testing.T) {
-	// This fails if a noindex document can add an inline script or miss its robots policy.
 	slug, reader, _ := formatTestReader(t, false)
 	origin, err := directrender.ParseRenderOrigin("http://127.0.0.1:20030", "development")
 	if err != nil {
@@ -120,7 +118,6 @@ func TestPublicHTMLNondiscoverableRejectsUnexpectedScript(t *testing.T) {
 }
 
 func TestPublicHTMLRejectsWrongMainAssetJSONLDAndOversize(t *testing.T) {
-	// This fails if an incomplete SSR shell, changed data script, or capped renderer output is served.
 	slug, reader, _ := formatTestReader(t, true)
 	snapshot, lease, err := reader.ReadResume(context.Background(), slug, publicstate.RepresentationHTML)
 	if err != nil {
@@ -142,8 +139,6 @@ func TestPublicHTMLRejectsWrongMainAssetJSONLDAndOversize(t *testing.T) {
 	}{
 		{"wrong main", strings.Replace(valid, `id="public-resume"`, `id="not-public"`, 1)},
 		{"wrong asset", strings.Replace(valid, "/_nuxt/assets/public-resume.mjs", "/_nuxt/assets/other.mjs", 1)},
-		// An unversioned or malformed version would let a browser run a
-		// year-old cached hydration script against new HTML.
 		{"unversioned asset", strings.Replace(valid, "public-resume.mjs?v=0123456789abcdef", "public-resume.mjs", 1)},
 		{"short asset version", strings.Replace(valid, "?v=0123456789abcdef", "?v=0123", 1)},
 		{"uppercase asset version", strings.Replace(valid, "?v=0123456789abcdef", "?v=0123456789ABCDEF", 1)},
@@ -173,7 +168,6 @@ func TestPublicHTMLRejectsWrongMainAssetJSONLDAndOversize(t *testing.T) {
 }
 
 func TestPublicHTMLHoldsLeaseThroughResponseWrite(t *testing.T) {
-	// This fails if a revocation can drain before the admitted HTML response finishes writing.
 	slug, reader, coordinator := formatTestReader(t, false)
 	origin, err := directrender.ParseRenderOrigin("http://127.0.0.1:20030", "development")
 	if err != nil {
@@ -227,7 +221,6 @@ func TestPublicHTMLHoldsLeaseThroughResponseWrite(t *testing.T) {
 }
 
 func TestPublicHTMLRejectsUnexpectedResourceLoads(t *testing.T) {
-	// This fails if a renderer response can load an unapproved resource despite Go's CSP boundary.
 	slug, reader, _ := formatTestReader(t, false)
 	origin, err := directrender.ParseRenderOrigin("http://127.0.0.1:20030", "development")
 	if err != nil {
@@ -266,7 +259,6 @@ func TestPublicHTMLRejectsUnexpectedResourceLoads(t *testing.T) {
 }
 
 func TestPublicHTMLAllowsOnlyTheProjectedPhotoURL(t *testing.T) {
-	// This fails if a document can substitute a non-projected image URL.
 	origin := mustPublicOrigin(t)
 	resume := publicresume.PublicResume{
 		Slug:     "ada",
@@ -291,7 +283,6 @@ func TestPublicHTMLAllowsOnlyTheProjectedPhotoURL(t *testing.T) {
 }
 
 func TestPublicHTMLClassifiesNotFoundAndUnavailableReads(t *testing.T) {
-	// This fails if a closed generation is made indistinguishable from absence, or absence exposes a retry signal.
 	slug, reader, coordinator := formatTestReader(t, false)
 	origin, err := directrender.ParseRenderOrigin("http://127.0.0.1:20030", "development")
 	if err != nil {
@@ -331,7 +322,6 @@ func TestPublicHTMLClassifiesNotFoundAndUnavailableReads(t *testing.T) {
 }
 
 func TestPublicHTMLReleasesLeaseAfterRendererFailure(t *testing.T) {
-	// This fails if a renderer failure leaves an admitted generation held after its 503 is complete.
 	slug, reader, coordinator := formatTestReader(t, false)
 	origin, err := directrender.ParseRenderOrigin("http://127.0.0.1:20030", "development")
 	if err != nil {
@@ -366,7 +356,6 @@ func TestPublicHTMLReleasesLeaseAfterRendererFailure(t *testing.T) {
 }
 
 func TestPublicHTMLRejectsMissingAndHostileAnchors(t *testing.T) {
-	// This fails if the SSR shell lacks its sole skip link or a public field injects a non-navigation URL.
 	origin := mustPublicOrigin(t)
 	resume := publicresume.PublicResume{Slug: "ada", Revision: "1", Document: publicresume.PublicResumeDocument{PersonalDetails: publicresume.PublicPersonalDetails{FullName: "Ada"}}}
 	jsonLD, err := publicformat.JSONLD(resume, origin, false)
@@ -400,7 +389,6 @@ func TestPublicHTMLRejectsMissingAndHostileAnchors(t *testing.T) {
 }
 
 func TestPublicHTMLRejectsHostileMetaAndInlineCSS(t *testing.T) {
-	// This fails if the direct renderer can trigger a navigation or resource load through CSP-permitted markup.
 	origin := mustPublicOrigin(t)
 	resume := publicresume.PublicResume{Slug: "ada", Revision: "1", Document: publicresume.PublicResumeDocument{PersonalDetails: publicresume.PublicPersonalDetails{FullName: "Ada"}}}
 	jsonLD, err := publicformat.JSONLD(resume, origin, false)
@@ -433,7 +421,6 @@ func TestPublicHTMLRejectsHostileMetaAndInlineCSS(t *testing.T) {
 }
 
 func TestPublicHTMLRequiresExactSocialImageMetadata(t *testing.T) {
-	// This fails if renderer HTML omits, duplicates, or changes share metadata.
 	origin := mustPublicOrigin(t)
 	resume := publicresume.PublicResume{Slug: "ada", Revision: "1", Document: publicresume.PublicResumeDocument{PersonalDetails: publicresume.PublicPersonalDetails{FullName: "Ada <&>"}}}
 	jsonLD, err := publicformat.JSONLD(resume, origin, false)
@@ -461,8 +448,6 @@ func TestPublicHTMLRequiresExactSocialImageMetadata(t *testing.T) {
 }
 
 func TestPublicHTMLAcceptsFormatDetectionMeta(t *testing.T) {
-	// This fails if the meta that stops Safari from auto-linking date ranges
-	// as phone numbers is missing from the allowlist, wrong, or unbounded.
 	origin := mustPublicOrigin(t)
 	resume := publicresume.PublicResume{Slug: "ada", Revision: "1", Document: publicresume.PublicResumeDocument{PersonalDetails: publicresume.PublicPersonalDetails{FullName: "Ada"}}}
 	jsonLD, err := publicformat.JSONLD(resume, origin, false)
@@ -506,9 +491,6 @@ func validHTML(name, canonical, revision, dataScript string) string {
 	return validHTMLIn("", name, canonical, revision, dataScript)
 }
 
-// validHTMLIn is a valid page for a resume in language lng whose only content
-// is the full name; name is the escaped <title> text. Its preview head is the
-// one Go derives for that resume, in design order.
 func validHTMLIn(lng, name, canonical, revision, dataScript string) string {
 	slug := strings.Split(canonical, "/")[3]
 	root := strings.TrimSuffix(canonical, "/"+slug)

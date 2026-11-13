@@ -10,16 +10,10 @@ import (
 	schema "danny.vn/aboutme/packages/schema/gen/go"
 )
 
-// accentContrast is the contrast the card accent keeps against the white
-// card, the level solid-color rule of the resume renderer.
 const accentContrast = 3.0
 
 var errColor = errors.New("previewcard: invalid color")
 
-// Accent is the template accent (colors.accent, else colors.primary) as a
-// lowercase hex color, clamped to 3:1 against white the way the resume
-// renderer clamps its solid accent: darken in OKLCH lightness steps of 0.005
-// until the ratio holds, else black.
 func Accent(colors schema.Colors) (string, error) {
 	source := colors.Primary
 	if colors.Accent != nil {
@@ -61,7 +55,6 @@ func parseHex(color string) (rgb, error) {
 	return rgb{r: channels[0], g: channels[1], b: channels[2]}, nil
 }
 
-// mustParseHex parses a color Accent already validated or built itself.
 func mustParseHex(color string) rgb {
 	value, err := parseHex(color)
 	if err != nil {

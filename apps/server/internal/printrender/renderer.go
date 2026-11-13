@@ -1,4 +1,3 @@
-// Package printrender renders private resume snapshots with a pinned Chromium.
 package printrender
 
 import (
@@ -21,17 +20,12 @@ import (
 const expectedBrowserVersion = "156.0.8078.4"
 
 var (
-	// ErrInvalidConfig reports an unusable browser controller configuration.
-	ErrInvalidConfig = errors.New("printrender: invalid configuration")
-	// ErrUnavailable reports that the configured browser cannot start safely.
-	ErrUnavailable = errors.New("printrender: unavailable")
-	// ErrRenderFailed reports a closed browser navigation or capture failure.
-	ErrRenderFailed = errors.New("printrender: render failed")
-	// ErrOutputTooLarge reports an artifact above its fixed format limit.
+	ErrInvalidConfig  = errors.New("printrender: invalid configuration")
+	ErrUnavailable    = errors.New("printrender: unavailable")
+	ErrRenderFailed   = errors.New("printrender: render failed")
 	ErrOutputTooLarge = errors.New("printrender: output too large")
 )
 
-// Config supplies the pinned browser and validated direct Nuxt listener.
 type Config struct {
 	BrowserExecutable string
 	RenderOrigin      directrender.RenderOrigin
@@ -51,7 +45,6 @@ type runtimeHooks struct {
 	now              func() time.Time
 }
 
-// Renderer owns a fresh browser and closed network authority for each render.
 type Renderer struct {
 	executable    string
 	origin        string
@@ -68,7 +61,6 @@ type Renderer struct {
 	render        func(context.Context, renderjob.Navigation) ([]byte, error)
 }
 
-// New validates the fixed browser and direct render origin.
 func New(config Config) (*Renderer, error) {
 	if config.RenderOrigin.String() == "" {
 		return nil, initializationFailure(ErrInvalidConfig, "configuration", "render origin is missing")
@@ -127,7 +119,6 @@ func New(config Config) (*Renderer, error) {
 	return renderer, nil
 }
 
-// Ready caches a successful probe and rechecks failures after a cooldown.
 func (r *Renderer) Ready() error {
 	if r == nil || r.hooks == nil {
 		return ErrUnavailable
@@ -144,7 +135,6 @@ func (r *Renderer) Ready() error {
 	if r.readyErr != nil && now().Before(r.readyAfter) {
 		return ErrUnavailable
 	}
-	// A readiness probe must not overlap a render's browser or joined teardown.
 	gate := r.browserGate()
 	select {
 	case gate <- struct{}{}:
@@ -173,7 +163,6 @@ func (r *Renderer) Ready() error {
 	return nil
 }
 
-// Render performs one controlled navigation and returns only validated bytes.
 func (r *Renderer) Render(ctx context.Context, navigation renderjob.Navigation) ([]byte, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err

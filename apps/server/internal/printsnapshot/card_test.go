@@ -19,8 +19,6 @@ func validCardInput() CardInput {
 	}
 }
 
-// The card envelope is closed: exactly these keys at each level, so no
-// contact, section, or document field can reach the card page.
 func TestCardEnvelopeHasExactlyTheClosedKeys(t *testing.T) {
 	t.Parallel()
 	resumeID := uuid.MustParse("20000000-0000-4000-8000-000000000001")

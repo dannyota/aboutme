@@ -105,7 +105,22 @@ is no AWS recovery copy.
 The quarterly [restore drill](../../deploy/vn/README.md#restore-drill) restores
 the latest backup and a point-in-time target to a temporary encrypted server.
 Outbound networking for that server remains open; do not claim a completed drill
-from backup configuration alone. The
+from backup configuration alone. The drill keeps production safe:
+
+- Nothing prints row data, a secret, or `secrets.conf`. `secrets.conf` goes from
+  the production host to the drill server in one pipe and never reaches the
+  laptop disk or terminal.
+- The drill server's host key is made for the run. Its public half is pinned
+  before the first SSH. Its private half still travels in user data and dies
+  with the server; the [restore drill plan](../plans/restore-drill.md) moves it
+  off user data before the first production drill.
+- The bundle copied to the drill server holds only `host/` and the two scripts
+  `install.sh` installs, never `deploy/vn/prod`.
+- The fresh cluster and every backup timer stop before the repository
+  credentials arrive, so the drill server never archives WAL or backs up to the
+  production repository.
+
+The
 [CrowdSec reset procedure](crowdsec-postgresql.md#reset-after-a-cluster-restore)
 requires the operator to discard restored attack data, statistics, and
 registrations before consumer restart. Whole-cluster backups include CrowdSec

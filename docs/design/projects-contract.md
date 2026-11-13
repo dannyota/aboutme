@@ -1,8 +1,8 @@
 # Projects contract
 
 Status: Accepted by the owner (2026-11-11). Implemented: the library, linking,
-deletion, replace advancement, and the public link context with `projectLinks`.
-Project pages, their dispatch, and the entry points are not yet implemented.
+deletion, replace advancement, the public link context with `projectLinks`, and
+the project pages with their dispatch. The entry points are not yet implemented.
 Product scope is in [projects](projects.md); the decision is
 [ADR 0029](../adr/0029-account-project-library.md).
 
@@ -18,9 +18,17 @@ Product scope is in [projects](projects.md); the decision is
   shapes. `projects` is a literal second segment, so the public root registry
   gets no new row and `projects` stays claimable as a resume slug. Route parity
   fixtures cover both shapes and a third unknown segment, which stays 404.
-- Go admits the request on the resume's fence, applies sign in to view after
-  admission and before any cache lookup, and renders through the existing direct
-  render boundary with a frozen request. Nuxt never authorizes.
+- Go handles a request in this order: it reads and admits the resume on its
+  fence, and an unknown or non-live resume answers the uniform 404; then sign in
+  to view without a valid pass serves the resume's gate for any well-formed
+  project address, whether or not that project or any project is available; then
+  an unavailable list or project answers the same uniform 404; then the cache;
+  then it renders through the existing direct render boundary with a frozen
+  request. The gate therefore reveals no more than the resume page's gate does.
+  Nuxt never authorizes.
+- A malformed shape, such as a trailing slash, `.md`, uppercase or an extra
+  segment, matches no Go route and falls to Nuxt's 404, as `/{slug}/` does; the
+  decision depends only on the path's form, never on stored data.
 - The request feed classifies both shapes as `public`, so a 404 keeps no exact
   path sample. The route locale helper treats them as public resume routes.
 
@@ -28,9 +36,10 @@ Product scope is in [projects](projects.md); the decision is
 
 One read builds a resume's public snapshot: the resume row and, for each visible
 linked entry, the project's slug, page URL and, for a project page, its resolved
-text and fields. The snapshot is taken in a single statement, so it is
-consistent with the resume revision it carries. It never contains a project
-`id`.
+text and fields. The project list and a project page also read every linked
+project's fields and text without its description, to decide which have a name
+to show. The snapshot is taken in a single statement, so it is consistent with
+the resume revision it carries. It never contains a project `id`.
 
 - The frozen public render request carries the snapshot for all three HTML pages
   of a resume.
@@ -45,9 +54,11 @@ validator accepts them as it accepts other absolute links.
 
 ## Generations and revocation
 
-Admission, leases, fences, cache keys and recovery stay exactly as for a resume
+Admission, leases, fences and recovery stay exactly as for a resume
 ([ADR 0010](../adr/0010-public-artifact-revocation.md)): the generation is the
-resume revision, and nothing is keyed by a project revision.
+resume revision, and nothing is keyed by a project revision. The cache key adds
+the route class (`project-list` or `project`) and, for a project page, the
+project slug, beside the resume's variant and revision.
 
 **Rule.** Every library mutation that can change a public page advances the
 revision of each live resume of the owner that links the project, in the same
@@ -231,20 +242,27 @@ it.
   the entry hides its own. The resume entry decides only availability and order,
   with one exception: `entryLink`, the entry's own `https` link, sent only when
   it differs from both the repository and the demo address. The comparison
-  lowercases the scheme and host, drops a default port, and reads an empty path
-  as `/`; the rest must match byte for byte. The link is sent as stored.
+  lowercases the scheme and host as JavaScript does, drops a default or empty
+  port, and reads an empty path as `/`; the rest must match byte for byte. The
+  link is sent as stored.
 - Go chooses one language per project, as [Language](projects.md#language) says,
   falling back to the default language when the chosen text's name is blank. It
   sends only that text, with `lang` set when it is not the resume language's
-  primary subtag, including for an `und` resume.
+  primary subtag, including for an `und` resume. A role, summary, outcome or
+  description that is blank by the renderer's trim rule is left out, as if
+  absent.
 - `uiLng` is `vi` when the resume language's primary subtag is `vi`, otherwise
   `en`, as for the gate. Dates go as stored; the renderer formats them with
   `dateFormat`, as on the resume page.
 - A list row carries at most its first six technologies and counts the rest in
   `moreTechnologies`, omitted when none; a project page carries all of them.
 - The list page has no description. A project page's is its summary, else the
-  first 160 characters of its outcome, else none; an empty `preview.description`
-  omits both description elements.
+  first 160 code points of its outcome, else none; a summary blank by the
+  renderer's trim rule counts as absent, and an empty `preview.description`
+  omits both description elements. Nothing else is cut: the renderer and the
+  validator admit a preview description of up to 300 code points and 1,200
+  bytes, and a preview title of up to 683 code points and 2,727 bytes, the
+  longest a stored project and resume can produce.
 
 Go serves 503 for rendered HTML that breaks any of these rules:
 
@@ -253,11 +271,22 @@ Go serves 503 for rendered HTML that breaks any of these rules:
 - The head: charset and viewport, the exact title, `canonical` equal to
   `pageUrl`, the favicon only when `faviconHref` is set, and the resume page's
   preview elements with `og:type` `website`, `og:url` equal to `pageUrl`, and
-  the description pair only when set. One inline `style` that passes the inline
-  style check, and no stylesheet but the versioned `print-fonts.css`.
+  the description pair only when set, and at most the resume page's one
+  `format-detection` element. No CSS in the page: no `style` element and no
+  `style` attribute, and no stylesheet but the versioned `print-fonts.css` and
+  `project-pages.css`, each at `/_nuxt/assets/{name}?v={styleVersion}`. The
+  style version is a hash of every public stylesheet's content, so a cached
+  stylesheet never pairs with newer HTML. Inline CSS can render text in too many
+  ways to check, so the page's CSS comes only from the image.
 - No `script`, `form`, `iframe`, `img`, media or embedding element, and no event
-  or resource attribute.
+  or resource attribute. SVG only as static icons: `svg`, `g`, `path`, `circle`,
+  `rect`, `line`, `polyline`, `polygon` and `title`, with presentation
+  attributes and a numeric `transform` (only `rotate`, `translate` and `scale`
+  with plain numbers), and no reference, `url()` paint, animation or embedded
+  image.
 - One `main#public-project`, one `h1`, and one skip link to the main region.
+- The response's CSP is the resume page's with `style-src 'self'` and no
+  `'unsafe-inline'`; the gate keeps its own.
 - Anchors: the credit once, as on the resume page; `a.public-back` once, to the
   resume `url`, with the accessible name in the
   [page design](ui/project-pages.md#shared-frame); internal links only to the

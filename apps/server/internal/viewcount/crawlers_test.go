@@ -2,8 +2,6 @@ package viewcount
 
 import "testing"
 
-// The closed crawler and link-preview list (docs/design/viewer-analytics/
-// counting.md, "Layer 1").
 func TestClassifyUserAgent(t *testing.T) {
 	tests := []struct {
 		ua       string
@@ -22,7 +20,6 @@ func TestClassifyUserAgent(t *testing.T) {
 		{"Mozilla/5.0 (Windows NT 6.1; WOW64) SkypeUriPreview Preview/0.5", AgentPreview, PlatformSkype},
 		{"Viber/20.0", AgentPreview, PlatformViber},
 		{"Zalo/195.1 CFNetwork/897.15 Darwin/17.5.0", AgentPreview, PlatformZalo},
-		// In-app browsers are people.
 		{"Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Zalo iOS/475", AgentBrowser, ""},
 		{"Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Mobile Safari/537.36 Viber/20.0", AgentBrowser, ""},
 		{"Mozilla/5.0 (Linux; Android 13; CUBOT_X19) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Mobile Safari/537.36", AgentBrowser, ""},

@@ -400,7 +400,6 @@ func TestRetainUsesExactBoundariesAndPreservesPendingMedia(t *testing.T) {
 	youngSession := insertSessionWithExpiry(ctx, t, pool, userID, retentionNow.Add(-91*24*time.Hour), retentionNow.Add(sessionRedactionLead+time.Second), nil)
 
 	oldAudit := insertAudit(ctx, t, pool, "account_deleted", retentionNow.Add(-180*24*time.Hour-time.Second))
-	// The sweep deletes every audit kind by age, including provider unlinks.
 	exactAudit := insertAudit(ctx, t, pool, "identity_unlinked", retentionNow.Add(-180*24*time.Hour))
 	youngAudit := insertAccountDeletionAudit(ctx, t, q, pool, retentionNow.Add(-180*24*time.Hour+time.Second))
 	oldSecurityEvent := insertAuthenticationSecurityEvent(ctx, t, pool, userID, retentionNow.Add(-180*24*time.Hour-time.Second))
@@ -453,12 +452,6 @@ func TestRetainUsesExactBoundariesAndPreservesPendingMedia(t *testing.T) {
 	}
 }
 
-// TestRetainRedactsSessionMetadataByAbsoluteExpiry proves the privacy notice's
-// session rule: IP and user-agent redaction runs a sessionRedactionLead ahead
-// of a session's absolute expiry (docs/design/operations.md), not by its
-// created_at, so a rotation successor cannot keep metadata alive past the
-// original sign-in's 90-day bound, and the daily sweep schedule (plus one
-// missed run) still finishes redaction inside that bound.
 func TestRetainRedactsSessionMetadataByAbsoluteExpiry(t *testing.T) {
 	ctx, pool := newRetentionPool(t)
 	q := store.New(pool)
@@ -472,25 +465,14 @@ func TestRetainRedactsSessionMetadataByAbsoluteExpiry(t *testing.T) {
 	userID := createRetentionUser(ctx, t, q)
 	t.Cleanup(func() { cleanupUsers(ctx, t, pool, userID) })
 
-	// A predecessor signed in 91 days ago (absolute_expires_at = sign-in +
-	// 90d = 1 day ago) rotates into a successor created 1 day ago. Rotation
-	// inherits absolute_expires_at unchanged (session.go's
-	// createRotationSuccessor), so the successor is just as overdue for
-	// redaction as its predecessor despite its recent created_at.
 	signIn := retentionNow.Add(-91 * 24 * time.Hour)
 	absoluteExpiry := signIn.Add(90 * 24 * time.Hour)
 	predecessor := insertSessionWithExpiry(ctx, t, pool, userID, signIn, absoluteExpiry, nil)
 	successor := insertSessionWithExpiry(ctx, t, pool, userID, retentionNow.Add(-24*time.Hour), absoluteExpiry, &predecessor)
 
-	// Boundary pair: absolute_expires_at exactly now+48h (the redaction lead)
-	// is redacted; one second later is kept, even though its created_at (89
-	// days ago) is well past the old created_at-based cutoff.
 	atBoundary := insertSessionWithExpiry(ctx, t, pool, userID, retentionNow.Add(-89*24*time.Hour), retentionNow.Add(sessionRedactionLead), nil)
 	pastBoundary := insertSessionWithExpiry(ctx, t, pool, userID, retentionNow.Add(-89*24*time.Hour), retentionNow.Add(sessionRedactionLead+time.Second), nil)
 
-	// A session locked by a concurrent writer is skipped (FOR UPDATE SKIP
-	// LOCKED) and stays in the backlog, so the backlog and its age-since-
-	// sign-in accounting are observable in the same run.
 	lockedSignIn := retentionNow.Add(-95 * 24 * time.Hour)
 	lockedExpiry := lockedSignIn.Add(90 * 24 * time.Hour)
 	locked := insertSessionWithExpiry(ctx, t, pool, userID, lockedSignIn, lockedExpiry, nil)
@@ -518,10 +500,6 @@ func TestRetainRedactsSessionMetadataByAbsoluteExpiry(t *testing.T) {
 	}
 }
 
-// TestRetainDeletesExpiredSlugTombstones proves the privacy notice's
-// tombstone rule (docs/design/product.md): a released slug stays reserved for
-// 180 days, unlinked from any account, then the daily privacy sweep deletes
-// it.
 func TestRetainDeletesExpiredSlugTombstones(t *testing.T) {
 	ctx, pool := newRetentionPool(t)
 	worker, err := New(Config{
@@ -609,9 +587,6 @@ func assertUsage(ctx context.Context, t *testing.T, pool *store.Pool, userID uui
 	}
 }
 
-// insertSessionWithExpiry inserts a session with independently chosen
-// created_at and absolute_expires_at values. rotatedFrom links a rotation
-// successor to its predecessor, matching createRotationSuccessor's lineage.
 func insertSessionWithExpiry(ctx context.Context, t *testing.T, pool *store.Pool, userID uuid.UUID, createdAt, absoluteExpiresAt time.Time, rotatedFrom *uuid.UUID) uuid.UUID {
 	t.Helper()
 	id := uuid.New()
@@ -625,9 +600,6 @@ func insertSessionWithExpiry(ctx context.Context, t *testing.T, pool *store.Pool
 	return id
 }
 
-// insertSlugTombstone inserts a raw slug_tombstones row with no owning
-// account, matching the privacy notice's rule that a released slug carries no
-// account link (docs/design/product.md).
 func insertSlugTombstone(ctx context.Context, t *testing.T, pool *store.Pool, slug string, releasedAt time.Time) string {
 	t.Helper()
 	if _, err := pool.Exec(ctx, `INSERT INTO slug_tombstones (slug, released_at) VALUES ($1, $2)`, slug, releasedAt); err != nil {

@@ -1,7 +1,3 @@
-// This adversarial suite covers write safety and cap concurrency. Every
-// identifier is prefixed `wsa` so it does not collide with sibling suites in
-// package resume_test.
-
 package resume_test
 
 import (
@@ -30,58 +26,32 @@ import (
 	"danny.vn/aboutme/apps/server/internal/testutil"
 )
 
-// wsaResumeCap is the maximum number of resumes per user.
 const wsaResumeCap = 3
 
-// wsaCapSQLState / wsaCapMessage are the exact contracted pair for a cap
-// violation raised by the database trigger.
 const (
 	wsaCapSQLState = "23514"
 	wsaCapMessage  = "resumes_user_cap_exceeded"
 )
 
-// wsaRawInsertSQL writes a resumes row with no store layer in the path at all:
-// the point of the bypass tests is that the trigger, not Go code, is the
-// enforcement point.
 const wsaRawInsertSQL = `INSERT INTO resumes
 	(user_id, title, schema_version, personal_details, content, customization)
 	VALUES ($1, $2, $3, $4, $5, $6)`
 
-// wsaBlockedOnHolderSQL answers, in ONE round trip, both halves of "is the
-// contender waiting on the holder's row lock": whether the holder's pid blocks
-// the contender's, and what the contender's backend is waiting on. Asking
-// separately would sample two different instants, so a heavyweight lock wait
-// observed by the second query need not be the one the first query saw. The
-// wait-state columns are scalar subqueries so the row always comes back, even
-// if the backend momentarily has no pg_stat_activity entry.
 const wsaBlockedOnHolderSQL = `SELECT
 	$1::int = ANY(pg_blocking_pids($2::int)),
 	coalesce((SELECT wait_event_type FROM pg_stat_activity WHERE pid = $2::int), ''),
 	coalesce((SELECT wait_event FROM pg_stat_activity WHERE pid = $2::int), '')`
 
-// wsaUngrantedLocksSQL renders the locks a backend is waiting for, purely as
-// failure diagnostics.
 const wsaUngrantedLocksSQL = `SELECT coalesce(string_agg(
 	format('%s on %s', locktype, coalesce(relation::regclass::text, '-')), ', '), '')
 	FROM pg_locks WHERE pid = $1::int AND NOT granted`
 
 var (
-	// errWsaCallbackFailed is the sentinel a deliberately failing
-	// idempotency callback returns, so the rollback assertions match on
-	// identity.
 	errWsaCallbackFailed = errors.New("wsa: callback failed after mutating")
 
-	// errWsaRejectedCallbackRan makes any invocation on a different-hash
-	// reuse observable through Execute's result without an external side
-	// effect. The contracted path returns ErrIdempotencyKeyReuse before this
-	// callback.
 	errWsaRejectedCallbackRan = errors.New("wsa: rejected idempotency callback ran")
 )
 
-// wsaCustomizationJSON is packages/schema/fixtures/minimal.json's
-// customization block, with the layout.sections.main array left as a format
-// verb so a document can place exactly the content keys it declares (the
-// aggregate invariant).
 const wsaCustomizationJSON = `"customization":{` +
 	`"font":{"family":"inter","baseSizePx":14},` +
 	`"colors":{"primary":"#1a1a1a","text":"#1a1a1a","background":"#ffffff"},` +
@@ -91,18 +61,14 @@ const wsaCustomizationJSON = `"customization":{` +
 	`"sectionDisplay":{"skill":{"style":"text"},"language":{"style":"text"}},` +
 	`"pageFormat":"a4","dateFormat":"MM/YYYY"}`
 
-// wsaUUID derives a stable, UUID-shaped id from n. Fixture IDs must be
-// reproducible, so this suite never calls uuid.New.
 func wsaUUID(n int) uuid.UUID {
 	return uuid.MustParse(fmt.Sprintf("00000000-0000-4000-8000-%012d", n))
 }
 
-// wsaHash is a deterministic stand-in for the SHA-256 of a raw request body.
 func wsaHash(body string) [32]byte {
 	return sha256.Sum256([]byte(body))
 }
 
-// wsaHarness is one test's live-database handle set.
 type wsaHarness struct {
 	ctx  context.Context
 	dsn  string
@@ -112,8 +78,6 @@ type wsaHarness struct {
 	idem *resume.IdempotencyStore
 }
 
-// wsaSetup brings up a migrated live database, a pool, and the two stores
-// under test. It skips (or, under REQUIRE_TEST_DB=1, fails) without a DSN.
 func wsaSetup(t *testing.T) *wsaHarness {
 	t.Helper()
 	dsn := testutil.RequireMigratedTestDatabaseURL(t)
@@ -133,8 +97,6 @@ func wsaSetup(t *testing.T) *wsaHarness {
 	}
 }
 
-// wsaNewUser creates a fresh user with a random email, so concurrent workers
-// on the shared test database never observe or disturb each other's rows.
 func (h *wsaHarness) wsaNewUser(t *testing.T) uuid.UUID {
 	t.Helper()
 	var b [12]byte
@@ -151,11 +113,9 @@ func (h *wsaHarness) wsaNewUser(t *testing.T) uuid.UUID {
 	return u.ID
 }
 
-// wsaCount returns how many rows of table belong to userID.
 func (h *wsaHarness) wsaCount(t *testing.T, table string, userID uuid.UUID) int64 {
 	t.Helper()
 	var n int64
-	// table is a package-private constant string, never caller input.
 	q := "SELECT count(*) FROM " + table + " WHERE user_id = $1"
 	if err := h.pool.QueryRow(h.ctx, q, userID).Scan(&n); err != nil {
 		t.Fatalf("count %s: %v", table, err)
@@ -163,9 +123,6 @@ func (h *wsaHarness) wsaCount(t *testing.T, table string, userID uuid.UUID) int6
 	return n
 }
 
-// wsaSnapshot returns a full-row textual snapshot of every row of table owned
-// by userID -- every column, not a projection, so "the write changed nothing"
-// is provable rather than assumed.
 func (h *wsaHarness) wsaSnapshot(t *testing.T, table string, userID uuid.UUID) string {
 	t.Helper()
 	var s string
@@ -177,13 +134,10 @@ func (h *wsaHarness) wsaSnapshot(t *testing.T, table string, userID uuid.UUID) s
 	return s
 }
 
-// wsaExecer is the shared shape of a pool, a connection, and a transaction:
-// the raw-SQL bypass tests run the same INSERT through all three.
 type wsaExecer interface {
 	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
 }
 
-// wsaRawInsert inserts a resumes row directly, with no store layer involved.
 func wsaRawInsert(ctx context.Context, x wsaExecer, userID uuid.UUID, title string, doc schema.Resume) error {
 	personalDetails, content, customization, err := wsaSplit(doc)
 	if err != nil {
@@ -194,8 +148,6 @@ func wsaRawInsert(ctx context.Context, x wsaExecer, userID uuid.UUID, title stri
 	return err
 }
 
-// wsaSplit decomposes a document into the three jsonb column values,
-// using only the exported canonical marshal.
 func wsaSplit(doc schema.Resume) (personalDetails, content, customization json.RawMessage, err error) {
 	raw, err := resume.AssembleCanonical(doc)
 	if err != nil {
@@ -208,7 +160,6 @@ func wsaSplit(doc schema.Resume) (personalDetails, content, customization json.R
 	return parts["personalDetails"], parts["content"], parts["customization"], nil
 }
 
-// wsaDecode turns a document literal into the typed shape the store takes.
 func wsaDecode(t *testing.T, raw string) schema.Resume {
 	t.Helper()
 	var doc schema.Resume
@@ -218,7 +169,6 @@ func wsaDecode(t *testing.T, raw string) schema.Resume {
 	return doc
 }
 
-// wsaCanonicalLen is the byte length MaxDocumentBytes measures.
 func wsaCanonicalLen(t *testing.T, doc schema.Resume) int {
 	t.Helper()
 	raw, err := resume.AssembleCanonical(doc)
@@ -228,42 +178,31 @@ func wsaCanonicalLen(t *testing.T, doc schema.Resume) int {
 	return len(raw)
 }
 
-// wsaEmptyDocJSON is fixtures/minimal.json with a settable fullName, so each
-// concurrent writer's document is distinguishable in the winner assertions.
 func wsaEmptyDocJSON(fullName string) string {
 	return `{"schemaVersion":2,"personalDetails":{"fullName":"` + fullName +
 		`","details":[]},"content":{},` + fmt.Sprintf(wsaCustomizationJSON, "") + `}`
 }
 
-// wsaDoc is the smallest valid document, tagged with fullName.
 func wsaDoc(t *testing.T, fullName string) schema.Resume {
 	t.Helper()
 	return wsaDecode(t, wsaEmptyDocJSON(fullName))
 }
 
-// wsaWorkDocJSON builds a one-section document from raw work-entry literals,
-// placing that section exactly once in layout.
 func wsaWorkDocJSON(entries []string) string {
 	return `{"schemaVersion":2,"personalDetails":{"fullName":"Ada Lovelace","details":[]},` +
 		`"content":{"work":{"sectionType":"work","entries":[` + strings.Join(entries, ",") + `]}},` +
 		fmt.Sprintf(wsaCustomizationJSON, `"work"`) + `}`
 }
 
-// wsaWorkEntryJSON is one work entry with a deterministic id and an
-// ASCII description of exactly descriptionLen bytes (no JSON escaping, so a
-// character added is a byte added).
 func wsaWorkEntryJSON(n, descriptionLen int) string {
 	return `{"id":"` + wsaUUID(n).String() + `","description":"` +
 		strings.Repeat("a", descriptionLen) + `"}`
 }
 
-// wsaDocOfCanonicalSize builds a valid-in-every-other-respect document whose
-// canonical assembled form is exactly target bytes, so MaxDocumentBytes can be
-// probed at the limit and at limit+1.
 func wsaDocOfCanonicalSize(t *testing.T, target int) schema.Resume {
 	t.Helper()
 	const fullEntries = 32
-	const fullLen = 16000 // below MaxRichTextBytes, so only the total bound bites
+	const fullLen = 16000
 	build := func(lastLen int) schema.Resume {
 		entries := make([]string, 0, fullEntries+1)
 		for i := range fullEntries {
@@ -284,8 +223,6 @@ func wsaDocOfCanonicalSize(t *testing.T, target int) schema.Resume {
 	return doc
 }
 
-// wsaRequireNotFound asserts the no-existence-oracle contract at one call
-// site: ErrNotFound and nothing that distinguishes "not yours" from "absent".
 func wsaRequireNotFound(t *testing.T, label string, err error) {
 	t.Helper()
 	if !errors.Is(err, resume.ErrNotFound) {
@@ -297,9 +234,6 @@ func wsaRequireNotFound(t *testing.T, label string, err error) {
 	}
 }
 
-// TestCreate_Concurrent_ExactlyThreeSucceed proves the resume cap holds under
-// 20-way concurrency through the store: exactly three creates commit, every
-// other caller gets ErrCapExceeded, and the database ends with three rows.
 func TestCreate_Concurrent_ExactlyThreeSucceed(t *testing.T) {
 	h := wsaSetup(t)
 	userID := h.wsaNewUser(t)
@@ -366,9 +300,6 @@ func TestCreate_Concurrent_ExactlyThreeSucceed(t *testing.T) {
 	}
 }
 
-// TestCreate_RawSQLBypass_StillCapped proves the cap is the database trigger,
-// not the Go store: a fourth row inserted with raw SQL still raises the exact
-// SQLSTATE/message pair.
 func TestCreate_RawSQLBypass_StillCapped(t *testing.T) {
 	h := wsaSetup(t)
 	userID := h.wsaNewUser(t)
@@ -396,12 +327,6 @@ func TestCreate_RawSQLBypass_StillCapped(t *testing.T) {
 	}
 }
 
-// TestCreate_ConcurrentRawSQLBypass_StillCapped exercises the trigger's own
-// PERFORM ... FOR UPDATE with no store layer anywhere in the path: while
-// one raw transaction holds an uncommitted third resume, a second raw
-// transaction's fourth insert must BLOCK on the owner row rather than counting
-// two committed rows and admitting itself. Deleting the trigger's lock line
-// makes the second insert succeed and this test fail.
 func TestCreate_ConcurrentRawSQLBypass_StillCapped(t *testing.T) {
 	h := wsaSetup(t)
 	userID := h.wsaNewUser(t)
@@ -437,9 +362,6 @@ func TestCreate_ConcurrentRawSQLBypass_StillCapped(t *testing.T) {
 	}
 	defer wsaRollback(h.ctx, t, contenderTx, "contender")
 
-	// The document is built HERE, on the test goroutine: wsaDoc takes *testing.T
-	// and can call t.Fatalf, which is only legal from the goroutine running the
-	// test.
 	contenderDoc := wsaDoc(t, "Ada")
 	execCtx, cancelExec := context.WithTimeout(h.ctx, 60*time.Second)
 	done := make(chan error, 1)
@@ -449,24 +371,11 @@ func TestCreate_ConcurrentRawSQLBypass_StillCapped(t *testing.T) {
 		defer contenderWG.Done()
 		done <- wsaRawInsert(execCtx, contenderTx, userID, "fourth-blocked", contenderDoc)
 	}()
-	// Registered AFTER the two rollback defers, so it runs BEFORE them (LIFO):
-	// the insert goroutine must be off contenderTx before anything rolls it
-	// back or closes its connection underneath it.
 	defer func() {
 		cancelExec()
 		contenderWG.Wait()
 	}()
 
-	// Poll from a third connection until the contender is observed blocked BY
-	// the holder AND waiting on a heavyweight lock. Each poll is a network
-	// round trip, so the loop paces itself: there is no sleep anywhere in this
-	// test, and the exit condition is the observation itself, never elapsed
-	// time.
-	//
-	// Both facts come from one query, at one instant. Only the trigger takes
-	// FOR UPDATE on the owner row; the foreign key alone would take FOR KEY
-	// SHARE, which does not conflict with itself, so a heavyweight lock wait
-	// here is that PERFORM line and nothing else.
 	waitCtx, cancelWait := context.WithTimeout(h.ctx, 30*time.Second)
 	defer cancelWait()
 	var blocked bool
@@ -478,9 +387,6 @@ func TestCreate_ConcurrentRawSQLBypass_StillCapped(t *testing.T) {
 				"the trigger's PERFORM ... FOR UPDATE is not serializing bypassing writers", earlyErr)
 		default:
 		}
-		// Checked BEFORE the query: once waitCtx has expired the query below
-		// fails with a context error, which would report the deadline as a
-		// query failure and lose the pids this diagnostic names.
 		if waitCtx.Err() != nil {
 			t.Fatalf("timed out waiting for the 4th raw insert to block on the owner row; "+
 				"holder pid %d, contender pid %d, last observed blocked=%t wait_event=%s/%s",
@@ -524,8 +430,6 @@ func TestCreate_ConcurrentRawSQLBypass_StillCapped(t *testing.T) {
 	}
 }
 
-// wsaConnect opens a dedicated connection, outside the pool, so a test can
-// hold an open transaction without starving the pool.
 func wsaConnect(t *testing.T, dsn string) *pgx.Conn {
 	t.Helper()
 	conn, err := pgx.Connect(context.Background(), dsn)
@@ -540,8 +444,6 @@ func wsaConnect(t *testing.T, dsn string) *pgx.Conn {
 	return conn
 }
 
-// wsaBackendPID returns conn's server-side backend pid, the handle
-// pg_blocking_pids works in.
 func wsaBackendPID(ctx context.Context, t *testing.T, conn *pgx.Conn) int32 {
 	t.Helper()
 	var pid int32
@@ -551,7 +453,6 @@ func wsaBackendPID(ctx context.Context, t *testing.T, conn *pgx.Conn) int32 {
 	return pid
 }
 
-// wsaRollback rolls tx back, tolerating an already-finished transaction.
 func wsaRollback(ctx context.Context, t *testing.T, tx pgx.Tx, label string) {
 	t.Helper()
 	if err := tx.Rollback(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
@@ -559,10 +460,6 @@ func wsaRollback(ctx context.Context, t *testing.T, tx pgx.Tx, label string) {
 	}
 }
 
-// TestSaveDocument_ConcurrentSameRevision_OneWinner proves the revision CAS
-// admits exactly one writer per revision: one caller advances the
-// row to R+1 and every loser receives a *RevisionMismatchError carrying the
-// winner's revision and the winner's document.
 func TestSaveDocument_ConcurrentSameRevision_OneWinner(t *testing.T) {
 	h := wsaSetup(t)
 	userID := h.wsaNewUser(t)
@@ -640,8 +537,6 @@ func TestSaveDocument_ConcurrentSameRevision_OneWinner(t *testing.T) {
 		t.Errorf("stored fullName = %q, want the winner's %q", got, names[winner])
 	}
 
-	// Every loser's error must carry the WINNING document and revision --
-	// this is the state an API conflict response serializes.
 	for i, r := range results {
 		if r.err == nil {
 			continue
@@ -658,8 +553,6 @@ func TestSaveDocument_ConcurrentSameRevision_OneWinner(t *testing.T) {
 	}
 }
 
-// wsaFullName reads personalDetails.fullName, the tag each test writes to tell
-// concurrent documents apart.
 func wsaFullName(t *testing.T, doc schema.Resume) string {
 	t.Helper()
 	if doc.PersonalDetails.FullName == nil {
@@ -668,9 +561,6 @@ func wsaFullName(t *testing.T, doc schema.Resume) string {
 	return *doc.PersonalDetails.FullName
 }
 
-// TestSaveDocument_MismatchCarriesWinningDoc proves the mismatch payload is
-// byte-identical to a fresh Get so an API can serialize it into a conflict body,
-// so a stale or partially-populated payload would be observable to clients.
 func TestSaveDocument_MismatchCarriesWinningDoc(t *testing.T) {
 	h := wsaSetup(t)
 	userID := h.wsaNewUser(t)
@@ -734,10 +624,6 @@ func TestSaveDocument_MismatchCarriesWinningDoc(t *testing.T) {
 	}
 }
 
-// wsaRequireResumeEqual compares the complete domain value and separately
-// byte-compares its canonical document. The whole-value comparison is
-// intentionally reflection-based so adding a Resume field cannot silently
-// weaken this acceptance assertion.
 func wsaRequireResumeEqual(t *testing.T, label string, got, want resume.Resume) {
 	t.Helper()
 	gotCanonical, err := resume.AssembleCanonical(got.Doc)
@@ -756,10 +642,6 @@ func wsaRequireResumeEqual(t *testing.T, label string, got, want resume.Resume) 
 	}
 }
 
-// TestIdempotency_ConcurrentSameKey_OneMutationCommits proves same-user
-// contenders serialize on the user row. Exactly one callback runs, exactly
-// one mutation is observable, and every
-// follower replays the committed response byte-for-byte from storage.
 func TestIdempotency_ConcurrentSameKey_OneMutationCommits(t *testing.T) {
 	h := wsaSetup(t)
 	userID := h.wsaNewUser(t)
@@ -769,9 +651,6 @@ func TestIdempotency_ConcurrentSameKey_OneMutationCommits(t *testing.T) {
 	hash := wsaHash("body-A")
 	responseBody := json.RawMessage(`{"created":true,"n":1}`)
 
-	// Built on the test goroutine: Execute may invoke this callback on one of
-	// the worker goroutines below, while wsaCreateParams/wsaDoc take *testing.T
-	// and can call t.Fatalf only from the test goroutine.
 	createParams := wsaCreateParams(t, userID, "idem-created", wsaDoc(t, "Ada"))
 	mutate := func(qtx *store.Queries) (resume.StoredResponse, error) {
 		if _, err := qtx.CreateResume(h.ctx, createParams); err != nil {
@@ -842,7 +721,6 @@ func TestIdempotency_ConcurrentSameKey_OneMutationCommits(t *testing.T) {
 				i, r.resp.Body, stored.ResponseBody)
 		}
 	}
-	// Every response, leader and follower alike, must be the SAME JSON value.
 	wantValue := wsaJSONValue(t, responseBody)
 	for i, r := range results {
 		if r.err != nil {
@@ -854,8 +732,6 @@ func TestIdempotency_ConcurrentSameKey_OneMutationCommits(t *testing.T) {
 	}
 }
 
-// wsaCreateParams builds the generated create-resume arguments a
-// transaction-scoped callback writes through.
 func wsaCreateParams(t *testing.T, userID uuid.UUID, title string, doc schema.Resume) store.CreateResumeParams {
 	t.Helper()
 	personalDetails, content, customization, err := wsaSplit(doc)
@@ -872,8 +748,6 @@ func wsaCreateParams(t *testing.T, userID uuid.UUID, title string, doc schema.Re
 	}
 }
 
-// wsaJSONValue decodes raw for semantic (not byte) comparison, since jsonb
-// normalization is a contracted, allowed difference for replays.
 func wsaJSONValue(t *testing.T, raw json.RawMessage) any {
 	t.Helper()
 	var v any
@@ -883,15 +757,11 @@ func wsaJSONValue(t *testing.T, raw json.RawMessage) any {
 	return v
 }
 
-// wsaJSONEqual reports whether raw decodes to the same JSON value as want.
 func wsaJSONEqual(t *testing.T, raw json.RawMessage, want any) bool {
 	t.Helper()
 	return fmt.Sprintf("%#v", wsaJSONValue(t, raw)) == fmt.Sprintf("%#v", want)
 }
 
-// TestIdempotency_MutationErrorRollsBack proves a callback that performs a real
-// transaction-scoped resume mutation and then
-// fails leaves neither the mutation nor an idempotency record behind.
 func TestIdempotency_MutationErrorRollsBack(t *testing.T) {
 	const route = "POST /resumes"
 
@@ -928,8 +798,6 @@ func TestIdempotency_MutationErrorRollsBack(t *testing.T) {
 			t.Errorf("idempotency_records rows = %d, want 0", n)
 		}
 
-		// Nothing was recorded, so the same key+hash must run a fresh,
-		// transaction-scoped mutation and commit its response with it.
 		retryResp, replayed, retryErr := h.idem.ExecuteForTest(h.ctx, userID, route, key, hash,
 			func(qtx *store.Queries) (resume.StoredResponse, error) {
 				if _, createErr := qtx.CreateResume(h.ctx, retryParams); createErr != nil {
@@ -975,9 +843,6 @@ func TestIdempotency_MutationErrorRollsBack(t *testing.T) {
 				}); casErr != nil {
 					return resume.StoredResponse{}, casErr
 				}
-				// Prove the mutation really landed inside this transaction
-				// before failing it, so the rollback assertion below is about a
-				// real write and not a no-op.
 				row, getErr := qtx.GetResumeForUser(h.ctx, store.GetResumeForUserParams{
 					ID: created.ID, UserID: userID,
 				})
@@ -1006,10 +871,6 @@ func TestIdempotency_MutationErrorRollsBack(t *testing.T) {
 	})
 }
 
-// TestIdempotency_DifferentBodyNeverExecutes proves a key reused with a
-// different request hash is rejected outright. Its callback never runs, and it
-// writes nothing -- including when interleaved
-// concurrently with valid replays of the same key.
 func TestIdempotency_DifferentBodyNeverExecutes(t *testing.T) {
 	h := wsaSetup(t)
 	userID := h.wsaNewUser(t)
@@ -1020,9 +881,6 @@ func TestIdempotency_DifferentBodyNeverExecutes(t *testing.T) {
 	hashB := wsaHash("body-B")
 	responseBody := json.RawMessage(`{"created":true}`)
 
-	// The leader callback's parameters are built on the test goroutine: Execute
-	// may invoke it on a worker goroutine below, while wsaCreateParams/wsaDoc
-	// take *testing.T and can call t.Fatalf only from the test goroutine.
 	leaderParams := wsaCreateParams(t, userID, "idem-leader", wsaDoc(t, "Ada"))
 
 	leaderMutate := func(qtx *store.Queries) (resume.StoredResponse, error) {
@@ -1041,8 +899,6 @@ func TestIdempotency_DifferentBodyNeverExecutes(t *testing.T) {
 	resumesBefore := h.wsaSnapshot(t, "resumes", userID)
 	recordsBefore := h.wsaSnapshot(t, "idempotency_records", userID)
 
-	// Sequential rejection first: the plain contract, with no concurrency to
-	// hide behind.
 	rejectMutate := func(_ *store.Queries) (resume.StoredResponse, error) {
 		return resume.StoredResponse{}, errWsaRejectedCallbackRan
 	}
@@ -1055,7 +911,6 @@ func TestIdempotency_DifferentBodyNeverExecutes(t *testing.T) {
 			rejectedResp, rejectedReplay)
 	}
 
-	// Now interleave 10 valid replays with 10 different-body reuses.
 	const perArm = 10
 	type outcome struct {
 		resp     resume.StoredResponse
@@ -1118,11 +973,6 @@ func TestIdempotency_DifferentBodyNeverExecutes(t *testing.T) {
 	}
 }
 
-// TestValidation_RejectionWritesNothing proves the validation choke point
-// sits before the transaction's writes: an invalid or oversized document
-// rejected by Create or SaveDocument leaves every existing row byte-identical
-// and the row count unchanged. The size cases are limit+1 at the transaction
-// boundary, with the exactly-at-limit document accepted as the control.
 func TestValidation_RejectionWritesNothing(t *testing.T) {
 	overRichText := wsaWorkDocJSON([]string{wsaWorkEntryJSON(1, schema.MaxRichTextBytes+1)})
 	duplicateEntryIDs := wsaWorkDocJSON([]string{wsaWorkEntryJSON(2, 4), wsaWorkEntryJSON(2, 5)})
@@ -1151,8 +1001,6 @@ func TestValidation_RejectionWritesNothing(t *testing.T) {
 		t.Run("Create/"+tc.name, func(t *testing.T) {
 			h := wsaSetup(t)
 			userID := h.wsaNewUser(t)
-			// Two existing rows, so the snapshot compares real content, not
-			// an empty set.
 			for i := range wsaResumeCap - 1 {
 				if _, err := h.st.Create(h.ctx, userID, fmt.Sprintf("existing-%d", i), wsaDoc(t, "Ada")); err != nil {
 					t.Fatalf("seed create %d: %v", i, err)
@@ -1212,8 +1060,6 @@ func TestValidation_RejectionWritesNothing(t *testing.T) {
 	})
 }
 
-// wsaRequireValidationError asserts a rejection came from the validation
-// pipeline rather than from the database or a nil error.
 func wsaRequireValidationError(t *testing.T, label string, err error) {
 	t.Helper()
 	if err == nil {
@@ -1228,10 +1074,6 @@ func wsaRequireValidationError(t *testing.T, label string, err error) {
 	}
 }
 
-// TestNoExistenceOracle_WrongUserSameAsNotFound proves the absence rule across
-// every per-resume method: a real id owned by someone else is byte-identically
-// indistinguishable from an id that never existed, and the CAS methods never
-// leak a revision mismatch for a row the caller does not own.
 func TestNoExistenceOracle_WrongUserSameAsNotFound(t *testing.T) {
 	h := wsaSetup(t)
 	ownerID := h.wsaNewUser(t)

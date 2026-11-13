@@ -1,6 +1,3 @@
-// These adversarial tests drive the real Google start and callback handlers.
-// They cover OIDC verification, state and transaction binding, verified email,
-// rejection cookie effects, and no-oracle behavior. See docs/design/security.md.
 package auth_test
 
 import (
@@ -29,8 +26,6 @@ func ptrFalse() *bool {
 	return &b
 }
 
-// generateOtherRSAKey returns a fresh RSA-2048 key distinct from any
-// oidctest.Provider's own key, for TestGoogleCallback_RejectsTamperedSignature.
 func generateOtherRSAKey(t *testing.T) *rsa.PrivateKey {
 	t.Helper()
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
@@ -40,7 +35,6 @@ func generateOtherRSAKey(t *testing.T) *rsa.PrivateKey {
 	return key
 }
 
-// doGetCaptureBody retains the body for no-oracle comparisons.
 func doGetCaptureBody(t *testing.T, handler http.Handler, path string, cookies ...*http.Cookie) (*http.Response, string) {
 	t.Helper()
 
@@ -62,11 +56,6 @@ func doGetCaptureBody(t *testing.T, handler http.Handler, path string, cookies .
 	return resp, string(body)
 }
 
-// ==== flow helpers ====
-
-// beginGoogle returns the transaction cookie, state, and server-generated nonce
-// from a real start redirect. Failure tests reuse the nonce to isolate one
-// verification dimension.
 func beginGoogle(t *testing.T, handler http.Handler) (txCookie *http.Cookie, state, nonce string) {
 	t.Helper()
 
@@ -87,10 +76,6 @@ func beginGoogle(t *testing.T, handler http.Handler) (txCookie *http.Cookie, sta
 	return txCookie, state, nonce
 }
 
-// doCallback drives GET auth.GoogleCallbackPath?code=...&state=... (via
-// the shared doGet), attaching cookies (typically just the __Host-oauth-tx
-// cookie beginGoogle returned; omitted entirely for
-// TestGoogleCallback_RejectsMissingTxCookie's case).
 func doCallback(t *testing.T, handler http.Handler, code, state string, cookies ...*http.Cookie) *http.Response {
 	t.Helper()
 
@@ -98,10 +83,6 @@ func doCallback(t *testing.T, handler http.Handler, code, state string, cookies 
 	return doGet(t, handler, path, cookies...) //nolint:bodyclose // doGet (handlers_test.go) closes the body itself before returning.
 }
 
-// ==== shared assertions ====
-
-// assertRejected checks the redirect, error code, absent session cookie, and
-// cleared transaction cookie. It returns the client-facing error code.
 func assertRejected(t *testing.T, resp *http.Response) (errorCode string) {
 	t.Helper()
 
@@ -111,7 +92,7 @@ func assertRejected(t *testing.T, resp *http.Response) (errorCode string) {
 
 	loc := resp.Header.Get("Location")
 	errorCode = mustQueryParam(t, loc, "error")
-	assertRedirectPath(t, loc, "/login") // Rejections use the login error page, not the success target.
+	assertRedirectPath(t, loc, "/login")
 
 	if sc := extractCookie(resp, auth.SessionCookieName); sc != nil {
 		t.Errorf("response set a %s cookie on a rejected callback (value=%q), want none -- a rejected callback must never authenticate the visitor", auth.SessionCookieName, sc.Value)
@@ -131,9 +112,6 @@ func assertRejected(t *testing.T, resp *http.Response) (errorCode string) {
 	return errorCode
 }
 
-// assertNoIdentity asserts no identities row exists for
-// (provider=google, provider_user_id=providerUserID) -- the row a
-// successful callback would have created.
 func assertNoIdentity(t *testing.T, q *store.Queries, providerUserID string) {
 	t.Helper()
 
@@ -146,8 +124,6 @@ func assertNoIdentity(t *testing.T, q *store.Queries, providerUserID string) {
 	}
 }
 
-// assertNoUser asserts no users row exists with the given email -- the row
-// a successful new-user callback would have created.
 func assertNoUser(t *testing.T, q *store.Queries, email string) {
 	t.Helper()
 
@@ -157,7 +133,6 @@ func assertNoUser(t *testing.T, q *store.Queries, email string) {
 	}
 }
 
-// uniqueSubject and uniqueEmail prevent shared-database collisions.
 func uniqueSubject(t *testing.T) string {
 	t.Helper()
 	return "g-sub-" + uuid.NewString()
@@ -168,10 +143,6 @@ func uniqueEmail(t *testing.T) string {
 	return uuid.NewString() + "@example.com"
 }
 
-// ==== OIDC rejection matrix ====
-
-// TestGoogleCallback_RejectsUnverifiedEmail proves Google registration requires
-// email_verified=true and returns the distinct user-actionable code.
 func TestGoogleCallback_RejectsUnverifiedEmail(t *testing.T) {
 	t.Parallel()
 
@@ -185,7 +156,7 @@ func TestGoogleCallback_RejectsUnverifiedEmail(t *testing.T) {
 		Subject:       subject,
 		Email:         email,
 		EmailVerified: ptrFalse(),
-		Nonce:         nonce, // must pass every OTHER check so only email_verified fails
+		Nonce:         nonce,
 	})
 
 	resp := doCallback(t, handler, "code-unverified", state, txCookie) //nolint:bodyclose // doCallback -> doGet closes the body itself before returning.
@@ -199,8 +170,6 @@ func TestGoogleCallback_RejectsUnverifiedEmail(t *testing.T) {
 	assertNoUser(t, q, email)
 }
 
-// TestGoogleCallback_RejectsWrongIssuer proves the HTTP flow preserves
-// go-oidc's issuer rejection and leaves no credential or database effect.
 func TestGoogleCallback_RejectsWrongIssuer(t *testing.T) {
 	t.Parallel()
 
@@ -225,8 +194,6 @@ func TestGoogleCallback_RejectsWrongIssuer(t *testing.T) {
 	assertNoUser(t, q, email)
 }
 
-// TestGoogleCallback_RejectsWrongAudience proves go-oidc rejects a token
-// whose "aud" doesn't match the Service's configured GoogleClientID.
 func TestGoogleCallback_RejectsWrongAudience(t *testing.T) {
 	t.Parallel()
 
@@ -251,9 +218,6 @@ func TestGoogleCallback_RejectsWrongAudience(t *testing.T) {
 	assertNoUser(t, q, email)
 }
 
-// TestGoogleCallback_RejectsTamperedSignature proves go-oidc rejects a
-// token signed with a key other than the one the provider published at
-// /jwks.json -- the harness's stand-in for a forged or tampered id_token.
 func TestGoogleCallback_RejectsTamperedSignature(t *testing.T) {
 	t.Parallel()
 
@@ -278,9 +242,6 @@ func TestGoogleCallback_RejectsTamperedSignature(t *testing.T) {
 	assertNoUser(t, q, email)
 }
 
-// TestGoogleCallback_RejectsNonceMismatch targets the manual check go-oidc does
-// not perform. The fixture discards the transaction nonce and signs a fixed,
-// unrelated value.
 func TestGoogleCallback_RejectsNonceMismatch(t *testing.T) {
 	t.Parallel()
 
@@ -289,7 +250,7 @@ func TestGoogleCallback_RejectsNonceMismatch(t *testing.T) {
 
 	subject := uniqueSubject(t)
 	email := uniqueEmail(t)
-	txCookie, state, _ := beginGoogle(t, handler) // the real nonce is deliberately discarded below
+	txCookie, state, _ := beginGoogle(t, handler)
 	p.RegisterCode("code-nonce-mismatch", oidctest.Claims{
 		Subject:       subject,
 		Email:         email,
@@ -304,9 +265,6 @@ func TestGoogleCallback_RejectsNonceMismatch(t *testing.T) {
 	assertNoUser(t, q, email)
 }
 
-// TestGoogleCallback_RejectsMissingNonce proves Google keeps the strict rule:
-// an ID token without a nonce claim is rejected. Only LinkedIn, which never
-// returns the claim, accepts its absence.
 func TestGoogleCallback_RejectsMissingNonce(t *testing.T) {
 	t.Parallel()
 
@@ -329,12 +287,6 @@ func TestGoogleCallback_RejectsMissingNonce(t *testing.T) {
 	assertNoUser(t, q, email)
 }
 
-// TestGoogleCallback_RejectsExpiredIDToken proves go-oidc rejects a token
-// whose "exp" is already in the past. oidctest's
-// TestProvider_ExpiresIn_IndependentOfIDTokenExpiry
-// guards that the mock's OAuth2 access-token expires_in can't
-// accidentally launder this past exp at the token-exchange layer, so a
-// rejection observed here can only be go-oidc's own id_token expiry check.
 func TestGoogleCallback_RejectsExpiredIDToken(t *testing.T) {
 	t.Parallel()
 
@@ -359,10 +311,6 @@ func TestGoogleCallback_RejectsExpiredIDToken(t *testing.T) {
 	assertNoUser(t, q, email)
 }
 
-// ==== transaction binding and no-oracle checks ====
-
-// TestGoogleCallback_RejectsStateMismatch prevents an attacker-controlled code
-// from being bound to the victim's valid transaction cookie.
 func TestGoogleCallback_RejectsStateMismatch(t *testing.T) {
 	t.Parallel()
 
@@ -371,7 +319,7 @@ func TestGoogleCallback_RejectsStateMismatch(t *testing.T) {
 
 	subject := uniqueSubject(t)
 	email := uniqueEmail(t)
-	txCookie, _, nonce := beginGoogle(t, handler) // deliberately discard the real state
+	txCookie, _, nonce := beginGoogle(t, handler)
 	p.RegisterCode("code-state-mismatch", oidctest.Claims{
 		Subject:       subject,
 		Email:         email,
@@ -386,12 +334,6 @@ func TestGoogleCallback_RejectsStateMismatch(t *testing.T) {
 	assertNoUser(t, q, email)
 }
 
-// TestGoogleCallback_RejectsMissingTxCookie: a /callback request that
-// carries a plausible code and state but no __Host-oauth-tx cookie at all
-// (e.g. a bookmarked/replayed callback URL, or a cookie dropped by a
-// privacy setting) must be rejected the same way any other invalid
-// transaction is -- never treated as "no transaction to check against, so
-// skip straight to token exchange".
 func TestGoogleCallback_RejectsMissingTxCookie(t *testing.T) {
 	t.Parallel()
 
@@ -400,7 +342,7 @@ func TestGoogleCallback_RejectsMissingTxCookie(t *testing.T) {
 
 	subject := uniqueSubject(t)
 	email := uniqueEmail(t)
-	_, state, nonce := beginGoogle(t, handler) // begin a real transaction, but never attach its cookie below
+	_, state, nonce := beginGoogle(t, handler)
 	p.RegisterCode("code-missing-cookie", oidctest.Claims{
 		Subject:       subject,
 		Email:         email,
@@ -415,9 +357,6 @@ func TestGoogleCallback_RejectsMissingTxCookie(t *testing.T) {
 	assertNoUser(t, q, email)
 }
 
-// TestGoogleCallback_OIDCFailures_NoOracleAcrossFailureModes requires identical
-// error codes and bodies across issuer, audience, signature, nonce, and expiry
-// failures.
 func TestGoogleCallback_OIDCFailures_NoOracleAcrossFailureModes(t *testing.T) {
 	t.Parallel()
 
@@ -426,8 +365,6 @@ func TestGoogleCallback_OIDCFailures_NoOracleAcrossFailureModes(t *testing.T) {
 
 	otherKey := generateOtherRSAKey(t)
 
-	// Every case except nonce mismatch echoes the real nonce so exactly one
-	// verification dimension fails.
 	cases := map[string]func(nonce string) oidctest.Claims{
 		"wrong issuer": func(nonce string) oidctest.Claims {
 			return oidctest.Claims{
@@ -494,7 +431,6 @@ func TestGoogleCallback_OIDCFailures_NoOracleAcrossFailureModes(t *testing.T) {
 		t.Error("OIDC verification failures reused the email_not_verified error code, want a distinct generic code -- these five are cryptographic/protocol failures, not the email_verified claim check, and conflating them would misreport the failure to the visitor")
 	}
 
-	// Equal bodies alone do not prove that none contains a shared leak.
 	forbidden := []string{"issuer", "audience", "signature", "nonce", "expired", "expire"}
 	for name, body := range bodies {
 		lower := strings.ToLower(body)
@@ -506,14 +442,6 @@ func TestGoogleCallback_OIDCFailures_NoOracleAcrossFailureModes(t *testing.T) {
 	}
 }
 
-// ==== enrolled accounts ====
-//
-// An enrolled account's provider login and reauthentication create a pending
-// authentication instead of a session or proof update, and linking rechecks
-// both recent proofs under the user lock. See
-// docs/design/second-factor-authentication.md.
-
-// createGoogleIdentityForTest links a fresh Google subject to userID.
 func createGoogleIdentityForTest(t *testing.T, q *store.Queries, userID uuid.UUID) string {
 	t.Helper()
 	subject := uniqueSubject(t)
@@ -525,7 +453,6 @@ func createGoogleIdentityForTest(t *testing.T, q *store.Queries, userID uuid.UUI
 	return subject
 }
 
-// registerGoogleCode registers a single-use code for subject bound to nonce.
 func registerGoogleCode(t *testing.T, p *oidctest.Provider, subject, nonce string) string {
 	t.Helper()
 	code := "code-enrolled-" + uuid.NewString()
@@ -533,7 +460,6 @@ func registerGoogleCode(t *testing.T, p *oidctest.Provider, subject, nonce strin
 	return code
 }
 
-// serveGetAsync serves one GET on its own goroutine.
 func serveGetAsync(ctx context.Context, handler http.Handler, path string, cookies ...*http.Cookie) <-chan *httptest.ResponseRecorder {
 	done := make(chan *httptest.ResponseRecorder, 1)
 	req := httptest.NewRequestWithContext(ctx, http.MethodGet, path, nil)
@@ -579,7 +505,6 @@ func TestGoogleCallback_EnrolledLogin_PendingNotSession(t *testing.T) {
 		t.Errorf("enrolled login created %d sessions, want 0", n)
 	}
 
-	// Replaying the consumed callback grants nothing and adds no pending row.
 	replay := doCallback(t, handler, code, state, txCookie) //nolint:bodyclose // doCallback -> doGet closes the body itself before returning.
 	if got := assertRejected(t, replay); got != "auth_failed" {
 		t.Errorf("replayed callback error = %q, want auth_failed", got)
@@ -681,11 +606,6 @@ func TestGoogleCallback_EnrolledLink_NeedsFactorProof(t *testing.T) {
 	}
 }
 
-// TestGoogleCallback_LinkRechecksEpochUnderUserLock holds a factor enrollment's
-// epoch change and session replacement under the user lock while a link
-// callback arrives. The callback authenticated its session before the lock,
-// so only the locked recheck can see that the session was replaced; the link
-// must create no identity.
 func TestGoogleCallback_LinkRechecksEpochUnderUserLock(t *testing.T) {
 	p := oidctest.NewProvider(t)
 	handler, q := newTestService(t, withGoogleIssuer(p.URL))

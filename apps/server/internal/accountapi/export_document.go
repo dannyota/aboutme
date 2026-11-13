@@ -25,12 +25,8 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// storedPhotoReference is the photo entry of a projected document's personal
-// details, removed from the portable document and read separately.
 type storedPhotoReference struct {
-	// Key is the stored media object key; it never leaves the server.
-	Key string `json:"key"`
-	// Crop is the stored crop JSON, set to JSON null when absent.
+	Key  string          `json:"key"`
 	Crop json.RawMessage `json:"crop"`
 }
 
@@ -66,16 +62,10 @@ func (s *Service) exportDocument(row store.ListAccountExportResumesRow) (json.Ra
 		return nil, nil, fmt.Errorf("marshal portable personal details: %w", err)
 	}
 	document, err := json.Marshal(struct {
-		// Content is the projected content object.
-		Content json.RawMessage `json:"content"`
-		// Customization is the projected customization object.
-		Customization json.RawMessage `json:"customization"`
-		// PersonalDetails is the projected personal details without the photo
-		// member; the portable photo is exported beside the document.
+		Content         json.RawMessage `json:"content"`
+		Customization   json.RawMessage `json:"customization"`
 		PersonalDetails json.RawMessage `json:"personalDetails"`
-		// SchemaVersion is the current schema version the parts were projected
-		// to.
-		SchemaVersion int32 `json:"schemaVersion"`
+		SchemaVersion   int32           `json:"schemaVersion"`
 	}{
 		Content: content, Customization: customization, PersonalDetails: personalDetails,
 		SchemaVersion: s.projector.CurrentVersion(),

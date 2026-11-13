@@ -1,0 +1,70 @@
+{
+  "description": "Route parity for the project page shapes /{slug}/projects and /{slug}/projects/{project-slug}. owner is who answers the path: go (the Go public gateway), nuxt (the Nuxt catch-all, which answers 404 for these paths), or 404 (Caddy itself). feed is the CrowdSec request feed route class. Read by apps/server/internal/publicapi, apps/server/internal/routetable and deploy/caddy/production/build.",
+  "cases": [
+    { "path": "/ada-lovelace/projects", "owner": "go", "feed": "public" },
+    {
+      "path": "/ada-lovelace/projects/analytical-engine",
+      "owner": "go",
+      "feed": "public"
+    },
+    { "path": "/projects/projects", "owner": "go", "feed": "public" },
+    { "path": "/projects/projects/projects", "owner": "go", "feed": "public" },
+    { "path": "/aaaa/projects/ab", "owner": "go", "feed": "public" },
+    {
+      "path": "/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/projects/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "owner": "go",
+      "feed": "public"
+    },
+    {
+      "path": "/ada-lovelace/projects/analytical-engine/extra",
+      "owner": "nuxt",
+      "feed": "unknown"
+    },
+    { "path": "/ada-lovelace/projects/", "owner": "nuxt", "feed": "public" },
+    {
+      "path": "/ada-lovelace/projects/analytical-engine/",
+      "owner": "nuxt",
+      "feed": "public"
+    },
+    { "path": "/x/projects.md", "owner": "nuxt", "feed": "unknown" },
+    { "path": "/ada-lovelace/projects.md", "owner": "nuxt", "feed": "unknown" },
+    {
+      "path": "/ada-lovelace/projects/analytical-engine.md",
+      "owner": "nuxt",
+      "feed": "unknown"
+    },
+    {
+      "path": "/ada-lovelace/projects/Analytical-Engine",
+      "owner": "nuxt",
+      "feed": "public"
+    },
+    { "path": "/Ada-Lovelace/projects", "owner": "nuxt", "feed": "public" },
+    {
+      "path": "/aaaa/projects/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "owner": "nuxt",
+      "feed": "unknown"
+    },
+    { "path": "/aaaa/projects/a", "owner": "nuxt", "feed": "unknown" },
+    {
+      "path": "/ada-lovelace/projects/a--b",
+      "owner": "nuxt",
+      "feed": "unknown"
+    },
+    { "path": "/ada/projects", "owner": "nuxt", "feed": "unknown" },
+    {
+      "path": "/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/projects",
+      "owner": "nuxt",
+      "feed": "unknown"
+    },
+    { "path": "/ada-lovelace/project", "owner": "nuxt", "feed": "unknown" },
+    { "path": "/app/projects", "owner": "nuxt", "feed": "auth" },
+    { "path": "/guide/projects", "owner": "nuxt", "feed": "public" },
+    { "path": "/admin/projects", "owner": "404", "feed": "unknown" },
+    {
+      "path": "/admin/projects/analytical-engine",
+      "owner": "404",
+      "feed": "unknown"
+    },
+    { "path": "/people/projects", "owner": "404", "feed": "unknown" }
+  ]
+}

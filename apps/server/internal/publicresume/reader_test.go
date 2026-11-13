@@ -22,10 +22,12 @@ import (
 )
 
 type readerStore struct {
-	row   store.Resume
-	links json.RawMessage
-	err   error
-	calls int
+	row         store.Resume
+	links       json.RawMessage
+	projects    json.RawMessage
+	projectSlug string
+	err         error
+	calls       int
 }
 
 type photoBackend struct {
@@ -91,6 +93,22 @@ func (s *readerStore) GetPublicResumeBySlug(context.Context, string) (store.GetP
 		links = json.RawMessage(`[]`)
 	}
 	return store.GetPublicResumeBySlugRow{Resume: s.row, ProjectLinks: links}, s.err
+}
+func (s *readerStore) GetPublicResumeProjectList(context.Context, string) (store.GetPublicResumeProjectListRow, error) {
+	s.calls++
+	return store.GetPublicResumeProjectListRow{Resume: s.row, Projects: orEmptyColumn(s.projects)}, s.err
+}
+func (s *readerStore) GetPublicResumeProject(_ context.Context, arg store.GetPublicResumeProjectParams) (store.GetPublicResumeProjectRow, error) {
+	s.calls++
+	s.projectSlug = arg.ProjectSlug
+	return store.GetPublicResumeProjectRow{Resume: s.row, ProjectLinks: orEmptyColumn(s.links), Projects: orEmptyColumn(s.projects)}, s.err
+}
+
+func orEmptyColumn(column json.RawMessage) json.RawMessage {
+	if column == nil {
+		return json.RawMessage(`[]`)
+	}
+	return column
 }
 
 func TestReaderReadResumeClassifiesAbsentRowsAsNotFound(t *testing.T) {
@@ -436,7 +454,6 @@ func TestProjectRowAndPhotoKeyDigestKeepTheKeyPrivate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ProjectRow() error = %v", err)
 	}
-	// The hex SHA-256 of "private/object-key".
 	const want = "fdfb86ee7abe56a6e1e3425240b4d10ec74c29c288a47f2a7c20a79c8eff50ff"
 	if digest := snapshot.PhotoKeyDigest(); digest != want {
 		t.Fatalf("PhotoKeyDigest() = %q, want %q", digest, want)

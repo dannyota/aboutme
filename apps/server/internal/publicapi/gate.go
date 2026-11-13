@@ -1,11 +1,5 @@
 package publicapi
 
-// The sign-in-to-view gate: the pass check every gated route shares, and the
-// gate page itself, rendered by Nuxt from a closed envelope and validated by
-// Go's own closed rule set, exactly as the resume page is
-// (docs/design/viewer-analytics/sign-in-to-view.md "Gate", "Gated routes";
-// AC-VIEW-002, AC-VIEW-003, AC-VIEW-007).
-
 import (
 	"context"
 	"net/http"
@@ -24,10 +18,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/viewpass"
 )
 
-// hasValidPass reports whether request carries a __Host-view-pass cookie
-// with a pass for resumeID at exactly passEpoch, not expired as of clock()
-// (design "Pass cookie", "Gated routes"; AC-VIEW-003, AC-VIEW-007). A nil
-// clock uses time.Now.
 func hasValidPass(request *http.Request, key []byte, resumeID uuid.UUID, passEpoch int32, clock func() time.Time) bool {
 	cookie, err := request.Cookie(viewpass.CookieName)
 	if err != nil {
@@ -40,10 +30,6 @@ func hasValidPass(request *http.Request, key []byte, resumeID uuid.UUID, passEpo
 	return viewpass.Valid(cookie.Value, key, resumeID, passEpoch, now())
 }
 
-// gateMessage reads only the two closed ?signin= values the design names
-// (canceled and failed); every other query, including any other signin
-// value, becomes "none". The gate is never cached, so this is safe to read
-// per request (design "Gate").
 func gateMessage(request *http.Request) string {
 	switch request.URL.Query().Get("signin") {
 	case "cancelled": //nolint:misspell // Exact wire value uses double-L "cancelled".
@@ -55,8 +41,6 @@ func gateMessage(request *http.Request) string {
 	}
 }
 
-// gateLng is "vi" when the resume language is Vietnamese, else "en" (docs/design/viewer-analytics/sign-in-to-view.md
-// "Gate").
 func gateLng(resumeLng string) string {
 	language, _, _ := strings.Cut(resumeLng, "-")
 	if strings.EqualFold(language, "vi") {
@@ -65,13 +49,7 @@ func gateLng(resumeLng string) string {
 	return "en"
 }
 
-// serveGate renders and serves the sign-in-to-view gate for a resume with no
-// valid pass: status 200, Cache-Control: no-store, X-Robots-Tag: noindex,
-// noarchive, and the resume page's CSP, never cached (design "Gate";
-// AC-VIEW-002). It writes the gate while lease stays live, so a revocation
-// ends a write blocked on a slow reader; when the cancel hook cannot be
-// registered it fails closed with the HTML 503 and writes no gate header.
-func serveGate(ctx context.Context, w http.ResponseWriter, request *http.Request, dependencies HTMLDependencies, snapshot publicresume.Snapshot, lease cancelHooks) {
+func serveGate(ctx context.Context, w http.ResponseWriter, request *http.Request, dependencies HTMLDependencies, snapshot publicresume.Snapshot, projectPage string, lease cancelHooks) {
 	page := expectedPublicPage(snapshot.Public, snapshot.PublicTitle, snapshot.FaviconEmoji)
 	if dependencies.Cards != nil {
 		version, err := dependencies.Cards.Version(snapshot)
@@ -92,6 +70,7 @@ func serveGate(ctx context.Context, w http.ResponseWriter, request *http.Request
 		Preview:         page.Preview,
 		Providers:       dependencies.GateProviders,
 		Message:         gateMessage(request),
+		Page:            projectPage,
 	}
 	result, err := dependencies.Renderer.RenderGate(ctx, envelope)
 	if err != nil {
@@ -110,7 +89,6 @@ func serveGate(ctx context.Context, w http.ResponseWriter, request *http.Request
 	}
 }
 
-// writeGate writes the validated gate page with its fixed headers.
 func writeGate(w http.ResponseWriter, request *http.Request, page []byte) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
@@ -125,23 +103,19 @@ func writeGate(w http.ResponseWriter, request *http.Request, page []byte) {
 	}
 }
 
-// gateExpectedAnchors maps every href the gate page may link to the one class
-// its anchor must carry, from the envelope's own providers plus the home page
-// (design "Gate"). The gate styles those classes, so no other class or
-// attribute is allowed.
 func gateExpectedAnchors(envelope directrender.GateRenderRequest, origin publicresume.PublicOrigin) map[string]string {
 	anchors := make(map[string]string, len(envelope.Providers)+1)
+	suffix := ""
+	if envelope.Page != "" {
+		suffix = "&page=" + envelope.Page
+	}
 	for _, provider := range envelope.Providers {
-		anchors["/api/v1/auth/"+provider+"/start?purpose=view&slug="+envelope.Slug] = "gate-provider"
+		anchors["/api/v1/auth/"+provider+"/start?purpose=view&slug="+envelope.Slug+suffix] = "gate-provider"
 	}
 	anchors[origin.Resolve("/")] = "gate-home"
 	return anchors
 }
 
-// gateImageMetaKeys is every image meta element of the preview head. A gate
-// with no card image URL carries none of them: the fallback share image is
-// the resume itself, which the gate must not advertise (design "Gate";
-// AC-VIEW-002).
 var gateImageMetaKeys = []metaKey{
 	{"property", "og:image"},
 	{"property", "og:image:type"},
@@ -152,9 +126,6 @@ var gateImageMetaKeys = []metaKey{
 	{"name", "twitter:image:alt"},
 }
 
-// newGateHeadMeta is newHeadMeta for the gate head. With no card image URL,
-// every image element is unexpected, so a present one is rejected, and
-// twitter:card may be absent.
 func newGateHeadMeta(resume publicresume.PublicResume, preview previewmeta.Meta, origin publicresume.PublicOrigin) *headMeta {
 	meta := newHeadMeta(resume, preview, origin)
 	if preview.ImageURL != "" {
@@ -167,9 +138,6 @@ func newGateHeadMeta(resume publicresume.PublicResume, preview previewmeta.Meta,
 	return meta
 }
 
-// gateHTMLRejection returns "" for gate HTML that passes every closed rule,
-// or the first rule's name it breaks. It never carries resume content, so
-// the name is safe to log (design "Gate"; AC-VIEW-002).
 func gateHTMLRejection(source []byte, envelope directrender.GateRenderRequest, origin publicresume.PublicOrigin) string {
 	if len(source) == 0 || len(source) > 2_097_152 {
 		return "size"

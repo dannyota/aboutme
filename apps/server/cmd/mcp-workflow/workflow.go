@@ -15,11 +15,9 @@ import (
 var (
 	errWorkflowBlocked  = errors.New("workflow_blocked")
 	errWorkflowContract = errors.New("workflow_contract_invalid")
-	// The launcher contract failures stay distinguishable for the one-word
-	// failure report while remaining blocked workflow states.
-	errArguments   = fmt.Errorf("%w: arguments", errWorkflowBlocked)
-	errControlRoot = fmt.Errorf("%w: control root", errWorkflowBlocked)
-	errRunRoot     = fmt.Errorf("%w: run root", errWorkflowBlocked)
+	errArguments        = fmt.Errorf("%w: arguments", errWorkflowBlocked)
+	errControlRoot      = fmt.Errorf("%w: control root", errWorkflowBlocked)
+	errRunRoot          = fmt.Errorf("%w: run root", errWorkflowBlocked)
 )
 
 const (
@@ -43,9 +41,6 @@ type workflowConfig struct {
 
 func (c workflowConfig) local() bool { return c.Mode == modeLocal }
 
-// parseRunnerArgs accepts only the launcher contract: the closed mode, the
-// run root, and its browser handoff directory. The control root is the run
-// root's parent. It accepts no owner data, identifiers, tokens, or URLs.
 func parseRunnerArgs(args []string) (workflowConfig, error) {
 	start, err := os.Getwd()
 	if err != nil {
@@ -54,11 +49,6 @@ func parseRunnerArgs(args []string) (workflowConfig, error) {
 	return parseRunnerArgsFrom(args, start)
 }
 
-// parseRunnerArgsFrom resolves the production control root from start. See
-// docs/design/mcp-owner-workflow.md#inputs-and-private-runtime: production
-// state lives only in the main checkout's .dev/mcp-workflow, found through the
-// Git common directory, so every worktree shares one control root. Local
-// synthetic proof must use a different control root.
 func parseRunnerArgsFrom(args []string, start string) (workflowConfig, error) {
 	if len(args) != 3 || (args[0] != modeLocal && args[0] != modeProduction) {
 		return workflowConfig{}, errArguments
@@ -101,9 +91,6 @@ const (
 	maxRepositoryDepth = 64
 )
 
-// mainControlRoot finds the repository containing start and returns the main
-// checkout's .dev/mcp-workflow. A linked worktree's .git file names its
-// private Git directory, whose commondir names the shared one.
 func mainControlRoot(start string) (string, error) {
 	directory := filepath.Clean(start)
 	if !filepath.IsAbs(directory) {
@@ -180,16 +167,12 @@ func readSmallFile(path string) (data []byte, err error) {
 	return data, nil
 }
 
-// sameDirectoryPath compares two paths after resolving symbolic links in
-// their parents. The final element itself must not be a link.
 func sameDirectoryPath(left, right string) bool {
 	leftParent, leftErr := filepath.EvalSymlinks(filepath.Dir(left))
 	rightParent, rightErr := filepath.EvalSymlinks(filepath.Dir(right))
 	return leftErr == nil && rightErr == nil && filepath.Base(left) == filepath.Base(right) && leftParent == rightParent
 }
 
-// workflowResult distinguishes a completed run from the production
-// one-shot control that stops before any network access.
 type workflowResult int
 
 const (
@@ -198,10 +181,6 @@ const (
 	resultRevocationRecovered
 )
 
-// runWorkflow holds the control lock for the whole run and checks durable
-// state before any OAuth, network, or resume access. A revocation journal
-// permits only revocation recovery. A sentinel without a journal stops a
-// production run successfully and fails a local run.
 func runWorkflow(ctx context.Context, config workflowConfig, deps workflowDeps) (result workflowResult, err error) {
 	if !config.Control.validRoot() || !config.Run.validRoot() || !validPrivateDirectory(config.BrowserRoot) {
 		return 0, errRunRoot

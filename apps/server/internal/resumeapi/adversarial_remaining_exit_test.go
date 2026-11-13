@@ -38,9 +38,8 @@ type remainingOpenAPIMutation struct {
 }
 
 type remainingFixture struct {
-	resume   resume.Resume
-	photoKey string
-	// unlinkedProject is an owned project the fixture resume does not link.
+	resume          resume.Resume
+	photoKey        string
 	unlinkedProject uuid.UUID
 }
 
@@ -550,8 +549,6 @@ func remainingOpenAPIMutations(t *testing.T, resumeID uuid.UUID) []remainingOpen
 			if candidate.operation == nil {
 				continue
 			}
-			// This catalog covers every resume mutation except publish, which
-			// has its own transition policy and tests.
 			if candidate.operation.OperationID == "publishResume" {
 				continue
 			}

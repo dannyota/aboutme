@@ -15,10 +15,8 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// InitialResult contains no campaign state or recipient data.
 type InitialResult struct{}
 
-// JSON returns the closed empty-state proof after reconciliation succeeds.
 func (InitialResult) JSON() ([]byte, error) {
 	output := struct {
 		SchemaVersion  int    `json:"schema_version"`
@@ -36,7 +34,6 @@ func (InitialResult) JSON() ([]byte, error) {
 	return append(data, '\n'), nil
 }
 
-// ReconcileInitial proves no notice history exists without changing business rows.
 func (s *Service) ReconcileInitial(ctx context.Context) (InitialResult, error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {

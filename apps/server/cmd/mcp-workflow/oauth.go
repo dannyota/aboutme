@@ -17,9 +17,6 @@ import (
 
 var errReauthorizationDisabled = errors.New("reauthorization_disabled")
 
-// Authorization-request rejections name the exact contract field that did not
-// match, so a failed run reports the field without printing its value. Each
-// wraps errInvalidCallback, which remains the closed OAuth failure.
 var (
 	errAuthorizationShape     = fmt.Errorf("%w: authorization request shape", errInvalidCallback)
 	errAuthorizationRedirect  = fmt.Errorf("%w: authorization redirect", errInvalidCallback)
@@ -32,9 +29,7 @@ type oauthGate struct {
 	delegate auth.OAuthHandler
 	mu       sync.Mutex
 	used     bool
-	// first keeps the first authorization failure, so a refused second attempt
-	// still reports the cause that ended the run.
-	first error
+	first    error
 }
 
 func (g *oauthGate) TokenSource(ctx context.Context) (oauth2.TokenSource, error) {
@@ -98,13 +93,7 @@ func newCallbackFetcher(redirectURI, issuer string, browser browserHandoff, list
 	}
 }
 
-// scopeReadWrite and scopeWriteRead are the only two byte sequences a scope
-// parameter naming exactly resumes:read and resumes:write once each can take.
-// RFC 6749 §3.3 gives scope order no meaning, and the pinned SDK's step-up
-// union (internal/authutil.UnionScopes) collects the requested set through a
-// map, so it hands back either order at random from one run to the next. The
-// server's own authorize endpoint accepts only the canonical order, so the
-// browser is always sent that order regardless of which one the SDK chose.
+// RFC 6749 section 3.3 gives scope order no meaning, and the MCP Go SDK's authutil.UnionScopes returns either order at random.
 const (
 	scopeReadWrite = "resumes:read resumes:write"
 	scopeWriteRead = "resumes:write resumes:read"
@@ -138,10 +127,6 @@ func validateAuthorizationURL(args *auth.AuthorizationArgs, redirectURI, issuer 
 	if scope != scopeReadWrite && scope != scopeWriteRead {
 		return "", "", errAuthorizationScope
 	}
-	// The pinned SDK checks the challenge's protected-resource metadata
-	// against the MCP endpoint URL and sends that metadata resource, so it
-	// must be exactly the MCP endpoint (rule 1 of
-	// docs/design/mcp-client-compatibility.md).
 	resource := issuer + mcpEndpointPath
 	if values.Get("resource") != resource || !canonicalResourceParameter(authorizationURL.RawQuery, resource) {
 		return "", "", errAuthorizationResource

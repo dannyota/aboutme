@@ -8,10 +8,8 @@ import (
 	"danny.vn/aboutme/apps/server/internal/publicresume"
 )
 
-// RobotsFormatVersion identifies the robots.txt byte format.
 const RobotsFormatVersion = 2
 
-// sitePages are the static site pages every sitemap and llms.txt lists.
 var sitePages = []struct{ path, title string }{
 	{"/", "Home"},
 	{"/privacy", "Privacy policy"},
@@ -20,8 +18,6 @@ var sitePages = []struct{ path, title string }{
 	{"/guide/mcp", "Connect an AI assistant with MCP"},
 }
 
-// templateIDs are the template presets, each with a gallery page at
-// /templates/{id}. A test keeps the list equal to packages/schema/templates.
 var templateIDs = []string{
 	"academic-dense", "ats-plain", "classic-serif", "consulting-formal", "creative-accent",
 	"designer-tag", "editorial-wide", "elegant-serif-two", "engineer-compact", "executive-band",
@@ -29,17 +25,10 @@ var templateIDs = []string{
 	"modern-sidebar", "mono-print", "nordic-muted", "one-page-tight", "startup-bold",
 }
 
-// repositoryURL is the project's public source code.
 const repositoryURL = "https://github.com/dannyota/aboutme"
 
-// crawlerHiddenPages are the sign-in and account pages crawlers skip. Each is
-// matched exactly, with or without a query, so a resume slug that merely
-// starts with the same letters stays crawlable.
 var crawlerHiddenPages = []string{"authorize", "forgot-password", "login", "register", "reset-password", "verify-email"}
 
-// Sitemap encodes the static site pages, which include the template gallery,
-// then each template page, then the sorted discoverable slugs, as XML. Resumes
-// with discovery off never appear.
 func Sitemap(origin publicresume.PublicOrigin, slugs []string) ([]byte, error) {
 	if origin.String() == "" {
 		return nil, errors.New("public origin is required")
@@ -67,11 +56,6 @@ func Sitemap(origin publicresume.PublicOrigin, slugs []string) ([]byte, error) {
 	return out.Bytes(), nil
 }
 
-// Robots encodes the canonical robots.txt response. Crawlers may read every
-// page except the API, the signed-in app, and the sign-in pages. Under /api
-// only the share image and the preview cards stay open, because social cards
-// fetch them; PDFs and JSON of resumes with discovery off must not be
-// crawled.
 func Robots(origin publicresume.PublicOrigin) []byte {
 	var out bytes.Buffer
 	out.WriteString("User-agent: *\nAllow: /\nAllow: /api/v1/public/resumes/*/og.png$\nAllow: /api/v1/public/resumes/*/og/\nDisallow: /api/\nDisallow: /app/\n")
@@ -82,8 +66,6 @@ func Robots(origin publicresume.PublicOrigin) []byte {
 	return out.Bytes()
 }
 
-// LLMS encodes llms.txt (https://llmstxt.org): a title, a summary, the site
-// pages and source code, then each discoverable resume's markdown.
 func LLMS(origin publicresume.PublicOrigin, slugs []string) ([]byte, error) {
 	if origin.String() == "" {
 		return nil, errors.New("public origin is required")

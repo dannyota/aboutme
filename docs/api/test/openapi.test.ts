@@ -96,6 +96,37 @@ describe("openapi contract", () => {
     expect(authViewSlug.required).toBe(false);
     expect(authViewSlug.schema.type).toBe("string");
 
+    const authViewPage = doc.components.parameters.AuthViewPage;
+    expect(authViewPage.name).toBe("page");
+    expect(authViewPage.in).toBe("query");
+    expect(authViewPage.required).toBe(false);
+    expect(authViewPage.schema).toEqual({
+      type: "string",
+      maxLength: 49,
+      pattern: "^projects(/(?=[a-z0-9-]{2,40}$)[a-z0-9]+(-[a-z0-9]+)*)?$",
+    });
+    const viewPagePattern = new RegExp(authViewPage.schema.pattern);
+    for (const page of [
+      "projects",
+      "projects/ab",
+      `projects/${"a".repeat(40)}`,
+    ]) {
+      expect(viewPagePattern.test(page), page).toBe(true);
+    }
+    for (const page of [
+      "",
+      "/projects",
+      "projects/",
+      "projects/a",
+      `projects/${"a".repeat(41)}`,
+      "projects/a--b",
+      "projects/Note-G",
+      "projects/note-g/extra",
+      "projects%2Fnote-g",
+    ]) {
+      expect(viewPagePattern.test(page), page).toBe(false);
+    }
+
     const authReturnPath = doc.components.parameters.AuthReturnPath;
     expect(authReturnPath.in).toBe("query");
     expect(authReturnPath.required).toBe(false);
@@ -124,6 +155,7 @@ describe("openapi contract", () => {
         { $ref: "#/components/parameters/AuthPurpose" },
         { $ref: "#/components/parameters/AuthReturnPath" },
         { $ref: "#/components/parameters/AuthViewSlug" },
+        { $ref: "#/components/parameters/AuthViewPage" },
       ]);
       expect(
         start.get.responses["405"],

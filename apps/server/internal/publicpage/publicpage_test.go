@@ -24,8 +24,6 @@ type publicPageCorpus struct {
 	} `json:"faviconHrefs"`
 }
 
-// The corpus is shared with apps/web/test/public-page, so the editor's
-// pre-validation and the server agree on every hostile case.
 func loadCorpus(t *testing.T) publicPageCorpus {
 	t.Helper()
 	raw, err := os.ReadFile(filepath.Join("testdata", "public-page-corpus.json"))

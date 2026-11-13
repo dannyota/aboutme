@@ -1,10 +1,5 @@
 package main
 
-// TOTP key-ring command helpers: the periodic key-health ticker and the
-// one-shot `server totp-key-reencrypt` command. See
-// docs/design/totp-key-management.md and
-// docs/design/totp-second-factor-contract.md.
-
 import (
 	"context"
 	"crypto/rand"
@@ -28,19 +23,9 @@ const (
 	totpReencryptCleanupTimeout = 5 * time.Second
 	totpReencryptPingTimeout    = 10 * time.Second
 
-	// totpHealthCheckInterval is the periodic key-health tick
-	// (docs/design/totp-key-management.md "Key failures": "At startup and
-	// every five minutes, a bounded query reads at most three distinct key
-	// IDs...").
 	totpHealthCheckInterval = 5 * time.Minute
 )
 
-// runTOTPHealthTicker calls check every totpHealthCheckInterval until ctx is
-// done. A query failure is logged and never stops the ticker or crashes the
-// process: only a stored key ID outside the ring or a decrypt failure is a
-// totp_unavailable reason, and those are emitted by checker.Check itself
-// through the shared signal, not through this loop's return value
-// (docs/design/totp-key-management.md "Key failures").
 func runTOTPHealthTicker(ctx context.Context, logger *slog.Logger, checker *secondfactor.TOTPHealthChecker) {
 	ticker := time.NewTicker(totpHealthCheckInterval)
 	defer ticker.Stop()
@@ -56,9 +41,6 @@ func runTOTPHealthTicker(ctx context.Context, logger *slog.Logger, checker *seco
 	}
 }
 
-// runTOTPKeyReencrypt is the `server totp-key-reencrypt` entry point: the
-// bounded one-shot re-encryption command
-// (docs/design/totp-key-management.md "Rotation"). It takes no arguments.
 func runTOTPKeyReencrypt(args []string) error {
 	if len(args) != 0 {
 		return errors.New("usage: server totp-key-reencrypt")
@@ -70,12 +52,6 @@ func runTOTPKeyReencrypt(args []string) error {
 	return executeTOTPKeyReencrypt(ctx, os.Getenv, os.Stdout, os.Stderr)
 }
 
-// executeTOTPKeyReencrypt runs the job and writes one fixed JSON report to
-// output, the same shape executePrivacyCommand uses for the other bounded
-// server commands. The report carries only the job name, success, and
-// runTOTPReencryptJob's result: counts and internal row IDs, never a key,
-// secret, nonce, ciphertext, email, or account ID
-// (docs/design/totp-key-management.md "Rotation").
 func executeTOTPKeyReencrypt(ctx context.Context, getenv func(string) string, output, diagnostics io.Writer) error {
 	logger := slog.New(slog.NewJSONHandler(diagnostics, nil))
 	result, runErr := runTOTPReencryptJob(ctx, getenv, logger)
@@ -93,10 +69,6 @@ func executeTOTPKeyReencrypt(ctx context.Context, getenv func(string) string, ou
 	return nil
 }
 
-// runTOTPReencryptJob loads the reduced TOTP re-encryption configuration
-// (config.LoadTOTPReencryptJob: DATABASE_URL and the key ring only, never
-// PUBLIC_ORIGIN, auth-email, OAuth, or password-rate values), opens a pool,
-// and runs one bounded TOTPRotationRunner pass.
 func runTOTPReencryptJob(ctx context.Context, getenv func(string) string, logger *slog.Logger) (secondfactor.TOTPReencryptResult, error) {
 	cfg, err := config.LoadTOTPReencryptJob(getenv)
 	if err != nil {

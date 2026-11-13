@@ -9,9 +9,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/config"
 )
 
-// captureAuthEmail returns the overrides that select valid dev capture mode,
-// including clearing every SES-only field so the shared env defaults never
-// leak into a capture test.
 func captureAuthEmail() map[string]string {
 	return map[string]string{
 		"AUTH_EMAIL_MODE":           "capture",
@@ -24,8 +21,6 @@ func captureAuthEmail() map[string]string {
 	}
 }
 
-// sesAuthEmail returns the overrides that select valid SES mode, including
-// clearing every capture-only field.
 func sesAuthEmail() map[string]string {
 	return map[string]string{
 		"AUTH_EMAIL_MODE":           "ses",
@@ -38,8 +33,6 @@ func sesAuthEmail() map[string]string {
 	}
 }
 
-// smtpAuthEmail returns the overrides that select valid SMTP mode, including
-// clearing every capture-only and SES-only field.
 func smtpAuthEmail() map[string]string {
 	return map[string]string{
 		"AUTH_EMAIL_MODE":           "smtp",
@@ -57,15 +50,12 @@ func smtpAuthEmail() map[string]string {
 	}
 }
 
-// applySMTP mutates vars into a valid SMTP mode.
 func applySMTP(v map[string]string) {
 	for k, val := range smtpAuthEmail() {
 		v[k] = val
 	}
 }
 
-// applySES mutates vars (already carrying the capture-mode base) into a valid
-// SES mode, so SES-specific rejection cases start from a valid SES shape.
 func applySES(v map[string]string) {
 	for k, val := range sesAuthEmail() {
 		v[k] = val
@@ -138,7 +128,6 @@ func TestLoad_AuthEmailSESFromName(t *testing.T) {
 func TestLoad_AuthEmailSMTPMode(t *testing.T) {
 	t.Parallel()
 
-	// The TLS mode is explicit, so any port pairs with either mode.
 	for _, tc := range []struct{ port, tls string }{{"2465", "implicit"}, {"2525", "starttls"}, {"2525", "implicit"}, {"2465", "starttls"}} {
 		vars := validDevEnv()
 		applySMTP(vars)
@@ -384,7 +373,6 @@ func TestLoad_AuthEmailCaptureRejectedOutsideDev(t *testing.T) {
 		for k, v := range sesAuthEmail() {
 			vars[k] = v
 		}
-		// Switch to capture mode.
 		vars["AUTH_EMAIL_MODE"] = "capture"
 		vars["AUTH_EMAIL_CAPTURE_URL"] = "http://127.0.0.1:20091"
 		vars["AUTH_EMAIL_CAPTURE_BEARER"] = testBase64URL32

@@ -1,10 +1,3 @@
-// Command mcp-uat-fixture seeds and cleans the one reserved local identity
-// used by the native HTTPS MCP proof.
-//
-// Usage:
-//
-//	mcp-uat-fixture seed    --database-url <dsn> --client-name <run-name>
-//	mcp-uat-fixture cleanup --database-url <dsn> --client-name <run-name>
 package main
 
 import (

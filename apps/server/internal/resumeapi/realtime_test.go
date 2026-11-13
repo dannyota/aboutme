@@ -143,8 +143,6 @@ func newRealtimePublicServer(t *testing.T, h *resumeAPITestHarness) *httptest.Se
 	if err != nil {
 		t.Fatal(err)
 	}
-	// This test isolates synchronous revocation from notification delivery.
-	// The real DB listener tests prove delivery separately.
 	hub.SetAvailable(true)
 	streams, err := realtimeapi.New(realtimeapi.Dependencies{Hub: hub, Store: h.queries, Sessions: auth.NewSessionManager(h.queries), Coordinator: h.service.coordinator})
 	if err != nil {

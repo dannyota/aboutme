@@ -1,4 +1,3 @@
-// Package project validates and stores private account library projects.
 package project
 
 import (
@@ -14,60 +13,40 @@ import (
 )
 
 const (
-	// MaxProjects is the number of library projects one account may store.
-	MaxProjects = 30
-	// MaxStoredBytes bounds the PostgreSQL JSON text of one document.
-	MaxStoredBytes = 96 * 1024
-	// SlugHoldDays is the account-local reservation after release, in days.
-	SlugHoldDays = 180
-	// MaxLinkCharacters bounds a repository or demo link in Unicode code
-	// points, matching the resume entry link it prefills.
+	MaxProjects       = 30
+	MaxStoredBytes    = 96 * 1024
+	SlugHoldDays      = 180
 	MaxLinkCharacters = 2048
 )
 
 var (
-	// ErrInvalid reports invalid project content without disclosing text.
 	ErrInvalid  = errors.New("project document is invalid")
 	languageKey = regexp.MustCompile(`^[a-z]{2,8}$`)
 )
 
-// Document is the complete replaceable project content.
 type Document struct {
-	// Dates is the optional resume-entry date range.
-	Dates *schema.DateRange `json:"dates,omitempty"`
-	// RepositoryURL is the optional HTTPS repository address.
-	RepositoryURL string `json:"repositoryUrl,omitempty"`
-	// DemoURL is the optional HTTPS demonstration address.
-	DemoURL string `json:"demoUrl,omitempty"`
-	// Technologies is the ordered list of plain technology names.
-	Technologies []string `json:"technologies,omitempty"`
-	// DefaultLanguage names one required text translation.
-	DefaultLanguage string `json:"defaultLanguage"`
-	// Text maps lowercase primary language subtags to translations.
-	Text map[string]Text `json:"text"`
+	Dates           *schema.DateRange `json:"dates,omitempty"`
+	RepositoryURL   string            `json:"repositoryUrl,omitempty"`
+	DemoURL         string            `json:"demoUrl,omitempty"`
+	Technologies    []string          `json:"technologies,omitempty"`
+	DefaultLanguage string            `json:"defaultLanguage"`
+	Text            map[string]Text   `json:"text"`
 }
 
-// Text holds one language's project content.
 type Text struct {
-	// Name is required in the default language, in at most 120 characters.
-	Name string `json:"name,omitempty"`
-	// Role describes the owner's role in at most 120 characters.
-	Role string `json:"role,omitempty"`
-	// Summary is the print-sized summary in at most 300 characters.
-	Summary string `json:"summary,omitempty"`
-	// Outcome describes results in at most 600 characters.
-	Outcome string `json:"outcome,omitempty"`
-	// Description is sanitized rich text in at most 16 KiB of UTF-8.
+	Name        string `json:"name,omitempty"`
+	Role        string `json:"role,omitempty"`
+	Summary     string `json:"summary,omitempty"`
+	Outcome     string `json:"outcome,omitempty"`
 	Description string `json:"description,omitempty"`
 }
 
-// Prepare validates complete content and returns a sanitized copy.
 func Prepare(d Document) (Document, error) {
 	if len(d.Text) < 1 || len(d.Text) > 4 || len(d.Technologies) > 20 || !languageKey.MatchString(d.DefaultLanguage) {
 		return Document{}, ErrInvalid
 	}
 	text, ok := d.Text[d.DefaultLanguage]
-	if !ok || strings.TrimSpace(text.Name) == "" {
+	if !ok || Blank(text.Name) {
 		return Document{}, ErrInvalid
 	}
 	repository, repositoryOK := NormalizeLink(d.RepositoryURL)
@@ -101,10 +80,6 @@ func validString(s string, limit int) bool {
 	return utf8.ValidString(s) && !strings.ContainsRune(s, 0) && utf8.RuneCountInString(s) <= limit
 }
 
-// NormalizeLink returns s with its scheme lowercase, as a resume entry link
-// requires, and reports whether the result is an absolute HTTPS link of at
-// most MaxLinkCharacters. An empty link is valid. Every byte after the scheme
-// is kept: lowercasing an internationalised host can change where it points.
 func NormalizeLink(s string) (string, bool) {
 	if s == "" {
 		return "", true

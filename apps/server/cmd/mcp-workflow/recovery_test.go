@@ -83,8 +83,6 @@ func TestCompletionSentinelMustMatchJournal(t *testing.T) {
 	}
 }
 
-// scriptedRevocation returns fixed outcomes and records the durable state
-// seen at each call. It never loops and has a fixed call budget.
 type scriptedRevocation struct {
 	control       privateArtifacts
 	probes        []probeOutcome

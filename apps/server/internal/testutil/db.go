@@ -10,22 +10,12 @@ import (
 	"testing"
 	"time"
 
-	// Registers the pgx driver under database/sql's "pgx" name, so
-	// NewMigratedTestDatabase's admin connection resolves. testutil is
-	// imported only by _test.go files (never production code, see the
-	// package doc comment in clock.go), so this registration only ever runs
-	// inside a test binary.
+	// Registers the pgx driver under database/sql's "pgx" name.
 	_ "github.com/jackc/pgx/v5/stdlib"
 
 	"danny.vn/aboutme/apps/server/migrations"
 )
 
-// RequireTestDatabaseURL returns TEST_DATABASE_URL, skipping the calling
-// test (not failing it) when unset -- UNLESS REQUIRE_TEST_DB=1 is also set
-// in the environment, in which case a missing TEST_DATABASE_URL is a hard
-// t.Fatal instead. `make server-test-db` sets REQUIRE_TEST_DB=1 precisely so
-// a gate run can never pass vacuously with every DB-backed test silently
-// skipped.
 func RequireTestDatabaseURL(t *testing.T) string {
 	t.Helper()
 	dsn := os.Getenv("TEST_DATABASE_URL")
@@ -38,10 +28,6 @@ func RequireTestDatabaseURL(t *testing.T) string {
 	return dsn
 }
 
-// MigrateTestDatabase prepares each exact DSN once per test binary. Concurrent
-// and later callers receive the same result, including a setup failure.
-// Separate test binaries retain Apply's database lock and protected recheck.
-// Each DB-backed test calls this before using tables it did not create.
 func MigrateTestDatabase(t *testing.T, dsn string) {
 	t.Helper()
 	if err := migratedTestDatabaseSetup.prepare(dsn); err != nil {
@@ -49,12 +35,6 @@ func MigrateTestDatabase(t *testing.T, dsn string) {
 	}
 }
 
-// RequireMigratedTestDatabaseURL is the common case for a DB-backed
-// package's test setup: it combines RequireTestDatabaseURL (skip, or
-// fail-closed under REQUIRE_TEST_DB=1, when no live database is
-// configured) with MigrateTestDatabase (bring that database's schema to
-// head), so callers get back a DSN they can open a pool or transaction
-// against and immediately query real tables with.
 func RequireMigratedTestDatabaseURL(t *testing.T) string {
 	t.Helper()
 	dsn := RequireTestDatabaseURL(t)
@@ -64,16 +44,6 @@ func RequireMigratedTestDatabaseURL(t *testing.T) string {
 
 var newMigratedTestDatabaseCounter atomic.Uint64
 
-// NewMigratedTestDatabase creates a fresh, uniquely named database on the
-// server pointed to by TEST_DATABASE_URL, brings it to head (fixed-role and
-// grant setup, then every embedded migration -- see
-// prepareMigratedTestDatabase), and returns its DSN and an open pool. The
-// database is dropped, and the pool closed, in t.Cleanup.
-//
-// Every call migrates a brand-new database from scratch (ADR 0005): there
-// is no shared head-state template to clone. Callers that only need a
-// single shared, already-migrated database should prefer
-// RequireMigratedTestDatabaseURL instead.
 func NewMigratedTestDatabase(t *testing.T) (string, *sql.DB) {
 	t.Helper()
 	base := RequireTestDatabaseURL(t)
@@ -100,10 +70,7 @@ func NewMigratedTestDatabase(t *testing.T) (string, *sql.DB) {
 	t.Cleanup(func() {
 		cleanup, stop := context.WithTimeout(context.Background(), 10*time.Second)
 		defer stop()
-		// WITH (FORCE) (Postgres 13+) disconnects any lingering sessions --
-		// e.g. this test's own pool that hasn't finished closing yet --
-		// instead of DROP DATABASE failing with "database is being accessed
-		// by other users".
+		// DROP DATABASE ... WITH (FORCE) (PostgreSQL 13+) ends lingering sessions instead of failing.
 		if _, dropErr := admin.ExecContext(cleanup, `DROP DATABASE IF EXISTS `+name+` WITH (FORCE)`); dropErr != nil {
 			t.Errorf("drop database %s: %v", name, dropErr)
 		}

@@ -1,13 +1,5 @@
 package auth
 
-// Every handler assumes sessionChain has authenticated the request and checked
-// CSRF where required. Targeted and global revocation recheck the caller's
-// session and epoch under the user lock before any write; ending sessions
-// only reduces access, so neither route needs a recent proof. Targeted
-// revocation also revokes exact rotation partners. See
-// docs/design/security.md, docs/design/second-factor-authentication.md, and
-// docs/adr/0015-accounts-passwords-and-sessions.md.
-
 import (
 	"context"
 	"errors"
@@ -23,12 +15,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// handleRevokeAllSessions implements DELETE /api/v1/sessions:
-// logout-everywhere. One transaction takes the user lock, locks and rechecks
-// the caller's session, then revokes every session. Session issuers, rotation
-// successors, and epoch-change replacements take the same user lock, so none
-// can commit a session that this revocation misses. See
-// docs/design/second-factor-authentication.md.
 func (s *Service) handleRevokeAllSessions(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	sess, ok := SessionFromContext(ctx)
@@ -64,17 +50,10 @@ func (s *Service) handleRevokeAllSessions(w http.ResponseWriter, r *http.Request
 	writeNoContent(w)
 }
 
-// notFoundCode collapses malformed, absent, and foreign session IDs.
 const notFoundCode = "not_found"
 
-// errSessionTargetNotFound collapses absent, foreign, and dead revoke targets.
 var errSessionTargetNotFound = errors.New("auth: session target not found")
 
-// handleRevokeSession requires ownership before revoking the target and its
-// rotation partners. One transaction takes the user lock, locks and rechecks
-// the caller's session, revokes the target, and sweeps its exact rotation
-// partners, so a concurrent rotation successor or epoch-change replacement
-// cannot survive. It clears client state whenever the current session dies.
 func (s *Service) handleRevokeSession(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	sess, ok := SessionFromContext(ctx)
@@ -87,7 +66,6 @@ func (s *Service) handleRevokeSession(w http.ResponseWriter, r *http.Request) {
 
 	targetID, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {
-		// Malformed IDs use the same no-oracle 404 as absent or foreign IDs.
 		api.WriteError(w, http.StatusNotFound, notFoundCode, "no such session")
 		return
 	}
@@ -115,7 +93,6 @@ func (s *Service) handleRevokeSession(w http.ResponseWriter, r *http.Request) {
 		if n == 0 {
 			return errSessionTargetNotFound
 		}
-		// RevokeSessionForUser returns only a count, so read the lineage.
 		target, readErr := qtx.GetSessionByID(ctx, targetID)
 		if readErr != nil {
 			return fmt.Errorf("get revoked session: %w", readErr)
@@ -142,8 +119,6 @@ func (s *Service) handleRevokeSession(w http.ResponseWriter, r *http.Request) {
 	writeNoContent(w)
 }
 
-// revokeLineagePartnersTx revokes row's exact predecessor and live successor in
-// the caller's transaction and returns their IDs.
 func revokeLineagePartnersTx(ctx context.Context, qtx *store.Queries, row store.Session, now time.Time) ([]uuid.UUID, error) {
 	var revokedIDs []uuid.UUID
 	if row.RotatedFrom != nil {
@@ -160,16 +135,12 @@ func revokeLineagePartnersTx(ctx context.Context, qtx *store.Queries, row store.
 		}
 		revokedIDs = append(revokedIDs, successor.ID)
 	case errors.Is(err, pgx.ErrNoRows):
-		// No live successor remains.
 	default:
 		return nil, fmt.Errorf("find successor session: %w", err)
 	}
 	return revokedIDs, nil
 }
 
-// lockAccountUser takes the user-row lock that every session issuer and
-// sensitive mutation serializes on. A missing account reads as an invalid
-// session.
 func lockAccountUser(ctx context.Context, qtx *store.Queries, userID uuid.UUID) (store.User, error) {
 	user, err := qtx.GetUserForUpdate(ctx, userID)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -181,8 +152,6 @@ func lockAccountUser(ctx context.Context, qtx *store.Queries, userID uuid.UUID) 
 	return user, nil
 }
 
-// lockCallerSession locks the caller's concrete session after the user lock
-// and requires it to be live, owned by user, and at the current epoch.
 func lockCallerSession(ctx context.Context, qtx *store.Queries, user store.User, sessionID uuid.UUID, now time.Time) (store.Session, error) {
 	sess, err := qtx.GetSessionByIDForUpdate(ctx, sessionID)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -197,8 +166,6 @@ func lockCallerSession(ctx context.Context, qtx *store.Queries, user store.User,
 	return sess, nil
 }
 
-// lockSecondFactorPolicy locks the account's factor policy row. It returns nil
-// for an unenrolled account.
 func lockSecondFactorPolicy(ctx context.Context, qtx *store.Queries, userID uuid.UUID) (*store.SecondFactorPolicy, error) {
 	policy, err := qtx.GetSecondFactorPolicyForUpdate(ctx, userID)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -210,12 +177,6 @@ func lockSecondFactorPolicy(ctx context.Context, qtx *store.Queries, userID uuid
 	return &policy, nil
 }
 
-// lockSensitiveSession runs after the caller locked user. It locks the
-// caller's session and then the factor policy, in the lock order of
-// docs/design/second-factor-authentication.md, and requires a live
-// current-epoch session with a recent primary proof and, for an enrolled
-// account, a recent factor proof. It returns ErrSessionInvalid or
-// ErrReauthRequired on a failed gate.
 func lockSensitiveSession(ctx context.Context, qtx *store.Queries, user store.User, sessionID uuid.UUID, now time.Time) (store.Session, error) {
 	sess, err := lockCallerSession(ctx, qtx, user, sessionID, now)
 	if err != nil {
@@ -231,8 +192,6 @@ func lockSensitiveSession(ctx context.Context, qtx *store.Queries, user store.Us
 	return sess, nil
 }
 
-// recheckSensitiveSession applies lockSensitiveSession in its own transaction
-// for a route that checks authority before it starts an external step.
 func (s *Service) recheckSensitiveSession(ctx context.Context, sess store.Session) error {
 	now := s.sessionMgr.now()
 	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
@@ -246,8 +205,6 @@ func (s *Service) recheckSensitiveSession(ctx context.Context, sess store.Sessio
 	})
 }
 
-// writeSensitiveGateError writes the session API response for a failed
-// sensitive-mutation gate and reports whether err was one.
 func writeSensitiveGateError(w http.ResponseWriter, err error) bool {
 	switch {
 	case errors.Is(err, ErrSessionInvalid):

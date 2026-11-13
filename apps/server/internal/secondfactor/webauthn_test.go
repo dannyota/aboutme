@@ -33,8 +33,6 @@ const (
 
 var b64 = base64.RawURLEncoding
 
-// testAuthenticator is a software P-256 authenticator that produces the
-// exact registration and assertion bodies the routes accept.
 type testAuthenticator struct {
 	t            *testing.T
 	key          *ecdsa.PrivateKey
@@ -56,8 +54,6 @@ func newTestAuthenticator(t *testing.T) *testAuthenticator {
 	return &testAuthenticator{t: t, key: key, credentialID: id, rpID: testRPID, origin: testOrigin}
 }
 
-// coseKey hand-encodes the EC2 P-256 COSE key in canonical CBOR order:
-// {1:2, 3:-7, -1:1, -2:x, -3:y}.
 func (a *testAuthenticator) coseKey() []byte {
 	point, err := a.key.PublicKey.Bytes()
 	if err != nil {
@@ -83,7 +79,6 @@ func (a *testAuthenticator) authData(rpID string, flags byte, counter uint32, at
 	return out
 }
 
-// clientDataSpec describes one clientDataJSON; zero fields take defaults.
 type clientDataSpec struct {
 	kind        string
 	challenge   string
@@ -107,7 +102,6 @@ func (c clientDataSpec) encode() []byte {
 	return out
 }
 
-// registrationSpec varies one registration response.
 type registrationSpec struct {
 	client  clientDataSpec
 	rpID    string
@@ -144,7 +138,6 @@ func (a *testAuthenticator) registrationBody(ceremonyID string, challenge []byte
 	})
 }
 
-// assertionSpec varies one assertion response.
 type assertionSpec struct {
 	client     clientDataSpec
 	rpID       string
@@ -291,8 +284,6 @@ func TestAssertionOptions_NeverEmptyAndNoExtensions(t *testing.T) {
 	}
 }
 
-// TestDecodeRegistration_HostileCorpus is a frozen set of malformed bodies
-// that must fail before any CBOR or signature work.
 func TestDecodeRegistration_HostileCorpus(t *testing.T) {
 	a := newTestAuthenticator(t)
 	ceremonyID, _ := testCeremonyID()
@@ -356,8 +347,6 @@ func TestDecodeAssertion_HostileCorpus(t *testing.T) {
 	}
 }
 
-// regexpReplaceValue replaces the quoted JSON string value of member name,
-// quotes included, with value.
 func regexpReplaceValue(body, name, value string) string {
 	start := strings.Index(body, `"`+name+`":"`)
 	if start < 0 {
@@ -410,8 +399,6 @@ func TestVerifyRegistration_AcceptsValidAndRejectsHostileCorpus(t *testing.T) {
 	}
 }
 
-// TestVerifyAssertion_HostileCorpus is the frozen assertion corpus: every case
-// is well formed and must fail verification without advancing anything.
 func TestVerifyAssertion_HostileCorpus(t *testing.T) {
 	rp := testRelyingParty(t)
 	a := newTestAuthenticator(t)
@@ -486,8 +473,6 @@ func TestVerifyAssertion_ZeroCountersStayZero(t *testing.T) {
 	}
 }
 
-// TestAssertion_EmptyUserHandleIsAbsent treats an empty user handle exactly
-// like null: it decodes to no handle and verification never compares it.
 func TestAssertion_EmptyUserHandleIsAbsent(t *testing.T) {
 	rp := testRelyingParty(t)
 	a := newTestAuthenticator(t)

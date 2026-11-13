@@ -140,15 +140,6 @@ type recoveryResolverFunc func(context.Context) (RecoveryProof, error)
 
 func (f recoveryResolverFunc) Resolve(ctx context.Context) (RecoveryProof, error) { return f(ctx) }
 
-// TestCloseCancelsEveryLeaseBeforeReadingDrainClock pins the ordering inside
-// Close that a canceled-cache-hit caller depends on for deterministic
-// synchronization: every affected lease is canceled before Close reads the
-// coordinator clock to arm the drain timer. A caller that only observes
-// admission closing (ErrAdmissionClosed from AcquireResume) races that same
-// cancel loop and cannot prove a specific already-admitted lease is canceled;
-// only this clock read can, and only because of the order asserted here. If
-// a future change reads the clock earlier, this test fails instead of the
-// race silently reopening.
 func TestCloseCancelsEveryLeaseBeforeReadingDrainClock(t *testing.T) {
 	t.Parallel()
 
@@ -174,9 +165,6 @@ func TestCloseCancelsEveryLeaseBeforeReadingDrainClock(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AcquireResume() error = %v", err)
 	}
-	// The hook stands in for a handler that stops serving and releases its
-	// lease as soon as it observes cancellation, the same reaction the
-	// canceled-cache-hit path requires.
 	if hookErr := lease.OnCancel(func() {
 		canceled.Store(true)
 		lease.Release()

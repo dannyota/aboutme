@@ -1,7 +1,5 @@
 package auth_test
 
-// Password-service race proofs using test probes and database lock queues.
-
 import (
 	"context"
 	"crypto/rand"
@@ -23,9 +21,6 @@ import (
 
 const raceIP = "203.0.113.7"
 
-// onceProbe returns a probe that pauses exactly once at the first invocation
-// (the first operation to acquire the lock), so the second operation's probe
-// invocation is a no-op and cannot deadlock.
 func onceProbe(locked, release chan struct{}) func() {
 	var once sync.Once
 	return func() {
@@ -110,8 +105,6 @@ func rollbackPasswordHolder(t *testing.T, tx pgx.Tx) func() {
 	}
 }
 
-// TestPasswordLogin_ResetFence proves login session issuance serializes on the
-// user lock with password reset's RevokeAllSessions.
 func TestPasswordLogin_ResetFence(t *testing.T) {
 	t.Run("login first, reset revokes", func(t *testing.T) {
 		e := newPasswordEnv(t)
@@ -134,7 +127,7 @@ func TestPasswordLogin_ResetFence(t *testing.T) {
 			loginDone <- raw
 		}()
 
-		<-locked // login holds the user lock
+		<-locked
 
 		resetDone := make(chan error, 1)
 		go func() {
@@ -168,7 +161,6 @@ func TestPasswordLogin_ResetFence(t *testing.T) {
 		e.setPassword(t, userID, testPassword)
 		email := e.userEmail(t, userID)
 
-		// Hold the user lock as reset does, then revoke and commit.
 		tx, err := e.pool.Begin(context.Background())
 		if err != nil {
 			t.Fatalf("begin reset tx: %v", err)
@@ -218,8 +210,6 @@ func TestPasswordLogin_ResetFence(t *testing.T) {
 	})
 }
 
-// TestPasswordLogin_ChangeSnapshotRetry proves a login whose credential changed
-// between snapshot and transaction re-verifies once against the new hash.
 func TestPasswordLogin_ChangeSnapshotRetry(t *testing.T) {
 	e := newPasswordEnv(t)
 	userID := e.createUser(t)
@@ -236,10 +226,8 @@ func TestPasswordLogin_ChangeSnapshotRetry(t *testing.T) {
 		loginDone <- err
 	}()
 
-	<-preTx // the snapshot was verified; the transaction has not started.
+	<-preTx
 
-	// Replace the credential with a fresh encoding of the SAME password: the
-	// snapshot hash no longer matches, so login must re-verify and still succeed.
 	e.setPassword(t, userID, testPassword)
 
 	close(release)
@@ -248,9 +236,6 @@ func TestPasswordLogin_ChangeSnapshotRetry(t *testing.T) {
 	}
 }
 
-// TestPasswordReset_ChangeLockOrder proves reset and change serialize on the
-// user lock: a change that starts while reset holds the lock re-reads its
-// current session and finds it revoked.
 func TestPasswordReset_ChangeLockOrder(t *testing.T) {
 	e := newPasswordEnv(t)
 	userID := e.createUser(t)
@@ -267,7 +252,7 @@ func TestPasswordReset_ChangeLockOrder(t *testing.T) {
 		resetDone <- e.svc.ResetForTest(context.Background(), token.Raw, "a fresh password 123", raceIP)
 	}()
 
-	<-locked // reset holds the user lock
+	<-locked
 
 	changeDone := make(chan error, 1)
 	go func() {
@@ -285,15 +270,12 @@ func TestPasswordReset_ChangeLockOrder(t *testing.T) {
 	if err := <-resetDone; err != nil {
 		t.Fatalf("reset error = %v", err)
 	}
-	// Change proceeds after the reset and finds its current session revoked.
 	if err := <-changeDone; err == nil {
 		t.Error("change succeeded after a reset revoked its session, want failure")
 	}
 }
 
-// runPasswordTokenRace queues both operations behind a held database lock.
-// Waiting for each backend in turn proves both preflight reads ran before
-// either operation can consume the token. PostgreSQL grants the lock in order.
+// PostgreSQL grants a contended lock to its waiters in queue order.
 func runPasswordTokenRace(ctx context.Context, t *testing.T, pool *store.Pool, holder pgx.Tx, first, second func() error) {
 	t.Helper()
 	pid := holder.Conn().PgConn().PID()
@@ -327,7 +309,6 @@ func waitPasswordTokenQueue(ctx context.Context, t *testing.T, pool *store.Pool,
 	defer ticker.Stop()
 	for {
 		var queued int
-		// A row-lock waiter may block on another waiter rather than the holder.
 		err := pool.QueryRow(ctx, `
 			WITH RECURSIVE queue(pid) AS (
 				SELECT $1::int
@@ -352,8 +333,6 @@ func waitPasswordTokenQueue(ctx context.Context, t *testing.T, pool *store.Pool,
 	}
 }
 
-// TestPasswordReset_DuplicateToken proves either candidate password can win
-// the user-lock race, with no writes from the rejected reset.
 func TestPasswordReset_DuplicateToken(t *testing.T) {
 	passwords := [2]string{"a fresh password 123", "a second fresh password"}
 	for _, winner := range []int{0, 1} {
@@ -407,8 +386,6 @@ func TestPasswordReset_DuplicateToken(t *testing.T) {
 	}
 }
 
-// TestPasswordVerify_DuplicateToken proves identical verify calls contend on
-// the email lock and create exactly one account with its pending credential.
 func TestPasswordVerify_DuplicateToken(t *testing.T) {
 	e := newPasswordEnv(t)
 	email := newEmail()
@@ -453,8 +430,6 @@ func TestPasswordVerify_DuplicateToken(t *testing.T) {
 	}
 }
 
-// TestPasswordVerify_ProviderSignupRace proves the two email-race orderings
-// between password verify and provider signup.
 func TestPasswordVerify_ProviderSignupRace(t *testing.T) {
 	t.Run("provider wins, verify consumes without password", func(t *testing.T) {
 		e := newPasswordEnv(t)
@@ -469,9 +444,8 @@ func TestPasswordVerify_ProviderSignupRace(t *testing.T) {
 		go func() {
 			verifyDone <- e.svc.VerifyForTest(context.Background(), token.Raw, raceIP)
 		}()
-		<-locked // verify locked the registration, before the email-ownership check
+		<-locked
 
-		// Provider signup creates the user for the same email first.
 		provider, err := e.q.CreateUser(context.Background(), store.CreateUserParams{Email: email, Name: "Provider"})
 		if err != nil {
 			t.Fatalf("provider CreateUser: %v", err)
@@ -482,7 +456,6 @@ func TestPasswordVerify_ProviderSignupRace(t *testing.T) {
 			t.Fatalf("verify error = %v, want success (consume without password)", err)
 		}
 
-		// The provider user owns the email and has no password credential.
 		if _, err := e.q.GetPasswordCredential(context.Background(), provider.ID); err == nil {
 			t.Error("provider user gained a password credential, want none")
 		}
@@ -500,7 +473,6 @@ func TestPasswordVerify_ProviderSignupRace(t *testing.T) {
 			t.Fatalf("verify error = %v", err)
 		}
 
-		// A later provider signup for the same email is rejected.
 		if _, err := e.q.CreateUser(context.Background(), store.CreateUserParams{Email: email, Name: "Provider"}); !isUniqueViolation(err) {
 			t.Errorf("provider CreateUser after verify error = %v, want unique violation", err)
 		}
@@ -514,8 +486,6 @@ func TestPasswordVerify_ProviderSignupRace(t *testing.T) {
 	})
 }
 
-// TestPasswordProvider_SubjectCollision proves a provider subject (identity)
-// stays unique to one account even as a password account is created separately.
 func TestPasswordProvider_SubjectCollision(t *testing.T) {
 	e := newPasswordEnv(t)
 	u1 := e.createUser(t)
@@ -528,7 +498,6 @@ func TestPasswordProvider_SubjectCollision(t *testing.T) {
 		t.Fatalf("create provider identity: %v", err)
 	}
 
-	// A password account for a different email is created by verify.
 	email2 := newEmail()
 	token, _ := e.createRegistration(t, email2, "Ada", testPassword)
 	if err := e.svc.VerifyForTest(context.Background(), token.Raw, raceIP); err != nil {
@@ -539,8 +508,6 @@ func TestPasswordProvider_SubjectCollision(t *testing.T) {
 		t.Fatalf("password account missing: %v", err)
 	}
 
-	// The provider subject cannot be linked to the second account (cross-user
-	// subject collision).
 	if _, err := e.q.CreateIdentity(context.Background(), store.CreateIdentityParams{
 		UserID:         u2.ID,
 		Provider:       string(auth.ProviderGoogle),
@@ -550,8 +517,6 @@ func TestPasswordProvider_SubjectCollision(t *testing.T) {
 	}
 }
 
-// TestPasswordProviderIssue_ResetFence proves a password reset revokes a
-// provider-issued session.
 func TestPasswordProviderIssue_ResetFence(t *testing.T) {
 	e := newPasswordEnv(t)
 	userID := e.createUser(t)
@@ -573,8 +538,6 @@ func TestPasswordProviderIssue_ResetFence(t *testing.T) {
 	}
 }
 
-// TestPasswordChange_LostResponseRevokesOldSession proves a lost change
-// response still leaves the old session revoked and the credential replaced.
 func TestPasswordChange_LostResponseRevokesOldSession(t *testing.T) {
 	e := newPasswordEnv(t)
 	userID := e.createUser(t)
@@ -587,7 +550,6 @@ func TestPasswordChange_LostResponseRevokesOldSession(t *testing.T) {
 		t.Fatalf("change error = %v", err)
 	}
 
-	// The response carrying newRaw is lost; the client only has oldRaw.
 	sm := auth.NewSessionManagerWithPoolForTest(e.pool, e.clk.Now)
 	if _, _, err := sm.Authenticate(context.Background(), oldRaw); err == nil {
 		t.Error("old session still authenticates after a lost change response, want revoked")
@@ -596,7 +558,6 @@ func TestPasswordChange_LostResponseRevokesOldSession(t *testing.T) {
 		t.Errorf("fresh session does not authenticate, want valid (even though unreachable)")
 	}
 
-	// The pre-change credential is gone; only the new password works.
 	email := e.userEmail(t, userID)
 	if _, err := e.svc.LoginForTest(context.Background(), email, newPassword, "ua", raceIP); err != nil {
 		t.Errorf("login with new password error = %v, want success", err)
@@ -606,8 +567,6 @@ func TestPasswordChange_LostResponseRevokesOldSession(t *testing.T) {
 	}
 }
 
-// TestPasswordOutboxFailure_RollsBackMutation proves an enqueue failure rolls
-// back the credential change and session revocation.
 func TestPasswordOutboxFailure_RollsBackMutation(t *testing.T) {
 	pool := newTestPool(t)
 	q := store.New(pool)
@@ -617,7 +576,7 @@ func TestPasswordOutboxFailure_RollsBackMutation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewHasher: %v", err)
 	}
-	outbox := newTestOutbox(t, clk, errorReader{}) // EnqueueTx will fail to seal
+	outbox := newTestOutbox(t, clk, errorReader{})
 
 	svc, err := newPasswordServiceWithOutbox(pool, q, sm, hasher, outbox, clk)
 	if err != nil {
@@ -633,7 +592,6 @@ func TestPasswordOutboxFailure_RollsBackMutation(t *testing.T) {
 		t.Fatal("change with a failing outbox succeeded, want failure")
 	}
 
-	// The credential and sessions were rolled back.
 	if _, err := svc.LoginForTest(context.Background(), email, testPassword, "ua", raceIP); err != nil {
 		t.Errorf("old password no longer works after rolled-back change: %v", err)
 	}
@@ -643,8 +601,6 @@ func TestPasswordOutboxFailure_RollsBackMutation(t *testing.T) {
 	}
 }
 
-// newTestClockAtEpoch and the helpers below exist so the outbox-failure test can
-// build a standalone service with a broken outbox without reusing passwordEnv.
 func newTestClockAtEpoch() *testutil.Clock {
 	return testutil.NewClockAtEpoch()
 }

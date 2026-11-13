@@ -12,9 +12,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// Reconcile scans at most 10,000 objects from the durable cursor. A dry run
-// performs the same listing, validation, age and database authority reads but
-// changes no object, job, audit row, or cursor.
 func (w *Worker) Reconcile(ctx context.Context, dryRun bool) (result Result, err error) {
 	started := w.now()
 	defer func() { result.Duration = durationSince(w.now, started) }()

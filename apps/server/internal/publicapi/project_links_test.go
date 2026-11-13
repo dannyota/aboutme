@@ -22,8 +22,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// linkedPublicService serves one discoverable resume whose project entry
-// links a library project, with the statement's link context for it.
 func linkedPublicService(t *testing.T) (svc *Service, reader *publicresume.Reader, slug, entryID, projectID string) {
 	t.Helper()
 	slug, lng, name, title := "ada-lovelace", "en", "Ada", "Atlas"

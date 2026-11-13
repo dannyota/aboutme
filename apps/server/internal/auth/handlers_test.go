@@ -1,5 +1,3 @@
-// Package auth_test exercises shared auth routes, identity resolution, and
-// error funnels against live Postgres.
 package auth_test
 
 import (
@@ -30,19 +28,15 @@ import (
 	"danny.vn/aboutme/apps/server/internal/testutil"
 )
 
-// testLogger discards JSON logs.
 func testLogger() *slog.Logger {
 	return slog.New(slog.NewJSONHandler(&bytes.Buffer{}, nil))
 }
 
-// newCapturingLogger returns a logger and the buffer that receives its JSON.
 func newCapturingLogger() (*slog.Logger, *bytes.Buffer) {
 	var buf bytes.Buffer
 	return slog.New(slog.NewJSONHandler(&buf, nil)), &buf
 }
 
-// mustQueryParam parses rawURL and returns its name query parameter,
-// failing the test if rawURL doesn't parse or the parameter is absent.
 func mustQueryParam(t *testing.T, rawURL, name string) string {
 	t.Helper()
 
@@ -56,9 +50,6 @@ func mustQueryParam(t *testing.T, rawURL, name string) string {
 	return u.Query().Get(name)
 }
 
-// assertRedirectPath fails unless rawURL parses and has wantPath. Callback
-// rejection and success tests pass distinct paths so they cannot collapse to
-// one redirect target unnoticed.
 func assertRedirectPath(t *testing.T, rawURL, wantPath string) {
 	t.Helper()
 
@@ -71,19 +62,12 @@ func assertRedirectPath(t *testing.T, rawURL, wantPath string) {
 	}
 }
 
-// testPublicOrigin is the PublicOrigin every test Service is configured
-// with -- an arbitrary, valid-per-config.loadPublicOrigin origin (scheme
-// + host, no path/trailing slash) these tests never actually dial.
 const testPublicOrigin = "https://aboutme.example"
 
-// noopPinger satisfies api.DBPinger without touching a database -- these
-// tests never hit /healthz or /readyz, but api.New requires a pinger to
-// build the handler at all.
 type noopPinger struct{}
 
 func (noopPinger) Ping(context.Context) error { return nil }
 
-// testServiceConfig holds test-only Service overrides.
 type testServiceConfig struct {
 	googleIssuer    string
 	githubEndpoint  string
@@ -96,70 +80,50 @@ type testServiceConfig struct {
 	viewPassKey     string
 }
 
-// testViewPassKey is a fixed, validly encoded VIEW_PASS_KEY for tests that
-// exercise sign in to view (docs/design/viewer-analytics/sign-in-to-view.md
-// "Pass cookie").
 var testViewPassKey = base64.RawURLEncoding.EncodeToString(make([]byte, 32))
 
-// testServiceOption configures newTestService.
 type testServiceOption func(*testServiceConfig)
 
-// withGoogleIssuer directs discovery to a test issuer.
 func withGoogleIssuer(issuer string) testServiceOption {
 	return func(c *testServiceConfig) { c.googleIssuer = issuer }
 }
 
-// withGitHubEndpoint directs every GitHub OAuth2 and API call to a test server.
 func withGitHubEndpoint(endpoint string) testServiceOption {
 	return func(c *testServiceConfig) { c.githubEndpoint = endpoint }
 }
 
-// withLinkedInIssuer directs LinkedIn discovery to a local issuer. An omitted
-// override resolves to NewServiceForTest's unroutable sentinel, so tests cannot
-// contact the real provider.
 func withLinkedInIssuer(issuer string) testServiceOption {
 	return func(c *testServiceConfig) { c.linkedinIssuer = issuer }
 }
 
-// withProviderLoginDisabled turns PROVIDER_LOGIN_ENABLED off for one test.
 func withProviderLoginDisabled() testServiceOption {
 	return func(c *testServiceConfig) { c.providerLogin = config.ProviderLogin{} }
 }
 
-// withProviderLogin enables exactly the given providers for one test.
 func withProviderLogin(p config.ProviderLogin) testServiceOption {
 	return func(c *testServiceConfig) { c.providerLogin = p }
 }
 
-// withLogger captures Service rejection and internal-error logs.
 func withLogger(logger *slog.Logger) testServiceOption {
 	return func(c *testServiceConfig) { c.logger = logger }
 }
 
-// withStartRateLimit sets a small budget before route registration.
 func withStartRateLimit(requests int, window time.Duration) testServiceOption {
 	return func(c *testServiceConfig) { c.startRateLimit, c.startRateWindow = requests, window }
 }
 
-// withViewPassKey sets a fixed, valid VIEW_PASS_KEY so a test can exercise
-// sign in to view's pass cookie.
 func withViewPassKey() testServiceOption {
 	return func(c *testServiceConfig) { c.viewPassKey = testViewPassKey }
 }
 
-// sessionIssuerForTest mirrors the unexported issuance seam structurally.
 type sessionIssuerForTest interface {
 	IssueTx(ctx context.Context, qtx *store.Queries, user store.User, ua, ip string) (auth.SessionIssue, error)
 }
 
-// withSessionIssuer injects deterministic issuance failures.
 func withSessionIssuer(si sessionIssuerForTest) testServiceOption {
 	return func(c *testServiceConfig) { c.sessionIssuer = si }
 }
 
-// newTestService builds the production router over live queries. It requires
-// at least one local provider override (Google issuer, GitHub endpoint, or
-// LinkedIn issuer); every omitted endpoint becomes the unroutable sentinel.
 func newTestService(t *testing.T, opts ...testServiceOption) (http.Handler, *store.Queries) {
 	t.Helper()
 
@@ -201,8 +165,6 @@ func newTestService(t *testing.T, opts ...testServiceOption) (http.Handler, *sto
 		logger = testLogger()
 	}
 
-	// Empty overrides pass through so NewServiceForTest applies the same
-	// unroutable sentinel for every provider.
 	svc, err := auth.NewServiceForTest(logger, cfg, pool, sc.googleIssuer, sc.githubEndpoint, sc.linkedinIssuer)
 	if err != nil {
 		t.Fatalf("NewServiceForTest() error = %v", err)
@@ -218,9 +180,6 @@ func newTestService(t *testing.T, opts ...testServiceOption) (http.Handler, *sto
 	return handler, q
 }
 
-// doGet returns ResponseRecorder.Result so headers written after WriteHeader
-// stay invisible as they would on the wire. Its in-memory body remains readable
-// after Close.
 func doGet(t *testing.T, handler http.Handler, path string, cookies ...*http.Cookie) *http.Response {
 	t.Helper()
 
@@ -237,8 +196,6 @@ func doGet(t *testing.T, handler http.Handler, path string, cookies ...*http.Coo
 	return resp
 }
 
-// extractCookie returns the cookie named name from resp's Set-Cookie
-// headers, or nil if absent.
 func extractCookie(resp *http.Response, name string) *http.Cookie {
 	for _, c := range resp.Cookies() {
 		if c.Name == name {
@@ -248,28 +205,18 @@ func extractCookie(resp *http.Response, name string) *http.Cookie {
 	return nil
 }
 
-// requestCookie builds a Cookie request-header value. Secure, HttpOnly, and
-// SameSite are response attributes with no request representation.
 func requestCookie(name, value string) *http.Cookie {
 	return &http.Cookie{Name: name, Value: value}
 }
 
-// failingSessionIssuer reaches the internal-error funnel deterministically.
-// Its distinctive error text must not reach clients or logs.
 type failingSessionIssuer struct{}
 
 func (failingSessionIssuer) IssueTx(context.Context, *store.Queries, store.User, string, string) (auth.SessionIssue, error) {
 	return auth.SessionIssue{}, errors.New("stub: session issuance deliberately failed for a test -- must never leak")
 }
 
-// pgErrorSessionIssuer fails with a *pgconn.PgError shaped exactly like a real
-// users_email_key unique-violation (the same SQLSTATE/message/detail/
-// constraint shape a genuine concurrent-registration race would produce),
-// deterministically exercising SQLSTATE extraction and redaction without a
-// database race.
 type pgErrorSessionIssuer struct{}
 
-// These fields model a unique violation whose detail contains bound PII.
 const (
 	pgUniqueViolationMessage    = `duplicate key value violates unique constraint "users_email_key"`
 	pgUniqueViolationDetail     = "Key (email)=(pg-error-test@example.com) already exists."
@@ -285,8 +232,6 @@ func (pgErrorSessionIssuer) IssueTx(context.Context, *store.Queries, store.User,
 	}
 }
 
-// ---- Service construction / route registration -----------------------
-
 func TestNewService_MissingPublicOrigin_ReturnsError(t *testing.T) {
 	t.Parallel()
 
@@ -297,10 +242,6 @@ func TestNewService_MissingPublicOrigin_ReturnsError(t *testing.T) {
 	}
 }
 
-// TestNewService_UndecodableViewPassKey_ReturnsError proves a non-blank
-// VIEW_PASS_KEY that does not decode to 32 bytes is refused rather than
-// silently becoming a nil HMAC key that would let anyone forge a view pass
-// (docs/design/viewer-analytics/sign-in-to-view.md "Pass cookie"; AC-VIEW-003).
 func TestNewService_UndecodableViewPassKey_ReturnsError(t *testing.T) {
 	t.Parallel()
 
@@ -320,11 +261,6 @@ func TestNewService_UndecodableViewPassKey_ReturnsError(t *testing.T) {
 	}
 }
 
-// ---- shared login identity resolution ------------------------------------
-
-// TestResolveReturningProvider_NewThenExisting_AcrossProviders checks the
-// transactional resolver's new-then-existing outcomes for each provider. Row
-// counts distinguish reuse from a failed duplicate insert.
 func TestResolveReturningProvider_NewThenExisting_AcrossProviders(t *testing.T) {
 	t.Parallel()
 
@@ -353,7 +289,6 @@ func TestResolveReturningProvider_NewThenExisting_AcrossProviders(t *testing.T) 
 			account := auth.NewProviderAccount{Subject: subject, VerifiedEmail: email, Name: "Test User"}
 			ctx := context.Background()
 
-			// First login: the subject is absent, so the account is created.
 			var first store.User
 			err = pgx.BeginFunc(ctx, pool, func(tx pgx.Tx) error {
 				qtx := q.WithTx(tx)
@@ -371,7 +306,6 @@ func TestResolveReturningProvider_NewThenExisting_AcrossProviders(t *testing.T) 
 				t.Errorf("first login User.Email = %q, want %q", first.Email, email)
 			}
 
-			// Second login: the subject resolves to the same locked user.
 			var second store.User
 			var found bool
 			err = pgx.BeginFunc(ctx, pool, func(tx pgx.Tx) error {
@@ -417,8 +351,6 @@ func TestResolveReturningProvider_NewThenExisting_AcrossProviders(t *testing.T) 
 	}
 }
 
-// TestGoogleProvider_DiscoveryDoesNotHoldCacheMutex blocks discovery without a
-// timing race, then proves another goroutine can acquire the cache mutex.
 func TestGoogleProvider_DiscoveryDoesNotHoldCacheMutex(t *testing.T) {
 	t.Parallel()
 
@@ -437,7 +369,7 @@ func TestGoogleProvider_DiscoveryDoesNotHoldCacheMutex(t *testing.T) {
 	handler := api.New(testLogger(), noopPinger{}, api.Options{}, nil, svc.RegisterRoutes)
 
 	entered, release := p.BlockDiscoveryForTest()
-	t.Cleanup(release) // in case the test fails before reaching the explicit release() below
+	t.Cleanup(release)
 
 	requestDone := make(chan struct{})
 	go func() {
@@ -447,9 +379,6 @@ func TestGoogleProvider_DiscoveryDoesNotHoldCacheMutex(t *testing.T) {
 
 	select {
 	case <-entered:
-		// Discovery is now genuinely blocked mid-flight (inside
-		// oidc.NewProvider's HTTP round trip); the assertion below
-		// happens exactly while that is true.
 	case <-requestDone:
 		t.Fatal("GET /start finished before discovery's blocked endpoint was ever entered -- test setup is broken, not the code under test")
 	}
@@ -465,8 +394,6 @@ func TestGoogleProvider_DiscoveryDoesNotHoldCacheMutex(t *testing.T) {
 	<-requestDone
 }
 
-// TestDefaultTestOverride_DefaultsToUnroutableSentinelWhenOmitted proves an
-// empty provider override cannot leave a Service pointed at a real endpoint.
 func TestDefaultTestOverride_DefaultsToUnroutableSentinelWhenOmitted(t *testing.T) {
 	t.Parallel()
 
@@ -475,8 +402,6 @@ func TestDefaultTestOverride_DefaultsToUnroutableSentinelWhenOmitted(t *testing.
 	}
 }
 
-// TestDefaultTestOverride_UsesExplicitOverrideWhenSupplied proves an explicit
-// test endpoint wins over the sentinel default.
 func TestDefaultTestOverride_UsesExplicitOverrideWhenSupplied(t *testing.T) {
 	t.Parallel()
 
@@ -485,14 +410,11 @@ func TestDefaultTestOverride_UsesExplicitOverrideWhenSupplied(t *testing.T) {
 	}
 }
 
-// TestService_LinkedInRoute_OmittedIssuerOverride_FailsFastOffline proves an
-// omitted LinkedIn issuer reaches only the loopback sentinel and returns an
-// opaque internal error.
 func TestService_LinkedInRoute_OmittedIssuerOverride_FailsFastOffline(t *testing.T) {
 	t.Parallel()
 
 	p := oidctest.NewProvider(t)
-	handler, _ := newTestService(t, withGoogleIssuer(p.URL)) // no withLinkedInIssuer
+	handler, _ := newTestService(t, withGoogleIssuer(p.URL))
 
 	resp := doGet(t, handler, auth.LinkedInStartPath) //nolint:bodyclose // doGet closes the body itself before returning.
 	if resp.StatusCode != http.StatusInternalServerError {
@@ -507,23 +429,16 @@ func TestService_RegisterRoutes_GoogleStartAndCallback_RespondToGET(t *testing.T
 	p := oidctest.NewProvider(t)
 	handler, _ := newTestService(t, withGoogleIssuer(p.URL))
 
-	// /start with no code/state at all still runs (it begins a fresh
-	// transaction and redirects) -- proving the route is registered and
-	// reachable is the point here, not the full OIDC round trip (that's
-	// google_test.go's job).
 	startResp := doGet(t, handler, auth.GoogleStartPath) //nolint:bodyclose // doGet closes the body itself before returning.
 	if startResp.StatusCode != http.StatusFound {
 		t.Errorf("GET %s status = %d, want %d", auth.GoogleStartPath, startResp.StatusCode, http.StatusFound)
 	}
 
-	// /callback with no transaction cookie at all is a well-defined
-	// rejection (missing __Host-oauth-tx), not a 404 -- proving the route
-	// itself is registered.
 	cbResp := doGet(t, handler, auth.GoogleCallbackPath) //nolint:bodyclose // doGet closes the body itself before returning.
 	if cbResp.StatusCode != http.StatusFound {
 		t.Errorf("GET %s (no cookie) status = %d, want %d", auth.GoogleCallbackPath, cbResp.StatusCode, http.StatusFound)
 	}
-	assertRedirectPath(t, cbResp.Header.Get("Location"), "/login") // Rejected callbacks return to login.
+	assertRedirectPath(t, cbResp.Header.Get("Location"), "/login")
 }
 
 func TestService_RegisterRoutes_ProviderLoginDisabled_ProviderPathsAre404(t *testing.T) {
@@ -548,7 +463,6 @@ func TestService_RegisterRoutes_ProviderLoginDisabled_ProviderPathsAre404(t *tes
 		}
 	}
 
-	// Session routes are unaffected: an anonymous /me is 401, not 404.
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, auth.MePath, nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -578,7 +492,6 @@ func TestService_RegisterRoutes_GoogleOnly_OtherProviderPathsAre404(t *testing.T
 		}
 	}
 
-	// The enabled Google start still redirects to the provider.
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, auth.GoogleStartPath, nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -622,8 +535,6 @@ func TestService_RegisterRoutes_ProviderLoginDisabled_NotFoundBodyIsUniform(t *t
 	}
 }
 
-// TestService_RegisterRoutes_WrongMethod_Returns405 pins exact methods. HEAD
-// must not inherit GET because a crawler could create or consume a transaction.
 func TestService_RegisterRoutes_WrongMethod_Returns405(t *testing.T) {
 	t.Parallel()
 
@@ -651,8 +562,6 @@ func TestService_RegisterRoutes_WrongMethod_Returns405(t *testing.T) {
 	}
 }
 
-// TestService_HeadRequest_DoesNotBeginTransaction proves method rejection
-// occurs before the start handler by asserting no transaction cookie.
 func TestService_HeadRequest_DoesNotBeginTransaction(t *testing.T) {
 	t.Parallel()
 
@@ -671,8 +580,6 @@ func TestService_HeadRequest_DoesNotBeginTransaction(t *testing.T) {
 	}
 }
 
-// TestService_HeadRequest_DoesNotConsumeTransaction sends HEAD with a real
-// transaction, then proves a GET can still consume the single-use handle.
 func TestService_HeadRequest_DoesNotConsumeTransaction(t *testing.T) {
 	t.Parallel()
 
@@ -707,10 +614,6 @@ func TestService_HeadRequest_DoesNotConsumeTransaction(t *testing.T) {
 	}
 }
 
-// ---- __Host-oauth-tx cookie lifecycle -------------------------------------
-
-// TestGoogleCallback_MissingTxCookie_RedirectsAuthFailed checks the earliest
-// rejection path before any provider identity exists.
 func TestGoogleCallback_MissingTxCookie_RedirectsAuthFailed(t *testing.T) {
 	t.Parallel()
 
@@ -725,15 +628,12 @@ func TestGoogleCallback_MissingTxCookie_RedirectsAuthFailed(t *testing.T) {
 	if got := mustQueryParam(t, loc, "error"); got != "auth_failed" {
 		t.Errorf("error param = %q, want %q", got, "auth_failed")
 	}
-	assertRedirectPath(t, loc, "/login") // Rejected callbacks return to login.
+	assertRedirectPath(t, loc, "/login")
 	if extractCookie(resp, auth.SessionCookieName) != nil {
 		t.Error("a session cookie was set for a rejected callback, want none")
 	}
 }
 
-// TestGoogleCallback_StaleOrUnknownTxCookie_ClearsCookieAndRedirectsAuthFailed
-// proves an unknown handle emits an explicit deletion cookie before provider
-// identity lookup.
 func TestGoogleCallback_StaleOrUnknownTxCookie_ClearsCookieAndRedirectsAuthFailed(t *testing.T) {
 	t.Parallel()
 
@@ -750,7 +650,7 @@ func TestGoogleCallback_StaleOrUnknownTxCookie_ClearsCookieAndRedirectsAuthFaile
 	if got := mustQueryParam(t, loc, "error"); got != "auth_failed" {
 		t.Errorf("error param = %q, want %q", got, "auth_failed")
 	}
-	assertRedirectPath(t, loc, "/login") // Rejected callbacks return to login.
+	assertRedirectPath(t, loc, "/login")
 
 	cleared := extractCookie(resp, auth.OAuthTxCookieName)
 	if cleared == nil {
@@ -764,9 +664,6 @@ func TestGoogleCallback_StaleOrUnknownTxCookie_ClearsCookieAndRedirectsAuthFaile
 	}
 }
 
-// TestGoogleCallback_StateMismatch_ClearsCookieAndRedirectsAuthFailed proves a
-// valid transaction cookie cannot bind an attacker-controlled code. Scoped row
-// checks prove rejection precedes account creation.
 func TestGoogleCallback_StateMismatch_ClearsCookieAndRedirectsAuthFailed(t *testing.T) {
 	t.Parallel()
 
@@ -775,7 +672,7 @@ func TestGoogleCallback_StateMismatch_ClearsCookieAndRedirectsAuthFailed(t *test
 
 	subject := uniqueSubject(t)
 	email := uniqueEmail(t)
-	txCookie, _, nonce := beginGoogle(t, handler) // beginGoogle: google_adversarial_test.go; state deliberately discarded below
+	txCookie, _, nonce := beginGoogle(t, handler)
 	p.RegisterCode("code-state-mismatch-handlers", oidctest.Claims{
 		Subject:       subject,
 		Email:         email,
@@ -791,7 +688,7 @@ func TestGoogleCallback_StateMismatch_ClearsCookieAndRedirectsAuthFailed(t *test
 	if got := mustQueryParam(t, loc, "error"); got != "auth_failed" {
 		t.Errorf("error param = %q, want %q", got, "auth_failed")
 	}
-	assertRedirectPath(t, loc, "/login") // Rejected callbacks return to login.
+	assertRedirectPath(t, loc, "/login")
 	cleared := extractCookie(resp, auth.OAuthTxCookieName)
 	if cleared == nil || cleared.MaxAge >= 0 {
 		t.Error("__Host-oauth-tx not cleared on a state-mismatch rejection")
@@ -804,11 +701,6 @@ func TestGoogleCallback_StateMismatch_ClearsCookieAndRedirectsAuthFailed(t *test
 	assertNoIdentity(t, q, subject)
 }
 
-// ---- internal-error funnel -----------------------------------------------
-
-// TestGoogleCallback_SessionIssuanceFails_Returns500ClearsCookieAndLogs injects
-// failure after a valid OIDC exchange. It checks the opaque response, cookie
-// effects, request ID, and absence of secrets or raw error text in logs.
 func TestGoogleCallback_SessionIssuanceFails_Returns500ClearsCookieAndLogs(t *testing.T) {
 	t.Parallel()
 
@@ -828,7 +720,7 @@ func TestGoogleCallback_SessionIssuanceFails_Returns500ClearsCookieAndLogs(t *te
 		Nonce:         nonce,
 	})
 
-	resp := doCallback(t, handler, secretCode, state, txCookie) //nolint:bodyclose // doCallback -> doGet closes the body itself before returning (still readable; see doGet's doc comment).
+	resp := doCallback(t, handler, secretCode, state, txCookie) //nolint:bodyclose // doCallback -> doGet closes the body itself before returning (still readable).
 
 	if resp.StatusCode != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)
@@ -878,11 +770,6 @@ func TestGoogleCallback_SessionIssuanceFails_Returns500ClearsCookieAndLogs(t *te
 	}
 }
 
-// TestGoogleCallback_SessionIssuanceUniqueViolation_LogsSQLSTATEOnly is
-// TestGoogleCallback_SessionIssuanceUniqueViolation_LogsSQLSTATEOnly proves
-// logInternalError records only PgError.Code, never Message, Detail, or
-// ConstraintName. A synthetic unique violation at session issuance exercises
-// the HTTP error path deterministically without relying on a database race.
 func TestGoogleCallback_SessionIssuanceUniqueViolation_LogsSQLSTATEOnly(t *testing.T) {
 	t.Parallel()
 
@@ -941,13 +828,6 @@ func TestGoogleCallback_SessionIssuanceUniqueViolation_LogsSQLSTATEOnly(t *testi
 	}
 }
 
-// TestGoogleCallback_RejectionLogsProviderAttribute proves logRejection's
-// output identifies WHICH provider's callback was rejected: the shared
-// funnel (redirectWithError/redirectAuthFailed) is reused by every
-// provider Service registers, so its log message is deliberately
-// provider-neutral ("auth: callback rejected", not "auth: google callback
-// rejected") -- the provider attribute is what still lets an operator
-// filter or correlate by provider in a multi-provider log stream.
 func TestGoogleCallback_RejectionLogsProviderAttribute(t *testing.T) {
 	t.Parallel()
 
@@ -966,14 +846,6 @@ func TestGoogleCallback_RejectionLogsProviderAttribute(t *testing.T) {
 	}
 }
 
-// ---- provider-signaled cancellation --------------------------------------
-
-// TestGoogleCallback_ProviderAccessDenied_RedirectsCancelled proves a
-// callback carrying ?error=access_denied (RFC 6749 §4.1.2.1's signal that
-// the visitor declined consent at the provider) redirects with its own
-// distinct error code (service.go's cancelledErrorCode -- not the
-// generic auth_failed) while still clearing the transaction cookie and
-// never authenticating the visitor.
 func TestGoogleCallback_ProviderAccessDenied_RedirectsCancelled(t *testing.T) {
 	t.Parallel()
 
@@ -993,7 +865,7 @@ func TestGoogleCallback_ProviderAccessDenied_RedirectsCancelled(t *testing.T) {
 	if got := mustQueryParam(t, loc, "error"); got != wantErrorCode {
 		t.Errorf("error param = %q, want %q (RFC 6749 access_denied maps to its own distinct code)", got, wantErrorCode)
 	}
-	assertRedirectPath(t, loc, "/login") // Rejected callbacks return to login.
+	assertRedirectPath(t, loc, "/login")
 	if extractCookie(resp, auth.SessionCookieName) != nil {
 		t.Error("a session cookie was set on a canceled login, want none")
 	}
@@ -1003,11 +875,6 @@ func TestGoogleCallback_ProviderAccessDenied_RedirectsCancelled(t *testing.T) {
 	}
 }
 
-// ---- injected session-manager consistency --------------------------------
-
-// TestGoogleCallback_LoginIssuesSessionUsingInjectedSessionManagerClock proves
-// SetSessionManagerForTest updates both authentication and issuance paths. The
-// issued session must use the injected epoch clock, not wall time.
 func TestGoogleCallback_LoginIssuesSessionUsingInjectedSessionManagerClock(t *testing.T) {
 	t.Parallel()
 
@@ -1056,17 +923,10 @@ func TestGoogleCallback_LoginIssuesSessionUsingInjectedSessionManagerClock(t *te
 	}
 }
 
-// ---- enrolled-account fixtures ----------------------------------------------
-
-// pendingCookieName is the pending authentication cookie defined in
-// docs/design/passkey-second-factor-contract.md.
 const pendingCookieName = "__Host-auth-pending"
 
-// secondFactorPage is the factor page an enrolled provider callback targets.
 const secondFactorPage = "/login/second-factor"
 
-// enrollForTest makes userID an enrolled account. Primary login and sensitive
-// actions read only the factor policy row, so no credential is needed.
 func enrollForTest(t *testing.T, q *store.Queries, userID uuid.UUID) {
 	t.Helper()
 	handle := make([]byte, 32)
@@ -1080,7 +940,6 @@ func enrollForTest(t *testing.T, q *store.Queries, userID uuid.UUID) {
 	}
 }
 
-// setFactorProofForTest sets a session's factor-proof time; nil clears it.
 func setFactorProofForTest(t *testing.T, sessionID uuid.UUID, at *time.Time) {
 	t.Helper()
 	pool := newRowInspectorPool(t)
@@ -1089,7 +948,6 @@ func setFactorProofForTest(t *testing.T, sessionID uuid.UUID, at *time.Time) {
 	}
 }
 
-// pendingForCookie loads the pending row named by a raw pending cookie.
 func pendingForCookie(t *testing.T, q *store.Queries, raw string) store.PendingAuthentication {
 	t.Helper()
 	row, err := q.GetPendingAuthenticationByTokenDigest(t.Context(), sessionTokenHash(raw))
@@ -1099,7 +957,6 @@ func pendingForCookie(t *testing.T, q *store.Queries, raw string) store.PendingA
 	return row
 }
 
-// pendingCountForUser counts every pending row of userID, live or consumed.
 func pendingCountForUser(t *testing.T, userID uuid.UUID) int {
 	t.Helper()
 	var n int
@@ -1109,7 +966,6 @@ func pendingCountForUser(t *testing.T, userID uuid.UUID) int {
 	return n
 }
 
-// unrevokedSessionCount counts userID's unrevoked session rows.
 func unrevokedSessionCount(t *testing.T, userID uuid.UUID) int {
 	t.Helper()
 	var n int
@@ -1119,9 +975,6 @@ func unrevokedSessionCount(t *testing.T, userID uuid.UUID) int {
 	return n
 }
 
-// assertPendingRedirect checks an enrolled provider callback: a 302 to the
-// factor page, a new pending cookie, no session cookie, and a cleared
-// transaction cookie. It returns the pending cookie value.
 func assertPendingRedirect(t *testing.T, resp *http.Response) string {
 	t.Helper()
 	if resp.StatusCode != http.StatusFound {

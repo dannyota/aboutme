@@ -156,10 +156,6 @@ func TestDeleteHandlerSucceedsWithFreshSecondFactorProof(t *testing.T) {
 	}
 }
 
-// enrollSecondFactor creates a second-factor policy, one active passkey
-// credential, and one recovery code for userID, mirroring the storage shape
-// docs/design/second-factor-authentication.md describes, without depending on
-// the auth package's enrollment handlers.
 func enrollSecondFactor(ctx context.Context, t *testing.T, q *store.Queries, userID uuid.UUID, now time.Time) store.SecondFactorPolicy {
 	t.Helper()
 	policy, err := q.CreateSecondFactorPolicy(ctx, store.CreateSecondFactorPolicyParams{
@@ -182,9 +178,6 @@ func enrollSecondFactor(ctx context.Context, t *testing.T, q *store.Queries, use
 	return policy
 }
 
-// seedPendingAndCeremony creates one live login pending authentication and one
-// live registration ceremony bound to sessionID, exercising the two remaining
-// second-factor tables enrollSecondFactor does not cover.
 func seedPendingAndCeremony(ctx context.Context, t *testing.T, q *store.Queries, userID, sessionID uuid.UUID, now time.Time) {
 	t.Helper()
 	if _, err := q.CreatePendingAuthentication(ctx, store.CreatePendingAuthenticationParams{
@@ -203,9 +196,6 @@ func seedPendingAndCeremony(ctx context.Context, t *testing.T, q *store.Queries,
 	}
 }
 
-// secondFactorTestBytes returns n bytes built from fresh random UUIDs, long
-// enough and unique enough for every second-factor column's length and
-// uniqueness constraints in migrations/00004_passkey_second_factor.sql.
 func secondFactorTestBytes(n int) []byte {
 	out := make([]byte, 0, n)
 	for len(out) < n {
@@ -215,16 +205,10 @@ func secondFactorTestBytes(n int) []byte {
 	return out[:n]
 }
 
-// totpTestKeyID returns a fixed key ID matching the migration's tk1_ shape
-// check, since a TOTP key ID is not free-form bytes like the other
-// second-factor sentinels.
 func totpTestKeyID() string {
 	return "tk1_" + "aaaaaaaaaaaaaaaaaaaaaa"
 }
 
-// enrollTOTP inserts one active TOTP credential and one live enrollment for
-// userID, bound to sessionID, mirroring migrations/00005_totp_second_factor.sql
-// without depending on the secondfactor package's lifecycle service.
 func enrollTOTP(ctx context.Context, t *testing.T, q *store.Queries, userID, sessionID uuid.UUID, now time.Time) {
 	t.Helper()
 	if _, err := q.InstallTOTPCredential(ctx, store.InstallTOTPCredentialParams{
@@ -786,11 +770,6 @@ func TestDeleteAccountRechecksConcreteSessionAfterDrain(t *testing.T) {
 	})
 }
 
-// TestDeleteAccountCascadesSecondFactorRows proves deletion removes every
-// policy, credential, recovery, pending, ceremony, TOTP credential, and TOTP
-// enrollment row for the deleted account while leaving a foreign account's
-// rows untouched. See docs/design/passkey-second-factor-contract.md#postgresql-shape
-// and docs/design/totp-second-factor-contract.md#postgresql-shape-and-bounds.
 func TestDeleteAccountCascadesSecondFactorRows(t *testing.T) {
 	env := newDeletionEnvironment(t)
 	now := time.Now().UTC().Truncate(time.Microsecond)

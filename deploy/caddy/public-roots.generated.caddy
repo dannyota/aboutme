@@ -22,7 +22,7 @@ handle @aboutme_reserved {
 	respond 404
 }
 
-@aboutme_public_slug expression `({http.request.uri.path}.matches('^/[a-z0-9]+(-[a-z0-9]+)*(\\.md)?$') && ((!{http.request.uri.path}.endsWith('.md') && size({http.request.uri.path}) >= 5 && size({http.request.uri.path}) <= 31) || ({http.request.uri.path}.endsWith('.md') && size({http.request.uri.path}) >= 8 && size({http.request.uri.path}) <= 34)))`
+@aboutme_public_slug expression `({http.request.uri.path}.matches('^/[a-z0-9]+(-[a-z0-9]+)*(\\.md)?$') && ((!{http.request.uri.path}.endsWith('.md') && size({http.request.uri.path}) >= 5 && size({http.request.uri.path}) <= 31) || ({http.request.uri.path}.endsWith('.md') && size({http.request.uri.path}) >= 8 && size({http.request.uri.path}) <= 34))) || ({http.request.uri.path}.matches('^/[a-z0-9]+(-[a-z0-9]+)*/projects(/[a-z0-9]+(-[a-z0-9]+)*)?$') && {http.request.uri.path}.matches('^/[a-z0-9-]{4,30}/projects(/[a-z0-9-]{2,40})?$'))`
 handle @aboutme_public_slug {
 	reverse_proxy server:8080 {
 		header_up X-Real-IP {http.request.remote.host}

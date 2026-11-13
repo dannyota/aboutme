@@ -9,10 +9,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// fifo is a bounded set whose entries leave in insertion order: when full,
-// or once an entry's expiry has passed. Callers insert with expiries that
-// rise with insertion, give or take a few milliseconds, so expire stops at
-// the first live entry and a late neighbor leaves on a later call.
 type fifo[K comparable] struct {
 	limit   int
 	entries map[K]time.Time
@@ -55,7 +51,6 @@ func (f *fifo[K]) full() bool {
 	return len(f.entries) >= f.limit
 }
 
-// add inserts key and reports false when the set is full.
 func (f *fifo[K]) add(key K, expiry time.Time) bool {
 	if f.full() {
 		return false
@@ -65,7 +60,6 @@ func (f *fifo[K]) add(key K, expiry time.Time) bool {
 	return true
 }
 
-// evictOldest removes the oldest entry to make room and returns it.
 func (f *fifo[K]) evictOldest() (K, bool) {
 	defer f.compact()
 	for f.head < len(f.order) {
@@ -80,7 +74,6 @@ func (f *fifo[K]) evictOldest() (K, bool) {
 	return zero, false
 }
 
-// networkFlags records what one network already did for one resume today.
 type networkFlags uint8
 
 const (
@@ -91,13 +84,8 @@ const (
 	flagInvalid
 )
 
-// networkKey is HMAC-SHA-256(dayKey, network || resumeID), truncated. The
-// day key is random, lives in memory for one Asia/Ho_Chi_Minh day, and is
-// never written anywhere (docs/design/viewer-analytics/counting.md, "Layer
-// 7").
 type networkKey [16]byte
 
-// networkBytes is the IPv4 address or the IPv6 /64.
 func networkBytes(addr netip.Addr) []byte {
 	addr = addr.Unmap()
 	if addr.Is4() {
@@ -117,12 +105,8 @@ func deriveNetworkKey(dayKey []byte, addr netip.Addr, resumeID uuid.UUID) networ
 	return key
 }
 
-// vietnam is Asia/Ho_Chi_Minh, which has kept UTC+7 without daylight saving
-// since 1975. A fixed zone needs no time zone database in the image.
 var vietnam = time.FixedZone("Asia/Ho_Chi_Minh", 7*60*60)
 
-// Day returns the Asia/Ho_Chi_Minh calendar day of t at midnight UTC, the
-// form the store's date columns take.
 func Day(t time.Time) time.Time {
 	y, m, d := t.In(vietnam).Date()
 	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)

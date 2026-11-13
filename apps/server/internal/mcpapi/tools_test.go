@@ -42,14 +42,6 @@ func TestToolErrorMapIsClosed(t *testing.T) {
 	}
 }
 
-// TestResponseDataStripsSignInToView proves the sign-in-to-view publish
-// switch never reaches an agent: MCP has no publish tool, so agents have no
-// path to read or change it, even though the REST resume response carries
-// it (docs/design/viewer-analytics/sign-in-to-view.md "Setting"). Every
-// resume-shaped tool output (list_resumes, get_resume, create_resume,
-// update_resume_metadata, and the photo/content/customization mutations)
-// goes through responseData, so this one seam is the closed proof for all
-// of them.
 func TestResponseDataStripsSignInToView(t *testing.T) {
 	body := []byte(`{"data":{"id":"018f5b6a-9a3e-7c21-8b1e-000000000010","revision":"1","signInToView":true}}`)
 	data, err := responseData(body)
@@ -64,9 +56,6 @@ func TestResponseDataStripsSignInToView(t *testing.T) {
 	}
 }
 
-// TestResponseDataStripsShowcase proves the community showcase state never
-// reaches an agent: no tool reads or changes it, even though the REST resume
-// response carries it (docs/design/showcase.md "Opt-in"; AC-SHOW-001).
 func TestResponseDataStripsShowcase(t *testing.T) {
 	body := []byte(`{"data":{"id":"018f5b6a-9a3e-7c21-8b1e-000000000010","revision":"1","showcase":{"state":"listed","role":"backend"}}}`)
 	data, err := responseData(body)
@@ -88,9 +77,6 @@ func TestResponseDataStripsShowcase(t *testing.T) {
 	}
 }
 
-// TestStripAgentOnlyFieldsAppliesToEachListedResume proves list_resumes
-// strips signInToView from every element, not only the first, since it
-// decodes a distinct envelope shape from responseData's single-object case.
 func TestStripAgentOnlyFieldsAppliesToEachListedResume(t *testing.T) {
 	resumes := []map[string]any{
 		{"id": "a", "signInToView": true},

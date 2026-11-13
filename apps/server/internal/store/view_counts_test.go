@@ -15,12 +15,9 @@ import (
 	"danny.vn/aboutme/apps/server/internal/testutil"
 )
 
-// viewCountWrite is one flush query and how to read back what it stored.
 type viewCountWrite struct {
-	name string
-	// add writes amount for every resume in ids on one day.
-	add func(ctx context.Context, q *store.Queries, ids []uuid.UUID, amount int32) error
-	// stored sums the stored amount for one resume.
+	name   string
+	add    func(ctx context.Context, q *store.Queries, ids []uuid.UUID, amount int32) error
 	stored string
 }
 
@@ -68,8 +65,6 @@ func viewCountWrites() []viewCountWrite {
 	}
 }
 
-// newViewCountEnv commits one user with two resumes, so separate
-// connections see them, and removes the user afterwards.
 func newViewCountEnv(t *testing.T) (context.Context, *pgxpool.Pool, uuid.UUID, uuid.UUID) {
 	t.Helper()
 	dsn := testutil.RequireMigratedTestDatabaseURL(t)
@@ -102,10 +97,6 @@ func newViewCountEnv(t *testing.T) (context.Context, *pgxpool.Pool, uuid.UUID, u
 	return ctx, pool, ids[0], ids[1]
 }
 
-// A flush that starts while a resume deletion is uncommitted sees that
-// resume in its snapshot. When the deletion commits, the flush must skip
-// that resume and still store every other resume's counts, instead of
-// failing its foreign key check and losing the whole batch.
 func TestViewCountFlushSkipsAResumeDeletedDuringTheFlush(t *testing.T) {
 	for _, write := range viewCountWrites() {
 		t.Run(write.name, func(t *testing.T) {
@@ -151,8 +142,6 @@ func TestViewCountFlushSkipsAResumeDeletedDuringTheFlush(t *testing.T) {
 	}
 }
 
-// While a flush is uncommitted, its resumes cannot be deleted, but ordinary
-// resume updates do not wait for it.
 func TestViewCountFlushBlocksOnlyResumeDeletion(t *testing.T) {
 	for _, write := range viewCountWrites() {
 		t.Run(write.name, func(t *testing.T) {
@@ -178,8 +167,6 @@ func TestViewCountFlushBlocksOnlyResumeDeletion(t *testing.T) {
 	}
 }
 
-// execWithLockTimeout runs one statement with a short lock wait and rolls it
-// back, leaving the fixture unchanged.
 func execWithLockTimeout(ctx context.Context, t *testing.T, pool *pgxpool.Pool, sql string, args ...any) error {
 	t.Helper()
 	tx, err := pool.Begin(ctx)
@@ -198,8 +185,6 @@ func execWithLockTimeout(ctx context.Context, t *testing.T, pool *pgxpool.Pool, 
 	return err
 }
 
-// waitForBackendBlockedBy waits until some backend waits on a lock that
-// holder holds.
 func waitForBackendBlockedBy(ctx context.Context, t *testing.T, pool *pgxpool.Pool, holder int32) {
 	t.Helper()
 	deadline := time.NewTimer(5 * time.Second)

@@ -14,26 +14,15 @@ import (
 	"danny.vn/aboutme/apps/server/internal/renderjob"
 )
 
-// ReadinessDependencies are the probes /readyz consults.
 type ReadinessDependencies struct {
-	// Coordinator gates readiness on the public-state generation.
-	Coordinator *publicstate.Coordinator
-	// PingDatabase checks the database connection.
-	PingDatabase func(context.Context) error
-	// Renderer is the direct public render worker client.
-	Renderer *directrender.Client
-	// PrintRenderer is the private browser renderer, or nil when the platform
-	// cannot print.
+	Coordinator   *publicstate.Coordinator
+	PingDatabase  func(context.Context) error
+	Renderer      *directrender.Client
 	PrintRenderer *printrender.Renderer
-	// PrintQueue is the private print queue.
-	PrintQueue *renderjob.Queue
-	// PublicOrigin is the canonical origin the render probe uses.
-	PublicOrigin publicresume.PublicOrigin
+	PrintQueue    *renderjob.Queue
+	PublicOrigin  publicresume.PublicOrigin
 }
 
-// NewReadiness returns the readiness check. Without a print renderer it
-// probes only the direct render worker; with one it also requires the print
-// queue and the browser to be ready first.
 func NewReadiness(deps ReadinessDependencies) *publicstate.Readiness {
 	return publicstate.NewReadiness(deps.Coordinator, publicstate.ReadinessDependencies{
 		PingDatabase: deps.PingDatabase,
@@ -44,7 +33,6 @@ func NewReadiness(deps ReadinessDependencies) *publicstate.Readiness {
 			if queueErr := deps.PrintQueue.Ready(); queueErr != nil {
 				return queueErr
 			}
-			// The browser probe owns its bound so a canceled caller cannot poison readiness.
 			if readyErr := deps.PrintRenderer.Ready(); readyErr != nil { //nolint:contextcheck // Ready owns the browser probe context.
 				return readyErr
 			}
@@ -53,9 +41,6 @@ func NewReadiness(deps ReadinessDependencies) *publicstate.Readiness {
 	})
 }
 
-// readinessRenderRequest is a closed, current-version public snapshot. The
-// direct worker applies the same OpenAPI validator to probes and viewer
-// renders, so readiness cannot use an incomplete synthetic value.
 func readinessRenderRequest(origin publicresume.PublicOrigin) directrender.PublicRenderRequest {
 	resume := publicresume.PublicResume{
 		Slug:     "readiness-probe",
@@ -84,8 +69,7 @@ func readinessRenderRequest(origin publicresume.PublicOrigin) directrender.Publi
 		Mode:             directrender.PublicRenderMode,
 		CanonicalOrigin:  origin.String(),
 		DiscoveryEnabled: false,
-		// The worker rejects an empty title, so the probe sends the default.
-		PageTitle: publicpage.EffectiveTitle(nil, "Readiness Probe"),
-		Preview:   previewmeta.For(resume, nil),
+		PageTitle:        publicpage.EffectiveTitle(nil, "Readiness Probe"),
+		Preview:          previewmeta.For(resume, nil),
 	}
 }

@@ -1,23 +1,13 @@
 package config
 
-// Sign in to view (docs/design/viewer-analytics/sign-in-to-view.md
-// "Setting", "Pass cookie"; ADR 0022). SIGN_IN_TO_VIEW_ENABLED lets owners
-// turn the per-resume switch on. VIEW_PASS_KEY seals the pass cookie.
-
 import (
 	"encoding/base64"
 	"errors"
 	"strings"
 )
 
-// viewPassKeyEncodedBytes is the unpadded base64url length of 32 bytes,
-// matching the TOTP key ring encoding (see totpKeyEncodedBytes).
 const viewPassKeyEncodedBytes = 43
 
-// loadSignInToViewFlag parses SIGN_IN_TO_VIEW_ENABLED. Blank or "false"
-// keeps the switch unavailable to owners (the default); "true" lets a
-// publish request turn it on. It never lifts the gate on an already-gated
-// resume.
 func loadSignInToViewFlag(raw string) (bool, error) {
 	switch strings.TrimSpace(raw) {
 	case "", "false":
@@ -29,14 +19,6 @@ func loadSignInToViewFlag(raw string) (bool, error) {
 	}
 }
 
-// loadViewPassKey requires VIEW_PASS_KEY, the canonical 43-character
-// unpadded base64url encoding of 32 bytes, mirroring loadTOTPKeyRing's
-// encoding. It is required whether or not sign in to view is enabled,
-// because rotating it must remain possible without also flipping the
-// feature flag, and a later Load call that turns the flag on must not
-// silently start sealing passes with an absent key. The raw value and its
-// decoded bytes never appear in a returned error or elsewhere in this
-// package's output.
 func loadViewPassKey(raw string) (string, error) {
 	if len(raw) != viewPassKeyEncodedBytes {
 		return "", errors.New("config: VIEW_PASS_KEY must be base64url encoding exactly 32 bytes")

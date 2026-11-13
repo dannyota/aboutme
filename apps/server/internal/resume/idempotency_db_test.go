@@ -18,8 +18,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/testutil"
 )
 
-// A wrong numeric ordering would make a transition consumer interpret a
-// producer decision as a different action.
 func TestIdempotencyRecheck_InterfaceAndDecisions(t *testing.T) {
 	if resume.RecheckFresh != 0 || resume.RecheckReplay != 1 || resume.RecheckReuse != 2 {
 		t.Fatalf("RecheckDecision values = (%d, %d, %d), want (0, 1, 2)",
@@ -32,8 +30,6 @@ func TestIdempotencyRecheck_InterfaceAndDecisions(t *testing.T) {
 	} = (*resume.IdempotencyStore)(nil)
 }
 
-// Recheck must keep the owner lock only through its lookup and commit, then
-// release it; retaining it would serialize a later mutation beyond the probe.
 func TestIdempotencyRecheck_UserLockBoundsReadOnlyTransaction(t *testing.T) {
 	clock := testutil.NewClockAtEpoch()
 	_, _, q, pool, ctx := newIntegrationIdempotencyStore(t, clock.Now)
@@ -71,8 +67,6 @@ func TestIdempotencyRecheck_UserLockBoundsReadOnlyTransaction(t *testing.T) {
 	assertRecheckNoWrite(ctx, t, pool, userID, 0, 0)
 }
 
-// Removing the retained-record decision or treating expiry as reuse would
-// make a transition close unnecessarily or reject a fresh mutation.
 func TestIdempotencyRecheck_DecidesWithoutWritesOrUsageMutation(t *testing.T) {
 	clock := testutil.NewClockAtEpoch()
 	idem, _, q, pool, ctx := newIntegrationIdempotencyStore(t, clock.Now)
@@ -117,8 +111,6 @@ func TestIdempotencyRecheck_DecidesWithoutWritesOrUsageMutation(t *testing.T) {
 	assertRecheckNoWrite(ctx, t, pool, userID, 1, 1)
 }
 
-// A transition's optimistic probe is not its final authority: a committed
-// contender between probe and Execute must replay without invoking mutate.
 func TestSameKeyContenderRechecksBeforeCAS(t *testing.T) {
 	idem, _, q, _, ctx := newIntegrationIdempotencyStore(t, testutil.NewClockAtEpoch().Now)
 	userID := createTestUser(t, q)
@@ -151,8 +143,6 @@ func TestSameKeyContenderRechecksBeforeCAS(t *testing.T) {
 	}
 }
 
-// Removing Execute's final decision would let a key reuse between transition
-// preflight and the callback run a second mutation.
 func TestExecuteFinalRecheck_ReplayAndReuseSkipCallback(t *testing.T) {
 	idem, _, q, _, ctx := newIntegrationIdempotencyStore(t, testutil.NewClockAtEpoch().Now)
 	userID := createTestUser(t, q)
@@ -187,8 +177,6 @@ func TestExecuteFinalRecheck_ReplayAndReuseSkipCallback(t *testing.T) {
 	}
 }
 
-// Canceling the request after PostgreSQL has accepted COMMIT cannot prove that
-// the mutation rolled back; callers must retain any external candidate.
 func TestCommitOutcome_CancellationAfterCommitBeginsIsUnknown(t *testing.T) {
 	clock := testutil.NewClockAtEpoch()
 	_, _, q, pool, ctx := newIntegrationIdempotencyStore(t, clock.Now)
@@ -199,9 +187,6 @@ func TestCommitOutcome_CancellationAfterCommitBeginsIsUnknown(t *testing.T) {
 	defer cancel()
 	idem := resume.NewIdempotencyStoreWithHooksForTest(pool, clock.Now, nil,
 		func(_ context.Context, tx pgx.Tx) error {
-			// Commit without the request context so this test can cancel the
-			// request exactly after the server has accepted the transaction.
-			// The returned cancellation is consequently an ambiguous outcome.
 			if err := tx.Commit(context.WithoutCancel(commitContext)); err != nil {
 				return err
 			}
@@ -236,8 +221,6 @@ func assertRecheckNoWrite(ctx context.Context, t *testing.T, pool *store.Pool, u
 	}
 }
 
-// Recheck must release its user lock and surface cancellation or a read error;
-// neither outcome may create a record or a usage row.
 func TestIdempotencyRecheck_FailuresDoNotWrite(t *testing.T) {
 	clock := testutil.NewClockAtEpoch()
 	_, _, q, pool, ctx := newIntegrationIdempotencyStore(t, clock.Now)

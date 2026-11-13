@@ -1,11 +1,3 @@
-// Proves the ownership and grant shape ADR 0005 requires: aboutme_migrator
-// owns every object in public (including goose_db_version and the citext
-// extension) and belongs to no other role, and aboutme_app holds exactly
-// SELECT/INSERT/UPDATE/DELETE (no grant option, nothing else) on each of
-// the business tables, nothing at all on any other relation in
-// public, and cannot create or alter schema objects. Every check is proven
-// against the real ACL and catalog state a live goose-migrated database
-// produces, not against the migration source text.
 package migrations_test
 
 import (
@@ -18,9 +10,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// businessTables is the exact public table set that aboutme_app may access.
-// TestBusinessTableSetMatchesPublicSchema fails when schema public gains a
-// table this list does not name.
 var businessTables = []string{
 	"users", "identities", "oauth_transactions", "sessions", "idempotency_records",
 	"resumes", "resume_preview_cards", "resume_showcase", "resume_view_days", "resume_share_signal_days", "slug_tombstones", "idempotency_usage", "media_deletion_jobs",
@@ -120,10 +109,6 @@ func TestAppRoleHasExactTablePrivileges(t *testing.T) {
 	}
 }
 
-// TestAppRoleHasNoPrivilegeOutsideBusinessTables asserts aboutme_app holds
-// no privilege on any relation in public other than businessTables:
-// goose_db_version, and any view, sequence, or other relation a later
-// migration might add without granting aboutme_app on it.
 func TestAppRoleHasNoPrivilegeOutsideBusinessTables(t *testing.T) {
 	t.Parallel()
 	tx, ctx := newResumeSchemaTx(t)
@@ -198,11 +183,6 @@ func TestAppRoleCannotCreateAlterOrReadGooseVersion(t *testing.T) {
 	}
 }
 
-// TestMigratorOwnsEveryRelationInPublic covers every relation kind
-// PostgreSQL supports in schema public (table, index, sequence, view,
-// materialized view, partitioned table, foreign table, and composite
-// type), not only the table and index kinds the baseline currently uses,
-// so a later view or sequence still needs aboutme_migrator ownership.
 func TestMigratorOwnsEveryRelationInPublic(t *testing.T) {
 	t.Parallel()
 	tx, ctx := newResumeSchemaTx(t)
@@ -222,14 +202,7 @@ func TestMigratorOwnsEveryRelationInPublic(t *testing.T) {
 	}
 }
 
-// TestMigratorOwnsEveryFunctionInPublicExceptTrustedExtensionMembers
-// excludes only a function that pg_depend records as a member of a
-// trusted extension whose own extnamespace is public (deptype 'e'): for
-// such an extension, PostgreSQL always attributes its member objects to
-// the cluster's bootstrap superuser, never to the non-superuser role
-// that ran CREATE EXTENSION, regardless of grants. The extension's own
-// catalog entry still records aboutme_migrator as owner (checked below),
-// which is what governs who may alter or drop it.
+// PostgreSQL makes the bootstrap superuser own a trusted extension's member objects, whoever runs CREATE EXTENSION.
 func TestMigratorOwnsEveryFunctionInPublicExceptTrustedExtensionMembers(t *testing.T) {
 	t.Parallel()
 	tx, ctx := newResumeSchemaTx(t)
@@ -255,12 +228,6 @@ func TestMigratorOwnsEveryFunctionInPublicExceptTrustedExtensionMembers(t *testi
 	}
 }
 
-// TestMigratorOwnsEveryTypeInPublicExceptExtensionMembers covers standalone
-// types in public (domains, enums, and standalone composite types), which
-// no other check here reaches. It excludes a trusted extension's member
-// types (same pg_depend rule as the function check above) and a table's
-// automatic row type and array type, whose ownership already follows the
-// table and is covered by TestMigratorOwnsEveryRelationInPublic.
 func TestMigratorOwnsEveryTypeInPublicExceptExtensionMembers(t *testing.T) {
 	t.Parallel()
 	tx, ctx := newResumeSchemaTx(t)
@@ -349,13 +316,6 @@ func TestMigratorHasNoRoleMembership(t *testing.T) {
 	}
 }
 
-// TestAppRoleSmokeFlowThroughInternalStoreQueries proves aboutme_app's
-// exact grant set is enough for internal/store's real generated queries,
-// not merely present in the catalog: it runs store.New against a
-// connection with SET ROLE aboutme_app, then creates a user, a session,
-// and a resume, takes a row lock on the user through the same FOR UPDATE
-// path a mutating store call takes before a write, reads each row back,
-// and confirms deleting the user cascades the session and resume away.
 func TestAppRoleSmokeFlowThroughInternalStoreQueries(t *testing.T) {
 	t.Parallel()
 	tx, ctx := newResumeSchemaTx(t)
@@ -400,8 +360,6 @@ func TestAppRoleSmokeFlowThroughInternalStoreQueries(t *testing.T) {
 		t.Fatalf("aboutme_app CreateResume: %v", err)
 	}
 
-	// The row lock a session-affecting store call takes before its write;
-	// exercises the FOR UPDATE path under aboutme_app's own privileges.
 	lockedUser, err := queries.GetUserForUpdate(ctx, user.ID)
 	if err != nil {
 		t.Fatalf("aboutme_app GetUserForUpdate: %v", err)

@@ -9,24 +9,17 @@ import (
 	altcha "github.com/altcha-org/altcha-lib-go/v2"
 )
 
-// Proof-of-work parameters (docs/design/viewer-analytics/counting.md,
-// "Layers 5 and 6"; docs/design/budgets.md, "Viewer analytics"). The server
-// picks the counter, so the client derives on average about 600 PBKDF2 keys
-// of 1,000 iterations each, while verification is one HMAC.
 const (
 	challengeAlgorithm  = "PBKDF2/SHA-256"
 	challengeCost       = 1_000
 	challengeKeyLength  = 32
 	challengeCounterMin = 200
 	challengeCounterMax = 1_000
-	// challengeDataKey names the token's view ID inside the signed challenge.
-	challengeDataKey = "view"
+	challengeDataKey    = "view"
 )
 
-// Challenge is the ALTCHA v2 challenge wire shape.
 type Challenge = altcha.Challenge
 
-// Solution is the ALTCHA v2 solution wire shape.
 type Solution = altcha.Solution
 
 type prover struct {
@@ -49,7 +42,6 @@ func newProver(random io.Reader) (*prover, error) {
 	}, nil
 }
 
-// challenge creates a signed challenge bound to one view ID.
 func (p *prover) challenge(id viewID) (Challenge, error) {
 	span := big.NewInt(challengeCounterMax - challengeCounterMin)
 	offset, err := randInt(p.rand, span)
@@ -69,10 +61,7 @@ func (p *prover) challenge(id viewID) (Challenge, error) {
 	})
 }
 
-// verify reports whether solution solves challenge, the challenge carries
-// this process's signature, and it is bound to id. It never trusts a
-// challenge without a key signature, which the library would otherwise
-// accept on its signature alone.
+// altcha-lib-go accepts a challenge on its signature alone, without a key signature.
 func (p *prover) verify(challenge Challenge, solution Solution, id viewID) bool {
 	params := challenge.Parameters
 	if params.KeySignature == "" || params.Algorithm != challengeAlgorithm ||

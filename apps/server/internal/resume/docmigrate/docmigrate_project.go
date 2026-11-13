@@ -1,8 +1,5 @@
 package docmigrate
 
-// Project and its document assembly/split helpers: lifting the three stored
-// jsonb parts to the projector's current version and back.
-
 import (
 	"bytes"
 	"encoding/json"
@@ -12,17 +9,6 @@ import (
 	"strconv"
 )
 
-// Project lifts personalDetails/content/customization -- exactly the three
-// jsonb parts read back from the resumes table's own columns -- plus the
-// row's own schema_version, forward to this projector's current version,
-// returning the three current-version parts (still undecoded
-// json.RawMessage; the caller's strict decode happens afterwards).
-//
-// It is pure: it never touches the database, and calling it twice on
-// the same input always produces the same output. A row already at the
-// current version short-circuits to a byte-for-byte passthrough. A row at a
-// version this build has no schema for fails closed -- never a silent
-// passthrough of content that cannot be migrated.
 func (p *Projector) Project(personalDetails, content, customization json.RawMessage, storedVersion int32) (pd, c, cu json.RawMessage, err error) {
 	if _, lookupErr := p.validatorFor(storedVersion); lookupErr != nil {
 		return nil, nil, nil, lookupErr
@@ -42,15 +28,8 @@ func (p *Projector) Project(personalDetails, content, customization json.RawMess
 	return splitDocument(converted, p.current)
 }
 
-// documentKeys are the only top-level keys a canonical document has: the
-// three stored jsonb parts plus the schema version. The set is fixed
-// across versions because it is the storage decomposition itself, not a
-// property of any one document shape.
 var documentKeys = []string{"schemaVersion", "personalDetails", "content", "customization"}
 
-// assembleDocument builds the full canonical document from the three stored
-// parts plus the row's schema_version, without decoding any part: the parts
-// are spliced in as raw JSON, so no value is ever reformatted on the way in.
 func assembleDocument(personalDetails, content, customization json.RawMessage, version int32) (json.RawMessage, error) {
 	parts := map[string]json.RawMessage{
 		"personalDetails": personalDetails,
@@ -74,12 +53,6 @@ func assembleDocument(personalDetails, content, customization json.RawMessage, v
 	return out, nil
 }
 
-// splitDocument decomposes a converted document back into the three stored
-// parts. It fails closed unless the document has exactly the four
-// canonical top-level keys and its own schemaVersion equals wantVersion: a
-// converter that invents a fifth top-level key has produced something this
-// storage layout cannot hold, and one that leaves schemaVersion behind has
-// produced a document that lies about itself.
 func splitDocument(doc json.RawMessage, wantVersion int32) (pd, c, cu json.RawMessage, err error) {
 	var fields map[string]json.RawMessage
 	dec := json.NewDecoder(bytes.NewReader(doc))

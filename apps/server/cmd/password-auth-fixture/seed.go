@@ -22,7 +22,6 @@ import (
 var mcpSeedEmail = regexp.MustCompile(`\Apa-test-mcp-[0-9a-f]{16}@example\.invalid\z`)
 var mcpSeedCredential = regexp.MustCompile(`\AABOUTME_TEST_EMAIL=(pa-test-mcp-[0-9a-f]{16}@example\.invalid)\nABOUTME_TEST_PASSWORD=([A-Za-z0-9_-]{32})\n\z`)
 
-// readMCPSeedCredential reads only the private file emitted by the MCP proof.
 func readMCPSeedCredential(path string) (fixtureAccount, error) {
 	invalid := errors.New("invalid private MCP fixture credential")
 	if !filepath.IsAbs(path) {
@@ -56,7 +55,6 @@ func readMCPSeedCredential(path string) (fixtureAccount, error) {
 	return fixtureAccount{Email: string(match[1]), Password: string(match[2]), Name: "Fictional Workflow Owner"}, nil
 }
 
-// runMCPSeed prepares one disposable login; the MCP journey proves sign-in.
 func runMCPSeed(ctx context.Context, cfg Config) error {
 	if os.Getenv("ENV") != "dev" {
 		return errors.New("MCP fixture requires the development environment")
@@ -96,7 +94,6 @@ func runMCPSeed(ctx context.Context, cfg Config) error {
 	return seedMCPAccount(ctx, db, account, encoded, time.Now())
 }
 
-// A collision refuses the seed instead of adopting or changing another user.
 func seedMCPAccount(ctx context.Context, db *sql.DB, account fixtureAccount, encoded string, now time.Time) error {
 	if !mcpSeedEmail.MatchString(account.Email) || account.ID == uuid.Nil || account.Provider != nil {
 		return errors.New("invalid MCP fixture account")

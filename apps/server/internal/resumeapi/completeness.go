@@ -23,8 +23,6 @@ const (
 	slugFormatMessage      = "slug must be 4 to 30 characters and match ^[a-z0-9]+(-[a-z0-9]+)*$"
 )
 
-// validatePublish resolves the command against the current publish state and
-// reports every independent, closed publish-policy issue.
 func validatePublish(source schema.Resume, current currentPublish, input publishInput) publishPrepared {
 	effective := current
 	effective.Live = input.Live
@@ -76,8 +74,6 @@ func validatePublish(source schema.Resume, current currentPublish, input publish
 	}
 }
 
-// publicPageMessages never echo the submitted value, which may hold bidi or
-// control characters.
 var publicPageMessages = map[string]string{
 	publicpage.CodeTooLong:           "public title must be at most 70 characters",
 	publicpage.CodeInvalidCharacters: "public title must not contain control or invisible formatting characters",
@@ -92,15 +88,10 @@ func publicPageIssues(path string, codes []string) []publishIssue {
 	return issues
 }
 
-// publishRequiresRecentReauth reports whether this fresh command releases an
-// existing public link. Initial claims and unpublishes preserve no release.
 func publishRequiresRecentReauth(current currentPublish, prepared publishPrepared) bool {
 	return current.Slug != nil && prepared.ChangedSlug
 }
 
-// admitChangedSlugAttempt keeps invalid and unchanged commands out of the
-// dedicated slug-attempt budget. A caller maps false after a clean preflight to
-// the closed rate_limited response before any claim availability detail.
 func admitChangedSlugAttempt(limiter slugAttemptLimiter, accountID uuid.UUID, now time.Time, prepared publishPrepared) bool {
 	if len(prepared.Issues) != 0 || !prepared.ChangedSlug {
 		return len(prepared.Issues) == 0

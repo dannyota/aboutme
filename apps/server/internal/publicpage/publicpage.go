@@ -1,6 +1,3 @@
-// Package publicpage validates and renders the owner-set public page title
-// and emoji favicon, publication settings stored beside the slug. See
-// docs/adr/0014-public-page-head-and-link-preview.md.
 package publicpage
 
 //go:generate go run extpict_gen.go
@@ -15,34 +12,22 @@ import (
 )
 
 const (
-	// MaxTitleGraphemes bounds the title as a reader sees it.
 	MaxTitleGraphemes = 70
-	// MaxTitleRunes bounds its storage, since one grapheme may hold many
-	// code points; the resumes_public_title_check constraint matches.
-	MaxTitleRunes = 560
-	// MaxFaviconRunes bounds one emoji grapheme. The longest standard
-	// sequences, family ZWJ sequences with skin tones, use 11 code points.
-	MaxFaviconRunes = 16
+	MaxTitleRunes     = 560
+	MaxFaviconRunes   = 16
 )
 
-// Issue codes reported under the publish request's field paths.
 const (
-	// CodeTooLong reports a title over MaxTitleGraphemes or MaxTitleRunes.
-	CodeTooLong = "too_long"
-	// CodeInvalidCharacters reports a control or format character in a title.
+	CodeTooLong           = "too_long"
 	CodeInvalidCharacters = "invalid_characters"
-	// CodeInvalidEmoji reports a favicon that is not exactly one emoji.
-	CodeInvalidEmoji = "invalid_emoji"
+	CodeInvalidEmoji      = "invalid_emoji"
 )
 
-// Result is one normalized field. Value is nil when the field clears; Codes
-// lists every issue, sorted, and is empty when the value is valid.
 type Result struct {
 	Value *string
 	Codes []string
 }
 
-// NormalizeTitle trims Unicode white space and validates a public title.
 func NormalizeTitle(raw string) Result {
 	title := trim(raw)
 	if title == "" {
@@ -65,10 +50,6 @@ func NormalizeTitle(raw string) Result {
 	return Result{Value: &title}
 }
 
-// NormalizeFaviconEmoji trims Unicode white space and accepts exactly one
-// emoji grapheme: an Extended_Pictographic base with only emoji modifiers,
-// variation selectors, ZWJ, and tag characters after it, or one flag of two
-// Regional Indicators.
 func NormalizeFaviconEmoji(raw string) Result {
 	emoji := trim(raw)
 	if emoji == "" {
@@ -80,7 +61,6 @@ func NormalizeFaviconEmoji(raw string) Result {
 	return Result{Value: &emoji}
 }
 
-// EffectiveTitle is the page's <title>: the owner's title, or the default.
 func EffectiveTitle(publicTitle *string, fullName string) string {
 	if publicTitle != nil && *publicTitle != "" {
 		return *publicTitle
@@ -88,9 +68,6 @@ func EffectiveTitle(publicTitle *string, fullName string) string {
 	return fullName + " — Resume"
 }
 
-// FaviconHref is the exact data: URL of an emoji favicon. Every byte outside
-// the URL-unreserved set is percent-encoded, so the value cannot leave its
-// attribute or the SVG text node whatever the emoji holds.
 func FaviconHref(emoji string) string {
 	svg := "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>" +
 		"<text y='.9em' font-size='90'>" + emoji + "</text></svg>"
@@ -141,8 +118,6 @@ func emojiCluster(cluster string) bool {
 
 func regionalIndicator(r rune) bool { return r >= 0x1F1E6 && r <= 0x1F1FF }
 
-// emojiComponent covers what may follow an emoji base inside one sequence:
-// ZWJ, text and emoji variation selectors, skin-tone modifiers, and tags.
 func emojiComponent(r rune) bool {
 	return r == zeroWidthJoiner || r == 0xFE0E || r == 0xFE0F ||
 		(r >= 0x1F3FB && r <= 0x1F3FF) || (r >= 0xE0020 && r <= 0xE007F)

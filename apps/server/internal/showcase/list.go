@@ -16,15 +16,10 @@ import (
 )
 
 const (
-	// PageSize is the number of listings on one page.
 	PageSize = 12
-	// MaxPage is the highest page number a request may ask for.
-	MaxPage = 100
+	MaxPage  = 100
 )
 
-// Filter selects a listing page. An empty field applies no filter. The caller
-// has already validated every value (see the Valid functions); Page is 1 to
-// MaxPage.
 type Filter struct {
 	Role     string
 	Lang     string
@@ -32,9 +27,6 @@ type Filter struct {
 	Page     int
 }
 
-// Item is one listing. Its fields are closed: it carries no account
-// identifier, contact detail, date, or count (docs/design/showcase.md "What a
-// listing shows").
 type Item struct {
 	Slug        string  `json:"slug"`
 	CardVersion string  `json:"cardVersion"`
@@ -44,7 +36,6 @@ type Item struct {
 	Role        *string `json:"role"`
 }
 
-// Page is one page of the listing.
 type Page struct {
 	Items     []Item `json:"items"`
 	Page      int    `json:"page"`
@@ -52,11 +43,6 @@ type Page struct {
 	Total     int    `json:"total"`
 }
 
-// List reads one page of the listing from committed state. One statement
-// checks all three listing conditions (the opt-in row, a live resume, sign in
-// to view off), and nothing caches it, so a request admitted after an opt-out,
-// unpublish, sign in to view, rename, or delete commits cannot list the
-// resume. Oldest opt-in comes first.
 func (s *Service) List(ctx context.Context, filter Filter) (Page, error) {
 	queries := store.New(s.db)
 	total, err := queries.CountShowcase(ctx, store.CountShowcaseParams{
@@ -80,8 +66,6 @@ func (s *Service) List(ctx context.Context, filter Filter) (Page, error) {
 		}
 		text, textErr := s.imageText(ctx, queries, row)
 		if textErr != nil {
-			// A resume whose details cannot be read is not shown; it is not
-			// served publicly either. It still counts in Total.
 			s.logSkipped(ctx, row.ID)
 			continue
 		}
@@ -93,8 +77,6 @@ func (s *Service) List(ctx context.Context, filter Filter) (Page, error) {
 	return Page{Items: items, Page: filter.Page, PageCount: pageCount(total), Total: int(total)}, nil
 }
 
-// logSkipped records a listed resume whose row could not be read. It names the
-// resume ID only, never a name or headline.
 func (s *Service) logSkipped(ctx context.Context, id uuid.UUID) {
 	if s.logger != nil {
 		s.logger.ErrorContext(ctx, "showcase listing skipped a row", "resume_id", id.String())
@@ -112,9 +94,6 @@ func optional(value string) *string {
 	return &value
 }
 
-// imageText is the card's image text of one listed resume. It reads only the
-// personal details when they are at the current document version, which is
-// every row once the backfill has run, and the whole document otherwise.
 func (s *Service) imageText(ctx context.Context, queries *store.Queries, row store.ListShowcaseRow) (string, error) {
 	details := row.PersonalDetails
 	version := row.SchemaVersion
@@ -138,8 +117,6 @@ func (s *Service) imageText(ctx context.Context, queries *store.Queries, row sto
 	return cardImageText(*row.Slug, doc.PersonalDetails), nil
 }
 
-// cardImageText applies the preview card's image text rule to personal
-// details, so it holds no contact detail.
 func cardImageText(slug string, details schema.PersonalDetails) string {
 	document := publicresume.ProjectDocument(schema.Resume{PersonalDetails: details}, "")
 	public := publicresume.PublicResume{Slug: slug, Lng: "und", Document: document}

@@ -1,4 +1,3 @@
-// Package privacynotice implements the fixed privacy notice cohort and ledger.
 package privacynotice
 
 import (
@@ -15,10 +14,8 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// ErrState hides database and authority details from command output.
 var ErrState = errors.New("privacy notice: invalid state")
 
-// Service owns the fixed cohort and its durable outcomes.
 type Service struct {
 	pool        *store.Pool
 	outbox      *authmail.Outbox
@@ -26,7 +23,6 @@ type Service struct {
 	authorityFS fs.FS
 }
 
-// New permits a keyless service for every action except enqueue.
 func New(pool *store.Pool, outbox *authmail.Outbox, now func() time.Time) (*Service, error) {
 	if pool == nil || now == nil {
 		return nil, ErrState
@@ -34,8 +30,6 @@ func New(pool *store.Pool, outbox *authmail.Outbox, now func() time.Time) (*Serv
 	return &Service{pool: pool, outbox: outbox, now: now}, nil
 }
 
-// Prepare captures one bounded batch. The host keeps account writers stopped
-// until the exact membership proof seals the cohort.
 func (s *Service) Prepare(ctx context.Context) (resultErr error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {

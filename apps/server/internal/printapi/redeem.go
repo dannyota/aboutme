@@ -1,5 +1,3 @@
-// Package printapi exposes the capability redemption endpoint for the private
-// render listener.
 package printapi
 
 import (
@@ -37,7 +35,6 @@ var (
 	redeemFailureBody  = []byte("{\"error\":{\"code\":\"not_found\",\"message\":\"not found\"}}\n")
 )
 
-// Redeemer atomically consumes one private render capability.
 type Redeemer interface {
 	Redeem(context.Context, renderjob.Redemption) (renderjob.Snapshot, error)
 }
@@ -46,7 +43,6 @@ type redeemHandler struct {
 	redeemer Redeemer
 }
 
-// NewRedeemHandler constructs the private render-capability adapter.
 func NewRedeemHandler(redeemer Redeemer) (http.Handler, error) {
 	if redeemer == nil || nilInterfaceValue(redeemer) {
 		return nil, errMissingRedeemer
@@ -294,10 +290,6 @@ func snapshotMatches(snapshot renderjob.Snapshot, requestedResumeID uuid.UUID) b
 	return true
 }
 
-// cardSnapshotMatches accepts a link-preview card envelope only in the exact
-// bytes printsnapshot.MarshalCard emits for it, bound to the snapshot's
-// resume and to a public generation. Any unknown key, a document, or a
-// non-canonical encoding fails.
 func cardSnapshotMatches(snapshot renderjob.Snapshot) bool {
 	if snapshot.PublicGeneration != snapshot.Revision {
 		return false
@@ -392,6 +384,5 @@ func writeRedeemResponse(response http.ResponseWriter, status int, body []byte, 
 		header.Set("Allow", http.MethodPost)
 	}
 	response.WriteHeader(status)
-	// application/json body from a stored snapshot on the private print boundary
 	_, _ = response.Write(body) //nolint:errcheck // The response is committed; retrying can duplicate bytes, and this private boundary must not log details.
 }

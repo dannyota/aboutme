@@ -16,8 +16,6 @@ import (
 
 var errCIMDInvalid = errors.New("oauth client metadata invalid")
 
-// CIMDMetadata retains only validated display and redirect values. Its fields
-// stay private and each resolver result owns its redirect slice.
 type CIMDMetadata struct {
 	id        string
 	host      string
@@ -120,7 +118,6 @@ func cimdAddressAllowed(addr netip.Addr) bool {
 	return true
 }
 
-// checkCIMDJSON checks ignored nested values before fields are discarded.
 func checkCIMDJSON(d *json.Decoder) error {
 	t, err := d.Token()
 	if err != nil {
@@ -311,7 +308,6 @@ func cimdRedirectWithoutPort(raw string) string {
 	if err != nil || u.Port() == "" {
 		return raw
 	}
-	// Remove only the literal port; reserialization could alter path spelling.
 	start := len(u.Scheme) + 3
 	return raw[:start] + strings.TrimSuffix(u.Host, ":"+u.Port()) + raw[start+len(u.Host):]
 }

@@ -8,9 +8,6 @@ import (
 	"danny.vn/aboutme/apps/server/migrations"
 )
 
-// 00003 adds the public page title and emoji favicon. The checks bound
-// storage and reject the empty string; the down path drops both columns and
-// the up path can apply again.
 func TestResumePublicPageMigrationUpDownUp(t *testing.T) {
 	t.Parallel()
 

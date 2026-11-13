@@ -10,8 +10,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/publicresume"
 )
 
-// resumeStylesheet reports whether href is one of the self-hosted stylesheets
-// that carry the resume template's CSS and fonts, and returns its path.
 func resumeStylesheet(href string) (string, bool) {
 	for _, path := range []string{"/_nuxt/assets/print-fonts.css", "/_nuxt/assets/print.css"} {
 		if versionedAsset(href, path) {
@@ -21,10 +19,6 @@ func resumeStylesheet(href string) (string, bool) {
 	return "", false
 }
 
-// versionedAsset reports whether url is path plus the renderer's content
-// version as its only query, ?v=<16 lowercase hex>. These assets keep fixed
-// names and are cached as immutable, so an unversioned URL could serve a
-// year-old copy after a release.
 func versionedAsset(url, path string) bool {
 	version, found := strings.CutPrefix(url, path+"?v=")
 	if !found || len(version) != 16 {
@@ -38,8 +32,6 @@ func versionedAsset(url, path string) bool {
 	return true
 }
 
-// derivedContactLinks counts the mailto: and tel: hrefs the renderer may emit
-// for the resume's visible contact details (docs/adr/0013-resume-header-and-contacts.md).
 func derivedContactLinks(resume publicresume.PublicResume) map[string]int {
 	links := map[string]int{}
 	if !resume.Document.PersonalDetails.Details.Present() {
@@ -53,7 +45,6 @@ func derivedContactLinks(resume publicresume.PublicResume) map[string]int {
 	return links
 }
 
-// insideResumeHeader reports whether node sits in the resume's header block.
 func insideResumeHeader(node *html.Node) bool {
 	for ancestor := node.Parent; ancestor != nil; ancestor = ancestor.Parent {
 		if ancestor.Type == html.ElementNode && ancestor.Data == "header" &&
@@ -64,12 +55,8 @@ func insideResumeHeader(node *html.Node) bool {
 	return false
 }
 
-// creditClass marks the page credit, which links the service's home page from
-// the page chrome (docs/design/web.md).
 const creditClass = "public-credit"
 
-// creditText is the credit's text in the resume language: Vietnamese for vi,
-// English for every other language.
 func creditText(lng string) string {
 	language, _, _ := strings.Cut(lng, "-")
 	if strings.EqualFold(language, "vi") {
@@ -78,8 +65,6 @@ func creditText(lng string) string {
 	return "Built with aboutme.vn"
 }
 
-// isPublicCredit requires exactly class and href, the canonical home URL, one
-// text child with the expected text, and a place outside the resume article.
 func isPublicCredit(node *html.Node, href, text string) bool {
 	if len(node.Attr) != 2 || attributeCount(node, "class") != 1 || attribute(node, "class") != creditClass ||
 		attributeCount(node, "href") != 1 || attribute(node, "href") != href {
@@ -123,8 +108,6 @@ func forbiddenResourceElement(name string) bool {
 	}
 }
 
-// unexpectedResourceAttribute returns the closed rule an attribute breaks, or
-// "" when every attribute is allowed.
 func unexpectedResourceAttribute(node *html.Node) string {
 	for _, attribute := range node.Attr {
 		key := strings.ToLower(attribute.Key)
@@ -156,7 +139,10 @@ func unsafeInlineStyle(value string) bool {
 	if strings.Contains(lower, "\\") {
 		return true
 	}
-	withoutComments := stripCSSComments(lower)
+	withoutComments, ok := cssWithoutComments(lower)
+	if !ok {
+		return true
+	}
 	compact := strings.Map(func(character rune) rune {
 		switch character {
 		case ' ', '\t', '\n', '\r', '\f':
@@ -168,19 +154,43 @@ func unsafeInlineStyle(value string) bool {
 	return strings.Contains(compact, "url") || strings.Contains(compact, "image-set") || strings.Contains(compact, "@import")
 }
 
-func stripCSSComments(value string) string {
+func cssWithoutComments(value string) (string, bool) {
 	var output strings.Builder
-	for {
-		start := strings.Index(value, "/*")
-		if start < 0 {
-			output.WriteString(value)
-			return output.String()
+	for i := 0; i < len(value); {
+		switch {
+		case value[i] == '"' || value[i] == '\'':
+			end, ok := cssStringEnd(value, i)
+			if !ok {
+				return "", false
+			}
+			output.WriteString(value[i:end])
+			i = end
+		case strings.HasPrefix(value[i:], "/*"):
+			end := strings.Index(value[i+2:], "*/")
+			if end < 0 {
+				return "", false
+			}
+			output.WriteByte(' ')
+			i += 2 + end + 2
+		default:
+			output.WriteByte(value[i])
+			i++
 		}
-		output.WriteString(value[:start])
-		end := strings.Index(value[start+2:], "*/")
-		if end < 0 {
-			return output.String()
-		}
-		value = value[start+2+end+2:]
 	}
+	return output.String(), true
+}
+
+func cssStringEnd(value string, start int) (int, bool) {
+	quote := value[start]
+	for i := start + 1; i < len(value); i++ {
+		switch value[i] {
+		case '\\':
+			i++
+		case '\n', '\r', '\f':
+			return 0, false
+		case quote:
+			return i + 1, true
+		}
+	}
+	return 0, false
 }

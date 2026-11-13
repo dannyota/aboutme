@@ -1,12 +1,3 @@
-// Command dev-seed creates one signed-in-ready development account with a
-// sample resume in the native development database (aboutme_dev). It is
-// idempotent, refuses every other database, and never runs in Compose or the
-// cloud (docs/design/security.md, "No operator surface").
-//
-// Usage:
-//
-//	dev-seed seed    --database-url <dsn>
-//	dev-seed cleanup --database-url <dsn>
 package main
 
 import (

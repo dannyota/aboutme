@@ -2,12 +2,8 @@ package oauthsrv
 
 import "net/http"
 
-// mcpResourcePath is the MCP endpoint path. Origin plus this path is the
-// protected resource identifier a person enters in an MCP client.
 const mcpResourcePath = "/mcp"
 
-// HandleMetadata serves the configured RFC 8414 authorization-server document.
-// Its bytes depend on the canonical public origin and CIMD startup flag.
 func (s *Service) HandleMetadata(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -25,12 +21,6 @@ func (s *Service) HandleMetadata(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// HandleProtectedResourceMetadata serves the configured RFC 9728 document.
-// Its bytes depend only on the validated canonical public origin. The resource
-// is the MCP endpoint URL a person enters; a client that finds this document
-// through the /mcp challenge's resource_metadata URL checks it against the URL
-// it called (RFC 9728 section 3.3). The authorization server is the origin.
-// See docs/design/mcp-client-compatibility.md.
 func (s *Service) HandleProtectedResourceMetadata(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		w.WriteHeader(http.StatusMethodNotAllowed)

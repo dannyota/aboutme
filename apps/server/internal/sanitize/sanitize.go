@@ -1,5 +1,3 @@
-// Package sanitize applies the versioned rich-text policy shared by write and
-// server-rendering boundaries.
 package sanitize
 
 import (
@@ -12,7 +10,6 @@ import (
 	"golang.org/x/net/html/atom"
 )
 
-// AllowlistVersion is the generated sanitizer policy version.
 const AllowlistVersion = schemagen.SanitizerAllowlistVersion
 
 var richTextPolicy = newRichTextPolicy()
@@ -29,7 +26,6 @@ func newRichTextPolicy() *bluemonday.Policy {
 	return policy
 }
 
-// RichText sanitizes one rich-text HTML fragment with the generated policy.
 func RichText(fragment string) string {
 	return normalizeAnchors(richTextPolicy.Sanitize(fragment))
 }

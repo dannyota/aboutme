@@ -16,8 +16,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// failingViewDB fails every resume read with a Postgres error that carries
-// text a log must never contain.
 type failingViewDB struct{}
 
 const failingViewDBMessage = "SENSITIVE-message-text"
@@ -40,11 +38,6 @@ func (failingViewRow) Scan(...interface{}) error {
 	return &pgconn.PgError{Code: "57014", Message: failingViewDBMessage}
 }
 
-// TestRedirectViewFailure_ReadFailureLogsLikeSuccessPath proves a database
-// error while re-reading the resume on a view-purpose failure returns the
-// opaque 500 and logs the request ID, provider, a fixed reason, and the
-// SQLSTATE, and nothing about the viewer or the error's text
-// (docs/design/viewer-analytics/sign-in-to-view.md "Sign-in flow"; AC-VIEW-006).
 func TestRedirectViewFailure_ReadFailureLogsLikeSuccessPath(t *testing.T) {
 	t.Parallel()
 

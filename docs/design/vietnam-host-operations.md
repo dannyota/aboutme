@@ -163,13 +163,15 @@ lock after SSH loss. Saved `status` needs no mutation lock. Unknown read
 outcomes never authorize apply.
 
 Lock order is request flock, persistent fence, rotation job drain, then
-`workload-lock.sh` (60-second acquisition limit). New
-`fence.sh lock-for <kind> <tag> <id>` stores that ID as `operation_id` plus its
-bound tag atomically. Kinds add `account_delete` and `view_pass_rotate`; TOTP
-uses `totp_reencrypt`. An existing identical tuple returns the same ID; another
-owner or tag refuses. Reacquisition after a safe suspension revalidates all
-saved state. Lost SSH replies are resolved by reading the binding, not by
-creating another request. Checkpoint before every effect and image start.
+`workload-lock.sh` (60-second acquisition limit). Retention, the watcher, and
+`deploy-safety.sh` take the retention lock before the fence, and app readiness
+waits stay outside it. New `fence.sh lock-for <kind> <tag> <id>` stores that ID
+as `operation_id` plus its bound tag atomically. Kinds add `account_delete` and
+`view_pass_rotate`; TOTP uses `totp_reencrypt`. An existing identical tuple
+returns the same ID; another owner or tag refuses. Reacquisition after a safe
+suspension revalidates all saved state. Lost SSH replies are resolved by reading
+the binding, not by creating another request. Checkpoint before every effect and
+image start.
 
 Match release-json, unit state, container digest/tag/number, and named secret
 metadata IDs. Do not emit full inspect output or inspect secret payloads.

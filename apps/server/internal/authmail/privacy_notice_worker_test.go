@@ -17,12 +17,10 @@ import (
 
 type noticeFixtureAuthority struct{ allowed bool }
 
-// AuthorizeSend models revocable authority without host files.
 func (a *noticeFixtureAuthority) AuthorizeSend(context.Context, *store.Queries) bool {
 	return a.allowed
 }
 
-// ContentDigest matches the isolated fixture campaign.
 func (*noticeFixtureAuthority) ContentDigest() []byte { return make([]byte, 32) }
 
 func noticeWorkerFixture(t *testing.T, outcome SendOutcome) (context.Context, *Worker, *noticeFixtureAuthority, uuid.UUID) {
@@ -220,7 +218,6 @@ type noticeCommitFailurePool struct {
 	job  uuid.UUID
 }
 
-// Begin wraps the real transaction for a deterministic finalization failure.
 func (p noticeCommitFailurePool) Begin(ctx context.Context) (pgx.Tx, error) {
 	tx, err := p.pool.Begin(ctx)
 	if err != nil {
@@ -234,7 +231,6 @@ type noticeCommitFailureTx struct {
 	job uuid.UUID
 }
 
-// Commit rolls back an accepted send instead of recording its outcome.
 func (tx noticeCommitFailureTx) Commit(ctx context.Context) error {
 	var accepted bool
 	if tx.QueryRow(ctx, `SELECT state='sent' FROM auth_email_jobs WHERE id=$1`, tx.job).Scan(&accepted) != nil {

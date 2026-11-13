@@ -22,7 +22,6 @@ import (
 )
 
 func TestMarkdownHandlerRejectsClosedAdmission(t *testing.T) {
-	// This fails if a pre-revocation cache value can bypass the live-state lease.
 	slug, reader, coordinator := formatTestReader(t, true)
 	cache, err := publiccache.New(4, time.Minute, time.Now)
 	if err != nil {
@@ -82,7 +81,6 @@ func TestMarkdownHandlerClassifiesReaderAbsenceAndFailure(t *testing.T) {
 }
 
 func TestMarkdownHandlerRequiresDiscovery(t *testing.T) {
-	// This fails if a live noindex resume can receive Markdown.
 	slug, reader, _ := formatTestReader(t, false)
 	cache, err := publiccache.New(4, time.Minute, time.Now)
 	if err != nil {
@@ -100,7 +98,6 @@ func TestMarkdownHandlerRequiresDiscovery(t *testing.T) {
 }
 
 func TestMarkdownHandlerHoldsLeaseThroughResponseWrite(t *testing.T) {
-	// This fails if revocation can finish while an admitted Markdown body is still writing.
 	slug, reader, coordinator := formatTestReader(t, true)
 	cache, err := publiccache.New(4, time.Minute, time.Now)
 	if err != nil {
@@ -212,6 +209,12 @@ func (s formatReadStore) GetPublicState(context.Context) (store.PublicState, err
 }
 func (s formatReadStore) GetPublicResumeBySlug(context.Context, string) (store.GetPublicResumeBySlugRow, error) {
 	return store.GetPublicResumeBySlugRow{Resume: s.row, ProjectLinks: linkContext(s.links)}, s.err
+}
+func (s formatReadStore) GetPublicResumeProjectList(context.Context, string) (store.GetPublicResumeProjectListRow, error) {
+	return store.GetPublicResumeProjectListRow{}, errors.New("unused")
+}
+func (s formatReadStore) GetPublicResumeProject(context.Context, store.GetPublicResumeProjectParams) (store.GetPublicResumeProjectRow, error) {
+	return store.GetPublicResumeProjectRow{}, errors.New("unused")
 }
 func (s formatReadStore) GetPublicResumeByOwner(context.Context, store.GetPublicResumeByOwnerParams) (store.Resume, error) {
 	return store.Resume{}, errors.New("unused")

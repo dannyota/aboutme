@@ -15,35 +15,16 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// registerAdmission is the narrow rate-admission boundary for registration.
-// It uses the canonical Caddy client address; this service neither reads
-// cookies nor derives an address itself.
 type registerAdmission interface {
-	// AdmitRegister reports whether a registration request at the given time
-	// is admitted and, when it is not, the whole seconds to wait before
-	// retrying.
 	AdmitRegister(time.Time, *http.Request) (allowed bool, retryAfterSeconds int)
 }
 
-// tokenAdmission is the narrow rate-admission boundary for the token endpoint:
-// a per-address request budget and a per-grant failure budget.
 type tokenAdmission interface {
-	// AdmitToken reports whether a token request at the given time is
-	// admitted and, when it is not, the whole seconds to wait before
-	// retrying.
 	AdmitToken(time.Time, *http.Request) (allowed bool, retryAfterSeconds int)
-	// AdmitGrant reserves one failed-grant slot for the grant ID at the given
-	// time before the request is processed. It returns the reservation,
-	// whether the grant is admitted, and, when it is not, the whole seconds to
-	// wait before retrying.
 	AdmitGrant(uuid.UUID, time.Time) (grantAttempt, bool, int)
-	// FinishGrant resolves one admitted reservation with the request's
-	// outcome: a failure keeps one failure, a release frees only the
-	// reservation, and a success clears a tracked grant's failure window.
 	FinishGrant(grantAttempt, grantAttemptResult)
 }
 
-// GrantAttempt is an opaque failed-grant reservation.
 type GrantAttempt struct {
 	clientID uuid.UUID
 	leaseID  uint64
@@ -60,46 +41,20 @@ const (
 	grantAttemptSuccess
 )
 
-// ServiceDependencies are the shared OAuth service dependencies.
 type ServiceDependencies struct {
-	// CIMD resolves client ID metadata document clients. It is required when
-	// CIMDEnabled is true and may be nil otherwise.
-	CIMD *CIMDResolver
-	// CIMDEnabled admits HTTPS metadata-document client IDs and advertises
-	// that support in the authorization-server metadata.
-	CIMDEnabled bool
-	// TrustedProxies are the proxy prefixes whose forwarded client address is
-	// trusted when deriving the request address passed to CIMD resolution.
-	TrustedProxies api.TrustedProxies
-	// Pool begins the transactions for consent, code, token, revocation and
-	// idle-client work. It must not be nil.
-	Pool *store.Pool
-	// Queries runs the OAuth client, code, grant and token queries outside a
-	// transaction. It must not be nil.
-	Queries store.OAuthQueries
-	// Clock returns the current time for registration, expiry and admission
-	// decisions. It must not be nil.
-	Clock func() time.Time
-	// Entropy supplies the random bytes for authorization codes and tokens.
-	// The service serializes its own reads, so a reader it shares with another
-	// consumer must be safe for concurrent use. It must not be nil.
-	Entropy io.Reader
-	// PublicOrigin is the canonical public origin, such as
-	// https://aboutme.vn. It is the issuer, the endpoint base and the exact
-	// Origin the consent routes require.
-	PublicOrigin string
-	// RegisterAdmission rate-limits client registration requests. It must not
-	// be nil.
+	CIMD              *CIMDResolver
+	CIMDEnabled       bool
+	TrustedProxies    api.TrustedProxies
+	Pool              *store.Pool
+	Queries           store.OAuthQueries
+	Clock             func() time.Time
+	Entropy           io.Reader
+	PublicOrigin      string
 	RegisterAdmission registerAdmission
-	// TokenAdmission rate-limits token requests and failed grant attempts. It
-	// must not be nil.
-	TokenAdmission tokenAdmission
-	// LiveGrantLimit is the most live grants one account may hold. It must be
-	// positive.
-	LiveGrantLimit int
+	TokenAdmission    tokenAdmission
+	LiveGrantLimit    int
 }
 
-// Service is the OAuth authorization-server service.
 type Service struct {
 	cimd              *CIMDResolver
 	cimdEnabled       bool
@@ -114,8 +69,6 @@ type Service struct {
 	liveGrantLimit    int
 }
 
-// NewService validates its fixed dependencies and performs the idle-client
-// cleanup sweep before making the service available to routes.
 func NewService(ctx context.Context, dependencies ServiceDependencies) (*Service, error) {
 	switch {
 	case dependencies.Pool == nil:

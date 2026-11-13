@@ -8,12 +8,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/api"
 )
 
-// Decode parses a closed owner request: a project document plus an optional
-// slug. encoding/json matches field names case-insensitively, so the body is
-// first checked against the exact request shape: no duplicate or undeclared
-// property, no trailing JSON, scalars of the declared type, and null only for
-// optional date ranges and date-range ends. Every failure wraps ErrInvalid;
-// one that a single value causes also wraps the *api.JSONPathError naming it.
 func Decode(raw []byte, target any) error {
 	if err := api.CheckJSONShape(raw, requestShape()); err != nil {
 		return fmt.Errorf("%w: %w", ErrInvalid, err)

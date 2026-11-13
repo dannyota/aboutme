@@ -5,8 +5,6 @@ import (
 	"testing"
 )
 
-// v5Document returns the v4 test document at version 5 with a dark color
-// scheme, the one field v4 cannot represent.
 func v5Document(t *testing.T) map[string]any {
 	t.Helper()
 	doc := v4Document(t)
@@ -15,7 +13,6 @@ func v5Document(t *testing.T) map[string]any {
 	return doc
 }
 
-// withoutV5Fields strips exactly what v4 cannot represent.
 func withoutV5Fields(t *testing.T, doc map[string]any) map[string]any {
 	t.Helper()
 	out := decodeFontTestMap(t, mustJSON(t, doc))
@@ -185,7 +182,6 @@ func TestProductionEmissionLossPolicyAllowsOnlyDeclaredV5Loss(t *testing.T) {
 		t.Fatalf("declared v5 loss rejected: %v", err)
 	}
 
-	// A v4 emission must keep the v4 fields; only colorScheme may go.
 	lostV4 := withoutV4Fields(t, withoutV5Fields(t, withoutV6Fields(t, doc)))
 	lostV4["schemaVersion"] = float64(4)
 	if err := productionEmissionLossPolicy(current, mustJSON(t, lostV4), restored, 4); err == nil {

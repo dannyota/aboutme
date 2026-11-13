@@ -7,15 +7,11 @@ import (
 	"github.com/coreos/go-oidc/v3/oidc"
 )
 
-// oidcProviderCache lazily discovers and caches one OIDC provider.
 type oidcProviderCache struct {
 	mu       sync.Mutex
-	provider *oidc.Provider // nil until first successful discover
+	provider *oidc.Provider
 }
 
-// discover caches the first successful result and retries after failures. It
-// never holds c.mu across network I/O. Concurrent first calls may issue
-// redundant requests, but all return the first provider stored in the cache.
 func (c *oidcProviderCache) discover(ctx context.Context, issuer string) (*oidc.Provider, error) {
 	c.mu.Lock()
 	p := c.provider

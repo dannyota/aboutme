@@ -1,6 +1,7 @@
 # Project pages
 
-Status: Accepted by the owner (2026-11-12); not yet implemented. The
+Status: Accepted by the owner (2026-11-12). The two pages are implemented; the
+entry points are not. The
 [projects design](../projects.md#project-pages-and-entry-points) owns what a
 page shows and when it exists; the [projects contract](../projects-contract.md)
 owns routes, the link context, representations and print. This document owns
@@ -43,7 +44,8 @@ Download PDF when at least one project is available.
   as one paragraph, and up to six technology chips with “+n”. Below 40 rem, role
   and dates move under the name.
 - A resume with no available project has no list page: it answers as an unknown
-  resume, like every other unavailable state.
+  resume, like every other unavailable state, once any sign in to view gate is
+  passed.
 
 ## Project page, `/{slug}/projects/{project-slug}`
 
@@ -92,8 +94,9 @@ resume content.
 
 Title: “{project name} · {owner's name}”; list: “Dự án · {name}” or “Projects ·
 {name}”. Description: the summary, else the first 160 characters of the outcome,
-else none. Canonical is the page's own address. The preview card is the resume's
-stored card. `noindex` unless the resume has SEO and GEO on.
+else none; neither is cut further. Canonical is the page's own address. The
+preview card is the resume's stored card. `noindex` unless the resume has SEO
+and GEO on.
 
 Decided 2026-11-13: the owner's name is the resume's full name, or its effective
 page title when the name is blank. `og:title`, `og:description` and `og:url` are

@@ -38,9 +38,6 @@ func newOAuthSessionHTTPHarness(t *testing.T) oauthSessionHTTPHarness {
 	if err != nil {
 		t.Fatalf("Issue session: %v", err)
 	}
-	// Pin the session's primary-proof time to the harness's injected clock
-	// rather than the real wall clock Issue used, so the consent decision's
-	// recent-reauthentication check compares against a deterministic value.
 	now := service.clock()
 	if _, err = service.pool.Exec(context.Background(), "UPDATE sessions SET reauthenticated_at = $1 WHERE id = $2", now, session.ID); err != nil {
 		t.Fatalf("pin session reauthenticated_at: %v", err)
@@ -180,8 +177,6 @@ func TestSessionConsentHTTPHandler_StaleAuthenticationRequiresReauthWithoutEndin
 				t.Fatalf("stale denial = %d %q", deny.Code, deny.Body.String())
 			}
 
-			// Model completed authentication without changing the session's CSRF,
-			// epoch, liveness, or the original stateless authorization request.
 			if factor != nil {
 				factor = &now
 			}
@@ -206,8 +201,6 @@ func TestSessionConsentHTTPHandler_ClientRemovedDuringReauthRequiresRestart(t *t
 	if view.Code != http.StatusOK {
 		t.Fatalf("initial consent read = %d %q", view.Code, view.Body.String())
 	}
-	// Idle DCR registration collection removes the client, not a pending
-	// authorization row. Consent must revalidate it after authentication.
 	if _, err := h.queries.DeleteOAuthClient(ctx, h.client.ID); err != nil {
 		t.Fatalf("remove authorization client: %v", err)
 	}
@@ -300,10 +293,6 @@ func TestSessionConsentHTTPHandler_EnforcesCSRFMediaTypeAndStrictBody(t *testing
 	}
 }
 
-// This catches a consent decision skipping the recent-reauth gate for an
-// enrolled account, and confirms the closed 403 reauth_required response the
-// rest of the API's sensitive actions already use. See
-// docs/design/second-factor-authentication.md.
 func TestSessionConsentHTTPHandler_RequiresSecondFactorProofForEnrolledAccount(t *testing.T) {
 	h := newOAuthSessionHTTPHarness(t)
 	handler := h.service.ConsentHTTPHandler(h.sessions)
@@ -335,12 +324,6 @@ func TestSessionConsentHTTPHandler_RequiresSecondFactorProofForEnrolledAccount(t
 	}
 }
 
-// TestSessionConsentHTTPHandler_ReportsAgentLimitAsClosedConflict confirms the
-// ten-live-grant ceiling reports its own closed HTTP 409 agent_limit_reached
-// response rather than the generic invalid-request response, that the tenth
-// approval still succeeds, and that re-approving an already-granted client at
-// the limit still succeeds. See docs/design/mcp-client-compatibility.md
-// rule 7.
 func TestSessionConsentHTTPHandler_ReportsAgentLimitAsClosedConflict(t *testing.T) {
 	h := newOAuthSessionHTTPHarness(t)
 	ctx := context.Background()
@@ -365,17 +348,12 @@ func TestSessionConsentHTTPHandler_ReportsAgentLimitAsClosedConflict(t *testing.
 
 	handler := h.service.ConsentHTTPHandler(h.sessions)
 
-	// The nine prior grants plus this approval reach the ten-grant limit: the
-	// tenth approval still succeeds.
 	tenth := httptest.NewRecorder()
 	handler.ServeHTTP(tenth, h.request(http.MethodPost, "https://aboutme.example/api/v1/oauth/consent", consentDecisionBody(h.client.ID, "approve"), true, true))
 	if tenth.Code != http.StatusOK {
 		t.Fatalf("tenth approval = %d %q", tenth.Code, tenth.Body.String())
 	}
 
-	// Re-approving the same, already-granted client at the limit narrows the
-	// existing grant rather than minting an eleventh one, so it still
-	// succeeds.
 	reapprove := httptest.NewRecorder()
 	handler.ServeHTTP(reapprove, h.request(http.MethodPost, "https://aboutme.example/api/v1/oauth/consent", consentDecisionBody(h.client.ID, "approve"), true, true))
 	if reapprove.Code != http.StatusOK {

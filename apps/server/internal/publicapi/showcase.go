@@ -15,30 +15,19 @@ import (
 )
 
 const (
-	// showcasePath is the community showcase listing route
-	// (docs/design/showcase.md "Delivery, caching, and revocation").
-	showcasePath = "/api/v1/public/showcase"
-	// showcaseRequestsPerMinute is the per-IP limit of the listing route. Card
-	// images keep the public artifact limit.
+	showcasePath              = "/api/v1/public/showcase"
 	showcaseRequestsPerMinute = 60
 	showcaseRobots            = "noindex, nofollow"
 )
 
-// showcasePagePattern is the canonical page number: digits with no sign and no
-// leading zero, so one page has one spelling.
 var showcasePagePattern = regexp.MustCompile(`^[1-9][0-9]{0,2}$`)
 
-// ShowcaseListing is the uncached showcase listing boundary; showcase.Service
-// implements it.
 type ShowcaseListing interface {
 	List(context.Context, showcase.Filter) (showcase.Page, error)
 }
 
 var _ ShowcaseListing = (*showcase.Service)(nil)
 
-// newShowcaseHandler serves GET and HEAD /api/v1/public/showcase. It reads no
-// cookie and sets none, strictly parses its query, computes the listing from
-// committed state on every request, and never goes through the public cache.
 func newShowcaseHandler(listing ShowcaseListing, trustedProxies api.TrustedProxies, clock func() time.Time) http.Handler {
 	if clock == nil {
 		clock = time.Now
@@ -94,11 +83,7 @@ func newShowcaseHandler(listing ShowcaseListing, trustedProxies api.TrustedProxi
 	})
 }
 
-// parseShowcaseQuery accepts only role, lang, template, and page, each once and
-// non-empty, with values from their closed sets. Anything else is invalid.
 func parseShowcaseQuery(raw string) (showcase.Filter, bool) {
-	// An empty segment ("&&", a leading or trailing "&") is no parameter, and
-	// no parameter is allowed that the page does not send.
 	if strings.HasPrefix(raw, "&") || strings.HasSuffix(raw, "&") || strings.Contains(raw, "&&") {
 		return showcase.Filter{}, false
 	}
@@ -144,8 +129,6 @@ func parseShowcaseQuery(raw string) (showcase.Filter, bool) {
 	return filter, true
 }
 
-// setShowcaseHeaders sets the headers every showcase response carries: it is
-// never stored by a cache and never indexed.
 func setShowcaseHeaders(w http.ResponseWriter) {
 	w.Header().Set("Cache-Control", api.CacheControlNoStore)
 	w.Header().Set("X-Robots-Tag", showcaseRobots)

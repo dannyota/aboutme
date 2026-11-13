@@ -24,8 +24,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// newTestReplacement replaces projectID with slug and d at whatever
-// revision the project holds, and stores the changed resumes as the body.
 func newTestReplacement(h *resumeAPITestHarness, projectID uuid.UUID, slug string, d project.Document) ProjectReplacement {
 	hash := sha256.Sum256([]byte("replacement " + projectID.String() + " " + slug))
 	operation := sha256.Sum256([]byte("replace operation " + projectID.String()))
@@ -147,8 +145,6 @@ func TestReplaceProject_ThreeChangedPlansAreBusyAndChangeNothing(t *testing.T) {
 	}
 }
 
-// findListing returns the showcase item of slug from the first page that
-// lists it, since other tests share the listing.
 func findListing(t *testing.T, h *resumeAPITestHarness, slug string) showcase.Item {
 	t.Helper()
 	for page := 1; page <= showcase.MaxPage; page++ {
@@ -197,8 +193,6 @@ func TestReplaceProject_AdvanceKeepsTheShowcaseRowListingAndStoredCard(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Link before publishing: a store write after publish would leave the
-	// public fence at the published revision.
 	if env.revision, err = h.resumes.SaveDocument(h.ctx, h.userID, env.id,
 		withProjectSection(current.Doc, "projects", linkedEntry(owned.ID, "Atlas")), current.Revision); err != nil {
 		t.Fatalf("link the resume: %v", err)
@@ -238,8 +232,6 @@ func TestReplaceProject_AdvanceKeepsTheShowcaseRowListingAndStoredCard(t *testin
 	if err != nil || bytes.Contains(listing, []byte("atlas")) || bytes.Contains(listing, []byte("/projects/")) {
 		t.Fatalf("listing %s (%v) carries a project slug or page address", listing, err)
 	}
-	// The card handler reuses a stored card whose version equals the
-	// current one, so an equal version after the advance means no render.
 	advanced := readLive(t, h, env.slug)
 	advancedVersion, err := previewcard.VersionOf(advanced)
 	if err != nil || advanced.Revision != linkedRevision+1 || advancedVersion != version {

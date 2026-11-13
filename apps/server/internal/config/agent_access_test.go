@@ -9,9 +9,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/config"
 )
 
-// The registration egress-range list follows
-// docs/design/mcp-client-compatibility.md, "Registration rate from shared
-// egress": deployment configuration, empty by default.
 func TestLoad_OAuthRegisterEgressCIDRs(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {

@@ -1,4 +1,3 @@
-// Package publiccache stores bounded public responses by complete render keys.
 package publiccache
 
 import (
@@ -14,13 +13,10 @@ import (
 
 const maxBodyBytes = 32 * 1024 * 1024
 
-// RouteClass separates cache routes with distinct response contracts.
 type RouteClass string
 
-// Variant separates response variants for one representation.
 type Variant string
 
-// Key identifies one cacheable public response.
 type Key struct {
 	RouteClass     RouteClass
 	Representation publicstate.Representation
@@ -30,9 +26,9 @@ type Key struct {
 	FormatVersion  int
 	AppDigest      string
 	RendererDigest string
+	Subject        string
 }
 
-// Value holds a cached response's immutable response data.
 type Value struct {
 	Status int
 	Header http.Header
@@ -44,7 +40,6 @@ type cacheEntry struct {
 	Sequence  uint64
 }
 
-// Cache is a bounded in-memory cache for public responses.
 type Cache struct {
 	mu         sync.RWMutex
 	entries    map[Key]cacheEntry
@@ -55,7 +50,6 @@ type Cache struct {
 	bodyBytes  int
 }
 
-// New creates a cache with a bounded entry count and lifetime.
 func New(maxEntries int, ttl time.Duration, now func() time.Time) (*Cache, error) {
 	if maxEntries <= 0 || ttl <= 0 || ttl > time.Minute || now == nil {
 		return nil, errors.New("invalid public cache configuration")
@@ -63,7 +57,6 @@ func New(maxEntries int, ttl time.Duration, now func() time.Time) (*Cache, error
 	return &Cache{entries: make(map[Key]cacheEntry), maxEntries: maxEntries, ttl: ttl, now: now}, nil
 }
 
-// Get returns a copy of the unexpired value for key.
 func (c *Cache) Get(key Key) (Value, bool) {
 	now := c.now()
 	c.mu.RLock()
@@ -84,7 +77,6 @@ func (c *Cache) Get(key Key) (Value, bool) {
 	return Value{}, false
 }
 
-// Put stores a copy of value and evicts the oldest entry when full.
 func (c *Cache) Put(key Key, value Value) {
 	if len(value.Body) > maxBodyBytes {
 		return
@@ -104,7 +96,6 @@ func (c *Cache) Put(key Key, value Value) {
 	c.bodyBytes += len(value.Body)
 }
 
-// RemoveRouteClass drops every entry of one route class.
 func (c *Cache) RemoveRouteClass(class RouteClass) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -115,7 +106,6 @@ func (c *Cache) RemoveRouteClass(class RouteClass) {
 	}
 }
 
-// Purge removes expired entries.
 func (c *Cache) Purge() {
 	now := c.now()
 	c.mu.Lock()

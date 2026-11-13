@@ -24,23 +24,15 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-// leasedRoute is one public route that writes its body while it holds a
-// public-state lease, with what a test needs to revoke that lease.
 type leasedRoute struct {
 	handler     http.Handler
 	path        string
 	coordinator *publicstate.Coordinator
-	// resumeID names the resume whose lease the route holds. uuid.Nil marks
-	// a discovery route, which holds the discovery generation instead.
-	resumeID uuid.UUID
-	// cache and key locate the route's cached body. A nil cache marks a
-	// route that never caches.
-	cache *publiccache.Cache
-	key   publiccache.Key
+	resumeID    uuid.UUID
+	cache       *publiccache.Cache
+	key         publiccache.Key
 }
 
-// plan is a transition of class over the lease the route holds. A discovery
-// transition always drains.
 func (r leasedRoute) plan(class publicstate.TransitionClass) publicstate.Plan {
 	if r.resumeID == uuid.Nil {
 		return publicstate.Plan{DiscoveryGeneration: int64Pointer(1)}
@@ -48,9 +40,6 @@ func (r leasedRoute) plan(class publicstate.TransitionClass) publicstate.Plan {
 	return publicstate.Plan{Resumes: []publicstate.ResumeTarget{{ID: r.resumeID, ExpectedRevision: 1, Class: class}}}
 }
 
-// leasedRouteCase builds one route over its own reader, coordinator, and
-// cache. A cached case is served once first, so the request under test takes
-// the cached branch.
 type leasedRouteCase struct {
 	name   string
 	cached bool
@@ -91,8 +80,6 @@ func leasedPageRoute(t *testing.T) leasedRoute {
 	}}
 }
 
-// leasedGateRoute is the resume page of a sign-in-to-view resume, requested
-// without a pass, so it serves the gate. The gate is never cached.
 func leasedGateRoute(t *testing.T) leasedRoute {
 	t.Helper()
 	dependencies, coordinator := leaseTestGateDependencies(t)
@@ -103,8 +90,6 @@ func leasedGateRoute(t *testing.T) leasedRoute {
 	return leasedRoute{handler: handler, path: "/ada", coordinator: coordinator, resumeID: gateTestResumeID}
 }
 
-// leaseTestGateDependencies serves one live sign-in-to-view resume, "ada",
-// whose renderer returns a valid gate for the envelope it receives.
 func leaseTestGateDependencies(t *testing.T) (HTMLDependencies, *publicstate.Coordinator) {
 	t.Helper()
 	slug, lng := "ada", "en"
@@ -223,9 +208,6 @@ func newLeaseTestCache(t *testing.T) *publiccache.Cache {
 	return cache
 }
 
-// leaseTestRenderer answers every render request with the HTML page returns
-// for the request body. It runs on the handler's goroutine, so page reports
-// a failure with t.Errorf, never t.Fatal.
 func leaseTestRenderer(t *testing.T, page func(body []byte) string) *directrender.Client {
 	t.Helper()
 	origin, err := directrender.ParseRenderOrigin("http://127.0.0.1:20030", "development")
@@ -251,9 +233,6 @@ func newLeaseTestRequest(path string) *http.Request {
 	return httptest.NewRequestWithContext(context.Background(), http.MethodGet, path, nil)
 }
 
-// primeLeasedRoute serves route once when cached, so the next request takes
-// the cached branch, and checks that the cache holds the route's body
-// exactly when cached.
 func primeLeasedRoute(t *testing.T, route leasedRoute, cached bool) {
 	t.Helper()
 	if cached {
@@ -271,8 +250,6 @@ func primeLeasedRoute(t *testing.T, route leasedRoute, cached bool) {
 	}
 }
 
-// statusBlockedWriter is deadlineBlockedWriter that also keeps the status
-// the handler wrote, so a test can tell a blocked body from a blocked error.
 type statusBlockedWriter struct {
 	*deadlineBlockedWriter
 	status atomic.Int32
@@ -284,9 +261,6 @@ func newStatusBlockedWriter() *statusBlockedWriter {
 
 func (w *statusBlockedWriter) WriteHeader(status int) { w.status.Store(int32(status)) }
 
-// serveBlocked serves one request of route to writer on its own goroutine
-// and returns once the handler is blocked writing a 200 body. The returned
-// channel closes when the handler returns.
 func serveBlocked(t *testing.T, route leasedRoute, writer *statusBlockedWriter) <-chan struct{} {
 	t.Helper()
 	done := make(chan struct{})

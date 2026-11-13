@@ -12,8 +12,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// Local non-Linux supervision rechecks group and start time before signaling,
-// but lacks Linux pidfds' atomic protection against reuse after the last check.
+// Without Linux pidfds, a PID can be reused between the last check and the signal.
 var realProcessOS = portableProcessOS(readIdentity, processEntries, syscall.Kill)
 
 func portableProcessOS(read func(int) (identity, error), entries func() ([]string, error), kill func(int, syscall.Signal) error) processOS {

@@ -179,7 +179,6 @@ func TestCleanFixtureRemovesOnlyExactCIMDRun(t *testing.T) {
 		{nil, `["https://other.example/callback"]`},
 		{&metadataURL, `["http://localhost/callback"]`},
 	} {
-		// The last client has another run URL but the same display name.
 		if len(ids) == 3 {
 			other := "https://client.example/oauth/" + uuid.NewString()
 			row.url = &other

@@ -1,6 +1,3 @@
-// Migration 00017: the authorization-code binding-fill trigger and the four
-// indexes 00015 superseded are gone, Down restores them, and at version 17 the
-// showcase review columns that releases before v0.9.2 read stay.
 package migrations_test
 
 import (
@@ -16,18 +13,14 @@ import (
 )
 
 var (
-	// obsoleteIndexes are the four indexes 00015 superseded.
 	obsoleteIndexes = []string{
 		"auth_email_jobs_claim_idx", "auth_email_jobs_outcome_idx",
 		"sessions_user_id_active_idx", "oauth_grants_client_live_idx",
 	}
-	// supersedingIndexes serve the queries the four superseded indexes served.
 	supersedingIndexes = []string{
 		"auth_email_jobs_claim_order_idx", "auth_email_jobs_finished_idx",
 		"sessions_user_revoked_idx", "oauth_grants_client_revoked_idx",
 	}
-	// showcaseReviewColumns are the unused review columns that releases before
-	// v0.9.2 read; 00018 drops them.
 	showcaseReviewColumns = []string{"review_key", "reviewed_key", "review_outcome", "reviewed_at", "first_listed_at"}
 )
 
@@ -40,12 +33,10 @@ const (
 		WHERE tgname = 'oauth_authorization_codes_fill_second_factor_bindings'`
 	bindingFunctionQuery = `SELECT count(*) FROM pg_proc
 		WHERE proname = 'fill_oauth_authorization_code_second_factor_bindings'`
-	// releasedShowcaseRead is GetResumeShowcase as v0.8.28 generated it.
 	releasedShowcaseRead = `SELECT resume_id, requested_at, role, review_key, card_version, template_id, reviewed_key, review_outcome, reviewed_at, first_listed_at FROM resume_showcase
 WHERE resume_id = $1`
 )
 
-// queryCountNamed runs a count query whose only argument is a list of names.
 func queryCountNamed(ctx context.Context, t *testing.T, db sqlExecer, query string, names []string) int {
 	t.Helper()
 	var n int
@@ -55,7 +46,6 @@ func queryCountNamed(ctx context.Context, t *testing.T, db sqlExecer, query stri
 	return n
 }
 
-// queryCount runs a count query with no arguments.
 func queryCount(ctx context.Context, t *testing.T, db sqlExecer, query string) int {
 	t.Helper()
 	var n int
@@ -65,8 +55,6 @@ func queryCount(ctx context.Context, t *testing.T, db sqlExecer, query string) i
 	return n
 }
 
-// requireObsoleteStateGone fails unless every object 00017 drops is absent and
-// the superseding indexes remain.
 func requireObsoleteStateGone(ctx context.Context, t *testing.T, db sqlExecer) {
 	t.Helper()
 	if n := queryCountNamed(ctx, t, db, indexesQuery, obsoleteIndexes); n != 0 {
@@ -83,7 +71,6 @@ func requireObsoleteStateGone(ctx context.Context, t *testing.T, db sqlExecer) {
 	}
 }
 
-// requireNotNullViolation fails unless err is a NOT NULL violation on column.
 func requireNotNullViolation(t *testing.T, err error, column string) {
 	t.Helper()
 	var pgErr *pgconn.PgError
@@ -95,8 +82,6 @@ func requireNotNullViolation(t *testing.T, err error, column string) {
 	}
 }
 
-// At head nothing 00017 drops remains, and with no trigger to fill them an
-// authorization code needs its grant and epoch from the caller.
 func TestObsoleteStateMigrationDropsUnusedState(t *testing.T) {
 	t.Parallel()
 	tx, ctx := newResumeSchemaTx(t)
@@ -125,9 +110,6 @@ func TestObsoleteStateMigrationDropsUnusedState(t *testing.T) {
 	}
 }
 
-// At version 17 the showcase review columns stay and the v0.8.28 showcase read
-// runs. Down restores the four indexes and the trigger, which fills an omitted
-// code binding again, and Up drops them once more.
 func TestObsoleteStateMigrationUpDownUp(t *testing.T) {
 	t.Parallel()
 	dsn := newTestDatabase(t)

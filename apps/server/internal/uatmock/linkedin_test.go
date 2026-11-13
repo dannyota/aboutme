@@ -71,7 +71,6 @@ func postLinkedInForm(handler http.Handler, path string, form url.Values, mutate
 	return rec
 }
 
-// linkedinAuthorize submits the account form and returns the callback query.
 func linkedinAuthorize(t *testing.T, handler http.Handler, action, subject string) url.Values {
 	t.Helper()
 	form := validLinkedInAuthorizeQuery()
@@ -179,12 +178,10 @@ func TestLinkedInFlowUsesDocumentedRequestsAndRealVerification(t *testing.T) {
 	if err := idToken.Claims(&claims); err != nil {
 		t.Fatalf("decode claims: %v", err)
 	}
-	// LinkedIn's ID token sends email_verified as a JSON string, not a boolean.
 	if claims.Subject != "lnkd-Q7x2mP4tVa" || claims.Email != "li-verified@example.invalid" ||
 		claims.EmailVerified == nil || *claims.EmailVerified != "true" || claims.Name != "LinkedIn Verified" {
 		t.Fatalf("claims = %+v", claims)
 	}
-	// LinkedIn accepts the nonce parameter but returns no nonce claim.
 	if claims.Nonce != nil {
 		t.Fatalf("ID token nonce claim = %q, want absent as LinkedIn returns it", *claims.Nonce)
 	}
@@ -216,8 +213,6 @@ func TestLinkedInTokenRejectsBasicCredentialsAndCodeVerifier(t *testing.T) {
 			}
 			assertOAuthError(t, postLinkedInForm(svc.Handler(), linkedinTokenPath, form, tt.mutate), http.StatusUnauthorized, "invalid_client")
 
-			// The client was rejected before the code was read, so the
-			// documented request still succeeds once.
 			if rec := postLinkedInForm(svc.Handler(), linkedinTokenPath, validLinkedInTokenForm(code), nil); rec.Code != http.StatusOK {
 				t.Fatalf("documented exchange = %d, body = %s", rec.Code, rec.Body.String())
 			}
@@ -291,7 +286,7 @@ func TestLinkedInAccountsIssueOptionalEmailClaims(t *testing.T) {
 	tests := []struct {
 		subject      string
 		wantEmail    string
-		wantVerified string // "" means the claim is absent; else the raw JSON value, quoted like LinkedIn's string encoding
+		wantVerified string
 	}{
 		{subject: "lnkd-Q7x2mP4tVa", wantEmail: "li-verified@example.invalid", wantVerified: `"true"`},
 		{subject: "lnkd-N3v8cR1sKe"},

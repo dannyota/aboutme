@@ -7,9 +7,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/config"
 )
 
-// AC-VIEW-001, AC-VIEW-007: the sign-in-to-view flags default off and the
-// pass-sealing key is always required, mirroring the other runtime keys.
-
 func TestLoad_SignInToViewFlag(t *testing.T) {
 	t.Parallel()
 	for raw, want := range map[string]bool{"": false, "false": false, " true ": true, "true": true} {
@@ -68,10 +65,6 @@ func TestLoad_ViewPassKeyRequiredRegardlessOfFlag(t *testing.T) {
 
 func TestLoad_ViewPassKeyRejectsNonCanonicalEncoding(t *testing.T) {
 	t.Parallel()
-	// 43 characters of the right length whose low bits are not the
-	// canonical zero padding: it decodes, but re-encoding it would not
-	// reproduce the same string, so the loader must reject it rather than
-	// accept an ambiguous key spelling.
 	vars := validDevEnv()
 	vars["VIEW_PASS_KEY"] = testBase64URL32[:42] + "B"
 	_, err := config.Load(env(vars))

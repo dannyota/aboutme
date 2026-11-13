@@ -13,8 +13,6 @@ import (
 	"time"
 )
 
-// hibpParts returns the 5-char uppercase prefix and 35-char uppercase suffix of
-// a password's SHA-1 hex digest.
 func hibpParts(password string) (prefix, suffix string) {
 	d := sha1.Sum([]byte(password))
 	full := strings.ToUpper(hex.EncodeToString(d[:]))
@@ -158,7 +156,6 @@ func TestHIBPRejectsOversizedResponse(t *testing.T) {
 	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
-		// One line larger than the 128 KiB cap.
 		fmt.Fprintf(w, "%s:1\n", strings.Repeat("0", hibpMaxResponse+100)) //nolint:errcheck // response-write errors are irrelevant in a test handler
 	}))
 	defer server.Close()
@@ -210,7 +207,6 @@ func TestHIBPCacheServesDuringOutage(t *testing.T) {
 		t.Fatalf("first Breached = %v, %v; want true, nil", breached, err)
 	}
 
-	// Upstream goes down; the cached response must still answer.
 	fail.store(true)
 	if breached, err := h.Breached(context.Background(), password); err != nil || !breached {
 		t.Errorf("cached Breached = %v, %v; want true, nil during outage", breached, err)
@@ -230,14 +226,11 @@ func TestHIBPMissPlusFailureIsFailClosed(t *testing.T) {
 	}
 }
 
-// atomicBool is a race-free flag for toggling the test server from the test
-// goroutine while the server handler reads it.
 type atomicBool struct{ v atomic.Bool }
 
 func (b *atomicBool) load() bool   { return b.v.Load() }
 func (b *atomicBool) store(v bool) { b.v.Store(v) }
 
-// makeDigests returns n strictly-increasing distinct [20]byte digests.
 func makeDigests(n int) [][20]byte {
 	out := make([][20]byte, n)
 	for i := range out {
@@ -288,7 +281,6 @@ func TestHIBPCacheByteCap(t *testing.T) {
 	t.Parallel()
 	c := newHIBPCache()
 	now := time.Now()
-	// 700000 digests = 14 MiB, then 200000 = 4 MiB; total exceeds 16 MiB.
 	c.put("AAAAA", makeDigests(700000), now)
 	c.put("BBBBB", makeDigests(200000), now)
 

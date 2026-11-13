@@ -1,4 +1,3 @@
-// Package store provides the pgx/v5 connection pool used by the API server.
 package store
 
 import (
@@ -8,13 +7,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// PasswordQueries is the exact data-layer surface the password service
-// consumes. It freezes the row-lock order (user, credential, reset token,
-// then sessions) behind the user-lock fence in
-// docs/adr/0015-accounts-passwords-and-sessions.md and hides
-// every raw-SQL detail behind one transactional contract. Existing provider identity and
-// session methods remain on *Queries through the broader Querier interface;
-// the password service uses only this surface.
 type PasswordQueries interface {
 	GetUserForUpdate(context.Context, uuid.UUID) (User, error)
 	GetUserByCanonicalEmail(context.Context, string) (User, error)
@@ -47,6 +39,4 @@ type PasswordQueries interface {
 	CleanupFinishedAuthEmailJobs(context.Context, CleanupFinishedAuthEmailJobsParams) (int64, error)
 }
 
-// The generated *Queries must satisfy the password surface exactly; a missing
-// or renamed method fails the build rather than silently dropping a query.
 var _ PasswordQueries = (*Queries)(nil)

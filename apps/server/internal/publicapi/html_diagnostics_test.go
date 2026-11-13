@@ -18,9 +18,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/publicresume"
 )
 
-// A second <main> inside the page's own, as a two-column resume once
-// rendered, breaks the one-main rule and must name that rule. nestedMain
-// replaces the end of the page's main.
 const nestedMain = `<div class="layout-two-columns"><main class="resume-main">body</main></div></main>`
 
 func TestPublicHTMLRejectionNamesTheBrokenRule(t *testing.T) {
@@ -92,9 +89,6 @@ func TestPublicHTMLLogsTheClosedReasonForA503(t *testing.T) {
 	}
 }
 
-// The page may link exactly the two self-hosted resume stylesheets, once each,
-// so the template's CSS and fonts load under style-src 'self'. Any other
-// stylesheet is rejected.
 func TestPublicHTMLAllowsOnlyTheResumeStylesheets(t *testing.T) {
 	origin := mustPublicOrigin(t)
 	resume := publicresume.PublicResume{Slug: "ada", Revision: "1", Document: publicresume.PublicResumeDocument{PersonalDetails: publicresume.PublicPersonalDetails{FullName: "Ada"}}}
@@ -114,7 +108,6 @@ func TestPublicHTMLAllowsOnlyTheResumeStylesheets(t *testing.T) {
 		{"duplicate stylesheet", `<link rel="stylesheet" href="/_nuxt/assets/print.css?v=0123456789abcdef">`},
 		{"preload", `<link rel="preload" href="/_nuxt/assets/print.css?v=0123456789abcdef" as="style">`},
 		{"extra attribute", `<link rel="stylesheet" href="/_nuxt/assets/print.css?v=0123456789abcdef" media="print">`},
-		// Unversioned or malformed versions would pin a year-old cached copy.
 		{"unversioned", `<link rel="stylesheet" href="/_nuxt/assets/print.css">`},
 		{"short version", `<link rel="stylesheet" href="/_nuxt/assets/print.css?v=0123">`},
 		{"uppercase version", `<link rel="stylesheet" href="/_nuxt/assets/print.css?v=0123456789ABCDEF">`},
@@ -130,8 +123,6 @@ func TestPublicHTMLAllowsOnlyTheResumeStylesheets(t *testing.T) {
 	}
 }
 
-// The public page may link its own PDF, exactly once, only while download is
-// enabled. Every other relative href stays rejected.
 func TestPublicHTMLAllowsOnlyTheOwnPDFDownloadLink(t *testing.T) {
 	origin := mustPublicOrigin(t)
 	resume := publicresume.PublicResume{Slug: "ada", Revision: "1", DownloadEnabled: true,
@@ -174,9 +165,6 @@ func TestPublicHTMLAllowsOnlyTheOwnPDFDownloadLink(t *testing.T) {
 	}
 }
 
-// The owner's title and emoji favicon are the only head values that vary per
-// resume: the validator derives both from the stored settings and accepts
-// nothing else (docs/adr/0014-public-page-head-and-link-preview.md).
 func TestPublicHTMLAcceptsOnlyTheStoredTitleAndFavicon(t *testing.T) {
 	origin := mustPublicOrigin(t)
 	resume := publicresume.PublicResume{Slug: "ada", Revision: "1",
@@ -189,7 +177,6 @@ func TestPublicHTMLAcceptsOnlyTheStoredTitleAndFavicon(t *testing.T) {
 	emoji := "\U0001F680"
 	page := expectedPublicPage(resume, &title, &emoji)
 	icon := `<link rel="icon" href="` + publicpage.FaviconHref(emoji) + `">`
-	// The public title is also the preview title (docs/design/link-previews.md).
 	ogTitle := `<meta property="og:title" content="Ada">`
 	customOGTitle := `<meta property="og:title" content="Ada &amp; &lt;friends&gt;">`
 	valid := strings.Replace(strings.Replace(
@@ -234,9 +221,6 @@ func TestPublicHTMLAcceptsOnlyTheStoredTitleAndFavicon(t *testing.T) {
 	}
 }
 
-// Header email and phone anchors must be exactly the links the contact rules
-// derive from visible details (docs/adr/0013-resume-header-and-contacts.md). Rich
-// text keeps its own sanitized mailto: and tel: links.
 func TestPublicHTMLAcceptsOnlyDerivedContactLinksInTheHeader(t *testing.T) {
 	origin := mustPublicOrigin(t)
 	resume := publicresume.PublicResume{Slug: "ada", Revision: "1", Document: publicresume.PublicResumeDocument{

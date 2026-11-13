@@ -1,11 +1,5 @@
 package config
 
-// Password-authentication email configuration. Every value is validated at
-// load time; secrets are base64url-decoded exactly once and never echoed in an
-// error. Capture, SES, and SMTP are exclusive modes, and capture is permitted
-// only in development so production can never route mail to a local loopback
-// sink. SMTP follows docs/design/vietnam-production.md, "DNS and mail".
-
 import (
 	"encoding/base64"
 	"errors"
@@ -24,74 +18,33 @@ const (
 	authEmailModeSES     = "ses"
 	authEmailModeCapture = "capture"
 	authEmailModeSMTP    = "smtp"
-	// smtpTLSImplicit and smtpTLSStartTLS are the SMTP_TLS values. The mode is
-	// always explicit and never inferred from SMTP_PORT.
-	smtpTLSImplicit = "implicit"
-	smtpTLSStartTLS = "starttls"
-	// maxSMTPValueBytes bounds SMTP_USERNAME and SMTP_PASSWORD.
-	maxSMTPValueBytes = 256
-	// requiredSESRegion is the exact region SES mode requires.
-	requiredSESRegion = "ap-southeast-1"
+	smtpTLSImplicit      = "implicit"
+	smtpTLSStartTLS      = "starttls"
+	maxSMTPValueBytes    = 256
+	requiredSESRegion    = "ap-southeast-1"
 )
 
-// AuthEmailConfig holds the validated password-mail configuration. The two key
-// fields are 32-byte arrays so a decoded secret can never be a string that
-// accidentally reaches a log or error; the SMTP password is a Secret for the
-// same reason. SESFrom and SESFromName are the From address and display name
-// in both SES and SMTP mode.
 type AuthEmailConfig struct {
-	// RateHMACKey keys the password rate-limit email HMAC
-	// (PASSWORD_RATE_HMAC_KEY).
-	RateHMACKey [32]byte
-	// ActiveKeyID names the key that seals new outbox jobs
-	// (AUTH_EMAIL_ACTIVE_KEY_ID).
-	ActiveKeyID string
-	// ActiveKey seals new outbox jobs (AUTH_EMAIL_ACTIVE_KEY).
-	ActiveKey [32]byte
-	// PreviousKeyID names the retired key kept for opening older jobs
-	// (AUTH_EMAIL_PREVIOUS_KEY_ID); empty unless HasPrevious.
+	RateHMACKey   [32]byte
+	ActiveKeyID   string
+	ActiveKey     [32]byte
 	PreviousKeyID string
-	// PreviousKey opens jobs sealed before rotation (AUTH_EMAIL_PREVIOUS_KEY).
-	PreviousKey [32]byte
-	// HasPrevious reports whether a previous key is configured.
-	HasPrevious bool
-	// Mode is the delivery mode: ses, capture, or smtp (AUTH_EMAIL_MODE).
-	Mode string
-	// CaptureURL is the loopback mail-capture endpoint in capture mode
-	// (AUTH_EMAIL_CAPTURE_URL).
-	CaptureURL string
-	// CaptureBearer authenticates capture-mode posts
-	// (AUTH_EMAIL_CAPTURE_BEARER).
+	PreviousKey   [32]byte
+	HasPrevious   bool
+	Mode          string
+	CaptureURL    string
 	CaptureBearer [32]byte
-	// SESFrom is the From address (SES_FROM_ADDRESS).
-	SESFrom string
-	// SESFromName is the From display name (SES_FROM_NAME).
-	SESFromName string
-	// SESConfigSet is the SES configuration set (SES_CONFIGURATION_SET).
-	SESConfigSet string
-	// SESRegion is the SES region (AWS_REGION); SES mode requires
-	// ap-southeast-1.
-	SESRegion string
-	// SMTPHost is the SMTP relay host (SMTP_HOST).
-	SMTPHost string
-	// SMTPPort is the SMTP relay TCP port (SMTP_PORT).
-	SMTPPort int
-	// SMTPTLS is the explicit SMTP TLS mode: implicit or starttls
-	// (SMTP_TLS).
-	SMTPTLS string
-	// SMTPUsername is the SMTP login, at most 256 bytes (SMTP_USERNAME).
-	SMTPUsername string
-	// SMTPPassword is the SMTP password, at most 256 bytes (SMTP_PASSWORD).
-	SMTPPassword Secret
+	SESFrom       string
+	SESFromName   string
+	SESConfigSet  string
+	SESRegion     string
+	SMTPHost      string
+	SMTPPort      int
+	SMTPTLS       string
+	SMTPUsername  string
+	SMTPPassword  Secret
 }
 
-// loadAuthEmailConfig reads and validates the password-mail configuration. It
-// rejects a missing or malformed rate key, active key, a previous key that is
-// only half-set or duplicates the active ID, an unknown mode, a capture mode in
-// a non-dev environment, a non-loopback capture URL, a malformed capture
-// bearer, a noncanonical From address, a non-AWS-safe configuration set, an
-// incomplete or inconsistent SMTP setting, and any mode-specific field set in
-// the wrong mode.
 func loadAuthEmailConfig(getenv func(string) string, environment string) (AuthEmailConfig, error) {
 	var cfg AuthEmailConfig
 
@@ -191,7 +144,6 @@ func loadAuthEmailConfig(getenv func(string) string, environment string) (AuthEm
 		return cfg, nil
 	}
 
-	// SES and SMTP mode.
 	for _, field := range []struct{ name, value string }{
 		{"AUTH_EMAIL_CAPTURE_URL", captureURL},
 		{"AUTH_EMAIL_CAPTURE_BEARER", captureBearerRaw},
@@ -225,8 +177,6 @@ func loadAuthEmailConfig(getenv func(string) string, environment string) (AuthEm
 	return cfg, nil
 }
 
-// loadSMTPConfig validates the SMTP settings. Every error names the variable,
-// never its value.
 func loadSMTPConfig(cfg AuthEmailConfig, host, port, tlsMode, username, password string) (AuthEmailConfig, error) {
 	if !isSMTPHostname(host) {
 		return cfg, errors.New("config: SMTP_HOST must be a DNS host name when AUTH_EMAIL_MODE=smtp")
@@ -252,9 +202,6 @@ func loadSMTPConfig(cfg AuthEmailConfig, host, port, tlsMode, username, password
 	return cfg, nil
 }
 
-// isSMTPHostname reports whether s is a DNS host name of at most 253 bytes
-// whose labels are 1-63 ASCII letters, digits, or inner hyphens. An IP literal
-// is rejected because the certificate is verified against the name.
 func isSMTPHostname(s string) bool {
 	if s == "" || len(s) > 253 || net.ParseIP(s) != nil {
 		return false
@@ -273,8 +220,6 @@ func isSMTPHostname(s string) bool {
 	return true
 }
 
-// validSMTPValue reports whether v is 1-256 bytes of valid UTF-8 with no
-// control characters, the bound the SMTP sender also enforces.
 func validSMTPValue(v string) bool {
 	if v == "" || len(v) > maxSMTPValueBytes || !utf8.ValidString(v) {
 		return false
@@ -287,8 +232,6 @@ func validSMTPValue(v string) bool {
 	return true
 }
 
-// decodeBase64URL32 decodes an unpadded base64url string and requires exactly 32
-// decoded bytes. It never returns a decoded value as a string.
 func decodeBase64URL32(raw string) ([32]byte, error) {
 	var zero [32]byte
 	raw = strings.TrimSpace(raw)
@@ -304,8 +247,6 @@ func decodeBase64URL32(raw string) ([32]byte, error) {
 	return out, nil
 }
 
-// isPrintableASCII reports whether s is 1-64 bytes of printable ASCII
-// (0x20-0x7e).
 func isPrintableASCII(s string) bool {
 	if len(s) < 1 || len(s) > 64 {
 		return false
@@ -318,8 +259,6 @@ func isPrintableASCII(s string) bool {
 	return true
 }
 
-// isAWSSafeASCII reports whether s is 1-64 bytes of ASCII letters, digits,
-// hyphens, or underscores — the SES configuration-set name alphabet.
 func isAWSSafeASCII(s string) bool {
 	if len(s) < 1 || len(s) > 64 {
 		return false
@@ -335,9 +274,6 @@ func isAWSSafeASCII(s string) bool {
 	return true
 }
 
-// validateCaptureURL requires an absolute loopback http URL with an explicit
-// port and no userinfo, query, or fragment. The mailcapture client only ever
-// POSTs there, so this is the loopback-only boundary.
 func validateCaptureURL(raw string) error {
 	u, err := parseLoopbackURL(raw)
 	if err != nil {
@@ -352,9 +288,6 @@ func validateCaptureURL(raw string) error {
 	return nil
 }
 
-// parseLoopbackURL returns the parsed absolute URL if raw is an http/https URL
-// whose host is loopback (or localhost), with no userinfo, path, query, or
-// fragment.
 func parseLoopbackURL(raw string) (*url.URL, error) {
 	u, err := url.Parse(raw)
 	if err != nil {
@@ -374,13 +307,8 @@ func parseLoopbackURL(raw string) (*url.URL, error) {
 	return u, nil
 }
 
-// maxSESFromNameRunes matches the SES sender's display-name bound.
 const maxSESFromNameRunes = 64
 
-// validFromName repeats the SES sender's display-name rule so config fails at
-// startup: empty, or at most 64 runes with no control characters, so it can
-// never inject a header line. authmail is not imported here to keep the AWS
-// SDK out of config.
 func validFromName(name string) bool {
 	if !utf8.ValidString(name) || utf8.RuneCountInString(name) > maxSESFromNameRunes {
 		return false

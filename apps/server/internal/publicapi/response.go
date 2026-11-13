@@ -9,19 +9,16 @@ import (
 	"strings"
 )
 
-// ErrInvalidSelectedResponse reports a response that violates cache invariants.
 var ErrInvalidSelectedResponse = errors.New("invalid public response")
 
 const maxSelectedBodyBytes = 2_097_152
 
-// SelectedResponse is a validated cacheable HTTP response.
 type SelectedResponse struct {
 	Status int
 	Header http.Header
 	Body   []byte
 }
 
-// NewSelectedResponse validates and constructs a cacheable public response.
 func NewSelectedResponse(status int, contentType, cacheControl string, body []byte, extra http.Header) (SelectedResponse, error) {
 	return newSelectedResponseWithLimit(status, contentType, cacheControl, body, extra, maxSelectedBodyBytes)
 }
@@ -93,26 +90,12 @@ func serveConditionalError(w http.ResponseWriter, request *http.Request) {
 
 func writeHeader(w http.ResponseWriter, header http.Header) {
 	for key, values := range header {
-		// Every public-response header is single-valued by contract (CSP,
-		// X-Robots-Tag, ETag), so Set-once is correct; a multi-valued header
-		// would silently collapse to its final value.
 		for _, value := range values {
-			// Set, not Add: a public response's headers are authoritative and
-			// must replace any baseline security-header middleware already
-			// wrote (e.g. the handler's specific Content-Security-Policy has
-			// to overwrite the middleware's default-src 'none', not coexist
-			// with it, or the browser applies both and blocks the page's own
-			// subresource fetches).
 			w.Header().Set(key, value)
 		}
 	}
 }
 
-// withPrivateCacheControl adds "private" ahead of a cacheable response's
-// stored Cache-Control for a sign-in-to-view resume
-// (docs/design/viewer-analytics/sign-in-to-view.md "Gated routes";
-// AC-VIEW-003), applied per request so the cached bytes themselves stay
-// identical and shareable among every pass holder.
 func withPrivateCacheControl(response SelectedResponse, private bool) SelectedResponse {
 	if !private {
 		return response
@@ -122,10 +105,6 @@ func withPrivateCacheControl(response SelectedResponse, private bool) SelectedRe
 	return response
 }
 
-// withDiscoveryRobots adds X-Robots-Tag: noindex, noarchive when the resume's
-// discovery is off. Handlers apply it per request from the current snapshot and
-// never store it in the cache, so toggling discovery at the same revision
-// cannot serve a stale header.
 func withDiscoveryRobots(response SelectedResponse, discoverable bool) SelectedResponse {
 	if discoverable {
 		return response

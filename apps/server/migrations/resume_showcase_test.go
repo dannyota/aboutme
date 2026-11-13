@@ -1,7 +1,3 @@
-// Community showcase table (docs/design/showcase.md "Data and contract", ADR
-// 0028; AC-SHOW-001, AC-SHOW-009, AC-SHOW-015): its column checks, cascades,
-// listing index, and the slug refusal. Tests that name the review columns or
-// their index run at the last version that has them.
 package migrations_test
 
 import (
@@ -17,14 +13,11 @@ import (
 )
 
 const (
-	showcaseHexA = "0123456789abcdef"
-	showcaseHexB = "fedcba9876543210"
-	// showcaseReviewVersion is the last schema version with the showcase
-	// review columns, their checks, and the approval index; 00018 drops them.
+	showcaseHexA          = "0123456789abcdef"
+	showcaseHexB          = "fedcba9876543210"
 	showcaseReviewVersion = 17
 )
 
-// showcaseRow is every column of a resume_showcase insert the tests vary.
 type showcaseRow struct {
 	role          *string
 	reviewHex     string
@@ -60,7 +53,6 @@ func showcaseCount(ctx context.Context, t *testing.T, tx pgx.Tx, resumeID uuid.U
 	return n
 }
 
-// AC-SHOW-015: every column rule of the design is a CHECK constraint.
 func TestResumeShowcaseConstraints(t *testing.T) {
 	t.Parallel()
 	tx, ctx := newResumeSchemaTxAt(t, showcaseReviewVersion)
@@ -138,8 +130,6 @@ func TestResumeShowcaseConstraints(t *testing.T) {
 	requireConstraintViolation(t, err, "resume_showcase_pkey")
 }
 
-// A reviewed row is valid when all three review columns are set, and an
-// approved one needs its first-listed time.
 func TestResumeShowcaseAcceptsReviewedRows(t *testing.T) {
 	t.Parallel()
 	tx, ctx := newResumeSchemaTxAt(t, showcaseReviewVersion)
@@ -163,8 +153,6 @@ func TestResumeShowcaseAcceptsReviewedRows(t *testing.T) {
 	}
 }
 
-// AC-SHOW-001, AC-SHOW-015: the row goes with its resume, and with its account
-// through the resume.
 func TestResumeShowcaseCascades(t *testing.T) {
 	t.Parallel()
 	tx, ctx := newResumeSchemaTxAt(t, showcaseReviewVersion)
@@ -192,9 +180,6 @@ func TestResumeShowcaseCascades(t *testing.T) {
 	}
 }
 
-// Through version 17 the partial index on the first approval serves releases
-// before v0.9.2; the listing index of the current release is checked with
-// migration 00011.
 func TestResumeShowcaseListingIndex(t *testing.T) {
 	t.Parallel()
 	tx, ctx := newResumeSchemaTxAt(t, showcaseReviewVersion)
@@ -212,8 +197,6 @@ func TestResumeShowcaseListingIndex(t *testing.T) {
 	}
 }
 
-// AC-SHOW-009: the migration refuses while a resume holds the slug showcase,
-// and adds only the table once the slug is free.
 func TestResumeShowcaseMigrationRefusesTheShowcaseSlug(t *testing.T) {
 	t.Parallel()
 	dsn := newTestDatabase(t)

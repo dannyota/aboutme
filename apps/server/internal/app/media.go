@@ -8,8 +8,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/media"
 )
 
-// NewMedia returns the configured media backend: the local filesystem for
-// "fs" or S3-compatible storage for "s3". Any other MEDIA_BACKEND fails.
 func NewMedia(ctx context.Context, cfg config.Config) (media.Backend, error) {
 	switch cfg.MediaBackend {
 	case "fs":

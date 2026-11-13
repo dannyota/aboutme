@@ -17,19 +17,8 @@ import (
 	"danny.vn/aboutme/apps/server/internal/resume"
 )
 
-// bounds_test.go is the size-bounds harness: a
-// named-bound limit/limit+1 matrix, a completeness guard that fails loudly
-// if a schema bound has no covering test, and a generated cross-language
-// verdict-parity corpus consumed by both this file (jsonschema/v6) and
-// packages/schema/test/bounds-parity.test.ts (ajv).
-
-// --- small construction helpers ---
-
 func strp(s string) *string { return &s }
 
-// boundUUID returns a deterministic, distinct, format:uuid-valid string for
-// index n. Committed generated fixtures must never depend on a random or
-// time-based source.
 func boundUUID(n int) string {
 	return fmt.Sprintf("00000000-0000-0000-0000-%012d", n)
 }
@@ -50,8 +39,6 @@ func baseCustomizationForBounds() schema.Customization {
 	}
 }
 
-// baseDocForBounds is a fully schema-valid, fully store-valid starting point
-// (empty content) every bound case mutates a copy of.
 func baseDocForBounds() schema.Resume {
 	return schema.Resume{
 		SchemaVersion:   int64(schema.CurrentVersion),
@@ -61,12 +48,6 @@ func baseDocForBounds() schema.Resume {
 	}
 }
 
-// Section builders that go through the schema package's own sanctioned
-// NewXSection constructors. Using the real constructors means this harness
-// exercises the exact API a caller uses, not a stand-in. All
-// three pass nil for displayName/iconKey (both optional in
-// resume.schema.json; an empty, as opposed to absent, iconKey fails its own
-// pattern), since none of these bound cases care about display metadata.
 func customSection(entries []schema.CustomEntry) schema.Section {
 	return schema.NewCustomSection(nil, nil, entries)
 }
@@ -88,9 +69,6 @@ func sortedContentKeys(content map[string]schema.Section) []string {
 	return keys
 }
 
-// lettersContent returns n content sections keyed "a", "b", "c", ... (n <=
-// 26): all lowercase-letter keys, so every one satisfies sectionKey's
-// `^[a-z]+$` pattern branch regardless of count.
 func lettersContent(n int) map[string]schema.Section {
 	if n > 26 {
 		panic("lettersContent: n must be <= 26")
@@ -118,11 +96,6 @@ func nPersonalDetails(n int) []schema.PersonalDetail {
 	return details
 }
 
-// docWithWorkField builds a single-work-entry document (layout-consistent:
-// "work" is placed in layout.sections.main) and lets the caller mutate that
-// one entry -- the shared shape behind every entry-level maxLength case
-// below (city/country/name class, fullName/.../title class via
-// personalDetails instead, etc.)
 func docWithWorkField(mutate func(*schema.WorkEntry)) schema.Resume {
 	doc := baseDocForBounds()
 	entry := schema.WorkEntry{ID: boundUUID(0)}
@@ -132,13 +105,6 @@ func docWithWorkField(mutate func(*schema.WorkEntry)) schema.Resume {
 	return doc
 }
 
-// padDocToCanonicalBytes builds a document whose AssembleCanonical output is
-// exactly target bytes: a "work" section holding as many full (<=16384
-// byte) ASCII-padded descriptions as needed, with the last entry's
-// description trimmed/grown by the exact remaining delta. ASCII 'a' never
-// needs JSON escaping, so each character changes the marshaled length by
-// exactly one byte -- the single delta-adjustment below always lands
-// exactly on target.
 func padDocToCanonicalBytes(target int) schema.Resume {
 	doc := baseDocForBounds()
 	doc.Customization.Layout.Sections.Main = []string{"work"}
@@ -186,46 +152,18 @@ func padDocToCanonicalBytes(target int) schema.Resume {
 	return doc
 }
 
-// --- the named-bound matrix ---
-
-// boundCase is one schema (or store-layer) size bound, exercised by an
-// at-limit document (schema-valid, and store-valid unless noted otherwise)
-// and a one-past-the-limit document (rejected). Keyword+Limit is what the
-// completeness guard (TestBoundsCompletenessGuard) cross-checks against
-// every maxLength/maxItems/maxProperties declaration found by walking
-// schema.RawSchema; Keyword is "" for MaxDocumentBytes, which is a
-// store-layer bound with no corresponding JSON-Schema keyword at all.
 type boundCase struct {
-	Name      string
-	BoundPath string // exact path walkSchemaBounds reports for the field this case actually exercises
-	// Aliases lists every OTHER schema path (as walkSchemaBounds reports it)
-	// that this case's (Keyword, Limit) test is DELIBERATELY treated as also
-	// covering -- an explicit, listed exemption to the "one representative
-	// document per value class" economy, never an automatic one keyed on the
-	// numeric value alone. Keying coverage on
-	// (keyword, limit) alone let a brand-new field that happened to reuse an
-	// EXISTING limit (e.g. a hypothetical new maxLength:160 field) pass
-	// silently, with nothing recorded about why. Every path found in the
-	// schema must now be this case's own BoundPath or be named here; a path
-	// that is neither fails TestBoundsCompletenessGuard, forcing a
-	// conscious decision (add a case, or add here with justification) rather
-	// than silence.
+	Name        string
+	BoundPath   string
 	Aliases     []string
 	Keyword     string
 	Limit       int
 	Valid       func() schema.Resume
 	Invalid     func() schema.Resume
-	StoreOnly   bool // true: JSON-Schema layer accepts BOTH valid and invalid; only the store layer distinguishes them
+	StoreOnly   bool
 	IssueSubstr string
 }
 
-// namedBounds is the harness's exercised-bounds inventory: every
-// maxLength/maxItems/maxProperties bound in resume.schema.json, one pair
-// per distinct (keyword, limit) class (a future value repeated across
-// several fields, e.g. maxLength:160 on both fullName and jobTitle, needs
-// only one representative pair -- the JSON-Schema maxLength check is
-// generic string-length logic, identical regardless of field name), plus
-// the two store-layer-only bounds (MaxDocumentBytes, rich-text byte-exact).
 var namedBounds = []boundCase{
 	{
 		Name:      "max-document-bytes",
@@ -248,14 +186,14 @@ var namedBounds = []boundCase{
 		Limit:     16384,
 		Valid: func() schema.Resume {
 			doc := baseDocForBounds()
-			text := strings.Repeat("é", 8192) // 8192 code points, 16384 UTF-8 bytes
+			text := strings.Repeat("é", 8192)
 			doc.Content = map[string]schema.Section{"profile": profileSection([]schema.ProfileEntry{{ID: boundUUID(0), Text: &text}})}
 			doc.Customization.Layout.Sections.Main = []string{"profile"}
 			return doc
 		},
 		Invalid: func() schema.Resume {
 			doc := baseDocForBounds()
-			text := strings.Repeat("é", 8192) + "a" // 8193 code points (still <16384), 16385 bytes
+			text := strings.Repeat("é", 8192) + "a"
 			doc.Content = map[string]schema.Section{"profile": profileSection([]schema.ProfileEntry{{ID: boundUUID(0), Text: &text}})}
 			doc.Customization.Layout.Sections.Main = []string{"profile"}
 			return doc
@@ -278,32 +216,22 @@ var namedBounds = []boundCase{
 			doc := baseDocForBounds()
 			doc.Content = lettersContent(25)
 			keys := sortedContentKeys(doc.Content)
-			// Keep layout.sections.main at 24 (its own limit) so this case
-			// isolates content.maxProperties -- the 25th key is left an
-			// orphan (a benign, expected store-only side issue), not also
-			// pushed over layout's own maxItems bound.
 			doc.Customization.Layout.Sections.Main = keys[:24]
 			return doc
 		},
 		IssueSubstr: "maxProperties",
 	},
 	{
-		Name: "section-entries-maxitems",
-		// oneOf[1] is "work" (oneOf order: profile, work, education, skill,
-		// language, certificate, project, custom -- see resume.schema.json's
-		// $defs.section). The other 7 branches declare the IDENTICAL
-		// maxItems:64 on their own "entries" array. This is exercised as one
-		// representative document, with the other 7 explicitly named below
-		// (not silently assumed) -- see boundCase.Aliases's comment.
+		Name:      "section-entries-maxitems",
 		BoundPath: "$.$defs.section.oneOf[1].properties.entries.maxItems",
 		Aliases: []string{
-			"$.$defs.section.oneOf[0].properties.entries.maxItems", // profile
-			"$.$defs.section.oneOf[2].properties.entries.maxItems", // education
-			"$.$defs.section.oneOf[3].properties.entries.maxItems", // skill
-			"$.$defs.section.oneOf[4].properties.entries.maxItems", // language
-			"$.$defs.section.oneOf[5].properties.entries.maxItems", // certificate
-			"$.$defs.section.oneOf[6].properties.entries.maxItems", // project
-			"$.$defs.section.oneOf[7].properties.entries.maxItems", // custom
+			"$.$defs.section.oneOf[0].properties.entries.maxItems",
+			"$.$defs.section.oneOf[2].properties.entries.maxItems",
+			"$.$defs.section.oneOf[3].properties.entries.maxItems",
+			"$.$defs.section.oneOf[4].properties.entries.maxItems",
+			"$.$defs.section.oneOf[5].properties.entries.maxItems",
+			"$.$defs.section.oneOf[6].properties.entries.maxItems",
+			"$.$defs.section.oneOf[7].properties.entries.maxItems",
 		},
 		Keyword: "maxItems",
 		Limit:   64,
@@ -352,10 +280,6 @@ var namedBounds = []boundCase{
 		Invalid: func() schema.Resume {
 			doc := baseDocForBounds()
 			doc.Content = lettersContent(24)
-			// content.maxProperties stays at 24 (still valid); main gets one
-			// EXTRA key never placed in content ("y"), isolating
-			// layout.sections.main's own maxItems bound. The orphan "y" is a
-			// benign, expected store-only side issue.
 			main := append(sortedContentKeys(doc.Content), "y")
 			doc.Customization.Layout.Sections.Main = main
 			return doc
@@ -363,12 +287,6 @@ var namedBounds = []boundCase{
 		IssueSubstr: "maxItems",
 	},
 	{
-		// Main and sidebar are two different schema paths sharing the same
-		// maxItems:24 value. Reachability is
-		// per-path (does layout.sections.SIDEBAR specifically carry this
-		// bound through the pipeline?), not per-value, and the main-array
-		// case above never exercises sidebar at all. Cheap enough to give
-		// its own real case rather than alias it away.
 		Name:      "layout-sections-sidebar-maxitems",
 		BoundPath: "$.$defs.customization.properties.layout.properties.sections.properties.sidebar.maxItems",
 		Keyword:   "maxItems",
@@ -585,7 +503,7 @@ var namedBounds = []boundCase{
 		Limit:     16384,
 		Valid: func() schema.Resume {
 			doc := baseDocForBounds()
-			text := strings.Repeat("a", 16384) // ASCII: code points == bytes
+			text := strings.Repeat("a", 16384)
 			doc.Content = map[string]schema.Section{"profile": profileSection([]schema.ProfileEntry{{ID: boundUUID(0), Text: &text}})}
 			doc.Customization.Layout.Sections.Main = []string{"profile"}
 			return doc
@@ -599,15 +517,6 @@ var namedBounds = []boundCase{
 		},
 		IssueSubstr: "maxLength",
 	},
-	// Every row above is maxLength/maxItems/
-	// maxProperties/byte-size -- none depends on format assertion
-	// (as opposed to mere annotation), so deleting AssertFormat() from
-	// validate.go would leave the ENTIRE parity corpus green; only the two
-	// one-sided Go-only format tests would catch it. These two rows are
-	// invalid only via format, tying format assertion to the parity corpus
-	// (Keyword is "" -- format is not a maxLength/maxItems/maxProperties
-	// bound, so these are outside the completeness guard's schema walk, same
-	// as MaxDocumentBytes above).
 	{
 		Name:    "personaldetail-id-format-uuid",
 		Keyword: "",
@@ -620,9 +529,6 @@ var namedBounds = []boundCase{
 		},
 		Invalid: func() schema.Resume {
 			doc := baseDocForBounds()
-			// $defs/uuid is {"type":"string","format":"uuid"} -- no pattern
-			// at all, so only format assertion can reject this; the pattern
-			// keyword literally doesn't exist here to fall back on.
 			doc.PersonalDetails.Details = []schema.PersonalDetail{
 				{ID: "not-a-uuid", Type: schema.TypeCustom, Value: "x", IsHidden: false},
 			}
@@ -638,12 +544,6 @@ var namedBounds = []boundCase{
 			return docWithWorkField(func(e *schema.WorkEntry) { e.EmployerLink = &link })
 		},
 		Invalid: func() schema.Resume {
-			// $defs/link's pattern (`^(https://|mailto:|tel:)`) is anchored
-			// at the START only (no trailing $), so it matches on the prefix
-			// alone regardless of what follows -- a trailing control
-			// character passes pattern untouched. Only format:uri (which
-			// both jsonschema/v6's net/url-based parser and ajv's `[^\s]*$`
-			// regex reject a raw control character under) catches this.
 			link := "https://a.co/\n"
 			return docWithWorkField(func(e *schema.WorkEntry) { e.EmployerLink = &link })
 		},
@@ -677,15 +577,6 @@ func TestBoundsMatrix_LimitAndLimitPlusOne(t *testing.T) {
 	}
 }
 
-// --- completeness guard ---
-
-// walkSchemaBounds parses schema.RawSchema generically (not through the
-// compiled *jsonschema.Schema, which resolves $refs and would collapse
-// e.g. richText's single maxLength declaration into many call sites) and
-// walks EVERY object node for a maxLength/maxItems/maxProperties key,
-// recording every occurrence's (keyword, limit). A future schema bound with
-// no corresponding pair in namedBounds fails TestBoundsCompletenessGuard
-// loudly instead of silently shipping unenforced.
 func walkSchemaBounds(t *testing.T) map[string]map[int][]string {
 	t.Helper()
 	var doc any
@@ -728,18 +619,7 @@ func walkSchemaBounds(t *testing.T) map[string]map[int][]string {
 	return found
 }
 
-// missingBoundCoverage compares found (walkSchemaBounds' output: keyword ->
-// limit -> every exact schema path declaring it) against cases' claimed
-// coverage (each case's own BoundPath plus its listed Aliases) and returns
-// one message per (keyword, limit, path) triple that is covered by
-// NEITHER -- sorted, for deterministic output. Extracted from
-// TestBoundsCompletenessGuard so TestMissingBoundCoverage_* can exercise it
-// directly against synthetic input, independent of the real schema.
 func missingBoundCoverage(found map[string]map[int][]string, cases []boundCase) []string {
-	// covered[keyword][limit] is the set of paths some case explicitly
-	// claims (its own BoundPath, or a listed Alias) -- keyed by PATH, not
-	// just by (keyword, limit) alone, so a brand-new path reusing an
-	// existing limit is not silently absorbed.
 	covered := map[string]map[int]map[string]bool{}
 	for _, bc := range cases {
 		if bc.Keyword == "" {
@@ -787,15 +667,6 @@ func TestBoundsCompletenessGuard(t *testing.T) {
 	}
 }
 
-// TestMissingBoundCoverage_CatchesNewPathReusingAnExistingLimit is the
-// guard for a hypothetical new schema field
-// ($defs.tagline.maxLength) that happens to reuse an EXISTING, already-
-// tested limit (160, already claimed by fullname-jobtitle-title-maxlength)
-// must still be reported missing -- proving coverage is keyed by path, not
-// silently granted by value alone. This is entirely synthetic (no real
-// schema file is touched): it feeds a "found" map missingBoundCoverage
-// would have produced if resume.schema.json gained that field, without
-// waiting for that to actually happen.
 func TestMissingBoundCoverage_CatchesNewPathReusingAnExistingLimit(t *testing.T) {
 	realFullNamePath := "$.$defs.personalDetails.properties.fullName.maxLength"
 	found := map[string]map[int][]string{
@@ -810,16 +681,12 @@ func TestMissingBoundCoverage_CatchesNewPathReusingAnExistingLimit(t *testing.T)
 	if !strings.Contains(missing[0], "$.$defs.tagline.maxLength") {
 		t.Fatalf("expected the missing entry to name $.$defs.tagline.maxLength, got: %v", missing[0])
 	}
-	// The REAL, already-covered fullName path must NOT be reported missing
-	// -- proves this isn't just failing on every path indiscriminately.
 	for _, m := range missing {
 		if strings.Contains(m, realFullNamePath) {
 			t.Fatalf("fullName's own path was reported missing, but it is namedBounds' directly-tested BoundPath: %v", missing)
 		}
 	}
 }
-
-// --- Generated cross-language verdict-parity corpus ---
 
 const boundsFixturesSubdir = "bounds"
 
@@ -836,18 +703,7 @@ type boundsManifestDoc struct {
 	StoreFixtures []manifestRow `json:"storeFixtures"`
 }
 
-// storeFixtureSchemaExpectations is each fixtures/store/*.json file's
-// JSON-Schema-LAYER verdict specifically -- distinct from
-// storeFixtureExpectations (validate_test.go), which is the OVERALL
-// ValidateForStore verdict. Most of these files are schema-valid (the
-// store-layer aggregate rules they exist to exercise -- entry-id
-// duplicates, byte length, layout aggregate, date-range order -- are simply
-// not expressible in JSON Schema at all); the three hostile-sectiontype
-// fixtures and the missing-dates-start/personal-detail-url-scheme fixtures
-// are genuinely schema-invalid too (verified directly against each file's
-// content: an out-of-enum sectionType, a required key absent, and a
-// scheme-restricted value respectively).
-var storeFixtureSchemaExpectations = map[string]bool{ // name -> schema-valid
+var storeFixtureSchemaExpectations = map[string]bool{
 	"invalid-duplicate-detail-id.json":                true,
 	"invalid-duplicate-entry-id.json":                 true,
 	"invalid-hostile-sectiontype-constructor.json":    false,
@@ -863,10 +719,6 @@ var storeFixtureSchemaExpectations = map[string]bool{ // name -> schema-valid
 	"valid-unique-entry-id.json":                      true,
 }
 
-// generatedBoundsCorpus computes the committed corpus files and manifest
-// from namedBounds + storeFixtureSchemaExpectations/
-// storeFixtureExpectations -- the single generation function both the drift
-// check and (if REGENERATE_BOUNDS_CORPUS=1) the regeneration path use.
 func generatedBoundsCorpus(t *testing.T) (files map[string][]byte, doc boundsManifestDoc) {
 	t.Helper()
 	files = map[string][]byte{}
@@ -933,13 +785,6 @@ func marshalManifest(t *testing.T, doc boundsManifestDoc) []byte {
 	return append(out, '\n')
 }
 
-// TestBoundsCorpus_MatchesCommitted is the generated-artifact drift check
-// every other generated artifact in this repo has (rawschema.go/
-// rawschema_test.go, gen/go/resume.go/gen.test.ts): it recomputes the
-// corpus + manifest from source (namedBounds) and asserts the committed
-// files are byte-identical. Set REGENERATE_BOUNDS_CORPUS=1 to write the
-// freshly computed content instead of failing -- the regeneration path for
-// a deliberate bound change.
 func TestBoundsCorpus_MatchesCommitted(t *testing.T) {
 	fixturesDir := schemaFixturesDir(t)
 	files, doc := generatedBoundsCorpus(t)
@@ -977,8 +822,6 @@ func TestBoundsCorpus_MatchesCommitted(t *testing.T) {
 		}
 	}
 
-	// Also catch a committed file namedBounds no longer produces (a removed
-	// or renamed bound case leaving a stale file behind).
 	if !regenerate {
 		entries, err := os.ReadDir(filepath.Join(fixturesDir, boundsFixturesSubdir))
 		if err != nil && !os.IsNotExist(err) {
@@ -993,17 +836,6 @@ func TestBoundsCorpus_MatchesCommitted(t *testing.T) {
 	}
 }
 
-// --- Cross-language verdict parity: the Go half ---
-
-// TestSchemaVerdictParity_Go runs jsonschema/v6 -- via the SAME compiled
-// schema ValidateForStore uses -- over the COMMITTED bounds corpus, the
-// COMMITTED manifest's store-fixture rows, and every existing
-// packages/schema/fixtures/*.json top-level fixture (naming convention).
-// packages/schema/test/bounds-parity.test.ts is the other half: it reads
-// the identical committed files and runs ajv over them, asserting the same
-// verdicts. A disagreement in either direction is a red build in whichever
-// side's test that is -- this test and that one, not the shared schema
-// file, are what make "one schema, both languages" true.
 func TestSchemaVerdictParity_Go(t *testing.T) {
 	sch := resume.CompiledSchemaPointerForTest()
 	fixturesDir := schemaFixturesDir(t)

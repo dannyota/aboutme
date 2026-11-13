@@ -41,8 +41,9 @@ changes the rendered resume. Counting runs the same with it on or off
 
 ## Gate
 
-A request for `/{slug}` without a valid pass for that resume gets the gate page
-instead of the resume, with status 200, `Cache-Control: no-store`, and
+A request for `/{slug}`, `/{slug}/projects` or `/{slug}/projects/{project-slug}`
+without a valid pass for that resume gets the gate page instead of the page,
+with status 200, `Cache-Control: no-store`, and
 `X-Robots-Tag: noindex, noarchive`. It shows:
 
 - the public page title, so the viewer knows whose resume it is;
@@ -60,9 +61,9 @@ content and no script: its buttons are plain links, it runs no counting, and it
 never hydrates. Go validates the rendered gate with its own closed rule set, as
 it does for the resume page.
 
-The message comes from `?signin=cancelled` or `?signin=failed` on `/{slug}`; Go
-reads only those two values into the envelope and ignores any other query. The
-gate is never cached, so the query cannot reach another viewer.
+The message comes from `?signin=cancelled` or `?signin=failed` on the gated
+address; Go reads only those two values into the envelope and ignores any other
+query. The gate is never cached, so the query cannot reach another viewer.
 
 **Owner approval** V5: the page head keeps the link-preview title, description,
 and card, so a shared link still previews
@@ -76,6 +77,7 @@ resume, except the preview card and its alias:
 | Route                                            | Without a pass                       |
 | ------------------------------------------------ | ------------------------------------ |
 | `/{slug}`                                        | The gate                             |
+| `/{slug}/projects` and `/{slug}/projects/{…}`    | The gate, available or not           |
 | `GET /api/v1/public/resumes/{slug}` and `/photo` | The uniform public 404               |
 | `GET /api/v1/public/resumes/{slug}/pdf`          | The uniform public 404               |
 | `GET /api/v1/live/{slug}`                        | The uniform public 404               |
@@ -106,13 +108,16 @@ resume ID.
 ## Sign-in flow
 
 1. The gate button links to
-   `GET /api/v1/auth/{provider}/start?purpose=view&slug={slug}`. `view` is a new
-   unauthenticated purpose, allowed on `GET` like `login`
+   `GET /api/v1/auth/{provider}/start?purpose=view&slug={slug}`, with
+   `&page=projects` or `&page=projects/{project-slug}` added when the gate
+   stands in for a project page. `view` is a new unauthenticated purpose,
+   allowed on `GET` like `login`
    ([ADR 0016](../../adr/0016-sign-in-providers.md)), and shares the anonymous
-   start limiter. A malformed slug gets 400. A slug that is not live with the
-   switch on redirects to `/{slug}` and creates no transaction. Otherwise the
-   start stores the transaction with purpose `view` and the resume ID, and
-   redirects to the provider.
+   start limiter. A malformed slug, or a `page` outside that grammar or
+   percent-encoded, gets 400. A slug that is not live with the switch on
+   redirects to the asked address and creates no transaction. Otherwise the
+   start stores the transaction with purpose `view`, the resume ID and the page
+   (in its return path), and redirects to the provider.
 2. The provider flow is unchanged: Google with PKCE, LinkedIn as
    [LinkedIn sign-in](../linkedin-sign-in.md#protocol) sets out, and ID token
    checks for both, with LinkedIn's nonce checked only when present
@@ -124,15 +129,16 @@ resume ID.
    an account and never creates a session. It verifies the ID token, re-reads
    the resume by ID, discards every claim, and then:
    - live with the switch on: sets a pass with the current epoch and redirects
-     to the resume's current slug;
-   - live with the switch off: redirects to the current slug without a pass;
+     to the resume's current slug, plus the stored page;
+   - live with the switch off: redirects to the current slug and page without a
+     pass;
    - not live: redirects to `/`.
 
    Nothing about the viewer is written to the database or logs. A failure after
-   the transaction is read, including cancel, returns to `/{slug}?signin=failed`
-   or `?signin=cancelled`. A failure before it is read (a missing or unknown
-   transaction cookie) names no resume and goes to the login page, as for any
-   purpose.
+   the transaction is read, including cancel, returns to the asked address with
+   `?signin=failed` or `?signin=cancelled`. A failure before it is read (a
+   missing or unknown transaction cookie) names no resume and goes to the login
+   page, as for any purpose.
 
 4. The resume renders; the counting script runs as for any viewer.
 

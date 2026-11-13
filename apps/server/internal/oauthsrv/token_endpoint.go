@@ -18,21 +18,14 @@ const (
 )
 
 type tokenResponse struct {
-	// AccessToken is the server-minted opaque bearer access token.
-	AccessToken string `json:"access_token"`
-	// TokenType is the RFC 6749 token type, always "Bearer".
-	TokenType string `json:"token_type"`
-	// ExpiresIn is the access token lifetime in seconds.
-	ExpiresIn int64 `json:"expires_in"`
-	// RefreshToken is the server-minted opaque refresh token for the family.
+	AccessToken  string `json:"access_token"`
+	TokenType    string `json:"token_type"`
+	ExpiresIn    int64  `json:"expires_in"`
 	RefreshToken string `json:"refresh_token"`
-	// Scope is the grant's canonical space-separated scope set.
-	Scope string `json:"scope"`
+	Scope        string `json:"scope"`
 }
 
-// HandleToken exchanges a single-use code or rotates a refresh token. It is a
-// bearer-world endpoint: it deliberately never reads a cookie. No response,
-// success or error, may be cached (RFC 6749 section 5.1).
+// RFC 6749 section 5.1 requires Cache-Control: no-store on token responses.
 func (s *Service) HandleToken(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	if r.Method != http.MethodPost {
@@ -118,8 +111,6 @@ func (s *Service) HandleToken(w http.ResponseWriter, r *http.Request) {
 		}
 		switch {
 		case errors.Is(err, errOAuthUnknownClient):
-			// RFC 6749 section 5.2: a deleted client gets 401,
-			// so an MCP client whose registration was swept registers again.
 			writeOAuthErrorBody(w, http.StatusUnauthorized, "invalid_client", "The request is invalid.")
 		case errors.Is(err, errOAuthInvalidClient):
 			writeOAuthErrorBody(w, http.StatusBadRequest, "invalid_client", "The request is invalid.")
@@ -138,15 +129,11 @@ func (s *Service) HandleToken(w http.ResponseWriter, r *http.Request) {
 	attemptResult = grantAttemptSuccess
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	// application/json body of server-minted tokens and a canonical closed-set scope
 	if _, writeErr := w.Write([]byte(`{"access_token":"` + response.AccessToken + `","token_type":"Bearer","expires_in":` + strconv.FormatInt(response.ExpiresIn, 10) + `,"refresh_token":"` + response.RefreshToken + `","scope":"` + response.Scope + `"}`)); writeErr != nil {
 		return
 	}
 }
 
-// Only a stored credential selects failed-grant debt. Public client identifiers
-// cannot select an owner's budget; token processing rechecks authority under locks.
-// errOAuthNoStoredGrant leaves ordinary token validation to classify the request.
 func (s *Service) grantRateID(ctx context.Context, form url.Values) (uuid.UUID, bool, error) {
 	if isNilDependency(s.queries) {
 		return uuid.Nil, false, errOAuthNoStoredGrant

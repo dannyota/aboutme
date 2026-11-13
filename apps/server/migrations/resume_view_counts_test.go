@@ -13,10 +13,6 @@ import (
 	"danny.vn/aboutme/apps/server/migrations"
 )
 
-// The view count tables hold numbers only, cascade with the resume, and
-// accept the closed platform set (docs/design/viewer-analytics/delivery.md,
-// "Schema").
-
 func viewDate(y int, m time.Month, d int) pgtype.Date {
 	return pgtype.Date{Time: time.Date(y, m, d, 0, 0, 0, 0, time.UTC), Valid: true}
 }
@@ -69,7 +65,6 @@ func TestResumeViewCountsUpsertCascadeAndSweep(t *testing.T) {
 	add(resumeID, today, 2, 1)
 	add(resumeID, today, 3, 0)
 	add(resumeID, old, 7, 0)
-	// A resume deleted before the flush is skipped, not an error.
 	add(uuid.New(), today, 1, 0)
 
 	if err := q.AddResumeShareSignalDays(ctx, store.AddResumeShareSignalDaysParams{
@@ -97,7 +92,6 @@ func TestResumeViewCountsUpsertCascadeAndSweep(t *testing.T) {
 		t.Fatalf("signals = %+v, want zalo 3 first", signals)
 	}
 
-	// Rows older than the 400-day cutoff go; newer rows stay.
 	deleted, err := q.DeleteOldResumeViewDaysPage(ctx, store.DeleteOldResumeViewDaysPageParams{Cutoff: viewDate(2025, time.August, 22), LimitRows: 1000})
 	if err != nil || deleted != 1 {
 		t.Fatalf("DeleteOldResumeViewDaysPage = %d, %v; want 1", deleted, err)
