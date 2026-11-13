@@ -111,8 +111,9 @@ from backup configuration alone. The drill keeps production safe:
   the production host to the drill server in one pipe and never reaches the
   laptop disk or terminal.
 - The drill server's host key is made for the run. Its public half is pinned
-  before the first SSH; its private half reaches the server only through user
-  data and dies with it.
+  before the first SSH. Its private half still travels in user data and dies
+  with the server; the [restore drill plan](../plans/restore-drill.md) moves it
+  off user data before the first production drill.
 - The bundle copied to the drill server holds only `host/` and the two scripts
   `install.sh` installs, never `deploy/vn/prod`.
 - The fresh cluster and every backup timer stop before the repository
