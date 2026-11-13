@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 restore_deploy_notifications() {
   local failed=0 actions state wait_for_alarm=${1:-0}
   if ((task_stopped_rule_restore)); then
