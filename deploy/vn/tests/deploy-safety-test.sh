@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# The signal cases need HUP trappable. A shell started with HUP ignored, as
+# under nohup or some job runners, cannot trap it, so restart once with the
+# default disposition.
+if [[ -z ${ABOUTME_SAFETY_SIGNALS_RESET:-} ]]; then
+  ABOUTME_SAFETY_SIGNALS_RESET=1 exec env --default-signal=HUP,INT,TERM "$BASH" "${BASH_SOURCE[0]}" "$@"
+fi
+
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 work=$(mktemp -d)
 # Release every fixture waiter and join the background jobs before removing
@@ -18,7 +25,7 @@ cleanup() {
 trap cleanup EXIT
 fail() { printf 'deployment safety: %s\n' "$*" >&2; exit 1; }
 # Every wait for a fixture's state ends as soon as the state appears, or after
-# this many seconds, so a loaded host slows the test instead of failing it.
+# this many seconds, so its length does not depend on how fast the host forks.
 export ABOUTME_TEST_WAIT_SECONDS=${ABOUTME_TEST_WAIT_SECONDS:-60}
 wait_for_file() { # path
   local deadline=$((SECONDS + ABOUTME_TEST_WAIT_SECONDS))
