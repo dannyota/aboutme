@@ -26,11 +26,6 @@ for (const name of ['UPDATE_GOLDEN', 'PLAYWRIGHT_UPDATE_SNAPSHOTS']) {
   }
 }
 
-// The production journey touches a live host over the network, not a local
-// dev server, so every step budget is wider than the local harness uses.
-// A step that never settles must still fail at its own stage rather than
-// silently consume the run; see totp-production.spec.ts for the per-step
-// wrap that turns any error into one fixed, secret-free message.
 export default defineConfig({
   forbidOnly: true,
   fullyParallel: false,

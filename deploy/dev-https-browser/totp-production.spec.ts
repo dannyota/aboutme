@@ -1,33 +1,3 @@
-/**
- * Scripted production proof for the authenticator-app (TOTP) second factor.
- * Runs only inside the pinned browser image against the real production
- * origin, driven by the top manager, never by hand
- * (docs/runbooks/totp-keys.md "Production proofs"). Three modes share this
- * file:
- *
- * - `totp-prod-flag-off`, after the flag-off deploy and before the fence
- *   raise: health, the named account signing in unenrolled, a passkey it
- *   enrolls and proves login and recovery with, existing sessions and
- *   grants revoking on enrollment, and TOTP enrollment answering closed.
- *   The `finally` path removes the passkey again, so the account is
- *   unenrolled for the next phase.
- * - `totp-prod-enabled`, after the fence raise and the flag-on redeploy:
- *   first TOTP enrollment, pending login, replacement, one shared recovery
- *   completion, passkey coexistence, both locales, and removal. The
- *   `finally` path removes every factor again.
- * - `totp-prod-cleanup`, a standalone safety net for when an earlier run's
- *   own `finally` path could not finish: signs in, removes any active
- *   factor and recovery set, and stops.
- *
- * The account is a durable fictional identity read from a mounted file, not
- * created or deleted by this proof. Every setup secret, code, recovery
- * code, cookie, and CSRF value stays in process memory; only fixed step
- * names and outcomes reach output, matching second-factor.spec.ts's and
- * totp.spec.ts's withheld-log convention.
- *
- * Contract: docs/design/totp-second-factor-contract.md,
- * docs/design/totp-key-management.md, ADR 0017.
- */
 import { expect, test, type BrowserContext, type Page, type Route } from '@playwright/test';
 import { randomBytes } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
@@ -38,15 +8,8 @@ import {
   TOTP_PERIOD_SECONDS,
 } from './totp-fixture';
 
-/**
- * The newest step an accepted code has used. The server accepts only a step
- * greater than the credential's last used step
- * (totp-second-factor-contract.md, "TOTP profile and code verification"),
- * so each accepted code waits for a newer step.
- */
 let lastUsedStep = -1;
 
-/** Returns a current-step code newer than every step already accepted. */
 async function freshCode(page: Page, secret: string): Promise<string> {
   const waitMs = ((lastUsedStep + 1) * TOTP_PERIOD_SECONDS - Date.now() / 1000)
     * 1000;
@@ -86,12 +49,9 @@ function beginTeardown(): void {
 
 test.afterEach(({}, testInfo) => {
   if (testInfo.status === testInfo.expectedStatus) return;
-  // Never forward the underlying error: it can hold a locator's matched
-  // text, a response body, or another value this proof must keep secret.
   console.log(`${MODE}-stage:fail-at-${recordedStage}`);
 });
 
-/** Runs one step, naming it before and rethrowing a fixed message on error. */
 async function step<T>(name: string, body: () => Promise<T>): Promise<T> {
   stage(name);
   try {
@@ -101,14 +61,11 @@ async function step<T>(name: string, body: () => Promise<T>): Promise<T> {
   }
 }
 
-// --- Account -----------------------------------------------------------
-
 interface Account {
   readonly email: string;
   readonly password: string;
 }
 
-/** Reads the durable fictional account. Never logged, never persisted. */
 async function readAccount(): Promise<Account> {
   const raw = await readFile(ACCOUNT_PATH, 'utf8');
   const fields = new Map<string, string>();
@@ -126,8 +83,6 @@ async function readAccount(): Promise<Account> {
   }
   return { email, password };
 }
-
-// --- Page helpers, mirroring totp.spec.ts adapted for production ----------
 
 async function hydrated(page: Page, timeout: number): Promise<void> {
   await expect.poll(
@@ -282,19 +237,11 @@ async function submitPendingTotpCode(page: Page, code: string): Promise<number> 
   const input = page.locator(TOTP_LOGIN_INPUT);
   await input.click();
   await input.fill(code);
-  // The recovery form's button has the same name, so scope to the TOTP form.
   await page.getByTestId('second-factor-totp-form')
     .locator('button[type="submit"]').click();
   return (await response).status();
 }
 
-/**
- * Answers the settings reauthentication on an enrolled account. The password
- * opens a pending reauthentication, and a fresh code from the current secret
- * completes it (second-factor-authentication.md, "Enrollment and
- * management": primary and an active factor must both be recent). The page
- * then returns to settings.
- */
 async function reauthenticateEnrolled(
   page: Page,
   password: string,
@@ -362,8 +309,6 @@ async function submitSetupCode(page: Page, code: string): Promise<number> {
   return (await response).status();
 }
 
-// --- Virtual authenticator, one credential at a time -----------------------
-
 type CDPSend = (
   method: string,
   params?: Record<string, unknown>,
@@ -393,15 +338,6 @@ async function attachAuthenticator(
   return id;
 }
 
-// --- Teardown ---------------------------------------------------------------
-
-/**
- * Removes every active factor and the recovery set for the account, leaving
- * it unenrolled. Never deletes the account itself: it is a durable identity
- * reused across releases (docs/runbooks/totp-keys.md "Production proofs").
- * A recovery code, when supplied, completes a pending row this cleanup pass
- * itself cannot otherwise close.
- */
 async function removeEveryFactor(
   page: Page,
   account: Account,
@@ -420,11 +356,6 @@ async function removeEveryFactor(
       await completeWithRecovery(page, recoveryCode);
     }
     await gotoHydrated(page, '/app/settings/sessions');
-    // Best-effort: remove TOTP, then every passkey. A route this account
-    // never used answers 404 and is ignored. Each removal that succeeds
-    // replaces the session and its CSRF secret, so every request reads a
-    // fresh token; reusing one would get 403 csrf_rejected after the first
-    // removal and stop the loop early.
     await page.evaluate(async (token) => {
       await fetch('/api/v1/me/second-factor/totp', {
         credentials: 'include',
@@ -457,8 +388,6 @@ async function removeEveryFactor(
     return false;
   }
 }
-
-// --- totp-prod-flag-off -----------------------------------------------------
 
 test('proves the pre-activation production state', async ({ context, page }) => {
   test.skip(MODE !== 'totp-prod-flag-off', 'flag-off mode only');
@@ -540,8 +469,6 @@ test('proves the pre-activation production state', async ({ context, page }) => 
   }
 });
 
-// --- totp-prod-enabled -------------------------------------------------
-
 test('proves the activated production authenticator-app journey', async ({
   context,
   page,
@@ -581,10 +508,6 @@ test('proves the activated production authenticator-app journey', async ({
       if (await meStatus(page) !== 200) throw new Error('TOTP login did not establish a session');
     });
 
-    // The old-secret rejection after replacement is dropped here: the hosted
-    // proof (totp.spec.ts, "replace-old-secret-rejected") already covers it,
-    // and production has only one account to spend its pending budget on
-    // (docs/runbooks/totp-keys.md "Production proofs").
     await step('totp-replace', async () => {
       await gotoHydrated(page, '/app/settings/sessions');
       await forceReauthOnce(page, '/api/v1/me/second-factor/totp/enrollment');
@@ -612,11 +535,6 @@ test('proves the activated production authenticator-app journey', async ({
     });
     recoveryCleanupCode = recoveryCodes[1] as string;
 
-    // Passkey coexistence and both locales share one pending row and one
-    // completion: the account has only 8 admitted attempts to spend here
-    // (docs/runbooks/totp-keys.md "Production proofs"), so this proves
-    // passkey and authenticator-app both list on the pending page, in both
-    // locales, and completes once with TOTP rather than the passkey.
     await step('passkey-coexistence-and-locales', async () => {
       await attachAuthenticator(context, page);
       await gotoHydrated(page, '/app/settings/sessions');
@@ -642,7 +560,6 @@ test('proves the activated production authenticator-app journey', async ({
         document.documentElement.scrollWidth <= window.innerWidth);
       if (!viOverflow) throw new Error('pending page overflowed its viewport');
 
-      // Same pending row, reloaded under the other locale and viewport.
       await context.addCookies([{ name: 'aboutme-locale', url: ORIGIN, value: 'en' }]);
       await page.setViewportSize(DESKTOP);
       await gotoHydrated(page, '/login/second-factor');
@@ -674,8 +591,6 @@ test('proves the activated production authenticator-app journey', async ({
     await removeEveryFactor(page, account, recoveryCleanupCode);
   }
 });
-
-// --- totp-prod-cleanup --------------------------------------------------
 
 test('removes every production TOTP proof factor', async ({ page }) => {
   test.skip(MODE !== 'totp-prod-cleanup', 'cleanup mode only');

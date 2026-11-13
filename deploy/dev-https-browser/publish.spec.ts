@@ -69,12 +69,7 @@ const EVIDENCE_PATH = "/evidence/publish-proof.json";
 const SCHEMA_VERSION = "6";
 const SEED_EMAIL = "dev@aboutme.invalid";
 const SEED_PASSWORD = "aboutme-dev-password-1";
-// An unpublished, deleted, or sign-in protected public resume may answer
-// either status.
 const REVOKED_PUBLIC_STATUSES: readonly number[] = [401, 404];
-// How long an unpublish may take to reach an open public page. Unpublish can
-// wait up to five seconds for old public responses to drain (ADR 0010), and a
-// loaded runner adds its own delay.
 const REVOCATION_BOUND_MS = 30_000;
 
 const steps = {
@@ -150,7 +145,6 @@ test.beforeEach(() => {
   writePublishEvidence = undefined;
 });
 
-// Classify failures after cleanup, including failures in cleanup itself.
 test.afterEach(async ({ browser }, info) => {
   if (info.status !== info.expectedStatus) failedStage ??= currentStage;
   if (createdID === undefined) return;
@@ -230,8 +224,6 @@ function stageNavigationFailure(error: unknown): void {
   else stage("navigation-error");
 }
 
-// isPublicRouteOf reports whether path is one of the resume's own public
-// routes: its page, its read, its live stream, or its versioned card image.
 function isPublicRouteOf(path: string, slug: string): boolean {
   const card = `/api/v1/public/resumes/${slug}/og/`;
   return (
@@ -1169,8 +1161,6 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
     const acceptedPublish = await publishResponse;
     statuses.publish = acceptedPublish.status();
     expect(statuses.publish).toBe(200);
-    // The seal never appears on or over the rendered preview; the top bar's
-    // public mark takes the landing stamp (DESIGN.md).
     const publicMark = page.getByTestId("public-mark");
     const previewStamp = page.getByTestId("preview-stamp");
     stage("publish-marks-landing");
@@ -1198,8 +1188,6 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
     stage("publish-mark-link-text");
     await expect(publicMarkLink).toHaveAttribute("href", `/${slug}`);
     stage("publish-mark-link");
-    // The open publish dialog hides the page behind it from the
-    // accessibility tree, so the seal query includes hidden elements.
     await expect(
       publicMark.getByRole("img", { includeHidden: true }),
     ).toHaveAttribute(
@@ -1550,10 +1538,7 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
     await expect(
       page.getByRole("heading", { name: "Resumes", exact: true }),
     ).toBeVisible();
-    // Log out stays disabled until the `/me` read brings the CSRF token, and
-    // the session list often renders first. `press` only focuses, and a
-    // disabled button takes no focus, so an Enter in that window is lost.
-    // Holding every `/me` read opens the window on every run.
+    // `press` only focuses, and a disabled button takes no focus, so an Enter before the /me read lands is lost (Playwright locator.press).
     let releaseMe = (): void => {};
     const meHeld = new Promise<void>((resolve) => {
       releaseMe = resolve;
@@ -1564,8 +1549,7 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
       try {
         await route.continue();
       } catch (error) {
-        // The page can abandon a held read for a newer one; Playwright then
-        // refuses to continue the abandoned read.
+        // The page can abandon a held read for a newer one; Playwright then refuses to continue it (Playwright route.continue).
         if (!String(error).includes("Route is already handled")) throw error;
       }
     };
@@ -1679,17 +1663,9 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
   };
 });
 
-// The community showcase opt-in over the real stack. Nothing is reviewed:
-// an opted-in, live resume with sign in to view off is listed at once, and
-// every revocation removes it from the next listing read
-// (docs/design/showcase.md "Opt-in", "Delivery, caching, and revocation").
 const SHOWCASE_LISTING_PATH = "/api/v1/public/showcase";
-// What the resume's own public routes may answer while the showcase test
-// itself turns sign in to view on or unpublishes.
 const SHOWCASE_REVOKED_STATUSES: readonly number[] = [401, 403, 404, 410];
-// True only while readListing navigates its page.
 let listingNavigation = false;
-// A listed card renders on demand within the server's 20 s render job bound.
 const CARD_RENDER_BOUND_MS = 20_000;
 
 function classifyConsoleFailure(
@@ -1702,7 +1678,6 @@ function classifyConsoleFailure(
     const location = new URL(message.location().url);
     if (location.origin === ORIGIN) path = location.pathname;
   } catch {
-    /* Keep unknown locations in the other category. */
   }
   const route =
     resumeID !== undefined && path === `/api/v1/resumes/${resumeID}`
@@ -1733,8 +1708,6 @@ function classifyConsoleFailure(
   return `console-${httpFailureStatus(message.text()) ?? "non-http"}-${route}`;
 }
 
-// recordCountedConsole keeps the first counted console error of a test as
-// closed words for its failure marker.
 function recordCountedConsole(
   message: ConsoleMessage,
   resumeID: string | undefined,
@@ -1743,8 +1716,6 @@ function recordCountedConsole(
   countedConsoleFailure ??= `${classifyConsoleFailure(message, resumeID, slug)}-at-${currentStage}`;
 }
 
-// A listing read still open when readListing navigates its page away ends
-// with this line. Only that navigation may cause it.
 function isAbortedListingConsole(message: ConsoleMessage): boolean {
   let location: URL;
   try {
@@ -1779,10 +1750,6 @@ async function submitPublishDialog(
   expect((await accepted).status()).toBe(200);
 }
 
-// waitForListedCard waits until the listed resume's card image has loaded. A
-// revocation cancels a card render still in flight, and the image then fails
-// with a 503 (ADR 0010), so the test lets its own card finish before it
-// revokes.
 async function waitForListedCard(page: Page, slug: string): Promise<void> {
   const image = page.locator(`[data-showcase-slug="${slug}"] img`);
   await image.scrollIntoViewIfNeeded();
@@ -1797,8 +1764,6 @@ async function waitForListedCard(page: Page, slug: string): Promise<void> {
   ).toBeGreaterThan(0);
 }
 
-// completeResume gives the open English editor what publishing needs: a full
-// name and one work entry.
 async function completeResume(page: Page, fullName: string): Promise<void> {
   await page.locator('[data-action="open-document"]').press("Enter");
   await page.getByLabel("Full name").fill(fullName);
@@ -1831,8 +1796,6 @@ async function openPublishDialog(page: Page) {
   return dialog;
 }
 
-// readListing opens /showcase and reads the listing from the page's own
-// request. It returns the document and listing responses and the slugs listed.
 async function readListing(
   page: Page,
 ): Promise<{ document: Response; listing: Response; slugs: string[] }> {
@@ -1878,8 +1841,6 @@ test("proves the showcase opt-in, its revocations, and delivery rules", async ({
   const slug = `showcase-${crypto.randomUUID().slice(0, 8)}`;
   let resumeID: string | undefined;
   let publicContext: BrowserContext | undefined;
-  // True from each revocation this test submits until it lists or publishes
-  // the resume again, so only revocations the test made itself are excused.
   let revokingPublic = false;
   const hooks = {
     countConsoleError: (message: ConsoleMessage): boolean =>
@@ -1914,7 +1875,6 @@ test("proves the showcase opt-in, its revocations, and delivery rules", async ({
     stage("showcase-complete-resume");
     await completeResume(page, "Showcase proof resume");
 
-    // AC-SHOW-001: the switch is off by default and needs a public resume.
     let dialog = await openPublishDialog(page);
     stage("showcase-opt-in-controls");
     await dialog.getByLabel("Slug", { exact: true }).fill(slug);
@@ -1942,8 +1902,6 @@ test("proves the showcase opt-in, its revocations, and delivery rules", async ({
     await submitPublishDialog(page, dialog, id);
 
     stage("showcase-opt-in-message");
-    // AC-SHOW-001, AC-SHOW-006: the opt-in lists the resume at once; the
-    // dialog shows the Listed line.
     const status = dialog.getByTestId("publish-showcase-status");
     await expect(status).toContainText("Shown in the community showcase.");
 
@@ -1962,7 +1920,6 @@ test("proves the showcase opt-in, its revocations, and delivery rules", async ({
     stage("showcase-listed-card");
     await waitForListedCard(anonymous, slug);
 
-    // AC-SHOW-008, AC-SHOW-014: delivery rules of the page and the listing.
     stage("showcase-delivery-headers");
     expect(listed.document.headers()["x-robots-tag"]).toBe("noindex, nofollow");
     expect(Object.keys(await listed.document.allHeaders())).not.toContain(
@@ -1978,8 +1935,6 @@ test("proves the showcase opt-in, its revocations, and delivery rules", async ({
     );
     expect(await publicContext.cookies(ORIGIN)).toEqual([]);
 
-    // AC-SHOW-001, AC-SHOW-014: turning on sign in to view ends the opt-in
-    // and the next listing read omits the resume.
     stage("showcase-sign-in-controls");
     await signInSwitch.press("Space");
     await expect(showcaseSwitch).not.toBeChecked();
@@ -2003,8 +1958,6 @@ test("proves the showcase opt-in, its revocations, and delivery rules", async ({
     stage("showcase-sign-in-listing");
     expect((await readListing(anonymous)).slugs).not.toContain(slug);
 
-    // Turning sign in to view off leaves the switch off and the resume
-    // unlisted (AC-SHOW-014).
     stage("showcase-sign-in-off-controls");
     await signInSwitch.press("Space");
     await expect(signInSwitch).not.toBeChecked();
@@ -2020,8 +1973,6 @@ test("proves the showcase opt-in, its revocations, and delivery rules", async ({
     stage("showcase-sign-in-off-listing");
     expect((await readListing(anonymous)).slugs).not.toContain(slug);
 
-    // AC-SHOW-001, AC-SHOW-006: opting in again lists the resume at once;
-    // unpublishing ends the opt-in and publishing again starts off.
     stage("showcase-reopt-in-controls");
     revokingPublic = false;
     await showcaseSwitch.press("Space");
@@ -2040,7 +1991,6 @@ test("proves the showcase opt-in, its revocations, and delivery rules", async ({
     await expect(showcaseSwitch).toBeDisabled();
     revokingPublic = true;
     await submitPublishDialog(page, dialog, id);
-    // AC-SHOW-014: unpublishing removes the resume from the next read.
     stage("showcase-unpublished-listing");
     expect((await readListing(anonymous)).slugs).not.toContain(slug);
     stage("showcase-republish-controls");
@@ -2083,8 +2033,6 @@ test("proves the showcase opt-in, its revocations, and delivery rules", async ({
 const DELETION_TEST_TITLE =
   "proves deleting a published resume ends its owner and public reads";
 
-// isExpectedDeletedConsole matches the line the browser logs for a read of
-// the deleted resume's own owner or public routes.
 function isExpectedDeletedConsole(
   message: ConsoleMessage,
   resumeID: string,
@@ -2107,8 +2055,6 @@ function isExpectedDeletedConsole(
   );
 }
 
-// ownerDelete reads the resume for its revision and deletes it through the
-// owner API. It returns both statuses.
 async function ownerDelete(
   page: Page,
   id: string,
@@ -2153,8 +2099,6 @@ async function ownerReadStatus(page: Page, id: string): Promise<number> {
   );
 }
 
-// ownerCreate creates a resume that publishing accepts, a full name and one
-// work entry, through the owner API. It returns the status and the new ID.
 async function ownerCreate(
   page: Page,
   title: string,
@@ -2228,8 +2172,6 @@ async function ownerCreate(
   );
 }
 
-// ownerPublish reads the resume for its revision and publishes it live at
-// slug through the owner API. It returns the publish status.
 async function ownerPublish(
   page: Page,
   id: string,
@@ -2275,8 +2217,6 @@ test(DELETION_TEST_TITLE, async ({ browser, context, page }) => {
   const slug = `deletion-${crypto.randomUUID().slice(0, 8)}`;
   let resumeID: string | undefined;
   let publicContext: BrowserContext | undefined;
-  // Set just before the delete request: from then on, and only for this
-  // resume's own routes, a 401 or 404 is the expected answer.
   let deleting = false;
   const hooks = {
     countConsoleError: (message: ConsoleMessage): boolean =>
@@ -2296,8 +2236,6 @@ test(DELETION_TEST_TITLE, async ({ browser, context, page }) => {
   try {
     stage("deletion-login");
     await signInWithPassword(page);
-    // The setup goes through the owner API: this test proves deletion, not
-    // the editor.
     stage("deletion-create-status");
     const created = await ownerCreate(
       page,

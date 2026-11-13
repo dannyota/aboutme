@@ -181,9 +181,6 @@ function expectedNegativeConsole(
           `/api/v1/public/resumes/${revokedSlug}/pdf`,
           `/api/v1/public/resumes/${revokedSlug}/og.png`,
         ].includes(url.pathname) ||
-          // The stored card's versioned URL (docs/design/link-previews.md,
-          // "Build, storage, and serving"); its 16-hex version varies per
-          // resume, so this checks the shape rather than a literal path.
           new RegExp(
             `^/api/v1/public/resumes/${revokedSlug}/og/[0-9a-f]{16}\\.png$`,
           ).test(url.pathname))) ||
@@ -201,11 +198,7 @@ async function installGuards(
   await installExternalWebSocketFirewall(context, counters);
 }
 
-// Armed forced rejections per page. The page reads GET /api/v1/me on its own
-// schedule, so only a DELETE may use one up. The route stays installed for
-// the page's life: when a page's last route expires or is removed, Playwright
-// continues every request still in that route a second time, and the context
-// firewall then fails with "Route is already handled!".
+// When a page's last route goes away, Playwright continues its requests a second time and the firewall fails with "Route is already handled!" (Playwright routing).
 const forcedDeleteRejections = new WeakMap<Page, { armed: boolean }>();
 
 async function forceNextDeleteReauth(page: Page): Promise<void> {
@@ -400,9 +393,6 @@ async function createOAuthGrant(
       status: 200,
     });
   });
-  // This page's query carries the client this call just registered, so it
-  // cannot be pre-warmed with different, throwaway parameters; its one real
-  // visit takes the warm bound directly.
   await warmPage(page, `/oauth/authorize?${query.toString()}`);
   await Promise.all([
     page.waitForURL(`${REDIRECT_URI}**`),
@@ -541,8 +531,6 @@ async function publicReads(
       result[name] = response.status;
       if (name === "html") htmlBody = await response.text();
     }
-    // The stored card's versioned URL, present only while the page is live
-    // (docs/design/link-previews.md, "Build, storage, and serving").
     const match = /<meta property="og:image" content="([^"]*)"/u
       .exec(htmlBody);
     result.shareVersionedPath = match?.[1] === undefined
@@ -602,9 +590,6 @@ test("proves account export, reauthentication, and deletion", async ({
   };
 
   try {
-    // Warm /login before signInWithGoogle depends on it already being
-    // compiled on the harness's dev server (harness-lib.ts warmPage); the
-    // real sign-in below revisits it at its own tight bound.
     stage("warm-login");
     await warmPage(page, "/login");
 
@@ -617,10 +602,6 @@ test("proves account export, reauthentication, and deletion", async ({
     });
     steps.auth = true;
 
-    // /app/resumes and /app/settings/sessions need a session, so they could
-    // not join the warm pass above; warm them now that one exists, before
-    // the resume and settings work below depends on either already being
-    // compiled.
     stage("warm-app-resumes");
     await warmPage(page, "/app/resumes");
     stage("warm-app-settings-sessions");
@@ -825,8 +806,6 @@ test("proves account export, reauthentication, and deletion", async ({
       share: 404,
       shareVersionedPath: null,
     });
-    // The version the live page named keeps returning the public 404, not
-    // the resume's actual data, once revoked.
     const revokedVersioned = await publicPage.evaluate(
       async (path) => (await fetch(path, { cache: "no-store" })).status,
       liveShareVersionedPath,
@@ -880,7 +859,6 @@ test("proves account export, reauthentication, and deletion", async ({
         try {
           await deleteThroughReauth(page);
         } catch {
-          // The final assertion reports incomplete cleanup without exposing state.
         }
       }
     }

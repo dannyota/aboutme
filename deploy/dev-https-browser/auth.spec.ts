@@ -86,7 +86,6 @@ test('proves trusted local Google authentication and CSRF boundaries', async ({
     webSocket.connectToServer();
   });
 
-  // 1. Begin with an anonymous browser at the public login page.
   const loginResponse = await page.goto('/login');
   expect(loginResponse?.status()).toBe(200);
   await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
@@ -94,7 +93,6 @@ test('proves trusted local Google authentication and CSRF boundaries', async ({
     '__Host-session',
   );
 
-  // 2. Start login and inspect only the transaction cookie's attributes.
   await Promise.all([
     page.waitForURL((url) =>
       url.origin === ORIGIN
@@ -106,13 +104,11 @@ test('proves trusted local Google authentication and CSRF boundaries', async ({
     requiredCookieAttributes(),
   );
 
-  // 3. Select the fixed local account at the same-origin provider page.
   const developmentAccount = page.getByLabel(
     'Development User — developer@example.invalid',
   );
   await expect(developmentAccount).toBeChecked();
 
-  // 4. Complete callback and prove the transaction handle is gone.
   await Promise.all([
     page.waitForURL((url) =>
       url.origin === ORIGIN && url.pathname === '/app/resumes'
@@ -123,12 +119,10 @@ test('proves trusted local Google authentication and CSRF boundaries', async ({
     '__Host-oauth-tx',
   );
 
-  // 5. Inspect only the session cookie's required attributes.
   expect(await cookieAttributes(context, '__Host-session')).toEqual(
     requiredCookieAttributes(),
   );
 
-  // 6. Validate the fixed account and retain CSRF only in page memory.
   const accountProof = await page.evaluate(async () => {
     const response = await fetch('/api/v1/me', {
       cache: 'no-store',
@@ -172,7 +166,6 @@ test('proves trusted local Google authentication and CSRF boundaries', async ({
     status: 200,
   });
 
-  // 7. Start and complete reauthentication using that in-memory token.
   const reauthStart = await page.evaluate(async () => {
     const state = window as BrowserSecretState;
     const token = state.__aboutmeUATCSRF;
@@ -224,7 +217,6 @@ test('proves trusted local Google authentication and CSRF boundaries', async ({
     '__Host-oauth-tx',
   );
 
-  // 8. The same privileged start without CSRF must fail closed.
   const missingToken = await page.evaluate(async () => {
     const response = await fetch('/api/v1/auth/google/start?purpose=reauth', {
       credentials: 'include',
@@ -241,7 +233,6 @@ test('proves trusted local Google authentication and CSRF boundaries', async ({
     '__Host-oauth-tx',
   );
 
-  // 9. Obtain a fresh in-memory token, log out, and prove the session is dead.
   const logoutProof = await page.evaluate(async () => {
     const me = await fetch('/api/v1/me', {
       cache: 'no-store',
@@ -270,7 +261,6 @@ test('proves trusted local Google authentication and CSRF boundaries', async ({
     '__Host-session',
   );
 
-  // 10. Persist only bounded verdicts after all leak and isolation checks pass.
   const { certificateErrors, consoleErrors, externalRequests, pageErrors } = counters;
   expect({ certificateErrors, consoleErrors, externalRequests, pageErrors }).toEqual({
     certificateErrors: 0,

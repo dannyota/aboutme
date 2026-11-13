@@ -19,9 +19,6 @@ import {
 } from './harness-lib';
 import { ALLOWED_ORIGIN } from './network-policy';
 
-// Node-only capture endpoint. The browser's page/context firewall never sees
-// this: it is reached only by Playwright control code over loopback HTTP,
-// authenticated with the bearer secret read from the read-only input mount.
 const ORIGIN = ALLOWED_ORIGIN;
 const CAPTURE_URL = 'http://127.0.0.1:20444/api/messages';
 const CAPTURE_TOKEN_PATH = '/uat-input/mail-capture-token';
@@ -78,12 +75,10 @@ function captureClient(token: string): CaptureClient {
   const headers = { Authorization: `Bearer ${token}` };
   return {
     async reset() {
-      // loopback HTTP to the local mail capture harness
       const response = await fetch(CAPTURE_URL, { method: 'DELETE', headers });
       if (!response.ok) throw new Error(`capture reset failed: ${response.status}`);
     },
     async messages() {
-      // loopback HTTP to the local mail capture harness
       const response = await fetch(CAPTURE_URL, { headers });
       if (!response.ok) throw new Error(`capture read failed: ${response.status}`);
       const body = (await response.json()) as { messages: CapturedMessage[] };
@@ -92,8 +87,6 @@ function captureClient(token: string): CaptureClient {
   };
 }
 
-// secret returns a runtime-random password that satisfies the D2 policy
-// (15-128 code points, not common/breached) without ever leaving test memory.
 function secret(): string {
   return randomBytes(24).toString('base64url');
 }
@@ -122,8 +115,6 @@ async function waitForLink(
   throw new Error(`no ${kind} message for ${to} within 30s`);
 }
 
-// fragmentURLFor builds a local verification/reset URL from a raw token,
-// re-pointing the production link origin at the trusted local origin.
 function verifyURL(token: string): string {
   return `${ORIGIN}/verify-email#token=${token}`;
 }
@@ -142,8 +133,6 @@ async function meStatus(page: Page): Promise<number> {
   });
 }
 
-// gotoHydrated navigates and then waits for the Nuxt app to hydrate, so a
-// Vue-bound form is interactive rather than a stale SSR shell.
 async function gotoHydrated(page: Page, url: string): Promise<void> {
   await page.goto(url);
   await waitForHydration(page);
@@ -198,16 +187,10 @@ test('proves password authentication over native HTTPS', async ({
   const password = secret();
   const newPassword = secret();
 
-  // Warm every signed-out page this proof visits before the timed journey
-  // below depends on any of them already being compiled on the harness's
-  // dev server (harness-lib.ts warmPage). Each is visited again for real at
-  // its own tight bound, so a real hydration regression there still fails
-  // fast instead of being masked behind the warm bound.
   await warmPage(page, '/register');
   await warmPage(page, '/login');
   await warmPage(page, '/forgot-password');
 
-  // 1. Register and prove the fixed, account-neutral accepted copy.
   await gotoHydrated(page, '/register');
   await page.getByLabel('Name').fill('Proof User');
   await page.getByLabel('Email').fill(email);
@@ -219,11 +202,6 @@ test('proves password authentication over native HTTPS', async ({
     'Check your email',
   );
 
-  // 2. Verify through the captured link, with no session created. This page
-  // reads its token from the URL fragment, so it cannot be pre-warmed with
-  // no token (the second-factor journeys exclude these pages from their own
-  // WARM_ROUTES for the same reason); its one real visit takes the warm
-  // bound directly instead.
   const verifyToken = await waitForLink(capture, 'verify', email);
   await warmPage(page, verifyURL(verifyToken));
   await expect(page.getByTestId('verify-success')).toContainText(
@@ -232,7 +210,6 @@ test('proves password authentication over native HTTPS', async ({
   await expect.poll(() => page.url()).not.toContain('#token=');
   expect(await meStatus(page)).toBe(401);
 
-  // 3. Password login and an authenticated /me with a password credential.
   await gotoHydrated(page, '/login');
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Password', { exact: true }).fill(password);
@@ -240,11 +217,8 @@ test('proves password authentication over native HTTPS', async ({
   await page.waitForURL('/app/resumes');
   expect(await meStatus(page)).toBe(200);
 
-  // /app/settings/sessions needs a session, so it could not join the
-  // signed-out warm pass above; warm it now that one exists.
   await warmPage(page, '/app/settings/sessions');
 
-  // 4. Link a provider whose verified email differs from the account email.
   setPasswordStage('settings-navigation');
   await gotoHydrated(page, '/app/settings/sessions');
   setPasswordStage('locale-toggle');
@@ -329,7 +303,6 @@ test('proves password authentication over native HTTPS', async ({
   await unlinkDialog.getByRole('button', { name: 'Cancel', exact: true }).click();
   setPasswordStage('after-identity-localization');
 
-  // 5. Provider-only account: sign in, then add a password.
   const providerContext = await browser.newContext();
   await pinEnglish(providerContext);
   const providerPage = await providerContext.newPage();
@@ -352,7 +325,6 @@ test('proves password authentication over native HTTPS', async ({
   );
   await providerContext.close();
 
-  // 6. A second live session for the registered account (context C).
   const secondContext = await browser.newContext();
   await pinEnglish(secondContext);
   const secondPage = await secondContext.newPage();
@@ -365,14 +337,11 @@ test('proves password authentication over native HTTPS', async ({
   await secondPage.waitForURL('/app/resumes');
   expect(await meStatus(secondPage)).toBe(200);
 
-  // 7. Forgot password and reset through the captured link (no auto-login).
   await gotoHydrated(page, '/forgot-password');
   await page.getByLabel('Email').fill(email);
   await page.getByRole('button', { name: 'Send reset link' }).click();
   await expect(page.getByTestId('forgot-success')).toBeVisible();
   const resetToken = await waitForLink(capture, 'reset', email);
-  // Like verify-email above, this page reads its token from the URL
-  // fragment and gets its one real visit here, at the warm bound.
   await warmPage(page, resetURL(resetToken));
   await page.getByLabel('New password', { exact: true }).fill(newPassword);
   await page.getByLabel('Confirm password', { exact: true }).fill(newPassword);
@@ -381,7 +350,6 @@ test('proves password authentication over native HTTPS', async ({
     'Password reset',
   );
 
-  // 8. Every old session is revoked; the old password is rejected.
   expect(await meStatus(page)).toBe(401);
   expect(await meStatus(secondPage)).toBe(401);
   await gotoHydrated(page, '/login');
@@ -392,14 +360,12 @@ test('proves password authentication over native HTTPS', async ({
     'Invalid email or password',
   );
 
-  // 9. The reset token is single-use: replay is rejected.
   await gotoHydrated(page, resetURL(resetToken));
   await page.getByLabel('New password', { exact: true }).fill(newPassword);
   await page.getByLabel('Confirm password', { exact: true }).fill(newPassword);
   await page.getByRole('button', { name: 'Reset password' }).click();
   await expect(page.getByTestId('reset-error')).toContainText('invalid');
 
-  // 10. The new password signs in.
   await gotoHydrated(page, '/login');
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Password', { exact: true }).fill(newPassword);

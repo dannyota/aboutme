@@ -64,9 +64,6 @@ interface FetchedText {
   readonly text: string;
 }
 
-// The last stage reached before a failure, so failure evidence can name a
-// concrete checkpoint without the withheld browser console (gotchas.md
-// "Browser proofs withhold console output").
 let lastStage = "start";
 
 function stage(name: string): void {
@@ -124,8 +121,6 @@ function expectPDF(bytes: Uint8Array): void {
   expect(Buffer.from(bytes.subarray(0, 5)).toString("ascii")).toBe("%PDF-");
 }
 
-// The PDF Title is the print page title, and its dates are the saved
-// revision's time, never the 1970 epoch (ADR 0011).
 function expectRevisionMetadata(bytes: Uint8Array): void {
   const text = Buffer.from(bytes).toString("latin1");
   stage("owner-metadata-title");
@@ -136,12 +131,8 @@ function expectRevisionMetadata(bytes: Uint8Array): void {
   expect(text).not.toContain("D:19700101000000");
 }
 
-// The stored preview card's byte cap (docs/design/link-previews.md, "Preview
-// card"), stricter than PNG_MAX_BYTES's general download sanity cap.
 const CARD_MAX_BYTES = 524_288;
 
-// Reads one head meta element's content by its naming attribute, matching
-// public.spec.ts's headMetaTags pattern.
 function extractMetaContent(
   html: string,
   attribute: "name" | "property",
@@ -175,15 +166,8 @@ function isSaveRequest(request: Request, resumeID: string): boolean {
   );
 }
 
-// The whole-document autosave route (apps/server/internal/resumeapi
-// personal_details.go): every field save below, including the work entry
-// fields, PATCHes this one route regardless of which part of the document
-// changed.
 const RESUME_SAVE_ROUTE = /^\/api\/v1\/resumes\/[^/]+\/personal-details$/u;
 const RESUME_ID_PLACEHOLDER = "{id}";
-// Bounds the failure evidence's request list so a runaway retry loop cannot
-// grow the written file without limit; the most recent saves matter most for
-// root causing a hang near the end of the test.
 const MAX_RECORDED_SAVE_REQUESTS = 20;
 
 interface RedactedSaveRequest {
@@ -202,8 +186,6 @@ function isResumeSaveRoute(request: Request): boolean {
   );
 }
 
-// redactSavePath replaces the resume ID segment so failure evidence never
-// carries an identifier that could be looked up against the harness.
 function redactSavePath(pathname: string): string {
   return pathname.replace(
     /\/resumes\/[^/]+\//u,
@@ -211,9 +193,6 @@ function redactSavePath(pathname: string): string {
   );
 }
 
-// readSaveStatusText reads the save-status indicator's current text for
-// failure evidence. It never throws: a page mid-navigation or mid-teardown
-// at failure time is expected, and evidence is best-effort.
 async function readSaveStatusText(target: Page): Promise<string | null> {
   try {
     return await target
@@ -224,11 +203,6 @@ async function readSaveStatusText(target: Page): Promise<string | null> {
   }
 }
 
-// writeFailureEvidence records only redacted, non-secret facts: the last
-// completed stage, the save-status indicator's text, and each resume
-// autosave request's method, placeholder-redacted path, status, and elapsed
-// time. It carries no bodies, cookies, tokens, emails, or slugs, matching the
-// redaction bar the passing-path evidence above already meets.
 async function writeFailureEvidence(
   target: Page,
   stageName: string,
@@ -336,9 +310,6 @@ test("proves owner and public export gates through native HTTPS", async ({
       ),
   })(page);
 
-  // Redacted, best-effort request evidence for a mid-test failure: every
-  // autosave request the owner page sends, independent of the specific
-  // resume ID (which changes as the test creates and deletes resumes).
   const resumeSaveRequests: RedactedSaveRequest[] = [];
   const resumeSaveRequestStarts = new Map<Request, number>();
   page.on("request", (request) => {
@@ -427,7 +398,6 @@ test("proves owner and public export gates through native HTTPS", async ({
     );
     const ownerDownload = page.waitForEvent("download");
     await page
-      // The accessible name carries the page size the PDF uses.
       .getByRole("button", { name: /^Tải PDF, (?:A4|Letter)$/ })
       .click();
     const saveResponse = await savedPatch;
@@ -576,8 +546,6 @@ test("proves owner and public export gates through native HTTPS", async ({
     const publicHTML = await fetchText(publicPage, `/${slug}`);
     expect(publicHTML.status).toBe(200);
     expect(publicHTML.headers["x-robots-tag"]).toBe("noindex, noarchive");
-    // The stored card's versioned URL (docs/design/link-previews.md, "Build,
-    // storage, and serving"); og:image and twitter:image must agree on it.
     const ogImageURL = extractMetaContent(publicHTML.text, "property", "og:image");
     expect(extractMetaContent(publicHTML.text, "name", "twitter:image")).toBe(
       ogImageURL,
@@ -714,8 +682,6 @@ test("proves owner and public export gates through native HTTPS", async ({
     try {
       await writeFailureEvidence(page, stageAtFailure, resumeSaveRequests);
     } catch {
-      // Evidence is best-effort: never replace the real failure below with
-      // one from a page or filesystem that is already unwinding.
       stage("failure-evidence-write-failed");
     }
     throw error;

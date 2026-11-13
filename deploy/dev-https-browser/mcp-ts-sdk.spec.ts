@@ -28,23 +28,10 @@ import {
 } from './harness-lib';
 import { ALLOWED_ORIGIN } from './network-policy';
 
-// Drives the pinned official TypeScript MCP SDK client
-// (@modelcontextprotocol/sdk) against the dev-https stack exactly as a
-// Claude Code style client would: the SDK owns discovery, dynamic client
-// registration, PKCE, token exchange, refresh, and Streamable HTTP framing.
-// This proof only supplies the browser half of the human-in-the-loop steps
-// (sign-in and consent) and the loopback redirect a native client would
-// register. See docs/design/mcp-client-compatibility.md ("Proofs") and
-// docs/adr/0018-mcp-agent-access.md.
-
 const ORIGIN = ALLOWED_ORIGIN;
 const CA_PATH = '/uat-input/caddy-root.crt';
 const CLIENT_NAME_PATH = '/uat-input/mcp-client-name';
 const EVIDENCE_PATH = '/evidence/mcp-ts-sdk-proof.json';
-// A loopback host, not an IP literal, so this proof exercises the native
-// redirect rule a Claude Code style client relies on
-// (docs/design/mcp-client-compatibility.md, gap 3). Fixed and distinct from
-// mcp.spec.ts's port so the two proofs never collide if ever run together.
 const REDIRECT_PORT = 20097;
 const REDIRECT_URI = `http://localhost:${REDIRECT_PORT}/callback`;
 const UAT_ACCOUNT = 'MCP Proof — mcp-proof@example.invalid';
@@ -79,9 +66,6 @@ function object(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
-// The native stack serves Nuxt in development mode, which compiles a route
-// on its first visit; a fresh hosted runner can hydrate later than the
-// default five-second expect timeout (mcp.spec.ts carries the same note).
 const FIRST_VISIT_HYDRATION_MS = 40_000;
 
 async function waitForFirstVisitHydration(page: Page): Promise<void> {
@@ -132,29 +116,17 @@ function mutationState(result: {
   return { revision, state };
 }
 
-// RefreshObservation records only the form field names a refresh grant sent,
-// never a token, code, or client value (docs/design/mcp-owner-workflow.md
-// "Privacy, revocation, and evidence").
 interface RefreshObservation {
   seen: boolean;
   keys: readonly string[];
   cimd?: { clientID: string; discovered: boolean; codeExchanged: boolean; refreshed: boolean };
 }
 
-// recordingFetch wraps the platform fetch so the transport, registration,
-// discovery, token, and refresh calls all go through one function: the spot
-// this proof needs to observe the refresh request's field names from, and
-// the spot a custom CA trust could hook if the environment ever stopped
-// trusting the harness root through NODE_EXTRA_CA_CERTS (run.sh sets it for
-// this mode before Node starts).
 function makeRecordingFetch(observation: RefreshObservation): FetchLike {
   return async (url, init) => {
     const target = url instanceof URL ? url : new URL(url);
     const body = init?.body;
-    // The pinned SDK's executeTokenRequest (client/auth.js) posts token
-    // requests with a URLSearchParams body, not a pre-encoded string; only
-    // a hand-built request would use a string. Accept either so a real
-    // refresh grant is never missed.
+    // The pinned SDK's executeTokenRequest posts a URLSearchParams body, not a string (@modelcontextprotocol/sdk client/auth.js).
     const params = body instanceof URLSearchParams
       ? body
       : typeof body === 'string' ? new URLSearchParams(body) : null;
@@ -187,10 +159,6 @@ function makeRecordingFetch(observation: RefreshObservation): FetchLike {
   };
 }
 
-// ProofOAuthProvider is a minimal in-memory OAuthClientProvider: client
-// information, tokens, the PKCE verifier, and the OAuth state all live only
-// for this test's lifetime, matching a native client's own session-scoped
-// storage (docs/design/mcp-client-compatibility.md "Evidence").
 class ProofOAuthProvider implements OAuthClientProvider {
   private info: OAuthClientInformationFull | undefined;
   private tokenSet: OAuthTokens | undefined;
@@ -231,10 +199,7 @@ class ProofOAuthProvider implements OAuthClientProvider {
     this.tokenSet = tokens;
   }
 
-  // invalidateCredentials clears the scope the SDK names after a closed
-  // token error, so a dead refresh token is never retried a second time
-  // (client/auth.js's `auth` wrapper retries authInternal once on
-  // InvalidGrantError).
+  // The SDK's auth wrapper retries authInternal once on InvalidGrantError (@modelcontextprotocol/sdk client/auth.js).
   invalidateCredentials(scope: 'all' | 'client' | 'tokens' | 'verifier'): void {
     if (scope === 'all' || scope === 'client') this.info = undefined;
     if (scope === 'all' || scope === 'tokens') this.tokenSet = undefined;
@@ -273,9 +238,6 @@ test('proves the official TypeScript MCP SDK client over trusted HTTPS', async (
   expect(clientName).toMatch(
     /^aboutme MCP UAT [0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
   );
-  // Read only to prove the harness mounted the trust root this mode's CA
-  // input requires; NODE_EXTRA_CA_CERTS, set by run.sh before Node started,
-  // is what actually extends trust for every fetch below.
   await readFile(CA_PATH);
 
   const refresh: RefreshObservation = { seen: false, keys: [] };
@@ -286,9 +248,6 @@ test('proves the official TypeScript MCP SDK client over trusted HTTPS', async (
     response_types: ['code'],
     token_endpoint_auth_method: 'none',
     scope: 'resumes:read resumes:write',
-    // An unknown member the server must ignore rather than reject
-    // (docs/design/mcp-client-compatibility.md, gap 2); the SDK sends it
-    // because real clients do.
     software_id: 'aboutme-mcp-ts-sdk-proof',
   } as OAuthClientMetadata);
 
@@ -353,9 +312,6 @@ test('proves the official TypeScript MCP SDK client over trusted HTTPS', async (
     await expect(permissions).toContainText('Read resumes');
     await expect(permissions).toContainText('Write resumes');
     stage('provider-login-return-to');
-    // The redirect is a loopback host, not an IP literal or an https host, so
-    // the consent page must show the loopback line
-    // (docs/design/mcp-client-compatibility.md, gap 6).
     await expect(page.getByTestId('consent-return-to')).toHaveText(
       'After you approve, you return to an app on this computer (localhost).',
     );
@@ -380,12 +336,7 @@ test('proves the official TypeScript MCP SDK client over trusted HTTPS', async (
 
     stage('exchange-token');
     await transport.finishAuth(code as string);
-    // The failed first connect already aborted the original transport
-    // (StreamableHTTPClientTransport never clears its internal abort
-    // controller on close, so `start()` refuses a second call on the same
-    // instance); a fresh transport over the same authProvider carries the
-    // exchanged tokens into the retry the SDK's own finishAuth doc comment
-    // describes, without repeating discovery or registration.
+    // StreamableHTTPClientTransport never clears its abort controller on close, so start() refuses a second call (@modelcontextprotocol/sdk).
     const authenticated = new StreamableHTTPClientTransport(new URL('/mcp', ORIGIN), {
       authProvider: provider,
       fetch: makeRecordingFetch(refresh),
@@ -417,10 +368,6 @@ test('proves the official TypeScript MCP SDK client over trusted HTTPS', async (
     stage('forced-refresh');
     const liveTokens = provider.tokens();
     if (liveTokens === undefined) throw new Error('no live tokens to force-expire');
-    // Syntactically valid (same alphabet and shape a real access token uses)
-    // but unknown to the server, so the next call must fail with a bearer
-    // challenge the SDK resolves on its own
-    // (docs/design/mcp-client-compatibility.md, gap 4).
     provider.saveTokens({
       ...liveTokens,
       access_token: randomBytes(32).toString('base64url'),
@@ -501,14 +448,11 @@ test('proves the official TypeScript MCP SDK client over trusted HTTPS', async (
       try {
         await deleteRecordedResume(page, resumeID);
       } catch {
-        // The fixture cleanup is the final fail-closed cleanup for an
-        // aborted proof.
       }
     }
     try {
       await client.close();
     } catch {
-      // Best-effort: the client may already be unauthorized or disconnected.
     }
   }
 
@@ -548,8 +492,6 @@ test('proves the official TypeScript MCP SDK client over trusted HTTPS', async (
   }
 });
 
-// UI fixtures exercise text isolation and keyboard decisions without creating
-// another client or grant in the SDK's real account.
 async function proveCIMDPresentation(page: Page): Promise<void> {
   const host = `${'a'.repeat(60)}.client.example`;
   const name = '<img src=x>\u202EClaude';
@@ -652,8 +594,6 @@ async function proveCIMDPresentation(page: Page): Promise<void> {
   }
 }
 
-// A native client supplies its published URL as client information. The SDK
-// still owns discovery, PKCE, code exchange, refresh, and MCP transport.
 async function proveCIMDSDK(page: Page, clientName: string): Promise<void> {
   const clientID = `https://client.example/oauth/${clientName.slice('aboutme MCP UAT '.length)}`;
   const provider = new ProofOAuthProvider(REDIRECT_URI, {

@@ -19,8 +19,6 @@ import {
 } from './harness-lib';
 import { ALLOWED_ORIGIN } from './network-policy';
 
-// Node-only capture endpoint, reached only by Playwright control code over
-// loopback HTTP (password-auth.spec.ts "captureClient"), never by the page.
 const ORIGIN = ALLOWED_ORIGIN;
 const CAPTURE_URL = 'http://127.0.0.1:20444/api/messages';
 const CAPTURE_TOKEN_PATH = '/uat-input/mail-capture-token';
@@ -64,12 +62,10 @@ function captureClient(token: string): CaptureClient {
   const headers = { Authorization: `Bearer ${token}` };
   return {
     async reset() {
-      // loopback HTTP to the local mail capture harness
       const response = await fetch(CAPTURE_URL, { method: 'DELETE', headers });
       if (!response.ok) throw new Error(`capture reset failed: ${response.status}`);
     },
     async messages() {
-      // loopback HTTP to the local mail capture harness
       const response = await fetch(CAPTURE_URL, { headers });
       if (!response.ok) throw new Error(`capture read failed: ${response.status}`);
       const body = (await response.json()) as { messages: CapturedMessage[] };
@@ -78,10 +74,6 @@ function captureClient(token: string): CaptureClient {
   };
 }
 
-// waitForVerifyToken polls the capture store for a verify message to the
-// given address and returns its token. dev-https-check.sh removes every row
-// an earlier run left before this proof starts, so each registration here is
-// new and must send one.
 async function waitForVerifyToken(
   capture: CaptureClient,
   to: string,
@@ -102,8 +94,6 @@ function randomEmail(): string {
   return `lnkd-test-${randomBytes(8).toString('hex')}@example.invalid`;
 }
 
-// secret returns a runtime-random password that satisfies the D2 policy
-// without ever leaving test memory.
 function secret(): string {
   return randomBytes(24).toString('base64url');
 }
@@ -126,8 +116,6 @@ async function meEmail(page: Page): Promise<string | null> {
   });
 }
 
-// createVerifiedPasswordAccount registers the given account through the UI
-// and verifies it through the captured link.
 async function createVerifiedPasswordAccount(
   page: Page,
   capture: CaptureClient,
@@ -156,9 +144,6 @@ async function signOut(page: Page): Promise<void> {
   await expect(page).toHaveURL(`${ORIGIN}/login`);
 }
 
-// attemptLinkedInSignIn starts a LinkedIn login for the named account from
-// an anonymous /login, allows it, and returns the resulting callback error
-// code (null on success, which never happens for this helper's callers).
 async function attemptLinkedInSignIn(
   page: Page,
   accountLabel: string,
@@ -210,8 +195,6 @@ test('proves LinkedIn sign-in, linking, and cancellation over native HTTPS', asy
     unverifiedBlocked: false,
   };
 
-  // 1. Sign-up with the verified account lands on the resume list
-  // (docs/design/linkedin-sign-in.md "Tests").
   stage('sign-up');
   await gotoHydrated(page, '/login');
   await signInWithLinkedIn(page, { accountLabel: LINKEDIN_VERIFIED_LABEL });
@@ -219,7 +202,6 @@ test('proves LinkedIn sign-in, linking, and cancellation over native HTTPS', asy
   expect(await meEmail(page)).toBe(VERIFIED_EMAIL);
   steps.signUp = true;
 
-  // 2. Sign out, then sign in again with LinkedIn reaches the same account.
   stage('sign-out-sign-in');
   await signOut(page);
   await signInWithLinkedIn(page, { accountLabel: LINKEDIN_VERIFIED_LABEL });
@@ -228,8 +210,6 @@ test('proves LinkedIn sign-in, linking, and cancellation over native HTTPS', asy
   steps.signOutSignIn = true;
   await signOut(page);
 
-  // 3. The no-email account shows the verify-with-provider message and
-  // creates nothing: signing in again fails the exact same way.
   stage('no-email-blocked');
   const noEmailFirst = await attemptLinkedInSignIn(page, LINKEDIN_NO_EMAIL_LABEL);
   expect(noEmailFirst.error).toBe('email_not_verified');
@@ -240,7 +220,6 @@ test('proves LinkedIn sign-in, linking, and cancellation over native HTTPS', asy
   expect(noEmailSecond.error).toBe('email_not_verified');
   steps.noEmailBlocked = true;
 
-  // 4. The unverified account behaves the same way.
   stage('unverified-blocked');
   const unverifiedFirst = await attemptLinkedInSignIn(page, LINKEDIN_UNVERIFIED_LABEL);
   expect(unverifiedFirst.error).toBe('email_not_verified');
@@ -248,9 +227,6 @@ test('proves LinkedIn sign-in, linking, and cancellation over native HTTPS', asy
   expect(unverifiedSecond.error).toBe('email_not_verified');
   steps.unverifiedBlocked = true;
 
-  // 5. The collision account, whose email a verified password account
-  // already holds, shows the generic collision message and creates
-  // nothing.
   stage('collision-account');
   await createVerifiedPasswordAccount(page, capture, COLLISION_EMAIL, secret());
   stage('collision-blocked');
@@ -262,9 +238,6 @@ test('proves LinkedIn sign-in, linking, and cancellation over native HTTPS', asy
   );
   steps.collisionBlocked = true;
 
-  // 6. A password account links LinkedIn (the Link account) from Settings
-  // after reauthentication (a freshly logged-in session), signs out, then
-  // signs in with LinkedIn to the same account.
   stage('link-account-register');
   const linkEmail = randomEmail();
   const linkPassword = secret();
@@ -303,7 +276,6 @@ test('proves LinkedIn sign-in, linking, and cancellation over native HTTPS', asy
   expect(await meEmail(page)).toBe(linkEmail);
   steps.linkedSignIn = true;
 
-  // 7. Unlink works: the password account keeps its other sign-in method.
   stage('unlink');
   await gotoHydrated(page, '/app/settings/sessions');
   const linkedRow = page.getByTestId('linked-provider-linkedin');
@@ -316,8 +288,6 @@ test('proves LinkedIn sign-in, linking, and cancellation over native HTTPS', asy
   steps.unlinked = true;
   await signOut(page);
 
-  // 8. The last-method guard holds for a LinkedIn-only account (the
-  // verified account has no password): Unlink stays disabled.
   stage('last-method-guard');
   await gotoHydrated(page, '/login');
   await signInWithLinkedIn(page, { accountLabel: LINKEDIN_VERIFIED_LABEL });
@@ -328,7 +298,6 @@ test('proves LinkedIn sign-in, linking, and cancellation over native HTTPS', asy
   steps.lastMethodGuard = true;
   await signOut(page);
 
-  // 9. Both cancel buttons show the same cancelled message.
   stage('cancel-login');
   await gotoHydrated(page, '/login');
   await startLinkedInAuthorize(
