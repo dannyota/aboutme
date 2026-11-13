@@ -297,7 +297,7 @@ const ERRORS: Record<string, Record<string, string[]>> = {
     "409": ["project_already_linked", "idempotency_key_reuse"],
   }),
   linkResumeProject: itemWrite({
-    "404": ["resume_not_found", "project_not_found"],
+    "404": ["resume_not_found", "entry_not_found", "project_not_found"],
     "409": ["project_already_linked", "idempotency_key_reuse"],
   }),
   refreshResumeProjectEntry: itemWrite({
