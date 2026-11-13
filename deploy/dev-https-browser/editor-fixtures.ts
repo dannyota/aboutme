@@ -1,6 +1,6 @@
 import { expect, type Page, type Response } from '@playwright/test';
 
-import { signInWithGoogle } from './harness-lib';
+import { signInWithGoogle, type SignInWithGoogleStep } from './harness-lib';
 
 export interface PersistenceCounts {
   readonly localStorage: number;
@@ -58,8 +58,11 @@ export function uniqueTitle(): string {
   return `Editor proof ${crypto.randomUUID()}`;
 }
 
-export async function loginAsDevelopmentUser(page: Page): Promise<void> {
-  await signInWithGoogle(page, { fromLoginPage: true, keyboard: true });
+export async function loginAsDevelopmentUser(
+  page: Page,
+  onStep?: (step: SignInWithGoogleStep) => void,
+): Promise<void> {
+  await signInWithGoogle(page, { fromLoginPage: true, keyboard: true, onStep });
 }
 
 export async function createBlankResume(
