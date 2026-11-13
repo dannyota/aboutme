@@ -3,7 +3,19 @@ set -euo pipefail
 
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 work=$(mktemp -d)
-trap 'rm -rf "$work"' EXIT
+# Release every fixture waiter and join the background jobs before removing
+# $work, so no stub keeps polling a deleted directory after a failure.
+cleanup() {
+  touch "$work/state/command-release" "$work/state/failure-release" \
+    "$work/state/admission-release" 2>/dev/null || true
+  local pid
+  for pid in $(jobs -p); do
+    kill "$pid" 2>/dev/null || true
+    wait "$pid" 2>/dev/null || true
+  done
+  rm -rf "$work"
+}
+trap cleanup EXIT
 fail() { printf 'deployment safety: %s\n' "$*" >&2; exit 1; }
 # Every wait for a fixture's state ends as soon as the state appears, or after
 # this many seconds, so a loaded host slows the test instead of failing it.
@@ -67,6 +79,7 @@ if [[ -e $state/pause-admission && ( $* == *'start aboutme-crowdsec-retention-st
   touch "$state/admission-entered"
   deadline=$((SECONDS + ${ABOUTME_TEST_WAIT_SECONDS:?}))
   while [[ ! -e $state/admission-release ]] && ((SECONDS < deadline)); do sleep 0.01; done
+  [[ -e $state/admission-release ]] || { touch "$state/fixture-expired"; exit 1; }
   if [[ $1 == start ]]; then
     rm -f "$state/../run/crowdsec-retention-failed"
     touch "$state/../run/crowdsec-retention-ok"
@@ -218,7 +231,8 @@ real_flock=$(command -v flock)
 flock() {
   if [[ -e $ABOUTME_TEST_STATE/pause-admission && $* == '-x -w 65 '* ]]; then
     touch "$ABOUTME_TEST_STATE/admission-entered"
-    wait_for_file "$ABOUTME_TEST_STATE/admission-release" || true
+    wait_for_file "$ABOUTME_TEST_STATE/admission-release" ||
+      { touch "$ABOUTME_TEST_STATE/fixture-expired"; return 1; }
   fi
   "$real_flock" "$@"
 }
@@ -232,6 +246,7 @@ printf 'retention-failed\n' >"$work/run/crowdsec-retention-failed"
 rm -f "$work/run/crowdsec-retention-ok" "$ABOUTME_TEST_STATE/active/aboutme-maintenance"
 touch "$ABOUTME_TEST_STATE/admission-release"
 wait "$admission_pid"
+[[ ! -e $ABOUTME_TEST_STATE/fixture-expired ]] || fail 'edge admission fixture expired before its release'
 [[ $(cat "$work/admission-result") == refused &&
   -f $work/run/crowdsec-retention-failed && ! -e $work/run/crowdsec-retention-ok &&
   ! -e $ABOUTME_TEST_STATE/unwanted-startup &&
