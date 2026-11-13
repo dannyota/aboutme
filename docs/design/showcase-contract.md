@@ -174,11 +174,12 @@ fence to it before migrating ([release floors](release-floors.md)). `Down`
 restores them with `review_key` defaulting to `0000000000000000` and the others
 null.
 
-**Older release on the new schema.** The earlier release lists only rows with a
-matching approved result; after 00011 none has one, so it lists nothing and
-shows every owner `pending`. Its review command could list resumes again, but
-never one the new rules would not. Rows it writes are valid opt-ins under the
-new rules, and the new release ignores the `review_key` it rewrites at start.
+**Older release on schema versions 11 to 17.** The earlier release lists only
+rows with a matching approved result; after 00011 none has one, so it lists
+nothing and shows every owner `pending`. Its review command could list resumes
+again, but never one the new rules would not. Rows it writes are valid opt-ins
+under the new rules, and the new release ignores the `review_key` it rewrites at
+start. From version 18 no such release can start: the fence refuses it.
 
 **Publish request.** `PublishResumeRequest` gains two optional fields. Omitted
 keeps the stored value, so an older web tab that does not know them leaves the
