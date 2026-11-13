@@ -1,11 +1,4 @@
 #!/usr/bin/env bash
-# Prepares the encrypted data volume on the production host
-# (docs/design/vietnam-production.md, "Host" and "Secrets and host identity").
-# Runs as root. Usage: data-volume.sh <device> [--format]
-#
-# Formats ext4 with label aboutme-data only with --format and only when the
-# device has no signature at all. Mounts it at /srv/data by label, creates the
-# source directories, and bind-mounts them to their targets. Safe to re-run.
 set -euo pipefail
 
 label=aboutme-data

@@ -27,7 +27,6 @@ alert() {
 }
 
 watch_crowdsec() (
-  # Match retention's lock order. Unrelated host checks hold neither lock.
   [[ -f /run/aboutme/crowdsec-retention.lock && ! -L /run/aboutme/crowdsec-retention.lock ]] || return 1
   exec {watch_retention_lock}</run/aboutme/crowdsec-retention.lock
   local admitted=yes
