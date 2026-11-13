@@ -85,11 +85,7 @@ func TestReaderReadProjects_ListFollowsLayoutAndOmitsWhatTheProjectionOmits(t *t
 	// rows for a hidden entry and an entry outside the layout.
 	readStore := &readerStore{row: projectPagesRow(t, "ada", ids), projects: projectColumn(t,
 		ids["aside"], "side-tool", ids["outside"], "outside-tool", ids["second"], "second-tool", ids["hidden"], "hidden-tool", ids["first"], "first-tool")}
-	snapshot, pages, lease, err := newTestReader(t, readStore).ReadProjects(context.Background(), "ada", "")
-	if err != nil {
-		t.Fatalf("ReadProjects() error = %v", err)
-	}
-	lease.Release()
+	snapshot, pages := readProjectPages(t, newTestReader(t, readStore), "")
 	if got, want := projectNames(pages), []string{"first-tool=first-tool", "second-tool=second-tool", "side-tool=side-tool"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("projects = %v, want %v", got, want)
 	}
@@ -100,7 +96,7 @@ func TestReaderReadProjects_ListFollowsLayoutAndOmitsWhatTheProjectionOmits(t *t
 	if first.URL != "https://resume.example/ada/projects/first-tool" || first.EntryLink != "https://ada.example/notes" || pages.Projects[1].EntryLink != "" {
 		t.Fatalf("first project = %+v, second entry link %q", first, pages.Projects[1].EntryLink)
 	}
-	if len(snapshot.ProjectLinks) != 3 || snapshot.Revision != 1 || snapshot.Public.Slug != "ada" {
+	if snapshot.Revision != 1 || snapshot.Public.Slug != "ada" {
 		t.Fatalf("snapshot = %+v", snapshot)
 	}
 }
@@ -112,11 +108,7 @@ func TestReaderReadProjects_PageReadsOnlyTheRequestedProject(t *testing.T) {
 		links:    linkColumn(t, ids["first"], "first-tool", ids["second"], "second-tool", ids["aside"], "side-tool"),
 		projects: projectColumn(t, ids["second"], "second-tool"),
 	}
-	_, pages, lease, err := newTestReader(t, readStore).ReadProjects(context.Background(), "ada", "second-tool")
-	if err != nil {
-		t.Fatalf("ReadProjects() error = %v", err)
-	}
-	lease.Release()
+	_, pages := readProjectPages(t, newTestReader(t, readStore), "second-tool")
 	if got, want := projectNames(pages), []string{"second-tool=second-tool"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("projects = %v, want %v", got, want)
 	}
@@ -178,11 +170,7 @@ func TestReaderReadProjects_UnavailablePageKeepsTheAdmission(t *testing.T) {
 		{"page slug of another row", &readerStore{row: row, links: allLinks, projects: projectColumn(t, ids["first"], "first-tool")}, "second-tool", 1},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			snapshot, pages, lease, err := newTestReader(t, test.store).ReadProjects(context.Background(), "ada", test.projectSlug)
-			if err != nil || lease == nil {
-				t.Fatalf("ReadProjects() error = %v, lease %v; want an admitted read", err, lease)
-			}
-			lease.Release()
+			snapshot, pages := readProjectPages(t, newTestReader(t, test.store), test.projectSlug)
 			if pages.Shown() || len(pages.Projects) != 0 || pages.Available != test.wantAvailable {
 				t.Fatalf("pages = %+v, want nothing shown and %d available", pages, test.wantAvailable)
 			}
@@ -193,7 +181,11 @@ func TestReaderReadProjects_UnavailablePageKeepsTheAdmission(t *testing.T) {
 	}
 }
 
-func TestReaderReadProjects_MalformedColumnsAreUnavailable(t *testing.T) {
+// TestReaderReadProjects_ColumnsDecodeOnlyWhenPagesAreBuilt proves admission
+// decodes no project column or document: a malformed one still admits the
+// resume, and only building the pages, which the caller does after its pass
+// check, meets the failure.
+func TestReaderReadProjects_ColumnsDecodeOnlyWhenPagesAreBuilt(t *testing.T) {
 	ids := projectPagesIDs()
 	row := projectPagesRow(t, "ada", ids)
 	for name, column := range map[string]json.RawMessage{
@@ -204,16 +196,34 @@ func TestReaderReadProjects_MalformedColumnsAreUnavailable(t *testing.T) {
 		"document type":  json.RawMessage(`[{"entryId":"` + ids["first"] + `","projectSlug":"first-tool","document":"text"}]`),
 	} {
 		t.Run(name, func(t *testing.T) {
-			_, _, lease, err := newTestReader(t, &readerStore{row: row, projects: column}).ReadProjects(context.Background(), "ada", "")
-			if lease != nil {
-				lease.Release()
-				t.Fatal("ReadProjects() returned a lease for a malformed column")
+			snapshot, read, lease, err := newTestReader(t, &readerStore{row: row, projects: column}).ReadProjects(context.Background(), "ada", "")
+			if err != nil || lease == nil {
+				t.Fatalf("ReadProjects() error = %v, lease %v; want the resume admitted", err, lease)
 			}
-			if !errors.Is(err, ErrUnavailable) {
-				t.Fatalf("ReadProjects() error = %v, want ErrUnavailable", err)
+			lease.Release()
+			if snapshot.ResumeID != row.ID {
+				t.Fatalf("snapshot = %+v, want the admitted resume", snapshot)
+			}
+			if _, err := read.Pages(); !errors.Is(err, ErrUnavailable) {
+				t.Fatalf("Pages() error = %v, want ErrUnavailable", err)
 			}
 		})
 	}
+}
+
+// readProjectPages admits a project read of "ada" and builds its pages.
+func readProjectPages(t *testing.T, reader *Reader, projectSlug string) (Snapshot, ProjectPages) {
+	t.Helper()
+	snapshot, read, lease, err := reader.ReadProjects(context.Background(), "ada", projectSlug)
+	if err != nil || lease == nil {
+		t.Fatalf("ReadProjects() error = %v, lease %v; want an admitted read", err, lease)
+	}
+	defer lease.Release()
+	pages, err := read.Pages()
+	if err != nil {
+		t.Fatalf("Pages() error = %v", err)
+	}
+	return snapshot, pages
 }
 
 func TestReaderReadProjects_MismatchRetriesOnceThenUnavailable(t *testing.T) {

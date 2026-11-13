@@ -93,7 +93,7 @@ func TestProjectHTMLRejection_ProjectPageRules(t *testing.T) {
 		{"image", "</main>", `<img src="https://evil.example/x.png" alt=""></main>`, "resource_element"},
 		{"form", "</main>", "<form></form></main>", "resource_element"},
 		{"event attribute", "<h1>", `<h1 onclick="x()">`, "event_attribute"},
-		{"svg resource", `<svg class="public-mark" aria-hidden="true" focusable="false"></svg>`, `<svg class="public-mark"><image href="https://evil.example/x.png"></image></svg>`, "href_element"},
+		{"svg resource", `<svg class="public-mark" aria-hidden="true" focusable="false"></svg>`, `<svg class="public-mark"><image href="https://evil.example/x.png"></image></svg>`, "svg_element"},
 		{"second main", "</main>", "</main><main></main>", "main"},
 		{"main attribute", `<main id="public-project" class="public-measure project-page">`, `<main id="public-project" class="public-measure project-page" data-x="1">`, "main"},
 		{"second h1", "</main>", "<h1>Again</h1></main>", "h1_count"},

@@ -39,6 +39,16 @@ type projectStoreRow struct {
 	owner   uuid.UUID
 	slug    string
 	doc     project.Document
+	// raw, when set, is the stored document instead of doc.
+	raw json.RawMessage
+}
+
+// stored is the row's document as the statements return it.
+func (row projectStoreRow) stored() any {
+	if row.raw != nil {
+		return row.raw
+	}
+	return row.doc
 }
 
 // projectPagesStore answers the project statements like PostgreSQL for the
@@ -94,6 +104,10 @@ func (s *projectPagesStore) GetPublicResumeProjectList(_ context.Context, slug s
 	}
 	column := []map[string]any{}
 	for _, row := range rows {
+		if row.raw != nil {
+			column = append(column, map[string]any{"entryId": row.entryID, "projectSlug": row.slug, "document": row.raw})
+			continue
+		}
 		document := row.doc
 		document.Text = map[string]project.Text{}
 		for key, text := range row.doc.Text {
@@ -115,7 +129,7 @@ func (s *projectPagesStore) GetPublicResumeProject(_ context.Context, arg store.
 	for _, row := range rows {
 		links = append(links, map[string]any{"entryId": row.entryID, "projectSlug": row.slug})
 		if row.slug == arg.ProjectSlug {
-			projects = append(projects, map[string]any{"entryId": row.entryID, "projectSlug": row.slug, "document": row.doc})
+			projects = append(projects, map[string]any{"entryId": row.entryID, "projectSlug": row.slug, "document": row.stored()})
 		}
 	}
 	rawLinks, err := json.Marshal(links)

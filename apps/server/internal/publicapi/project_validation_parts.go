@@ -50,7 +50,7 @@ func (v *projectValidator) visitAnchor(node *html.Node) {
 	case relHasToken(class, "project-external"):
 		v.externalSeen[href]++
 		switch {
-		case !v.want.external[href] || v.externalSeen[href] > 1 || !onlyAttributes(node, "href", "class", "rel"):
+		case v.externalSeen[href] > v.want.external[href] || !onlyAttributes(node, "href", "class", "rel"):
 			v.reject("external_link")
 		case attribute(node, "rel") != projectExternalRel:
 			v.reject("external_rel")

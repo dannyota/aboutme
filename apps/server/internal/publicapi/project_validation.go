@@ -31,9 +31,11 @@ type projectExpectation struct {
 	// holds the ones the list must link exactly once.
 	internal map[string]bool
 	listed   []string
-	// external holds the repository, demo and entry links a page may carry
-	// once each.
-	external map[string]bool
+	// external counts, for each repository, demo and entry link of the
+	// request, the fields that supply it: the page may carry that link at
+	// most that many times, so equal repository and demo addresses keep
+	// both buttons.
+	external map[string]int
 	// description is the project's sanitized rich text, or "" for none.
 	description string
 }
@@ -59,11 +61,11 @@ func projectHTMLRejection(source []byte, request directrender.ProjectRenderReque
 		resume: request.Resume, title: request.PageTitle, faviconHref: request.FaviconHref, pageURL: request.PageURL,
 		preview: request.Preview, description: request.Project.Description,
 		internal: map[string]bool{request.Resume.URL: true, request.ListURL: true, request.Project.URL: true},
-		external: map[string]bool{},
+		external: map[string]int{},
 	}
 	for _, link := range []string{request.Project.RepositoryURL, request.Project.DemoURL, request.EntryLink} {
 		if link != "" {
-			want.external[link] = true
+			want.external[link]++
 		}
 	}
 	return projectPageRejection(source, want, origin)
@@ -135,8 +137,18 @@ func (v *projectValidator) visitElement(node *html.Node) {
 		v.reject("resource_element")
 		return
 	}
+	if node.Namespace == "svg" {
+		if name := staticIconRule(node); name != "" {
+			v.reject(name)
+			return
+		}
+	}
 	if name := unexpectedResourceAttribute(node); name != "" {
 		v.reject(name)
+		return
+	}
+	if attributeCount(node, "style") != 0 && unsafeStyleContent(attribute(node, "style")) {
+		v.reject("style_content")
 		return
 	}
 	switch node.Data {
@@ -161,6 +173,8 @@ func (v *projectValidator) visitElement(node *html.Node) {
 		v.styles++
 		if v.styles > 1 || unsafeInlineStyle(textNode(node)) {
 			v.reject("style_element")
+		} else if unsafeStyleContent(textNode(node)) {
+			v.reject("style_content")
 		}
 	case "main":
 		v.mains++

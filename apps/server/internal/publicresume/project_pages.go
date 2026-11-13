@@ -55,34 +55,42 @@ type storedProject struct {
 	Document    json.RawMessage `json:"document"`
 }
 
-// ReadProjects reads a live resume and its available library projects
-// behind the same admission as ReadResume: the live gate, the HTML lease at
-// the row's revision, and one retry on a changed generation. An empty
-// projectSlug reads the list; otherwise only that project. A project is
-// available only when its linking entry is one the public projection shows,
-// as projectLinks decides. An unknown or non-live resume, or a project slug
-// outside the grammar, is ErrNotFound with no lease. A live resume with no
-// available project, or without the requested one, is admitted: it returns
-// the snapshot and lease with pages that are not Shown, so the caller can
-// apply sign in to view first (docs/design/projects.md "Project pages and
-// entry points").
-func (r *Reader) ReadProjects(ctx context.Context, slug, projectSlug string) (Snapshot, ProjectPages, *publicstate.Lease, error) {
+// ProjectRead is the project part of an admitted project read, not yet
+// decoded. Pages builds it.
+type ProjectRead struct {
+	public      PublicResume
+	origin      PublicOrigin
+	rawLinks    json.RawMessage
+	rawProjects json.RawMessage
+	projectSlug string
+}
+
+// ReadProjects reads and admits a live resume for a project route behind the
+// same admission as ReadResume: the live gate, the HTML lease at the row's
+// revision, and one retry on a changed generation. An empty projectSlug
+// reads the list; otherwise only that project. An unknown or non-live
+// resume, or a project slug outside the grammar, is ErrNotFound with no
+// lease. Admission decodes no project: the caller applies sign in to view
+// first and only then builds the pages with ProjectRead.Pages, so a viewer
+// without a pass costs the same work for an available and an unavailable
+// project (docs/design/projects.md "Project pages and entry points").
+func (r *Reader) ReadProjects(ctx context.Context, slug, projectSlug string) (Snapshot, ProjectRead, *publicstate.Lease, error) {
 	if projectSlug != "" && !project.ValidSlug(projectSlug) {
-		return Snapshot{}, ProjectPages{}, nil, ErrNotFound
+		return Snapshot{}, ProjectRead{}, nil, ErrNotFound
 	}
 	for attempt := 0; attempt < 2; attempt++ {
 		row, links, projects, err := r.readProjectRow(ctx, slug, projectSlug)
 		if errors.Is(err, pgx.ErrNoRows) {
-			return Snapshot{}, ProjectPages{}, nil, ErrNotFound
+			return Snapshot{}, ProjectRead{}, nil, ErrNotFound
 		}
 		if err != nil {
-			return Snapshot{}, ProjectPages{}, nil, ErrUnavailable
+			return Snapshot{}, ProjectRead{}, nil, ErrUnavailable
 		}
 		if row.Slug == nil || *row.Slug != slug || !row.Live {
-			return Snapshot{}, ProjectPages{}, nil, ErrNotFound
+			return Snapshot{}, ProjectRead{}, nil, ErrNotFound
 		}
 		if row.Revision <= 0 {
-			return Snapshot{}, ProjectPages{}, nil, ErrUnavailable
+			return Snapshot{}, ProjectRead{}, nil, ErrUnavailable
 		}
 		lease, err := r.coordinator.AcquireResume(ctx, row.ID, row.Revision, publicstate.RepresentationHTML)
 		if err != nil {
@@ -90,16 +98,17 @@ func (r *Reader) ReadProjects(ctx context.Context, slug, projectSlug string) (Sn
 			if errors.As(err, &mismatch) && attempt == 0 {
 				continue
 			}
-			return Snapshot{}, ProjectPages{}, nil, ErrUnavailable
+			return Snapshot{}, ProjectRead{}, nil, ErrUnavailable
 		}
-		snapshot, pages, err := r.projectPages(row, links, projects, projectSlug)
+		snapshot, err := r.snapshot(row)
 		if err != nil {
 			lease.Release()
-			return Snapshot{}, ProjectPages{}, nil, err
+			return Snapshot{}, ProjectRead{}, nil, ErrUnavailable
 		}
-		return snapshot, pages, lease, nil
+		read := ProjectRead{public: snapshot.Public, origin: r.origin, rawLinks: links, rawProjects: projects, projectSlug: projectSlug}
+		return snapshot, read, lease, nil
 	}
-	return Snapshot{}, ProjectPages{}, nil, ErrUnavailable
+	return Snapshot{}, ProjectRead{}, nil, ErrUnavailable
 }
 
 // readProjectRow runs the list or the project page statement and returns
@@ -114,24 +123,19 @@ func (r *Reader) readProjectRow(ctx context.Context, slug, projectSlug string) (
 	return read.Resume, read.ProjectLinks, read.Projects, err
 }
 
-// projectPages projects the row and keeps only the projects whose links the
-// public projection shows, once per project slug, in layout and entry order.
-func (r *Reader) projectPages(row store.Resume, rawLinks, rawProjects json.RawMessage, projectSlug string) (Snapshot, ProjectPages, error) {
-	snapshot, err := r.snapshot(row)
+// Pages decodes the read and keeps only the projects whose links the public
+// projection shows, once per project slug, in layout and entry order, with
+// each description sanitized again. A malformed column or document is
+// ErrUnavailable. Pages that are not Shown answer as an unknown resume.
+func (p ProjectRead) Pages() (ProjectPages, error) {
+	projectSlug := p.projectSlug
+	entries, err := linkedEntries(p.rawLinks, p.public, p.origin)
 	if err != nil {
-		return Snapshot{}, ProjectPages{}, ErrUnavailable
+		return ProjectPages{}, ErrUnavailable
 	}
-	entries, err := linkedEntries(rawLinks, snapshot.Public, r.origin)
+	documents, err := storedDocuments(p.rawProjects, projectSlug)
 	if err != nil {
-		return Snapshot{}, ProjectPages{}, ErrUnavailable
-	}
-	snapshot.ProjectLinks = make([]ProjectLink, 0, len(entries))
-	for _, entry := range entries {
-		snapshot.ProjectLinks = append(snapshot.ProjectLinks, entry.link)
-	}
-	documents, err := storedDocuments(rawProjects, projectSlug)
-	if err != nil {
-		return Snapshot{}, ProjectPages{}, ErrUnavailable
+		return ProjectPages{}, ErrUnavailable
 	}
 	var pages ProjectPages
 	seen := make(map[string]bool, len(entries))
@@ -146,15 +150,15 @@ func (r *Reader) projectPages(row store.Resume, rawLinks, rawProjects json.RawMe
 			continue
 		}
 		if !found {
-			return Snapshot{}, ProjectPages{}, ErrUnavailable
+			return ProjectPages{}, ErrUnavailable
 		}
 		document, err := publicDocument(raw)
 		if err != nil {
-			return Snapshot{}, ProjectPages{}, ErrUnavailable
+			return ProjectPages{}, ErrUnavailable
 		}
 		pages.Projects = append(pages.Projects, PublicProject{Slug: entry.link.ProjectSlug, URL: entry.link.URL, EntryLink: entry.entryLink, Document: document})
 	}
-	return snapshot, pages, nil
+	return pages, nil
 }
 
 // publicDocument decodes a stored project document and sanitizes each

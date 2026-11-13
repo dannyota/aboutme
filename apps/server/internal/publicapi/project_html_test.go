@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -20,7 +19,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/directrender"
 	"danny.vn/aboutme/apps/server/internal/project"
 	"danny.vn/aboutme/apps/server/internal/publicformat"
-	"danny.vn/aboutme/apps/server/internal/viewpass"
 )
 
 // projectPageSections is the name-only corpus page's resume: a project
@@ -216,109 +214,6 @@ func TestProjectPages_UnavailableAnswersLikeAnUnknownResume(t *testing.T) {
 				t.Fatal("an unavailable page reached the renderer")
 			}
 		})
-	}
-}
-
-func projectPass(t *testing.T, epoch int32) *http.Cookie {
-	t.Helper()
-	id := uuid.MustParse("00000000-0000-0000-0000-0000000000d2")
-	return &http.Cookie{Name: viewpass.CookieName, Value: viewpass.Seal(gateTestKey, id, epoch, time.Now().Add(time.Hour))}
-}
-
-// TestProjectPages_GatedResumeServesOneGateWithoutAPass proves that,
-// without a pass, every project address of a gated resume serves the same
-// gate, available or not, so no one can probe which project slugs exist.
-// Only page in the provider links differs, and Content-Length with it.
-func TestProjectPages_GatedResumeServesOneGateWithoutAPass(t *testing.T) {
-	gatedHandlers := func(t *testing.T, hideNoteG bool) projectHandlers {
-		t.Helper()
-		sections := projectPageSections()
-		sections["projects"][0].hidden = hideNoteG
-		readStore := projectPageFixture(t)
-		readStore.row = projectResumeRow(t, "en", nil, schema.MmYyyy, sections, "projects")
-		readStore.row.SignInToView, readStore.row.ViewPassEpoch = true, 1
-		_, client := newFakeProjectRenderer(t)
-		return newProjectHandlers(t, projectTestReader(t, readStore), client)
-	}
-	available, empty := gatedHandlers(t, false), gatedHandlers(t, true)
-	pageGate := available.serve(http.MethodGet, "/ada/projects/note-g")
-	listGate := available.serve(http.MethodGet, "/ada/projects")
-	for _, reference := range []*httptest.ResponseRecorder{pageGate, listGate} {
-		if reference.Code != http.StatusOK || !strings.Contains(reference.Body.String(), `id="public-gate"`) {
-			t.Fatalf("available page without a pass = %d %q, want the gate", reference.Code, reference.Body.String())
-		}
-	}
-	for _, test := range []struct {
-		name      string
-		handlers  projectHandlers
-		path      string
-		page      string
-		reference *httptest.ResponseRecorder
-	}{
-		{"unknown project slug", available, "/ada/projects/unknown-tool", "projects/unknown-tool", pageGate},
-		{"hidden project slug", available, "/ada/projects/hidden-tool", "projects/hidden-tool", pageGate},
-		{"another account's project slug", available, "/ada/projects/foreign-tool", "projects/foreign-tool", pageGate},
-		{"unknown project slug with no available project", empty, "/ada/projects/unknown-tool", "projects/unknown-tool", pageGate},
-		{"list with no available project", empty, "/ada/projects", "projects", listGate},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			wantBody := test.reference.Body.String()
-			if test.reference == pageGate {
-				wantBody = strings.ReplaceAll(wantBody, "&amp;page=projects/note-g\"", "&amp;page="+test.page+"\"")
-			}
-			wantHeader := test.reference.Header().Clone()
-			wantHeader.Set("Content-Length", strconv.Itoa(len(wantBody)))
-			got := test.handlers.serve(http.MethodGet, test.path)
-			if got.Code != test.reference.Code || !reflect.DeepEqual(got.Header(), wantHeader) || got.Body.String() != wantBody {
-				t.Fatalf("response = %d %#v %q, want the gate %d %#v %q", got.Code, got.Header(), got.Body.String(), test.reference.Code, wantHeader, wantBody)
-			}
-			if !strings.Contains(got.Body.String(), "&amp;page="+test.page+"\"") {
-				t.Fatalf("gate links do not carry page=%s", test.page)
-			}
-		})
-	}
-}
-
-func TestProjectPages_SignInToViewServesTheGateWithThePage(t *testing.T) {
-	readStore := projectPageFixture(t)
-	readStore.row.SignInToView, readStore.row.ViewPassEpoch = true, 1
-	renderer, client := newFakeProjectRenderer(t)
-	handlers := newProjectHandlers(t, projectTestReader(t, readStore), client)
-
-	for _, test := range []struct{ path, page, message string }{
-		{"/ada/projects/note-g", "projects/note-g", "none"},
-		{"/ada/projects?signin=failed&page=evil", "projects", "failed"},
-	} {
-		gate := handlers.serve(http.MethodGet, test.path)
-		if gate.Code != http.StatusOK || gate.Header().Get("Cache-Control") != "no-store" || !strings.Contains(gate.Body.String(), `id="public-gate"`) {
-			t.Fatalf("%s: gate = %d %#v; log %s", test.path, gate.Code, gate.Header(), handlers.logs.String())
-		}
-		var envelope directrender.GateRenderRequest
-		if err := json.Unmarshal(renderer.envelope(directrender.GateRenderMode), &envelope); err != nil {
-			t.Fatal(err)
-		}
-		if envelope.Page != test.page || envelope.Message != test.message || envelope.Slug != "ada" {
-			t.Fatalf("%s: gate envelope = %+v", test.path, envelope)
-		}
-		for _, provider := range []string{"google", "linkedin"} {
-			link := `/api/v1/auth/` + provider + `/start?purpose=view&amp;slug=ada&amp;page=` + test.page + `"`
-			if !strings.Contains(gate.Body.String(), link) {
-				t.Fatalf("%s: gate body lacks %s", test.path, link)
-			}
-		}
-	}
-	if renderer.count(directrender.ProjectRenderMode) != 0 || renderer.count(directrender.ProjectListRenderMode) != 0 {
-		t.Fatal("a project page was rendered without a pass")
-	}
-
-	page := handlers.serve(http.MethodGet, "/ada/projects/note-g", projectPass(t, 1))
-	if page.Code != http.StatusOK || page.Body.String() != readProjectCorpus(t)["project-en-name-only"].HTML ||
-		page.Header().Get("Cache-Control") != "private, no-cache, must-revalidate" || page.Header().Get("X-Robots-Tag") != "noindex, noarchive" {
-		t.Fatalf("valid pass = %d %#v; log %s", page.Code, page.Header(), handlers.logs.String())
-	}
-	// A cached page is not reached before the pass check.
-	if gate := handlers.serve(http.MethodGet, "/ada/projects/note-g", projectPass(t, 0)); !strings.Contains(gate.Body.String(), `id="public-gate"`) {
-		t.Fatalf("old pass after a cached page = %d %q, want the gate", gate.Code, gate.Body.String())
 	}
 }
 

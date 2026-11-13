@@ -46,7 +46,7 @@ func newProjectHandler(dependencies HTMLDependencies, page bool) (http.Handler, 
 			serveHTMLError(w, request, http.StatusNotFound)
 			return
 		}
-		snapshot, pages, lease, err := dependencies.Reader.ReadProjects(request.Context(), slug, projectSlug)
+		snapshot, read, lease, err := dependencies.Reader.ReadProjects(request.Context(), slug, projectSlug)
 		if err != nil {
 			if lease != nil {
 				lease.Release()
@@ -61,10 +61,11 @@ func newProjectHandler(dependencies HTMLDependencies, page bool) (http.Handler, 
 		}
 		defer lease.Release()
 		// No view is observed on a project page (ADR 0022). The pass check
-		// runs after admission and before both the availability decision and
-		// any public cache lookup: without a pass every address of a gated
-		// resume serves the same gate, so no one can probe which projects
-		// exist, and cached project bytes are never served without a pass.
+		// runs after admission and before the pages are built, the
+		// availability decision and any public cache lookup: without a pass
+		// every address of a gated resume serves the same gate after the same
+		// work, so no one can probe which projects exist, and cached project
+		// bytes are never served without a pass.
 		if snapshot.SignInToView && !hasValidPass(request, dependencies.ViewPassKey, snapshot.ResumeID, snapshot.ViewPassEpoch, dependencies.Clock) {
 			gatePage := "projects"
 			if page {
@@ -72,6 +73,12 @@ func newProjectHandler(dependencies HTMLDependencies, page bool) (http.Handler, 
 			}
 			//nolint:contextcheck // The lease context is derived from request.Context and adds revocation cancellation.
 			serveGate(lease.Context(), w, request, dependencies, snapshot, gatePage)
+			return
+		}
+		pages, err := read.Pages()
+		if err != nil {
+			logHTMLUnavailable(dependencies.Logger, request, "pages_failed", "")
+			serveHTMLError(w, request, http.StatusServiceUnavailable)
 			return
 		}
 		if !pages.Shown() {
@@ -88,7 +95,7 @@ func newProjectHandler(dependencies HTMLDependencies, page bool) (http.Handler, 
 			AppDigest: dependencies.AppDigest, RendererDigest: dependencies.RendererDigest, Subject: projectSlug,
 		}
 		if cached, ok := dependencies.Cache.Get(key); ok {
-			withPrivateCacheControl(SelectedResponse{Status: cached.Status, Header: cached.Header, Body: cached.Body}, snapshot.SignInToView).ServeHTTP(w, request)
+			serveLeasedResponse(w, request, lease, dependencies.Logger, withPrivateCacheControl(SelectedResponse{Status: cached.Status, Header: cached.Header, Body: cached.Body}, snapshot.SignInToView))
 			return
 		}
 		input := projectPageInput{snapshot: snapshot, pages: pages, origin: dependencies.PublicOrigin}
@@ -111,7 +118,7 @@ func newProjectHandler(dependencies HTMLDependencies, page bool) (http.Handler, 
 			return
 		}
 		dependencies.Cache.Put(key, publiccache.Value{Status: response.Status, Header: response.Header, Body: response.Body})
-		withPrivateCacheControl(response, snapshot.SignInToView).ServeHTTP(w, request)
+		serveLeasedResponse(w, request, lease, dependencies.Logger, withPrivateCacheControl(response, snapshot.SignInToView))
 	}), nil
 }
 
