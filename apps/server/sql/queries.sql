@@ -580,13 +580,21 @@ FROM resumes AS r
 WHERE r.slug = sqlc.arg(slug)::text AND r.live = true;
 
 -- name: GetPublicResumeProject :one
--- One project page's snapshot: the live resume, its project link context as
--- in GetPublicResumeBySlug, and the document of the requested project only
--- when an entry that is not hidden in a project section links it. The page
--- needs the other links only to know whether another project is available.
--- The project id never leaves the statement.
+-- One project page's snapshot: the live resume; its project link context as
+-- the list reads it, each linked document without its descriptions; and the
+-- whole document of the requested project, only when an entry that is not
+-- hidden in a project section links it. The page reads the other documents
+-- only to know whether another project has a name to show. The project id
+-- never leaves the statement.
 SELECT sqlc.embed(r), COALESCE((
-    SELECT jsonb_agg(jsonb_build_object('entryId', e.entry->>'id', 'projectSlug', p.slug))
+    SELECT jsonb_agg(jsonb_build_object(
+        'entryId', e.entry->>'id',
+        'projectSlug', p.slug,
+        'document', jsonb_set(p.document, '{text}', COALESCE((
+            SELECT jsonb_object_agg(t.key, t.value - 'description')
+            FROM jsonb_each(p.document->'text') AS t(key, value)
+        ), '{}'::jsonb))
+    ))
     FROM jsonb_each(r.content) AS s(key, section)
     CROSS JOIN LATERAL jsonb_array_elements(s.section->'entries') AS e(entry)
     JOIN projects AS p

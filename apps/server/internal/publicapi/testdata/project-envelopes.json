@@ -1,0 +1,1560 @@
+{
+  "cases": [
+    {
+      "name": "list: thirty rows, vi resume",
+      "envelope": {
+        "mode": "project-list",
+        "canonicalOrigin": "https://aboutme.example",
+        "pageUrl": "https://aboutme.example/ada/projects",
+        "discoveryEnabled": false,
+        "pageTitle": "Dự án · Ada Lovelace",
+        "faviconHref": "",
+        "preview": {
+          "title": "Dự án · Ada Lovelace",
+          "description": "",
+          "locale": "vi_VN",
+          "imageAlt": "Ada Lovelace",
+          "imageUrl": "https://aboutme.example/api/v1/public/resumes/ada/og/0123456789abcdef.png"
+        },
+        "resume": {
+          "slug": "ada",
+          "url": "https://aboutme.example/ada",
+          "ownerName": "Ada Lovelace",
+          "lng": "vi-VN",
+          "uiLng": "vi",
+          "colorScheme": "light",
+          "dateFormat": "MM/YYYY"
+        },
+        "projects": [
+          {
+            "slug": "project-00",
+            "url": "https://aboutme.example/ada/projects/project-00",
+            "lang": "en",
+            "name": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+            "role": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+            "dates": {
+              "end": {
+                "m": 12,
+                "y": 2100
+              },
+              "present": false,
+              "start": {
+                "m": 1,
+                "y": 1900
+              }
+            },
+            "summary": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+            "technologies": [
+              "00😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+              "01😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+              "02😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+              "03😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+              "04😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+              "05😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀"
+            ],
+            "moreTechnologies": 14
+          },
+          {
+            "slug": "project-01",
+            "url": "https://aboutme.example/ada/projects/project-01",
+            "lang": "en",
+            "name": "Project project-01",
+            "role": "Lead",
+            "dates": {
+              "end": {
+                "m": 12,
+                "y": 2100
+              },
+              "present": false,
+              "start": {
+                "m": 1,
+                "y": 1900
+              }
+            },
+            "summary": "Summary of project-01.",
+            "technologies": [
+              "Tool 0"
+            ]
+          },
+          {
+            "slug": "project-02",
+            "url": "https://aboutme.example/ada/projects/project-02",
+            "lang": "en",
+            "name": "Project project-02",
+            "role": "Lead",
+            "dates": {
+              "end": null,
+              "present": true,
+              "start": {
+                "y": 2020
+              }
+            },
+            "summary": "Summary of project-02.",
+            "technologies": [
+              "Tool 0",
+              "Tool 1"
+            ]
+          },
+          {
+            "slug": "project-03",
+            "url": "https://aboutme.example/ada/projects/project-03",
+            "lang": "en",
+            "name": "Project project-03",
+            "role": "Lead",
+            "dates": {
+              "end": {
+                "m": 3,
+                "y": 2020
+              },
+              "present": false,
+              "start": {
+                "m": 3,
+                "y": 2020
+              }
+            },
+            "summary": "Summary of project-03.",
+            "technologies": [
+              "Tool 0",
+              "Tool 1",
+              "Tool 2"
+            ]
+          },
+          {
+            "slug": "project-04",
+            "url": "https://aboutme.example/ada/projects/project-04",
+            "lang": "en",
+            "name": "Project project-04",
+            "role": "Lead",
+            "summary": "Summary of project-04.",
+            "technologies": [
+              "Tool 0",
+              "Tool 1",
+              "Tool 2",
+              "Tool 3"
+            ]
+          },
+          {
+            "slug": "project-05",
+            "url": "https://aboutme.example/ada/projects/project-05",
+            "lang": "en",
+            "name": "Project project-05",
+            "role": "Lead",
+            "dates": {
+              "end": {
+                "m": 12,
+                "y": 2100
+              },
+              "present": false,
+              "start": {
+                "m": 1,
+                "y": 1900
+              }
+            },
+            "summary": "Summary of project-05.",
+            "technologies": [
+              "Tool 0",
+              "Tool 1",
+              "Tool 2",
+              "Tool 3",
+              "Tool 4"
+            ]
+          },
+          {
+            "slug": "project-06",
+            "url": "https://aboutme.example/ada/projects/project-06",
+            "lang": "en",
+            "name": "Project project-06",
+            "role": "Lead",
+            "dates": {
+              "end": null,
+              "present": true,
+              "start": {
+                "y": 2020
+              }
+            },
+            "summary": "Summary of project-06.",
+            "technologies": [
+              "Tool 0",
+              "Tool 1",
+              "Tool 2",
+              "Tool 3",
+              "Tool 4",
+              "Tool 5"
+            ]
+          },
+          {
+            "slug": "project-07",
+            "url": "https://aboutme.example/ada/projects/project-07",
+            "lang": "en",
+            "name": "Project project-07",
+            "role": "Lead",
+            "dates": {
+              "end": {
+                "m": 3,
+                "y": 2020
+              },
+              "present": false,
+              "start": {
+                "m": 3,
+                "y": 2020
+              }
+            },
+            "summary": "Summary of project-07.",
+            "technologies": [
+              "Tool 0",
+              "Tool 1",
+              "Tool 2",
+              "Tool 3",
+              "Tool 4",
+              "Tool 5"
+            ],
+            "moreTechnologies": 1
+          },
+          {
+            "slug": "project-08",
+            "url": "https://aboutme.example/ada/projects/project-08",
+            "lang": "en",
+            "name": "Project project-08",
+            "role": "Lead",
+            "summary": "Summary of project-08.",
+            "technologies": [
+              "Tool 0",
+              "Tool 1",
+              "Tool 2",
+              "Tool 3",
+              "Tool 4",
+              "Tool 5"
+            ],
+            "moreTechnologies": 2
+          },
+          {
+            "slug": "project-09",
+            "url": "https://aboutme.example/ada/projects/project-09",
+            "lang": "en",
+            "name": "Project project-09",
+            "role": "Lead",
+            "dates": {
+              "end": {
+                "m": 12,
+                "y": 2100
+              },
+              "present": false,
+              "start": {
+                "m": 1,
+                "y": 1900
+              }
+            },
+            "summary": "Summary of project-09.",
+            "technologies": []
+          },
+          {
+            "slug": "project-10",
+            "url": "https://aboutme.example/ada/projects/project-10",
+            "lang": "en",
+            "name": "Project project-10",
+            "role": "Lead",
+            "dates": {
+              "end": null,
+              "present": true,
+              "start": {
+                "y": 2020
+              }
+            },
+            "summary": "Summary of project-10.",
+            "technologies": [
+              "Tool 0"
+            ]
+          },
+          {
+            "slug": "project-11",
+            "url": "https://aboutme.example/ada/projects/project-11",
+            "lang": "en",
+            "name": "Project project-11",
+            "role": "Lead",
+            "dates": {
+              "end": {
+                "m": 3,
+                "y": 2020
+              },
+              "present": false,
+              "start": {
+                "m": 3,
+                "y": 2020
+              }
+            },
+            "summary": "Summary of project-11.",
+            "technologies": [
+              "Tool 0",
+              "Tool 1"
+            ]
+          },
+          {
+            "slug": "project-12",
+            "url": "https://aboutme.example/ada/projects/project-12",
+            "lang": "en",
+            "name": "Project project-12",
+            "role": "Lead",
+            "summary": "Summary of project-12.",
+            "technologies": [
+              "Tool 0",
+              "Tool 1",
+              "Tool 2"
+            ]
+          },
+          {
+            "slug": "project-13",
+            "url": "https://aboutme.example/ada/projects/project-13",
+            "lang": "en",
+            "name": "Project project-13",
+            "role": "Lead",
+            "dates": {
+              "end": {
+                "m": 12,
+                "y": 2100
+              },
+              "present": false,
+              "start": {
+                "m": 1,
+                "y": 1900
+              }
+            },
+            "summary": "Summary of project-13.",
+            "technologies": [
+              "Tool 0",
+              "Tool 1",
+              "Tool 2",
+              "Tool 3"
+            ]
+          },
+          {
+            "slug": "project-14",
+            "url": "https://aboutme.example/ada/projects/project-14",
+            "lang": "en",
+            "name": "Project project-14",
+            "role": "Lead",
+            "dates": {
+              "end": null,
+              "present": true,
+              "start": {
+                "y": 2020
+              }
+            },
+            "summary": "Summary of project-14.",
+            "technologies": [
+              "Tool 0",
+              "Tool 1",
+              "Tool 2",
+              "Tool 3",
+              "Tool 4"
+            ]
+          },
+          {
+            "slug": "project-15",
+            "url": "https://aboutme.example/ada/projects/project-15",
+            "lang": "en",
+            "name": "Project project-15",
+            "role": "Lead",
+            "dates": {
+              "end": {
+                "m": 3,
+                "y": 2020
+              },
+              "present": false,
+              "start": {
+                "m": 3,
+                "y": 2020
+              }
+            },
+            "summary": "Summary of project-15.",
+            "technologies": [
+              "Tool 0",
+              "Tool 1",
+              "Tool 2",
+              "Tool 3",
+              "Tool 4",
+              "Tool 5"
+            ]
+          },
+          {
+            "slug": "project-16",
+            "url": "https://aboutme.example/ada/projects/project-16",
+            "lang": "en",
+            "name": "Project project-16",
+            "role": "Lead",
+            "summary": "Summary of project-16.",
+            "technologies": [
+              "Tool 0",
+              "Tool 1",
+              "Tool 2",
+              "Tool 3",
+              "Tool 4",
+              "Tool 5"
+            ],
+            "moreTechnologies": 1
+          },
+          {
+            "slug": "project-17",
+            "url": "https://aboutme.example/ada/projects/project-17",
+            "lang": "en",
+            "name": "Project project-17",
+            "role": "Lead",
+            "dates": {
+              "end": {
+                "m": 12,
+                "y": 2100
+              },
+              "present": false,
+              "start": {
+                "m": 1,
+                "y": 1900
+              }
+            },
+            "summary": "Summary of project-17.",
+            "technologies": [
+              "Tool 0",
+              "Tool 1",
+              "Tool 2",
+              "Tool 3",
+              "Tool 4",
+              "Tool 5"
+            ],
+            "moreTechnologies": 2
+          },
+          {
+            "slug": "project-18",
+            "url": "https://aboutme.example/ada/projects/project-18",
+            "lang": "en",
+            "name": "Project project-18",
+            "role": "Lead",
+            "dates": {
+              "end": null,
+              "present": true,
+              "start": {
+                "y": 2020
+              }
+            },
+            "summary": "Summary of project-18.",
+            "technologies": []
+          },
+          {
+            "slug": "project-19",
+            "url": "https://aboutme.example/ada/projects/project-19",
+            "lang": "en",
+            "name": "Project project-19",
+            "role": "Lead",
+            "dates": {
+              "end": {
+                "m": 3,
+                "y": 2020
+              },
+              "present": false,
+              "start": {
+                "m": 3,
+                "y": 2020
+              }
+            },
+            "summary": "Summary of project-19.",
+            "technologies": [
+              "Tool 0"
+            ]
+          },
+          {
+            "slug": "project-20",
+            "url": "https://aboutme.example/ada/projects/project-20",
+            "lang": "en",
+            "name": "Project project-20",
+            "role": "Lead",
+            "summary": "Summary of project-20.",
+            "technologies": [
+              "Tool 0",
+              "Tool 1"
+            ]
+          },
+          {
+            "slug": "project-21",
+            "url": "https://aboutme.example/ada/projects/project-21",
+            "lang": "en",
+            "name": "Project project-21",
+            "role": "Lead",
+            "dates": {
+              "end": {
+                "m": 12,
+                "y": 2100
+              },
+              "present": false,
+              "start": {
+                "m": 1,
+                "y": 1900
+              }
+            },
+            "summary": "Summary of project-21.",
+            "technologies": [
+              "Tool 0",
+              "Tool 1",
+              "Tool 2"
+            ]
+          },
+          {
+            "slug": "project-22",
+            "url": "https://aboutme.example/ada/projects/project-22",
+            "lang": "en",
+            "name": "Project project-22",
+            "role": "Lead",
+            "dates": {
+              "end": null,
+              "present": true,
+              "start": {
+                "y": 2020
+              }
+            },
+            "summary": "Summary of project-22.",
+            "technologies": [
+              "Tool 0",
+              "Tool 1",
+              "Tool 2",
+              "Tool 3"
+            ]
+          },
+          {
+            "slug": "project-23",
+            "url": "https://aboutme.example/ada/projects/project-23",
+            "lang": "en",
+            "name": "Project project-23",
+            "role": "Lead",
+            "dates": {
+              "end": {
+                "m": 3,
+                "y": 2020
+              },
+              "present": false,
+              "start": {
+                "m": 3,
+                "y": 2020
+              }
+            },
+            "summary": "Summary of project-23.",
+            "technologies": [
+              "Tool 0",
+              "Tool 1",
+              "Tool 2",
+              "Tool 3",
+              "Tool 4"
+            ]
+          },
+          {
+            "slug": "project-24",
+            "url": "https://aboutme.example/ada/projects/project-24",
+            "lang": "en",
+            "name": "Project project-24",
+            "role": "Lead",
+            "summary": "Summary of project-24.",
+            "technologies": [
+              "Tool 0",
+              "Tool 1",
+              "Tool 2",
+              "Tool 3",
+              "Tool 4",
+              "Tool 5"
+            ]
+          },
+          {
+            "slug": "project-25",
+            "url": "https://aboutme.example/ada/projects/project-25",
+            "lang": "en",
+            "name": "Project project-25",
+            "role": "Lead",
+            "dates": {
+              "end": {
+                "m": 12,
+                "y": 2100
+              },
+              "present": false,
+              "start": {
+                "m": 1,
+                "y": 1900
+              }
+            },
+            "summary": "Summary of project-25.",
+            "technologies": [
+              "Tool 0",
+              "Tool 1",
+              "Tool 2",
+              "Tool 3",
+              "Tool 4",
+              "Tool 5"
+            ],
+            "moreTechnologies": 1
+          },
+          {
+            "slug": "project-26",
+            "url": "https://aboutme.example/ada/projects/project-26",
+            "lang": "en",
+            "name": "Project project-26",
+            "role": "Lead",
+            "dates": {
+              "end": null,
+              "present": true,
+              "start": {
+                "y": 2020
+              }
+            },
+            "summary": "Summary of project-26.",
+            "technologies": [
+              "Tool 0",
+              "Tool 1",
+              "Tool 2",
+              "Tool 3",
+              "Tool 4",
+              "Tool 5"
+            ],
+            "moreTechnologies": 2
+          },
+          {
+            "slug": "project-27",
+            "url": "https://aboutme.example/ada/projects/project-27",
+            "lang": "en",
+            "name": "Project project-27",
+            "role": "Lead",
+            "dates": {
+              "end": {
+                "m": 3,
+                "y": 2020
+              },
+              "present": false,
+              "start": {
+                "m": 3,
+                "y": 2020
+              }
+            },
+            "summary": "Summary of project-27.",
+            "technologies": []
+          },
+          {
+            "slug": "project-28",
+            "url": "https://aboutme.example/ada/projects/project-28",
+            "lang": "en",
+            "name": "Project project-28",
+            "role": "Lead",
+            "summary": "Summary of project-28.",
+            "technologies": [
+              "Tool 0"
+            ]
+          },
+          {
+            "slug": "project-29",
+            "url": "https://aboutme.example/ada/projects/project-29",
+            "lang": "en",
+            "name": "Project project-29",
+            "role": "Lead",
+            "dates": {
+              "end": {
+                "m": 12,
+                "y": 2100
+              },
+              "present": false,
+              "start": {
+                "m": 1,
+                "y": 1900
+              }
+            },
+            "summary": "Summary of project-29.",
+            "technologies": [
+              "Tool 0",
+              "Tool 1"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "list: und resume",
+      "envelope": {
+        "mode": "project-list",
+        "canonicalOrigin": "https://aboutme.example",
+        "pageUrl": "https://aboutme.example/ada/projects",
+        "discoveryEnabled": false,
+        "pageTitle": "Projects · Ada",
+        "faviconHref": "",
+        "preview": {
+          "title": "Projects · Ada",
+          "description": "",
+          "locale": "",
+          "imageAlt": "Ada",
+          "imageUrl": "https://aboutme.example/api/v1/public/resumes/ada/og/0123456789abcdef.png"
+        },
+        "resume": {
+          "slug": "ada",
+          "url": "https://aboutme.example/ada",
+          "ownerName": "Ada",
+          "lng": "und",
+          "uiLng": "en",
+          "colorScheme": "light",
+          "dateFormat": "MM/YYYY"
+        },
+        "projects": [
+          {
+            "slug": "first",
+            "url": "https://aboutme.example/ada/projects/first",
+            "lang": "en",
+            "name": "Project first",
+            "role": "Lead",
+            "summary": "Summary of first.",
+            "technologies": [
+              "Tool 0"
+            ]
+          },
+          {
+            "slug": "second",
+            "url": "https://aboutme.example/ada/projects/second",
+            "lang": "en",
+            "name": "Project second",
+            "role": "Lead",
+            "dates": {
+              "end": null,
+              "present": true,
+              "start": {
+                "y": 2020
+              }
+            },
+            "summary": "Summary of second.",
+            "technologies": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "list: blank-name fallback",
+      "envelope": {
+        "mode": "project-list",
+        "canonicalOrigin": "https://aboutme.example",
+        "pageUrl": "https://aboutme.example/ada/projects",
+        "discoveryEnabled": false,
+        "pageTitle": "Dự án · Ada",
+        "faviconHref": "",
+        "preview": {
+          "title": "Dự án · Ada",
+          "description": "",
+          "locale": "vi_VN",
+          "imageAlt": "Ada",
+          "imageUrl": "https://aboutme.example/api/v1/public/resumes/ada/og/0123456789abcdef.png"
+        },
+        "resume": {
+          "slug": "ada",
+          "url": "https://aboutme.example/ada",
+          "ownerName": "Ada",
+          "lng": "vi",
+          "uiLng": "vi",
+          "colorScheme": "light",
+          "dateFormat": "MM/YYYY"
+        },
+        "projects": [
+          {
+            "slug": "fallback",
+            "url": "https://aboutme.example/ada/projects/fallback",
+            "lang": "en",
+            "name": "Project fallback",
+            "role": "Lead",
+            "summary": "Summary of fallback.",
+            "technologies": [
+              "Tool 0",
+              "Tool 1",
+              "Tool 2"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "page: blank-name fallback",
+      "envelope": {
+        "mode": "project",
+        "canonicalOrigin": "https://aboutme.example",
+        "pageUrl": "https://aboutme.example/ada/projects/fallback",
+        "discoveryEnabled": false,
+        "pageTitle": "Project fallback · Ada",
+        "faviconHref": "",
+        "preview": {
+          "title": "Project fallback · Ada",
+          "description": "Summary of fallback.",
+          "locale": "vi_VN",
+          "imageAlt": "Ada",
+          "imageUrl": "https://aboutme.example/api/v1/public/resumes/ada/og/0123456789abcdef.png"
+        },
+        "resume": {
+          "slug": "ada",
+          "url": "https://aboutme.example/ada",
+          "ownerName": "Ada",
+          "lng": "vi",
+          "uiLng": "vi",
+          "colorScheme": "light",
+          "dateFormat": "MM/YYYY"
+        },
+        "project": {
+          "slug": "fallback",
+          "url": "https://aboutme.example/ada/projects/fallback",
+          "lang": "en",
+          "name": "Project fallback",
+          "role": "Lead",
+          "summary": "Summary of fallback.",
+          "technologies": [
+            "Tool 0",
+            "Tool 1",
+            "Tool 2"
+          ]
+        },
+        "listUrl": "https://aboutme.example/ada/projects",
+        "otherProjects": false
+      }
+    },
+    {
+      "name": "list: cards off",
+      "envelope": {
+        "mode": "project-list",
+        "canonicalOrigin": "https://aboutme.example",
+        "pageUrl": "https://aboutme.example/ada/projects",
+        "discoveryEnabled": false,
+        "pageTitle": "Projects · Ada Lovelace",
+        "faviconHref": "",
+        "preview": {
+          "title": "Projects · Ada Lovelace",
+          "description": "",
+          "locale": "en_US",
+          "imageAlt": "Ada Lovelace"
+        },
+        "resume": {
+          "slug": "ada",
+          "url": "https://aboutme.example/ada",
+          "ownerName": "Ada Lovelace",
+          "lng": "en",
+          "uiLng": "en",
+          "colorScheme": "light",
+          "dateFormat": "MM/YYYY"
+        },
+        "projects": [
+          {
+            "slug": "cards-off",
+            "url": "https://aboutme.example/ada/projects/cards-off",
+            "name": "Project cards-off",
+            "role": "Lead",
+            "dates": {
+              "end": {
+                "m": 3,
+                "y": 2020
+              },
+              "present": false,
+              "start": {
+                "m": 3,
+                "y": 2020
+              }
+            },
+            "summary": "Summary of cards-off.",
+            "technologies": [
+              "Tool 0",
+              "Tool 1"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "page: cards off, the only project",
+      "envelope": {
+        "mode": "project",
+        "canonicalOrigin": "https://aboutme.example",
+        "pageUrl": "https://aboutme.example/ada/projects/cards-off",
+        "discoveryEnabled": false,
+        "pageTitle": "Project cards-off · Ada Lovelace",
+        "faviconHref": "",
+        "preview": {
+          "title": "Project cards-off · Ada Lovelace",
+          "description": "Summary of cards-off.",
+          "locale": "en_US",
+          "imageAlt": "Ada Lovelace"
+        },
+        "resume": {
+          "slug": "ada",
+          "url": "https://aboutme.example/ada",
+          "ownerName": "Ada Lovelace",
+          "lng": "en",
+          "uiLng": "en",
+          "colorScheme": "light",
+          "dateFormat": "MM/YYYY"
+        },
+        "project": {
+          "slug": "cards-off",
+          "url": "https://aboutme.example/ada/projects/cards-off",
+          "name": "Project cards-off",
+          "role": "Lead",
+          "dates": {
+            "end": {
+              "m": 3,
+              "y": 2020
+            },
+            "present": false,
+            "start": {
+              "m": 3,
+              "y": 2020
+            }
+          },
+          "summary": "Summary of cards-off.",
+          "technologies": [
+            "Tool 0",
+            "Tool 1"
+          ]
+        },
+        "listUrl": "https://aboutme.example/ada/projects",
+        "otherProjects": false
+      }
+    },
+    {
+      "name": "page: und resume",
+      "envelope": {
+        "mode": "project",
+        "canonicalOrigin": "https://aboutme.example",
+        "pageUrl": "https://aboutme.example/ada/projects/und",
+        "discoveryEnabled": false,
+        "pageTitle": "Project und · Ada",
+        "faviconHref": "",
+        "preview": {
+          "title": "Project und · Ada",
+          "description": "Summary of und.",
+          "locale": "",
+          "imageAlt": "Ada",
+          "imageUrl": "https://aboutme.example/api/v1/public/resumes/ada/og/0123456789abcdef.png"
+        },
+        "resume": {
+          "slug": "ada",
+          "url": "https://aboutme.example/ada",
+          "ownerName": "Ada",
+          "lng": "und",
+          "uiLng": "en",
+          "colorScheme": "light",
+          "dateFormat": "MM/YYYY"
+        },
+        "project": {
+          "slug": "und",
+          "url": "https://aboutme.example/ada/projects/und",
+          "lang": "en",
+          "name": "Project und",
+          "role": "Lead",
+          "dates": {
+            "end": null,
+            "present": true,
+            "start": {
+              "y": 2020
+            }
+          },
+          "summary": "Summary of und.",
+          "technologies": [
+            "Tool 0"
+          ]
+        },
+        "listUrl": "https://aboutme.example/ada/projects",
+        "otherProjects": true
+      }
+    },
+    {
+      "name": "list: longest owner from the public title",
+      "envelope": {
+        "mode": "project-list",
+        "canonicalOrigin": "https://aboutme.example",
+        "pageUrl": "https://aboutme.example/ada/projects",
+        "discoveryEnabled": false,
+        "pageTitle": "Projects · 👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻",
+        "faviconHref": "",
+        "preview": {
+          "title": "Projects · 👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻",
+          "description": "",
+          "locale": "en_US",
+          "imageAlt": "aboutme.vn/ada",
+          "imageUrl": "https://aboutme.example/api/v1/public/resumes/ada/og/0123456789abcdef.png"
+        },
+        "resume": {
+          "slug": "ada",
+          "url": "https://aboutme.example/ada",
+          "ownerName": "👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻",
+          "lng": "en",
+          "uiLng": "en",
+          "colorScheme": "light",
+          "dateFormat": "MM/YYYY"
+        },
+        "projects": [
+          {
+            "slug": "bounds",
+            "url": "https://aboutme.example/ada/projects/bounds",
+            "name": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+            "role": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+            "dates": {
+              "end": {
+                "m": 12,
+                "y": 2100
+              },
+              "present": false,
+              "start": {
+                "m": 1,
+                "y": 1900
+              }
+            },
+            "summary": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+            "technologies": [
+              "00😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+              "01😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+              "02😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+              "03😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+              "04😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+              "05😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀"
+            ],
+            "moreTechnologies": 14
+          }
+        ]
+      }
+    },
+    {
+      "name": "page: every field at its bound",
+      "envelope": {
+        "mode": "project",
+        "canonicalOrigin": "https://aboutme.example",
+        "pageUrl": "https://aboutme.example/ada/projects/bounds",
+        "discoveryEnabled": false,
+        "pageTitle": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀 · 👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻",
+        "faviconHref": "",
+        "preview": {
+          "title": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀 · 👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻",
+          "description": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+          "locale": "en_US",
+          "imageAlt": "aboutme.vn/ada",
+          "imageUrl": "https://aboutme.example/api/v1/public/resumes/ada/og/0123456789abcdef.png"
+        },
+        "resume": {
+          "slug": "ada",
+          "url": "https://aboutme.example/ada",
+          "ownerName": "👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻👩🏽‍❤️‍💋‍👨🏻",
+          "lng": "en",
+          "uiLng": "en",
+          "colorScheme": "light",
+          "dateFormat": "MM/YYYY"
+        },
+        "project": {
+          "slug": "bounds",
+          "url": "https://aboutme.example/ada/projects/bounds",
+          "name": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+          "role": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+          "dates": {
+            "end": {
+              "m": 12,
+              "y": 2100
+            },
+            "present": false,
+            "start": {
+              "m": 1,
+              "y": 1900
+            }
+          },
+          "summary": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+          "outcome": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+          "description": "<p>aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa</p>",
+          "technologies": [
+            "00😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+            "01😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+            "02😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+            "03😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+            "04😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+            "05😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+            "06😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+            "07😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+            "08😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+            "09😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+            "10😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+            "11😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+            "12😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+            "13😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+            "14😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+            "15😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+            "16😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+            "17😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+            "18😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+            "19😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀"
+          ],
+          "repositoryUrl": "https://ada.example/repository/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "demoUrl": "https://ada.example/demo/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "entryLink": "https://ada.example/entry/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "listUrl": "https://aboutme.example/ada/projects",
+        "otherProjects": true
+      }
+    },
+    {
+      "name": "page: outcome cut at 160 wide code points",
+      "envelope": {
+        "mode": "project",
+        "canonicalOrigin": "https://aboutme.example",
+        "pageUrl": "https://aboutme.example/ada/projects/wide-outcome",
+        "discoveryEnabled": false,
+        "pageTitle": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀 · Ada Lovelace",
+        "faviconHref": "",
+        "preview": {
+          "title": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀 · Ada Lovelace",
+          "description": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+          "locale": "en_US",
+          "imageAlt": "Ada Lovelace",
+          "imageUrl": "https://aboutme.example/api/v1/public/resumes/ada/og/0123456789abcdef.png"
+        },
+        "resume": {
+          "slug": "ada",
+          "url": "https://aboutme.example/ada",
+          "ownerName": "Ada Lovelace",
+          "lng": "en",
+          "uiLng": "en",
+          "colorScheme": "light",
+          "dateFormat": "MM/YYYY"
+        },
+        "project": {
+          "slug": "wide-outcome",
+          "url": "https://aboutme.example/ada/projects/wide-outcome",
+          "name": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+          "outcome": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+          "technologies": []
+        },
+        "listUrl": "https://aboutme.example/ada/projects",
+        "otherProjects": true
+      }
+    },
+    {
+      "name": "page: outcome cut across an accent",
+      "envelope": {
+        "mode": "project",
+        "canonicalOrigin": "https://aboutme.example",
+        "pageUrl": "https://aboutme.example/ada/projects/accent",
+        "discoveryEnabled": false,
+        "pageTitle": "Accent · Ada Lovelace",
+        "faviconHref": "",
+        "preview": {
+          "title": "Accent · Ada Lovelace",
+          "description": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaae",
+          "locale": "en_US",
+          "imageAlt": "Ada Lovelace",
+          "imageUrl": "https://aboutme.example/api/v1/public/resumes/ada/og/0123456789abcdef.png"
+        },
+        "resume": {
+          "slug": "ada",
+          "url": "https://aboutme.example/ada",
+          "ownerName": "Ada Lovelace",
+          "lng": "en",
+          "uiLng": "en",
+          "colorScheme": "light",
+          "dateFormat": "MM/YYYY"
+        },
+        "project": {
+          "slug": "accent",
+          "url": "https://aboutme.example/ada/projects/accent",
+          "name": "Accent",
+          "outcome": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaébbbb",
+          "technologies": []
+        },
+        "listUrl": "https://aboutme.example/ada/projects",
+        "otherProjects": true
+      }
+    },
+    {
+      "name": "page: whitespace summary",
+      "envelope": {
+        "mode": "project",
+        "canonicalOrigin": "https://aboutme.example",
+        "pageUrl": "https://aboutme.example/ada/projects/whitespace",
+        "discoveryEnabled": false,
+        "pageTitle": "Whitespace · Ada Lovelace",
+        "faviconHref": "",
+        "preview": {
+          "title": "Whitespace · Ada Lovelace",
+          "description": "Outcome.",
+          "locale": "en_US",
+          "imageAlt": "Ada Lovelace",
+          "imageUrl": "https://aboutme.example/api/v1/public/resumes/ada/og/0123456789abcdef.png"
+        },
+        "resume": {
+          "slug": "ada",
+          "url": "https://aboutme.example/ada",
+          "ownerName": "Ada Lovelace",
+          "lng": "en",
+          "uiLng": "en",
+          "colorScheme": "light",
+          "dateFormat": "MM/YYYY"
+        },
+        "project": {
+          "slug": "whitespace",
+          "url": "https://aboutme.example/ada/projects/whitespace",
+          "name": "Whitespace",
+          "outcome": "Outcome.",
+          "technologies": []
+        },
+        "listUrl": "https://aboutme.example/ada/projects",
+        "otherProjects": true
+      }
+    },
+    {
+      "name": "list: blank optional text",
+      "envelope": {
+        "mode": "project-list",
+        "canonicalOrigin": "https://aboutme.example",
+        "pageUrl": "https://aboutme.example/ada/projects",
+        "discoveryEnabled": false,
+        "pageTitle": "Projects · Ada Lovelace",
+        "faviconHref": "",
+        "preview": {
+          "title": "Projects · Ada Lovelace",
+          "description": "",
+          "locale": "en_US",
+          "imageAlt": "Ada Lovelace",
+          "imageUrl": "https://aboutme.example/api/v1/public/resumes/ada/og/0123456789abcdef.png"
+        },
+        "resume": {
+          "slug": "ada",
+          "url": "https://aboutme.example/ada",
+          "ownerName": "Ada Lovelace",
+          "lng": "en",
+          "uiLng": "en",
+          "colorScheme": "light",
+          "dateFormat": "MM/YYYY"
+        },
+        "projects": [
+          {
+            "slug": "blank",
+            "url": "https://aboutme.example/ada/projects/blank",
+            "name": "Blank",
+            "technologies": [
+              "Tool 0"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "page: blank optional text",
+      "envelope": {
+        "mode": "project",
+        "canonicalOrigin": "https://aboutme.example",
+        "pageUrl": "https://aboutme.example/ada/projects/blank",
+        "discoveryEnabled": false,
+        "pageTitle": "Blank · Ada Lovelace",
+        "faviconHref": "",
+        "preview": {
+          "title": "Blank · Ada Lovelace",
+          "description": "",
+          "locale": "en_US",
+          "imageAlt": "Ada Lovelace",
+          "imageUrl": "https://aboutme.example/api/v1/public/resumes/ada/og/0123456789abcdef.png"
+        },
+        "resume": {
+          "slug": "ada",
+          "url": "https://aboutme.example/ada",
+          "ownerName": "Ada Lovelace",
+          "lng": "en",
+          "uiLng": "en",
+          "colorScheme": "light",
+          "dateFormat": "MM/YYYY"
+        },
+        "project": {
+          "slug": "blank",
+          "url": "https://aboutme.example/ada/projects/blank",
+          "name": "Blank",
+          "technologies": [
+            "Tool 0"
+          ]
+        },
+        "listUrl": "https://aboutme.example/ada/projects",
+        "otherProjects": false
+      }
+    },
+    {
+      "name": "page: entry link differs",
+      "envelope": {
+        "mode": "project",
+        "canonicalOrigin": "https://aboutme.example",
+        "pageUrl": "https://aboutme.example/ada/projects/linked",
+        "discoveryEnabled": false,
+        "pageTitle": "Project linked · Ada Lovelace",
+        "faviconHref": "",
+        "preview": {
+          "title": "Project linked · Ada Lovelace",
+          "description": "Summary of linked.",
+          "locale": "en_US",
+          "imageAlt": "Ada Lovelace",
+          "imageUrl": "https://aboutme.example/api/v1/public/resumes/ada/og/0123456789abcdef.png"
+        },
+        "resume": {
+          "slug": "ada",
+          "url": "https://aboutme.example/ada",
+          "ownerName": "Ada Lovelace",
+          "lng": "en",
+          "uiLng": "en",
+          "colorScheme": "light",
+          "dateFormat": "MM/YYYY"
+        },
+        "project": {
+          "slug": "linked",
+          "url": "https://aboutme.example/ada/projects/linked",
+          "name": "Project linked",
+          "role": "Lead",
+          "summary": "Summary of linked.",
+          "technologies": [
+            "Tool 0"
+          ],
+          "repositoryUrl": "https://github.com/ada/engine",
+          "demoUrl": "https://ada.example/demo"
+        },
+        "entryLink": "https://ada.example/notes",
+        "listUrl": "https://aboutme.example/ada/projects",
+        "otherProjects": true
+      }
+    },
+    {
+      "name": "page: entry link equal to the repository",
+      "envelope": {
+        "mode": "project",
+        "canonicalOrigin": "https://aboutme.example",
+        "pageUrl": "https://aboutme.example/ada/projects/linked",
+        "discoveryEnabled": false,
+        "pageTitle": "Project linked · Ada Lovelace",
+        "faviconHref": "",
+        "preview": {
+          "title": "Project linked · Ada Lovelace",
+          "description": "Summary of linked.",
+          "locale": "en_US",
+          "imageAlt": "Ada Lovelace",
+          "imageUrl": "https://aboutme.example/api/v1/public/resumes/ada/og/0123456789abcdef.png"
+        },
+        "resume": {
+          "slug": "ada",
+          "url": "https://aboutme.example/ada",
+          "ownerName": "Ada Lovelace",
+          "lng": "en",
+          "uiLng": "en",
+          "colorScheme": "light",
+          "dateFormat": "MM/YYYY"
+        },
+        "project": {
+          "slug": "linked",
+          "url": "https://aboutme.example/ada/projects/linked",
+          "name": "Project linked",
+          "role": "Lead",
+          "summary": "Summary of linked.",
+          "technologies": [
+            "Tool 0"
+          ],
+          "repositoryUrl": "https://github.com/ada/engine",
+          "demoUrl": "https://ada.example/demo"
+        },
+        "listUrl": "https://aboutme.example/ada/projects",
+        "otherProjects": true
+      }
+    },
+    {
+      "name": "page: entry link equal to the demo but for host case",
+      "envelope": {
+        "mode": "project",
+        "canonicalOrigin": "https://aboutme.example",
+        "pageUrl": "https://aboutme.example/ada/projects/linked",
+        "discoveryEnabled": false,
+        "pageTitle": "Project linked · Ada Lovelace",
+        "faviconHref": "",
+        "preview": {
+          "title": "Project linked · Ada Lovelace",
+          "description": "Summary of linked.",
+          "locale": "en_US",
+          "imageAlt": "Ada Lovelace",
+          "imageUrl": "https://aboutme.example/api/v1/public/resumes/ada/og/0123456789abcdef.png"
+        },
+        "resume": {
+          "slug": "ada",
+          "url": "https://aboutme.example/ada",
+          "ownerName": "Ada Lovelace",
+          "lng": "en",
+          "uiLng": "en",
+          "colorScheme": "light",
+          "dateFormat": "MM/YYYY"
+        },
+        "project": {
+          "slug": "linked",
+          "url": "https://aboutme.example/ada/projects/linked",
+          "name": "Project linked",
+          "role": "Lead",
+          "summary": "Summary of linked.",
+          "technologies": [
+            "Tool 0"
+          ],
+          "repositoryUrl": "https://github.com/ada/engine",
+          "demoUrl": "https://ada.example/demo"
+        },
+        "listUrl": "https://aboutme.example/ada/projects",
+        "otherProjects": true
+      }
+    },
+    {
+      "name": "page: entry link equal to the demo but for the port",
+      "envelope": {
+        "mode": "project",
+        "canonicalOrigin": "https://aboutme.example",
+        "pageUrl": "https://aboutme.example/ada/projects/linked",
+        "discoveryEnabled": false,
+        "pageTitle": "Project linked · Ada Lovelace",
+        "faviconHref": "",
+        "preview": {
+          "title": "Project linked · Ada Lovelace",
+          "description": "Summary of linked.",
+          "locale": "en_US",
+          "imageAlt": "Ada Lovelace",
+          "imageUrl": "https://aboutme.example/api/v1/public/resumes/ada/og/0123456789abcdef.png"
+        },
+        "resume": {
+          "slug": "ada",
+          "url": "https://aboutme.example/ada",
+          "ownerName": "Ada Lovelace",
+          "lng": "en",
+          "uiLng": "en",
+          "colorScheme": "light",
+          "dateFormat": "MM/YYYY"
+        },
+        "project": {
+          "slug": "linked",
+          "url": "https://aboutme.example/ada/projects/linked",
+          "name": "Project linked",
+          "role": "Lead",
+          "summary": "Summary of linked.",
+          "technologies": [
+            "Tool 0"
+          ],
+          "repositoryUrl": "https://github.com/ada/engine",
+          "demoUrl": "https://ada.example/demo"
+        },
+        "listUrl": "https://aboutme.example/ada/projects",
+        "otherProjects": true
+      }
+    },
+    {
+      "name": "page: entry link equal to the demo but for a final sigma",
+      "envelope": {
+        "mode": "project",
+        "canonicalOrigin": "https://aboutme.example",
+        "pageUrl": "https://aboutme.example/ada/projects/sigma",
+        "discoveryEnabled": false,
+        "pageTitle": "Project sigma · Ada Lovelace",
+        "faviconHref": "",
+        "preview": {
+          "title": "Project sigma · Ada Lovelace",
+          "description": "Summary of sigma.",
+          "locale": "en_US",
+          "imageAlt": "Ada Lovelace",
+          "imageUrl": "https://aboutme.example/api/v1/public/resumes/ada/og/0123456789abcdef.png"
+        },
+        "resume": {
+          "slug": "ada",
+          "url": "https://aboutme.example/ada",
+          "ownerName": "Ada Lovelace",
+          "lng": "en",
+          "uiLng": "en",
+          "colorScheme": "light",
+          "dateFormat": "MM/YYYY"
+        },
+        "project": {
+          "slug": "sigma",
+          "url": "https://aboutme.example/ada/projects/sigma",
+          "name": "Project sigma",
+          "role": "Lead",
+          "summary": "Summary of sigma.",
+          "technologies": [
+            "Tool 0"
+          ],
+          "demoUrl": "https://ada.ας/"
+        },
+        "listUrl": "https://aboutme.example/ada/projects",
+        "otherProjects": true
+      }
+    },
+    {
+      "name": "page: entry link equal to the demo but for a dotted capital I",
+      "envelope": {
+        "mode": "project",
+        "canonicalOrigin": "https://aboutme.example",
+        "pageUrl": "https://aboutme.example/ada/projects/dotted",
+        "discoveryEnabled": false,
+        "pageTitle": "Project dotted · Ada Lovelace",
+        "faviconHref": "",
+        "preview": {
+          "title": "Project dotted · Ada Lovelace",
+          "description": "Summary of dotted.",
+          "locale": "en_US",
+          "imageAlt": "Ada Lovelace",
+          "imageUrl": "https://aboutme.example/api/v1/public/resumes/ada/og/0123456789abcdef.png"
+        },
+        "resume": {
+          "slug": "ada",
+          "url": "https://aboutme.example/ada",
+          "ownerName": "Ada Lovelace",
+          "lng": "en",
+          "uiLng": "en",
+          "colorScheme": "light",
+          "dateFormat": "MM/YYYY"
+        },
+        "project": {
+          "slug": "dotted",
+          "url": "https://aboutme.example/ada/projects/dotted",
+          "name": "Project dotted",
+          "role": "Lead",
+          "summary": "Summary of dotted.",
+          "technologies": [
+            "Tool 0"
+          ],
+          "demoUrl": "https://i̇.example/"
+        },
+        "listUrl": "https://aboutme.example/ada/projects",
+        "otherProjects": true
+      }
+    },
+    {
+      "name": "page: favicon, dark, discoverable",
+      "envelope": {
+        "mode": "project",
+        "canonicalOrigin": "https://aboutme.example",
+        "pageUrl": "https://aboutme.example/ada/projects/favicon",
+        "discoveryEnabled": true,
+        "pageTitle": "Project favicon · Ada",
+        "faviconHref": "data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%20100%20100%27%3E%3Ctext%20y%3D%27.9em%27%20font-size%3D%2790%27%3E%F0%9F%9A%80%3C%2Ftext%3E%3C%2Fsvg%3E",
+        "preview": {
+          "title": "Project favicon · Ada",
+          "description": "Summary of favicon.",
+          "locale": "en_GB",
+          "imageAlt": "Ada",
+          "imageUrl": "https://aboutme.example/api/v1/public/resumes/ada/og/0123456789abcdef.png"
+        },
+        "resume": {
+          "slug": "ada",
+          "url": "https://aboutme.example/ada",
+          "ownerName": "Ada",
+          "lng": "en-GB",
+          "uiLng": "en",
+          "colorScheme": "dark",
+          "dateFormat": "YYYY"
+        },
+        "project": {
+          "slug": "favicon",
+          "url": "https://aboutme.example/ada/projects/favicon",
+          "name": "Project favicon",
+          "role": "Lead",
+          "dates": {
+            "end": null,
+            "present": true,
+            "start": {
+              "y": 2020
+            }
+          },
+          "summary": "Summary of favicon.",
+          "technologies": [
+            "Tool 0"
+          ]
+        },
+        "listUrl": "https://aboutme.example/ada/projects",
+        "otherProjects": true
+      }
+    }
+  ]
+}

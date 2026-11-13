@@ -98,17 +98,24 @@ func TestGetPublicResumeProjectList_ReadsVisibleOwnedProjectsWithoutDescriptions
 	if len(rows) != 1 || rows[0].EntryID != fixture.entryIDs["linked"] || rows[0].ProjectSlug != "atlas" {
 		t.Fatalf("projects = %s, want only the visible owned link", row.Projects)
 	}
+	requireWithoutDescriptions(t, rows[0].Document)
+}
+
+// requireWithoutDescriptions requires the atlas fixture document with every
+// description removed and the rest kept.
+func requireWithoutDescriptions(t *testing.T, raw json.RawMessage) {
+	t.Helper()
 	var document struct {
 		DefaultLanguage string                       `json:"defaultLanguage"`
 		Technologies    []string                     `json:"technologies"`
 		Text            map[string]map[string]string `json:"text"`
 	}
-	if err := json.Unmarshal(rows[0].Document, &document); err != nil {
+	if err := json.Unmarshal(raw, &document); err != nil {
 		t.Fatal(err)
 	}
 	want := map[string]map[string]string{"en": {"name": "atlas", "summary": "Summary"}, "vi": {"name": "atlas"}}
 	if !reflect.DeepEqual(document.Text, want) || document.DefaultLanguage != "en" || !reflect.DeepEqual(document.Technologies, []string{"Go"}) {
-		t.Fatalf("document = %s, want every description removed and the rest kept", rows[0].Document)
+		t.Fatalf("document = %s, want every description removed and the rest kept", raw)
 	}
 }
 
@@ -125,9 +132,10 @@ func TestGetPublicResumeProject_ReadsOnlyTheRequestedVisibleOwnedProject(t *test
 		t.Fatalf("projects = %s, want the linked project with its descriptions", row.Projects)
 	}
 	links := decodePublicProjects(t, row.ProjectLinks, fixture.ids)
-	if len(links) != 1 || links[0].ProjectSlug != "atlas" || links[0].Document != nil {
-		t.Fatalf("project links = %s, want the one visible owned link without a document", row.ProjectLinks)
+	if len(links) != 1 || links[0].ProjectSlug != "atlas" || links[0].EntryID != fixture.entryIDs["linked"] {
+		t.Fatalf("project links = %s, want the one visible owned link", row.ProjectLinks)
 	}
+	requireWithoutDescriptions(t, links[0].Document)
 
 	for _, slug := range []string{"quiet", "foreign", "absent"} {
 		row, err := queries.GetPublicResumeProject(ctx, store.GetPublicResumeProjectParams{Slug: fixture.slug, ProjectSlug: slug})

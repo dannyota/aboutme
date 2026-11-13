@@ -102,22 +102,28 @@ func (s *projectPagesStore) GetPublicResumeProjectList(_ context.Context, slug s
 	if err != nil {
 		return store.GetPublicResumeProjectListRow{}, err
 	}
+	raw, err := json.Marshal(withoutDescriptions(rows))
+	return store.GetPublicResumeProjectListRow{Resume: resume, Projects: raw}, err
+}
+
+// withoutDescriptions is the statements' link context: every linked
+// document with each description removed.
+func withoutDescriptions(rows []projectStoreRow) []map[string]any {
 	column := []map[string]any{}
 	for _, row := range rows {
-		if row.raw != nil {
-			column = append(column, map[string]any{"entryId": row.entryID, "projectSlug": row.slug, "document": row.raw})
-			continue
-		}
-		document := row.doc
-		document.Text = map[string]project.Text{}
-		for key, text := range row.doc.Text {
-			text.Description = ""
-			document.Text[key] = text
+		var document any = row.raw
+		if row.raw == nil {
+			stripped := row.doc
+			stripped.Text = map[string]project.Text{}
+			for key, text := range row.doc.Text {
+				text.Description = ""
+				stripped.Text[key] = text
+			}
+			document = stripped
 		}
 		column = append(column, map[string]any{"entryId": row.entryID, "projectSlug": row.slug, "document": document})
 	}
-	raw, err := json.Marshal(column)
-	return store.GetPublicResumeProjectListRow{Resume: resume, Projects: raw}, err
+	return column
 }
 
 func (s *projectPagesStore) GetPublicResumeProject(_ context.Context, arg store.GetPublicResumeProjectParams) (store.GetPublicResumeProjectRow, error) {
@@ -125,19 +131,15 @@ func (s *projectPagesStore) GetPublicResumeProject(_ context.Context, arg store.
 	if err != nil {
 		return store.GetPublicResumeProjectRow{}, err
 	}
-	links, projects := []map[string]any{}, []map[string]any{}
+	links, projects := withoutDescriptions(rows), []map[string]any{}
 	for _, row := range rows {
-		links = append(links, map[string]any{"entryId": row.entryID, "projectSlug": row.slug})
 		if row.slug == arg.ProjectSlug {
 			projects = append(projects, map[string]any{"entryId": row.entryID, "projectSlug": row.slug, "document": row.stored()})
 		}
 	}
-	rawLinks, err := json.Marshal(links)
-	if err != nil {
-		return store.GetPublicResumeProjectRow{}, err
-	}
+	rawLinks, linksErr := json.Marshal(links)
 	rawProjects, err := json.Marshal(projects)
-	return store.GetPublicResumeProjectRow{Resume: resume, ProjectLinks: rawLinks, Projects: rawProjects}, err
+	return store.GetPublicResumeProjectRow{Resume: resume, ProjectLinks: rawLinks, Projects: rawProjects}, errors.Join(linksErr, err)
 }
 
 func (s *projectPagesStore) update(change func(*projectPagesStore)) {

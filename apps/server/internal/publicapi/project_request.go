@@ -6,10 +6,7 @@ package publicapi
 
 import (
 	"errors"
-	"strings"
 	"unicode/utf8"
-
-	"github.com/rivo/uniseg"
 
 	schema "danny.vn/aboutme/packages/schema/gen/go"
 
@@ -33,8 +30,8 @@ const (
 	maxProjectPreviewDescriptionBytes = 1200
 )
 
-// maxOutcomeDescriptionRunes bounds a project page description taken from
-// its outcome.
+// maxOutcomeDescriptionRunes is the number of code points of its outcome a
+// project page without a summary takes as its description.
 const maxOutcomeDescriptionRunes = 160
 
 // errProjectWithoutName reports a project with no name in the chosen or the
@@ -71,8 +68,8 @@ func buildProjectListRequest(input projectPageInput) (directrender.ProjectListRe
 			shown, more = shown[:maxListTechnologies], len(shown)-maxListTechnologies
 		}
 		rows = append(rows, directrender.ProjectSummary{
-			Slug: available.Slug, URL: available.URL, Lang: lang, Name: text.Name, Role: text.Role,
-			Dates: available.Document.Dates, Summary: text.Summary, Technologies: shown, MoreTechnologies: more,
+			Slug: available.Slug, URL: available.URL, Lang: lang, Name: text.Name, Role: presentText(text.Role),
+			Dates: available.Document.Dates, Summary: presentText(text.Summary), Technologies: shown, MoreTechnologies: more,
 		})
 	}
 	pageURL := input.origin.Resolve("/" + input.snapshot.Public.Slug + "/projects")
@@ -102,8 +99,8 @@ func buildProjectRequest(input projectPageInput) (directrender.ProjectRenderRequ
 		DiscoveryEnabled: input.snapshot.DiscoveryEnabled, PageTitle: title, FaviconHref: projectFaviconHref(input.snapshot),
 		Preview: projectPreview(input, title, projectDescription(text)), Resume: resume,
 		Project: directrender.ProjectDetail{
-			Slug: available.Slug, URL: available.URL, Lang: lang, Name: text.Name, Role: text.Role, Dates: document.Dates,
-			Summary: text.Summary, Outcome: text.Outcome, Description: text.Description,
+			Slug: available.Slug, URL: available.URL, Lang: lang, Name: text.Name, Role: presentText(text.Role), Dates: document.Dates,
+			Summary: presentText(text.Summary), Outcome: presentText(text.Outcome), Description: presentText(text.Description),
 			Technologies: append([]string{}, document.Technologies...), RepositoryURL: renderableLink(document.RepositoryURL), DemoURL: renderableLink(document.DemoURL),
 		},
 		EntryLink:     projectEntryLink(available.EntryLink, document.RepositoryURL, document.DemoURL),
@@ -162,85 +159,26 @@ func chooseProjectText(document project.Document, resumeLng string) (project.Tex
 	return text, lang, nil
 }
 
-// projectDescription is the summary, else the first 160 characters of the
-// outcome, else "".
+// presentText is an optional text as the request carries it: "", which the
+// request leaves out, when it is blank by the renderer's trim, so the
+// renderer's presence tests read it as absent.
+func presentText(text string) string {
+	if project.Blank(text) {
+		return ""
+	}
+	return text
+}
+
+// projectDescription is the summary, else the first 160 code points of the
+// outcome, else "": the renderer's decoder computes the same text and
+// requires it exactly, so the cut may part a letter from its accent.
 func projectDescription(text project.Text) string {
-	if !project.Blank(text.Summary) {
-		return text.Summary
+	if summary := presentText(text.Summary); summary != "" {
+		return summary
 	}
-	if project.Blank(text.Outcome) {
-		return ""
+	outcome := presentText(text.Outcome)
+	if utf8.RuneCountInString(outcome) <= maxOutcomeDescriptionRunes {
+		return outcome
 	}
-	return firstGraphemes(text.Outcome, maxOutcomeDescriptionRunes)
-}
-
-// firstGraphemes returns text up to the last grapheme boundary at or below
-// maxRunes runes, so a letter is never parted from its combining marks.
-func firstGraphemes(text string, maxRunes int) string {
-	if utf8.RuneCountInString(text) <= maxRunes {
-		return text
-	}
-	end, runes := 0, 0
-	graphemes := uniseg.NewGraphemes(text)
-	for graphemes.Next() {
-		runes += len(graphemes.Runes())
-		if runes > maxRunes {
-			break
-		}
-		_, end = graphemes.Positions()
-	}
-	return text[:end]
-}
-
-// renderableLink is link when the renderer's URL parser accepts it, else "".
-func renderableLink(link string) string {
-	if !rendererLink(link) {
-		return ""
-	}
-	return link
-}
-
-// projectEntryLink is the entry's own link as stored when it is an https
-// link that differs from both the repository and the demo address, else "".
-// The comparison lowercases the scheme and host, drops the default port and
-// reads an empty path as "/"; the rest must match byte for byte.
-func projectEntryLink(entryLink, repositoryURL, demoURL string) string {
-	if !strings.HasPrefix(entryLink, "https://") {
-		return ""
-	}
-	if normalized, ok := project.NormalizeLink(entryLink); !ok || normalized != entryLink || !rendererLink(entryLink) {
-		return ""
-	}
-	own := comparableLink(entryLink)
-	for _, other := range []string{repositoryURL, demoURL} {
-		if other != "" && comparableLink(other) == own {
-			return ""
-		}
-	}
-	return entryLink
-}
-
-// comparableLink is link in the comparison form of projectEntryLink.
-func comparableLink(link string) string {
-	scheme, rest, found := strings.Cut(link, "://")
-	if !found {
-		return link
-	}
-	scheme = strings.ToLower(scheme)
-	authority, tail := rest, ""
-	if end := strings.IndexAny(rest, "/?#"); end >= 0 {
-		authority, tail = rest[:end], rest[end:]
-	}
-	userinfo, host := "", authority
-	if at := strings.LastIndex(authority, "@"); at >= 0 {
-		userinfo, host = authority[:at+1], authority[at+1:]
-	}
-	host = strings.ToLower(host)
-	if scheme == "https" {
-		host = strings.TrimSuffix(host, ":443")
-	}
-	if !strings.HasPrefix(tail, "/") {
-		tail = "/" + tail
-	}
-	return scheme + "://" + userinfo + host + tail
+	return string([]rune(outcome)[:maxOutcomeDescriptionRunes])
 }

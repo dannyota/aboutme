@@ -37,7 +37,8 @@ type ProjectPages struct {
 	Projects []PublicProject
 	// Available counts available projects: on the list, the ones it shows;
 	// on a project page, the requested one when shown and every other
-	// linked, visible project, whose document the page does not read.
+	// linked, visible project with a name the renderer can show, read from
+	// its document without descriptions.
 	Available int
 }
 
@@ -140,6 +141,14 @@ func (p ProjectRead) Pages() (ProjectPages, error) {
 	if err != nil {
 		return ProjectPages{}, ErrUnavailable
 	}
+	// A page's link context carries every linked document without
+	// descriptions, so the page counts the other projects as the list would.
+	var others map[string]json.RawMessage
+	if projectSlug != "" {
+		if others, err = storedDocuments(p.rawLinks, ""); err != nil {
+			return ProjectPages{}, ErrUnavailable
+		}
+	}
 	var pages ProjectPages
 	seen := make(map[string]bool, len(entries))
 	for _, entry := range entries {
@@ -148,9 +157,13 @@ func (p ProjectRead) Pages() (ProjectPages, error) {
 		}
 		seen[entry.link.ProjectSlug] = true
 		if projectSlug != "" && entry.link.ProjectSlug != projectSlug {
-			// Another project of a page; the page statement reads no other
-			// document, so it counts as available.
-			pages.Available++
+			renderable, err := renderableProject(others[entry.link.EntryID], p.public.Lng)
+			if err != nil {
+				return ProjectPages{}, ErrUnavailable
+			}
+			if renderable {
+				pages.Available++
+			}
 			continue
 		}
 		raw, found := documents[entry.link.EntryID]
@@ -173,6 +186,21 @@ func (p ProjectRead) Pages() (ProjectPages, error) {
 		pages.Projects = append(pages.Projects, PublicProject{Slug: entry.link.ProjectSlug, URL: entry.link.URL, EntryLink: entry.entryLink, Document: document})
 	}
 	return pages, nil
+}
+
+// renderableProject reports whether a linked project's document, read
+// without descriptions, has a name the renderer can show. A missing or
+// malformed document is an error.
+func renderableProject(raw json.RawMessage, resumeLng string) (bool, error) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return false, errLinkContext
+	}
+	var document project.Document
+	if err := json.Unmarshal(raw, &document); err != nil {
+		return false, err
+	}
+	_, _, renderable := project.ChooseText(document, resumeLng)
+	return renderable, nil
 }
 
 // publicDocument decodes a stored project document and sanitizes each

@@ -105,7 +105,7 @@ func TestReaderReadProjects_PageReadsOnlyTheRequestedProject(t *testing.T) {
 	ids := projectPagesIDs()
 	readStore := &readerStore{
 		row:      projectPagesRow(t, "ada", ids),
-		links:    linkColumn(t, ids["first"], "first-tool", ids["second"], "second-tool", ids["aside"], "side-tool"),
+		links:    projectColumn(t, ids["first"], "first-tool", ids["second"], "second-tool", ids["aside"], "side-tool"),
 		projects: projectColumn(t, ids["second"], "second-tool"),
 	}
 	_, pages := readProjectPages(t, newTestReader(t, readStore), "second-tool")
@@ -155,7 +155,7 @@ func TestReaderReadProjects_UnknownResumeIsNotFound(t *testing.T) {
 func TestReaderReadProjects_UnavailablePageKeepsTheAdmission(t *testing.T) {
 	ids := projectPagesIDs()
 	row := projectPagesRow(t, "ada", ids)
-	allLinks := linkColumn(t, ids["first"], "first-tool", ids["hidden"], "hidden-tool", ids["outside"], "outside-tool")
+	allLinks := projectColumn(t, ids["first"], "first-tool", ids["hidden"], "hidden-tool", ids["outside"], "outside-tool")
 	for _, test := range []struct {
 		name          string
 		store         *readerStore

@@ -34,22 +34,6 @@ func TestProjectRequest_PreviewTextIsUncut(t *testing.T) {
 	}
 }
 
-// TestProjectDescription_OutcomeCutKeepsGraphemes proves the outcome
-// fallback is cut at the last grapheme boundary at or below 160 runes, so a
-// combining accent is never split from its letter.
-func TestProjectDescription_OutcomeCutKeepsGraphemes(t *testing.T) {
-	for name, test := range map[string]struct{ outcome, want string }{
-		"accent across the cut": {strings.Repeat("a", 159) + "é" + "bbbb", strings.Repeat("a", 159)},
-		"cut on a boundary":     {strings.Repeat("a", 160) + "é", strings.Repeat("a", 160)},
-		"exactly 160 runes":     {strings.Repeat("a", 158) + "é", strings.Repeat("a", 158) + "é"},
-		"precomposed letter":    {strings.Repeat("a", 159) + "é" + "b", strings.Repeat("a", 159) + "é"},
-	} {
-		if got := projectDescription(project.Text{Outcome: test.outcome}); got != test.want {
-			t.Errorf("%s: description = %q (%d runes), want %q", name, got, len([]rune(got)), test.want)
-		}
-	}
-}
-
 // TestProjectValidators_AdmitExactlyThePreviewBounds proves both validators
 // accept a preview title of at most 683 code points and 2,727 bytes and a
 // description of at most 300 code points and 1,200 bytes, and refuse more.

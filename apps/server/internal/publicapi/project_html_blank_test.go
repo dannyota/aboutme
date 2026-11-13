@@ -81,3 +81,34 @@ func TestProjectPages_BlankNamedProjectIsUnavailable(t *testing.T) {
 	}
 	requireCorpusEnvelope(t, renderer.envelope(directrender.ProjectListRenderMode), "list-vi-two-projects")
 }
+
+// TestProjectPages_NoFooterLinkBesideOnlyABlankNamedProject proves a project
+// page whose only other linked project has a blank name sends
+// otherProjects false, so the page has no link to a list that would show
+// nothing else.
+func TestProjectPages_NoFooterLinkBesideOnlyABlankNamedProject(t *testing.T) {
+	readStore := projectPageFixture(t)
+	var content map[string]schema.Section
+	if err := json.Unmarshal(readStore.row.Content, &content); err != nil {
+		t.Fatal(err)
+	}
+	projectID, title := "00000000-0000-0000-0000-00000000b002", "blank"
+	section := content["projects"]
+	section.ProjectEntries = append(section.ProjectEntries, schema.ProjectEntry{ID: "e-blank", Title: &title, ProjectID: &projectID})
+	content["projects"] = section
+	raw, err := json.Marshal(content)
+	if err != nil {
+		t.Fatal(err)
+	}
+	readStore.row.Content = raw
+	readStore.rows = append(readStore.rows, projectStoreRow{entryID: "e-blank", owner: projectTestOwner, slug: "blank-tool",
+		doc: project.Document{DefaultLanguage: "en", Text: map[string]project.Text{"en": {Name: string(rune(0xfeff))}}}})
+
+	renderer, client := newFakeProjectRenderer(t)
+	handlers := newProjectHandlers(t, projectTestReader(t, readStore), client)
+	page := handlers.serve(http.MethodGet, "/ada/projects/note-g")
+	if page.Code != http.StatusOK {
+		t.Fatalf("page = %d; log %s", page.Code, handlers.logs.String())
+	}
+	requireCorpusEnvelope(t, renderer.envelope(directrender.ProjectRenderMode), "project-en-name-only")
+}

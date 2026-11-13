@@ -7,7 +7,9 @@ package publicapi
 // value of another type fails its rule, as it does in TypeScript. Links and
 // origins follow the WHATWG URL parser through rendererLink and
 // whatwgHostPort, which renderer_link_test.go pins against Node's URL.
-// Preview text uses the project page bounds agreed with the renderer.
+// Preview text uses the project page bounds agreed with the renderer. The
+// rules follow the decoder at web commit 7ed24b18; the golden envelope test
+// runs the decoder itself.
 
 import (
 	"encoding/json"
@@ -61,6 +63,7 @@ func decodeProjectEnvelopeRules(t *testing.T, request any) []string {
 		listURL := d.common(envelope) + "/projects"
 		rows, ok := envelope["projects"].([]any)
 		d.require(envelope["pageUrl"] == listURL, "list pageUrl")
+		d.require(d.object(envelope["preview"], "preview")["description"] == "", "the list has no description")
 		d.require(ok && len(rows) >= 1 && len(rows) <= 30, "list has 1 to 30 rows")
 		seen := map[any]bool{}
 		for _, row := range rows {
@@ -76,9 +79,12 @@ func decodeProjectEnvelopeRules(t *testing.T, request any) []string {
 		d.require(envelope["pageUrl"] == project["url"], "pageUrl is the project url")
 		_, isBool := envelope["otherProjects"].(bool)
 		d.require(isBool, "otherProjects")
+		d.require(d.object(envelope["preview"], "preview")["description"] == decoderDescription(project),
+			"description is the summary, else the outcome's first 160 code points, else empty")
 		if entry, present := envelope["entryLink"]; present {
 			d.require(decoderLink(entry), "entryLink is an https link")
-			d.require(entry != project["repositoryUrl"] && entry != project["demoUrl"], "entryLink differs from both buttons")
+			d.require(!decoderSameLink(entry, project["repositoryUrl"]) && !decoderSameLink(entry, project["demoUrl"]),
+				"entryLink differs from both buttons under the link comparison")
 		}
 	default:
 		d.require(false, "mode")
@@ -114,7 +120,7 @@ func (d *envelopeDecoder) common(envelope map[string]any) string {
 	d.require(isString && decoderSlug.MatchString(slug), "resume slug")
 	d.require(resume["url"] == origin+"/"+slug, "resume url is origin/slug")
 	owner, isString := resume["ownerName"].(string)
-	d.require(isString && decoderBoundedText(owner, 2240) && !project.Blank(owner), "ownerName is non-blank and at most 2240 bytes")
+	d.require(isString && decoderBoundedText(owner, 2240) && !project.Blank(owner) && decoderStorable(owner), "ownerName is non-blank, storable and at most 2240 bytes")
 	lng, isString := resume["lng"].(string)
 	d.require(isString && len(lng) <= 35 && decoderResumeLng.MatchString(lng), "lng is a tag of at most 35 characters")
 	primary, _, _ := strings.Cut(strings.ToLower(lng), "-")
@@ -137,7 +143,7 @@ func (d *envelopeDecoder) preview(preview map[string]any, origin, slug string) {
 	title, isString := preview["title"].(string)
 	d.require(isString && title != "" && utf8.RuneCountInString(title) <= 683 && len(title) <= 2727, "preview title is 1 to 683 code points and 2727 bytes")
 	description, isString := preview["description"].(string)
-	d.require(isString && utf8.RuneCountInString(description) <= 300 && len(description) <= 1200, "preview description is at most 300 code points and 1200 bytes")
+	d.require(isString && len(description) <= 1200, "preview description is at most 1200 bytes")
 	alt, isString := preview["imageAlt"].(string)
 	d.require(isString && decoderBoundedText(alt, 1024), "preview imageAlt is 1 to 1024 bytes")
 	locale, isString := preview["locale"].(string)
@@ -159,7 +165,7 @@ func (d *envelopeDecoder) text(fields map[string]any, listURL string) {
 		d.require(isLang && decoderProjectLang.MatchString(value), "lang is a primary subtag")
 	}
 	name, isString := fields["name"].(string)
-	d.require(isString && decoderText(name, 120) && !project.Blank(name), "name is non-blank and at most 120 code points")
+	d.require(isString && decoderText(name, 120) && !project.Blank(name), "name is non-blank, storable and at most 120 code points")
 	d.optionalText(fields, "role", 120)
 	d.optionalText(fields, "summary", 300)
 	if dates, present := fields["dates"]; present {
@@ -188,7 +194,7 @@ func (d *envelopeDecoder) detail(value any, listURL string) map[string]any {
 	d.optionalText(project, "outcome", 600)
 	if description, present := project["description"]; present {
 		text, isString := description.(string)
-		d.require(isString && decoderBoundedText(text, 16384), "description is 1 to 16384 bytes")
+		d.require(isString && decoderBoundedText(text, 16384) && decoderStorable(text), "description is storable and 1 to 16384 bytes")
 	}
 	for _, key := range []string{"repositoryUrl", "demoUrl"} {
 		if link, present := project[key]; present {
@@ -225,8 +231,36 @@ func (d *envelopeDecoder) dates(value any) {
 	if present {
 		d.require(dates["end"] == nil, "a present range has a null end")
 	} else {
-		d.require(decoderYearMonth(dates["end"]), "a completed range has an end")
+		d.require(decoderYearMonth(dates["end"]) && decoderMonth(dates["start"]) <= decoderMonth(dates["end"]),
+			"a completed range has an end no earlier than its start")
 	}
+}
+
+// decoderMonth is monthOrdinal: the year in months, an omitted month read
+// as January.
+func decoderMonth(value any) float64 {
+	month, isObject := value.(map[string]any)
+	year, isYear := month["y"].(float64)
+	if !isObject || !isYear {
+		return 0
+	}
+	if number, present := month["m"].(float64); present {
+		return year*12 + number
+	}
+	return year*12 + 1
+}
+
+// decoderDescription is the page description the decoder computes: the
+// summary when present, else the outcome's first 160 code points, else "".
+func decoderDescription(fields map[string]any) any {
+	if summary, present := fields["summary"]; present {
+		return summary
+	}
+	outcome, isString := fields["outcome"].(string)
+	if runes := []rune(outcome); isString && len(runes) > 160 {
+		return string(runes[:160])
+	}
+	return outcome
 }
 
 // object requires an object; another type fails and reads as empty.
@@ -257,40 +291,17 @@ func decoderYearMonth(value any) bool {
 	return true
 }
 
+// decoderText is the decoder's text: at most maxCodePoints and storable.
 func decoderText(value string, maxCodePoints int) bool {
-	return utf8.RuneCountInString(value) <= maxCodePoints
+	return utf8.RuneCountInString(value) <= maxCodePoints && decoderStorable(value)
+}
+
+// decoderStorable is storable: no NUL and well formed. Go's JSON decoding
+// already replaces a lone surrogate, which Go's encoding never writes.
+func decoderStorable(value string) bool {
+	return !strings.ContainsRune(value, 0) && utf8.ValidString(value)
 }
 
 func decoderBoundedText(value string, maxBytes int) bool {
 	return value != "" && len(value) <= maxBytes
-}
-
-// decoderLink is project-decode.ts externalLink.
-func decoderLink(value any) bool {
-	link, isString := value.(string)
-	return isString && rendererLink(link)
-}
-
-// decoderNormalizedOrigin is envelope-fields.ts normalizedOrigin: an ASCII
-// string of at most 512 bytes that is exactly its own http or https origin,
-// with no user, path, query or fragment.
-func decoderNormalizedOrigin(value any) bool {
-	origin, isString := value.(string)
-	if !isString || len(origin) > 512 || strings.IndexFunc(origin, func(r rune) bool { return r > 0x7f }) >= 0 {
-		return false
-	}
-	scheme, authority, found := strings.Cut(origin, "://")
-	if !found || (scheme != "http" && scheme != "https") || strings.ContainsAny(authority, "/\\?#@") {
-		return false
-	}
-	host, port, ok := whatwgHostPort(authority)
-	if !ok {
-		return false
-	}
-	serialized := scheme + "://" + host
-	defaultPort := scheme == "https" && port == "443" || scheme == "http" && port == "80"
-	if port != "" && !defaultPort {
-		serialized += ":" + port
-	}
-	return serialized == origin
 }
