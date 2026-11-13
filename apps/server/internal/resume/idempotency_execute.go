@@ -1,7 +1,6 @@
 package resume
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -24,6 +23,17 @@ func (s *IdempotencyStore) Execute(ctx context.Context, userID uuid.UUID,
 		return ExecuteResult{Outcome: CommitNotAttempted}, err
 	}
 
+	result, err := s.executeMutation(ctx, userID, operation, key, requestHash, now, mutate)
+	if errors.Is(err, errExpiredRecordConflict) {
+		return s.executeMutation(ctx, userID, operation, key, requestHash, now, mutate)
+	}
+	return result, err
+}
+
+func (s *IdempotencyStore) executeMutation(ctx context.Context, userID uuid.UUID,
+	operation string, key uuid.UUID, requestHash [32]byte, now time.Time,
+	mutate func(qtx *store.Queries) (StoredResponse, error),
+) (ExecuteResult, error) {
 	tx, err := s.begin(ctx)
 	if err != nil {
 		return ExecuteResult{Outcome: CommitNotAttempted},
@@ -139,7 +149,7 @@ func (s *IdempotencyStore) Execute(ctx context.Context, userID uuid.UUID,
 			if rollbackErr := tx.Rollback(context.WithoutCancel(ctx)); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
 				return rolledBack(fmt.Errorf("resume: idempotency: roll back insert conflict: %w", rollbackErr))
 			}
-			return s.afterInsertConflict(ctx, userID, operation, key, requestHash)
+			return s.afterInsertConflict(ctx, userID, operation, key, requestHash, now)
 		}
 		return rolledBack(fmt.Errorf("resume: idempotency: insert record: %w", insErr))
 	}
@@ -268,8 +278,10 @@ func (s *IdempotencyStore) capacityError(ctx context.Context, qtx *store.Queries
 	return &IdempotencyCapacityError{RetryAfterSeconds: retryAfter}
 }
 
+var errExpiredRecordConflict = errors.New("resume: idempotency: insert conflicted with an expired record")
+
 func (s *IdempotencyStore) afterInsertConflict(ctx context.Context, userID uuid.UUID,
-	operation string, key uuid.UUID, requestHash [32]byte,
+	operation string, key uuid.UUID, requestHash [32]byte, now time.Time,
 ) (ExecuteResult, error) {
 	row, getErr := s.q.GetIdempotencyRecord(ctx, store.GetIdempotencyRecordParams{
 		UserID: userID, Route: operation, IdempotencyKey: key,
@@ -278,12 +290,14 @@ func (s *IdempotencyStore) afterInsertConflict(ctx context.Context, userID uuid.
 		return ExecuteResult{Outcome: CommitDefinitelyRolledBack},
 			fmt.Errorf("resume: idempotency: re-read after conflict: %w", getErr)
 	}
-	if bytes.Equal(row.RequestHash, requestHash[:]) {
-		resp, respErr := storedResponseFromRecord(row.ResponseStatus, row.ResponseBody, row.ResponseHeaders)
-		if respErr != nil {
-			return ExecuteResult{Outcome: CommitDefinitelyRolledBack}, respErr
-		}
-		return ExecuteResult{Response: resp, Replayed: true, Outcome: CommitCommitted}, nil
+	decision, err := exactIdempotencyRecordDecision(row, true, requestHash, now)
+	switch {
+	case err != nil:
+		return ExecuteResult{Outcome: CommitDefinitelyRolledBack}, err
+	case decision.Decision == RecheckReplay:
+		return ExecuteResult{Response: decision.Response, Replayed: true, Outcome: CommitCommitted}, nil
+	case decision.Decision == RecheckReuse:
+		return ExecuteResult{Outcome: CommitDefinitelyRolledBack}, ErrIdempotencyKeyReuse
 	}
-	return ExecuteResult{Outcome: CommitDefinitelyRolledBack}, ErrIdempotencyKeyReuse
+	return ExecuteResult{Outcome: CommitDefinitelyRolledBack}, errExpiredRecordConflict
 }
