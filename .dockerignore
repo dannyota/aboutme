@@ -1,5 +1,3 @@
-# Keep local credentials, agent state, and repository metadata out of the
-# repository-root build context used by both deployment images.
 .git
 .claude
 .codex
@@ -12,8 +10,6 @@
 AGENTS.md
 CLAUDE.md
 
-# Dependency trees, caches, test artifacts, and local build outputs are not
-# Dockerfile inputs.
 **/node_modules
 **/.nuxt
 **/.output

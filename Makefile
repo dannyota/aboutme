@@ -1,21 +1,10 @@
-# aboutme — repo-level targets.
-# bash, not sh: test-db-up's host-side port probe uses /dev/tcp, a bash
-# builtin that under dash never succeeds and turns the readiness loop into a
-# guaranteed 30s failure.
+# SHELL is bash because dash has no /dev/tcp, which test-db-up's port probe uses (dash(1)).
 SHELL := $(shell command -v bash)
 .PHONY: help ci ci-local check pre-push scan tools-check operational-test operational-test-fast operational-test-dev-https operational-test-deploy operational-test-browser hooks-install docs-lint lengths-check docs-fmt generate schema-gen schema-check api-gen api-check server-build server-vet server-test server-test-db server-test-media-s3 server-test-resumeapi server-test-resumeapi-s3 observer-test web-build web-lint web-typecheck web-test web-source-manifest-check web-source-manifest-update web-source-build web-no-eval-check web-e2e dev dev-down test-db-up test-db-down test-media-s3-up test-media-s3-down server-test-integration sqlc-gen sqlc-check migrate migrate-check server-migration-test public-roots-check route-table-test dev-native dev-seed dev-native-down dev-native-status dev-native-logs dev-https dev-https-down dev-https-status dev-https-logs mail-capture-static-check dev-https-browser-image dev-https-auth-check dev-https-transport-check dev-https-editor-check dev-https-public-check dev-https-password-check dev-https-mcp-check dev-https-entry-check dev-https-publish-check dev-https-exports-check native-http-check
 
 WEB_E2E_COMMIT := $(shell git rev-parse --verify 'HEAD^{commit}')
 WEB_E2E_IMAGE := mcr.microsoft.com/playwright:v1.64.0-noble@sha256:bc72a8df40831ded821e3cbc79c318c21b44d6e51dff9fd89ace7a8249c5b462
 WEB_E2E_MANIFEST := scripts/web-e2e-source.manifest
-# Renderer specs per Playwright surface (apps/web/e2e/playwright.config.ts).
-# make web-e2e runs every spec unless WEB_E2E_SHARD names one of five shards
-# that together run each spec once, sized by measured test and diagnostics
-# time to run in about the same time: preview-gap holds the slowest harness
-# specs, rest-4 the resume screen specs, rest-1 the remaining harness specs,
-# and rest-2 and rest-3 split the normal surface. A shard builds only the Nuxt
-# surfaces it tests. rest-1 and rest-3 take whatever the other shards of
-# their surface leave.
 WEB_E2E_HARNESS_SPECS := screenshot.spec.ts guide-screenshot.spec.ts resume-screen.spec.ts fonts-offline.spec.ts corpus.spec.ts print.spec.ts print-pdf.spec.ts print-mutations.spec.ts samples.spec.ts sample-pages.spec.ts preview-gap.spec.ts card.spec.ts sign-in-gate.spec.ts project-pages.spec.ts
 WEB_E2E_NORMAL_SPECS := normal-csp.spec.ts gallery.spec.ts gallery-baselines.spec.ts chrome.spec.ts verify.spec.ts showcase.spec.ts showcase-baselines.spec.ts projects.spec.ts
 WEB_E2E_PREVIEW_GAP_SPECS := preview-gap.spec.ts corpus.spec.ts print.spec.ts print-pdf.spec.ts print-mutations.spec.ts samples.spec.ts sample-pages.spec.ts
@@ -25,8 +14,6 @@ WEB_E2E_REST_4_SPECS := resume-screen.spec.ts
 DEV_HTTPS_BROWSER_CONTEXT := deploy/dev-https-browser
 DEV_HTTPS_BROWSER_TAG := localhost/aboutme-dev-https-browser:local
 DEV_HTTPS_BROWSER_MANIFEST := .dev/native-https/browser-image.manifest
-# Image-side sources only. Spec sources are staged per run by
-# scripts/dev-https-check.sh and never gate the image manifest.
 DEV_HTTPS_BROWSER_SOURCES := \
 	deploy/dev-https-browser/Dockerfile \
 	deploy/dev-https-browser/package.json \
@@ -63,11 +50,6 @@ codex-agents: ## Render Codex roles from the shared preamble and role fragments
 codex-agents-check: ## Check committed Codex roles match their sources
 	bash scripts/generate-codex-agents.sh --check
 
-# Split into four lanes so hosted CI can run them in parallel: the dev-https
-# static suite alone was 185s of a 284s sequential total, deploy_test.sh 38s,
-# and the browser-image/MCP-owner-workflow suites 25s and 23s. Each lane keeps
-# its slice of the original recipe lines unchanged; `operational-test` still
-# runs every one of them, in the same order, for a local or non-matrix caller.
 operational-test: operational-test-fast operational-test-dev-https operational-test-deploy operational-test-browser ## Test local CI, scan, toolchain, Compose guard, and native-status contracts without real services
 
 operational-test-fast: ## operational-test's sub-second-to-low-single-digit-second scripts

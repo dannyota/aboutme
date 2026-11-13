@@ -7,8 +7,6 @@ inputs:
 runs:
   using: composite
   steps:
-    # Trivy comes only from the ci-tools package; load it before the build so
-    # a failed load stops the job early.
     - name: Load pinned CI tools
       id: load-ci-tools
       uses: ./.github/actions/ci-tools
@@ -18,7 +16,7 @@ runs:
       run: |
         case "$NAME" in
           observer*)
-            # Lambda requires a single-platform manifest without buildx provenance.
+            # Lambda requires a single-platform manifest without buildx provenance (AWS Lambda container image docs).
             docker build --platform "linux/$ARCH" --provenance=false \
               --build-arg VERSION="$VERSION" --build-arg COMMIT="$COMMIT" \
               -f "$DOCKERFILE" -t "$IMAGE" .
@@ -34,10 +32,6 @@ runs:
         [ "$(docker inspect --format '{{.Os}}/{{.Architecture}}' "$IMAGE")" = "linux/$ARCH" ]
         case "$NAME" in
           server)
-            # The server exits on its missing configuration, which proves the
-            # binary runs on this platform. Chromium then renders one page
-            # headless; the smoke container has no user namespaces for the
-            # sandbox, which production keeps.
             docker run --rm --entrypoint sh -e MACHINE="$MACHINE" "$IMAGE" -c '
               set -e
               test "$(uname -m)" = "$MACHINE"
@@ -59,8 +53,6 @@ runs:
             exit 1
             ;;
           caddy)
-            # The entrypoint's adapt mode assembles the edge listeners and
-            # parses both route tables without the runtime TLS files.
             docker run --rm "$IMAGE" adapt
             docker run --rm -e EDGES=cloudfront "$IMAGE" adapt
             ;;

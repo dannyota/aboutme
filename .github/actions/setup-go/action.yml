@@ -27,9 +27,7 @@ outputs:
 runs:
   using: composite
   steps:
-    # setup-go finds a cached toolchain in the runner tool cache instead of
-    # downloading it. The version in this path and key matches go-version
-    # below, and save-go-cache saves the same path.
+    # setup-go uses a toolchain found in the runner tool cache instead of downloading it (actions/setup-go).
     - id: toolchain
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:

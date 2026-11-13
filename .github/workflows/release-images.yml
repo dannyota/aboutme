@@ -1,14 +1,5 @@
 name: Release images
 
-# Builds, smoke-tests and publishes the production images for a version tag.
-# It holds no cloud credential and never deploys; see
-# docs/design/single-host-production.md. Server, web, and caddy publish one
-# image per platform, linux/arm64 for AWS and linux/amd64 for the Vietnam host
-# (docs/design/vietnam-production.md, "Host"), and the version tag names an
-# image index of the two. Each observer platform builds in its own job below so
-# a Trivy finding there cannot cancel or block server, web, or caddy, or stop
-# the release job that publishes them.
-# Manual builds use release-check.yml with read-only permissions.
 on:
   push:
     tags: ["v*"]
@@ -56,10 +47,6 @@ jobs:
           retention-days: 1
           overwrite: true
 
-  # No publishing job receives write authority until this read-only check
-  # accepts the tag and its exact main CI result. Each write-capable job repeats
-  # the check from trusted main before other work, including on partial reruns.
-  # Candidate checkouts supply build inputs only.
   eligibility:
     name: Release eligibility
     runs-on: ubuntu-24.04
@@ -83,8 +70,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: bash .release-trusted/scripts/release-eligibility.sh "$TAG" "$COMMIT"
 
-  # App images fail fast together. Observer outcomes never gate app builds.
-  # Each platform builds on a native runner.
   build:
     name: Release images (${{ matrix.name }}, ${{ matrix.arch }})
     needs: [eligibility, trivy-db]
@@ -115,7 +100,6 @@ jobs:
             runner: ubuntu-24.04
             machine: x86_64
     env:
-      # The image job joins the platform tags under the version tag.
       IMAGE: ghcr.io/dannyota/aboutme-${{ matrix.name }}:${{ github.ref_name }}-${{ matrix.arch }}
       NAME: ${{ matrix.name }}
       ARCH: ${{ matrix.arch }}
@@ -161,9 +145,6 @@ jobs:
           subject-name: ghcr.io/dannyota/aboutme-${{ matrix.name }}
           subject-digest: ${{ steps.push.outputs.digest }}
           push-to-registry: true
-      # The SBOM lists the packages in the pushed digest: Go build information
-      # and the OS package database. The attestation binds it to that digest;
-      # docs/design/deployment-transparency/verification.md, "SBOM".
       - name: SBOM
         if: github.event_name == 'push'
         env:
@@ -193,10 +174,6 @@ jobs:
           path: aboutme-${{ matrix.name }}-${{ matrix.arch }}.spdx.json
           if-no-files-found: error
 
-  # Joins each image's two platform digests under the version tag as an image
-  # index, checks the index lists exactly those digests, and attests its
-  # provenance. A deploy pins one platform digest, never the index:
-  # deploy/aws/scripts/deploy.sh picks linux/arm64.
   image:
     name: Release index (${{ matrix.name }})
     needs: build
@@ -275,9 +252,6 @@ jobs:
           path: index-${{ matrix.name }}.txt
           if-no-files-found: error
 
-  # The deployment transparency observer
-  # (docs/design/deployment-transparency/README.md) builds a single-platform
-  # arm64 manifest for Lambda. Its failures never block the app release.
   observer-image:
     name: Release observer (arm64)
     needs: [eligibility, trivy-db]
@@ -335,9 +309,6 @@ jobs:
           subject-name: ghcr.io/dannyota/aboutme-observer
           subject-digest: ${{ steps.push.outputs.digest }}
           push-to-registry: true
-      # The SBOM lists the packages in the pushed digest: Go build information
-      # and the OS package database. The attestation binds it to that digest;
-      # docs/design/deployment-transparency/verification.md, "SBOM".
       - name: SBOM
         if: github.event_name == 'push'
         env:
@@ -367,9 +338,6 @@ jobs:
           path: aboutme-observer.spdx.json
           if-no-files-found: error
 
-  # The amd64 observer uses a separate single-platform tag for the Vietnam host.
-  # Its job stays independent so a Trivy finding cannot block the app images
-  # or their release.
   observer-image-amd64:
     name: Release observer (amd64)
     needs: [eligibility, trivy-db]
@@ -456,14 +424,6 @@ jobs:
           path: aboutme-observer-amd64.spdx.json
           if-no-files-found: error
 
-  # Publishes the tag's SBOMs and digests as a GitHub Release, so they keep a
-  # permanent public link. The signed attestations above are the evidence; a
-  # release asset is a copy. This job holds no registry, OIDC, or attestation
-  # permission. It needs only the app images: observer job outcomes never gate
-  # or block this release (see the "build" job comment).
-  # needs lists both observer jobs so this job can pick up their digest
-  # artifacts. !cancelled() keeps GitHub from skipping this job when either
-  # observer job fails. The explicit app image result is the release gate.
   release:
     name: Publish release
     needs: [image, observer-image, observer-image-amd64]
@@ -515,16 +475,13 @@ jobs:
             { echo "release: $TAG is not a vMAJOR.MINOR.PATCH tag" >&2; exit 1; }
           mkdir release
           : >release/digests.txt
-          # Reads one "name=sha256:..." digest file.
-          read_digest() { # file name
+          read_digest() {
             local line
             line=$(cat "$1")
             [[ $line =~ ^$2=(sha256:[0-9a-f]{64})$ ]] ||
               { echo "release: malformed digest in ${1##*/}" >&2; return 1; }
             printf '%s\n' "${BASH_REMATCH[1]}"
           }
-          # Each line of digests.txt is an image reference and the platforms
-          # it serves: the index first, then each platform image.
           for name in server web caddy; do
             d=$(read_digest "artifacts/index-$name.txt" "$name")
             echo "ghcr.io/dannyota/aboutme-$name@$d linux/arm64,linux/amd64" >>release/digests.txt
@@ -538,7 +495,6 @@ jobs:
             # arm64 image, so keep that platform's SBOM at the legacy URL.
             cp "artifacts/aboutme-$name-arm64.spdx.json" "release/aboutme-$name.spdx.json"
           done
-          # Each observer platform is listed when its independent job succeeds.
           names=()
           if [ "$OBSERVER_ARM_RESULT" = success ] &&
             [ -e artifacts/digest-observer.txt ] &&
