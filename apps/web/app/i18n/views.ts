@@ -31,9 +31,6 @@ function realViewsEn(real: number): string {
   return `${formatNumber('en', real)} real ${real === 1 ? 'view' : 'views'}`;
 }
 
-// Days and months arrive as 'YYYY-MM-DD' / 'YYYY-MM' Asia/Ho_Chi_Minh
-// calendar values. Parsing as Date.UTC and formatting with timeZone: 'UTC'
-// keeps the calendar day from shifting with the viewer's own time zone.
 function parseDay(date: string): Date {
   const [year = 0, month = 1, day = 1] = date.split('-').map(Number);
   return new Date(Date.UTC(year, month - 1, day));

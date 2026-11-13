@@ -35,7 +35,7 @@ const PRINT_PHOTO_MAX_BYTES = 2_097_152;
 
 const SAFE_SQUARE = { xMax: 885, xMin: 315, yMax: 615, yMin: 15 };
 
-/* eslint-disable max-len -- verbatim copy of Go's pageReadinessExpression. */
+/* eslint-disable max-len */
 const PAGE_READINESS_EXPRESSION = `(async () => {
   const roots = document.querySelectorAll('[data-print-document="true"]');
   if (roots.length !== 1 || document.scripts.length !== 0) throw new Error('invalid document');
@@ -48,7 +48,7 @@ const PAGE_READINESS_EXPRESSION = `(async () => {
   if (images.some((image) => !image.complete || image.naturalWidth <= 0 || image.naturalHeight <= 0)) throw new Error('image failed');
   return true;
 })()`;
-/* eslint-enable max-len -- end of the verbatim copy above. */
+/* eslint-enable max-len */
 
 const CONTACT_SENTINELS = [
   'sentinel-contact@example.test',

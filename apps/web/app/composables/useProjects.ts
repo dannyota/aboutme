@@ -422,8 +422,6 @@ export function useProjectEditor(
       winner = null;
       saveFailed.value = false;
       loaded.value = result.value;
-      // The server's sanitized text replaces the draft only when nothing was
-      // typed while the save ran.
       const typed = draft.value === null
         ? null
         : canonicalJSON(requestFromDraft(draft.value));

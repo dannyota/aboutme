@@ -224,6 +224,28 @@ describe('project editor', () => {
       expect(editor.notice.value).toBeNull();
     });
 
+  it('keeps text typed while a save runs', async () => {
+    const { editor, api } = await editorSetup();
+    editor.draft.value!.text.en!.name = 'Shop';
+    let answer: (value: unknown) => void = () => {};
+    api.replace.mockImplementation(() => new Promise((resolve) => {
+      answer = resolve;
+    }));
+
+    const saving = editor.save();
+    await flushPromises();
+    editor.draft.value!.text.en!.name = 'Shop typed during the save';
+    answer(ok(project({
+      revision: '4', text: { en: { name: 'Shop', role: 'Lead engineer' } },
+    })));
+    await saving;
+
+    expect(editor.loaded.value?.revision).toBe('4');
+    expect(editor.draft.value?.text.en?.name).toBe(
+      'Shop typed during the save',
+    );
+  });
+
   it('loads, edits and saves a project that already has dates', async () => {
     const { editor, api } = await editorSetup(dated());
     expect(editor.dirty.value).toBe(false);

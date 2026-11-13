@@ -34,11 +34,6 @@ function coalesceAtomicPending(
   return [...pending.slice(0, -1), ...coalescePending([last], item)];
 }
 
-/**
- * Moves `queueItem` from the head of the queue to the write in flight. It
- * must be the head object itself: typing coalesces into a new object with
- * the same id, which an older reference may never consume.
- */
 export function startAttempt(
   record: ResumeRecord,
   queueItem: EditorQueueItem,
