@@ -315,7 +315,7 @@ func TestPublicRenderRequestWithTheLargestDocumentFits(t *testing.T) {
 		t.Fatalf("largest render request refused: %v", err)
 	}
 	t.Logf("largest render request: %d bytes", sent)
-	if sent == 0 || sent > 532_480 {
+	if sent == 0 || sent > 557_056 {
 		t.Fatalf("render request = %d bytes", sent)
 	}
 }

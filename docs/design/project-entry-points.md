@@ -27,10 +27,10 @@ can show, so a title never links to a page that answers 404.
   appears anywhere on the public page.
 - Go's resume page validator accepts `a.public-projects` once, with exactly
   `projectsUrl`, and only when links exist. Each anchor carrying
-  `data-project-entry` must name a map entry and have exactly its URL, and each
-  map entry has exactly one. Links the owner wrote in a description keep the
-  existing rule, even when they point to a project page. The HTML format version
-  rises with this change.
+  `data-project-entry` must name a map entry and have exactly its URL. Each map
+  entry with a non-empty title has exactly one, and an untitled entry none.
+  Links the owner wrote in a description keep the existing rule, even when they
+  point to a project page. The HTML format version rises with this change.
 - The server-rendered root carries `data-project-links` whenever the request
   carried `projectsUrl`, with or without links. The browser builds the map from
   the public JSON it fetches only when that marker is present, and replaces the

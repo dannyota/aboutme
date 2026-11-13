@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	publicRenderRequestMaxBytes  int64 = 532_480
+	publicRenderRequestMaxBytes  int64 = 557_056
 	publicRenderResponseMaxBytes int64 = 2_097_152
 	publicRenderDeadline               = 5 * time.Second
 )

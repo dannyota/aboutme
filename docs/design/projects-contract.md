@@ -36,10 +36,13 @@ Product scope is in [projects](projects.md); the decision is
 
 One read builds a resume's public snapshot: the resume row and, for each visible
 linked entry, the project's slug, page URL and, for a project page, its resolved
-text and fields. The project list and a project page also read every linked
-project's fields and text without its description, to decide which have a name
-to show. The snapshot is taken in a single statement, so it is consistent with
-the resume revision it carries. It never contains a project `id`.
+text and fields. The resume page, the project list and a project page also read
+every linked project's fields and text without its description, to decide which
+have a name to show; a linked project without one carries no link. The snapshot
+is taken in a single statement, so it is consistent with the resume revision it
+carries. It never contains a project `id`. Every state other than a live resume
+reads as no rows, and an entry's `projectId` is compared as text, so a malformed
+value matches no project.
 
 - The frozen public render request carries the snapshot for all three HTML pages
   of a resume.

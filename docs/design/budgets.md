@@ -79,7 +79,7 @@ the [scaling contract](scaling/README.md) and
 | Privileged OAuth starts/account and IP                   | ≤ 30/min                                                                                                                                                          | Auth service                                             |
 | Public revocation drain                                  | ≤ 5 s hard, then fail before mutation                                                                                                                             | Publish transitions                                      |
 | Public render `canonicalOrigin`                          | ≤ 512 ASCII bytes                                                                                                                                                 | Public render boundary (Go and Nuxt)                     |
-| Internal public-render JSON                              | ≤ 532,480 bytes                                                                                                                                                   | Public render boundary (Go and Nuxt)                     |
+| Internal public-render JSON                              | ≤ 557,056 bytes                                                                                                                                                   | Public render boundary (Go and Nuxt)                     |
 | Internal public-render HTML                              | ≤ 2,097,152 bytes; provisional gate                                                                                                                               | Public render corpus test                                |
 | Direct public-render wall time                           | ≤ 5 s hard; cancel and join                                                                                                                                       | Direct-render client                                     |
 | Slug claim/rename attempts                               | ≤ 30/account/hour                                                                                                                                                 | Slug route limiter                                       |
@@ -228,11 +228,15 @@ Notes on rows whose reason is not obvious:
   usually controls a whole `/64`. See
   [MCP client compatibility](mcp-client-compatibility.md#5-registration-rate-from-shared-egress).
 - **Public render.** `canonicalOrigin` is one normalized ASCII origin with no
-  userinfo, path, query, or fragment; production requires `https`. The 532,480
-  byte request is the 524,288-byte document ceiling plus an 8,192-byte envelope.
-  The HTML bound stays provisional until minimal, full, and 512 KiB fixtures
-  pass beneath it. The five-second revocation bound is one deadline across every
-  drain and fails before the mutation transaction.
+  userinfo, path, query, or fragment; production requires `https`. The 557,056
+  byte request is the 524,288-byte document ceiling plus a 32,768-byte envelope.
+  The envelope holds the largest document's page fields with 30 project links, a
+  30-character slug, 40-character project slugs and a 512-byte origin; a test
+  builds that case and proves the fit. The private print JSON bound holds the
+  same case with the largest photo, also proven by a test. The HTML bound stays
+  provisional until minimal, full, and 512 KiB fixtures pass beneath it. The
+  five-second revocation bound is one deadline across every drain and fails
+  before the mutation transaction.
 - **Slugs and media.** The slug limit applies only when a request changes the
   slug. Orphan deletion retries each object up to three times, waiting one and
   then two seconds; queue retries double from one minute to six hours.
