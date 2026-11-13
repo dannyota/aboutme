@@ -73,6 +73,8 @@ const WRITE_LIMIT = 200;
  */
 export function fakeServer(initial: AcceptedResume) {
   let stored = structuredClone(initial);
+  /** The resume was deleted: later lists leave it out and reads miss it. */
+  let deleted = false;
   const failedReads: ReadFailure[] = [];
   const heldResponses: Promise<void>[] = [];
   let readsHeld: Promise<void> | undefined;
@@ -168,6 +170,7 @@ export function fakeServer(initial: AcceptedResume) {
         return { kind: 'complete', status: 201, accepted: copy() };
       }
       case 'deleteResume':
+        deleted = true;
         return { kind: 'resume-deleted', status: 204 };
       case 'deleteResumePhoto': {
         const { photo: _photo, ...personalDetails } = document.personalDetails;
@@ -259,12 +262,18 @@ export function fakeServer(initial: AcceptedResume) {
     }),
     list: vi.fn(async () => ({
       kind: 'ready' as const,
-      items: [{ ...stored.metadata, revision: stored.revision }],
+      items: deleted
+        ? []
+        : [{ ...stored.metadata, revision: stored.revision }],
     })),
     read: vi.fn(async (): Promise<ResumeReadResult> => {
       readTimes.push(Date.now());
       if (readsHeld !== undefined) await readsHeld;
-      return failedReads.shift() ?? { kind: 'complete', accepted: copy() };
+      const failed = failedReads.shift();
+      if (failed !== undefined) return failed;
+      return deleted
+        ? { kind: 'unavailable' }
+        : { kind: 'complete', accepted: copy() };
     }),
   };
 

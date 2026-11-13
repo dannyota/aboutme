@@ -28,6 +28,8 @@ export { dependencyIdsForNewCommand, nextSequence } from './resumeRecord';
 
 interface ResumeStoreState {
   records: Map<string, ResumeRecord>;
+  /** Editor pages open on each resume; other pages leave its record alone. */
+  editors: Map<string, number>;
 }
 
 interface ResumeStoreActions {
@@ -84,12 +86,21 @@ interface ResumeStoreActions {
     state: OpaquePhotoOutcome | null,
   ): void;
   discardLocal(resumeId: string): void;
+  /**
+   * Removes the queued or held commands `commandIds`, and nothing else, from
+   * the resume's record: the work a page queued and is leaving behind.
+   */
+  dropCommands(resumeId: string, commandIds: ReadonlySet<string>): void;
+  /** An editor page opened on the resume, or closed. */
+  markEditorOpen(resumeId: string, open: boolean): void;
   removeResume(resumeId: string): void;
 }
 
 interface ResumeStore extends ResumeStoreState, ResumeStoreActions {
   recordFor(resumeId: string): ResumeRecord | undefined;
   saveStateFor(resumeId: string): SaveState;
+  /** An editor page has the resume's record open. */
+  openInEditor(resumeId: string): boolean;
 }
 
 /** The store's record for `resumeId`, as its reactive state holds it. */
@@ -101,7 +112,10 @@ function recordIn(
 }
 
 const resumeStore = defineStore('resumes', {
-  state: () => ({ records: new Map<string, unknown>() }),
+  state: () => ({
+    records: new Map<string, unknown>(),
+    editors: new Map<string, number>(),
+  }),
 
   getters: {
     recordFor:
@@ -116,6 +130,10 @@ const resumeStore = defineStore('resumes', {
             | undefined;
           return record === undefined ? 'idle' : saveState(record);
         },
+    openInEditor:
+      (state) =>
+        (resumeId: string): boolean =>
+          (state.editors.get(resumeId) ?? 0) > 0,
   },
 
   actions: {
@@ -319,6 +337,17 @@ const resumeStore = defineStore('resumes', {
     discardLocal(resumeId: string) {
       const record = recordIn(this, resumeId);
       if (record !== undefined) queue.discardLocal(record);
+    },
+
+    dropCommands(resumeId: string, commandIds: ReadonlySet<string>) {
+      const record = recordIn(this, resumeId);
+      if (record !== undefined) queue.dropCommands(record, commandIds);
+    },
+
+    markEditorOpen(resumeId: string, open: boolean) {
+      const count = (this.editors.get(resumeId) ?? 0) + (open ? 1 : -1);
+      if (count > 0) this.editors.set(resumeId, count);
+      else this.editors.delete(resumeId);
     },
 
     removeResume(resumeId: string) {

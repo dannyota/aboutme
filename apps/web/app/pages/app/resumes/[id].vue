@@ -283,6 +283,9 @@ function retryFirstLoad(): void {
 }
 
 onMounted(() => {
+  // While this page lives, a page leaving the resume behind, such as the
+  // resume list, leaves the record and its queued work to this editor.
+  store.markEditorOpen(id, true);
   watch(auth.authState, (state) => void settleSession(state), {
     immediate: true,
   });
@@ -308,6 +311,7 @@ watch(
 
 onBeforeUnmount(() => {
   disposed = true;
+  store.markEditorOpen(id, false);
   stopRealtime();
   photo.clear();
   sessionCheck.stop();

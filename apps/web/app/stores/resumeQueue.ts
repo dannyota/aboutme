@@ -188,6 +188,26 @@ export function setTemplateState(
   replay(record);
 }
 
+export function dropCommands(
+  record: ResumeRecord,
+  commandIds: ReadonlySet<string>,
+): void {
+  const pending = (toRaw(record.pending) as readonly EditorQueueItem[])
+    .filter((item) => !commandIds.has(item.id));
+  const held = record.attempt !== null
+    && commandIds.has(record.attempt.queueItem.id);
+  if (pending.length === record.pending.length && !held) return;
+  record.pending = pending as typeof record.pending;
+  if (held) record.attempt = null;
+  record.conflicts = record.conflicts.filter(
+    (conflict) => !commandIds.has(conflict.id),
+  );
+  record.issues = Object.fromEntries(
+    Object.entries(record.issues).filter(([id]) => !commandIds.has(id)),
+  );
+  replay(record);
+}
+
 export function discardLocal(record: ResumeRecord): void {
   record.pending = [];
   record.attempt = null;
