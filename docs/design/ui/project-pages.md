@@ -68,7 +68,10 @@ Facts column, one bordered panel:
 
 1. Repository as a filled button and Demo as an outlined button, each with an
    icon, `rel="noopener noreferrer nofollow"`, shown only when set. With only a
-   demo link, Demo is the filled button.
+   demo link, Demo is the filled button. When the resume entry's own `link`
+   differs from both, a third outlined button “Liên kết” or “Link” carries it
+   (2026-11-13), so a link the owner wrote on that resume is not lost when its
+   title links here.
 2. “Vai trò” or “Role”, and “Thời gian” or “Dates”, as a definition list.
 3. “Công nghệ” or “Technologies”: all chips, wrapping.
 4. GitHub evidence, when that feature ships ([design](../github-evidence.md));
@@ -92,10 +95,21 @@ Title: “{project name} · {owner's name}”; list: “Dự án · {name}” or
 else none. Canonical is the page's own address. The preview card is the resume's
 stored card. `noindex` unless the resume has SEO and GEO on.
 
+Decided 2026-11-13: the owner's name is the resume's full name, or its effective
+page title when the name is blank. `og:title`, `og:description` and `og:url` are
+this page's; the image, its alt text and `og:locale` are the resume's. The
+favicon is the resume's. A language whose text has a blank name falls back to
+the default language, so the page always has an h1. Colors are the resume's
+color scheme only, never its template accent. The pages have no script and no
+live stream; they change on the next request after the resume's revision
+advances.
+
 ## Gate
 
-With sign in to view on and no pass, both addresses show the resume's gate page
-unchanged, and after sign-in return to the address asked for.
+With sign in to view on and no pass, both addresses show the resume's gate page,
+which looks unchanged; its provider links carry the page asked for, and after
+sign-in the person returns to that page under the resume's current address. No
+join invite is shown on project pages.
 
 ## Accessibility and fit
 
