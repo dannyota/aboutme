@@ -165,15 +165,36 @@ describe('resume render envelope entry points', () => {
       const sections = document(value).customization.layout.sections;
       sections.main = sections.main!.filter((key) => key !== 'project');
     }));
-    rejects(linked((value) => {
-      document(value).content.project!.entries[1]!.title = '';
-    }));
+  });
+
+  it('accepts a link to an entry without a title', () => {
+    for (const title of ['', undefined]) {
+      const envelope = linked((value) => {
+        const entry = document(value).content.project!.entries[1]!;
+        if (title === undefined) delete entry.title;
+        else entry.title = title;
+      });
+      expect(decode(envelope)).toEqual(envelope);
+    }
   });
 
   it('rejects a link context inside the public resume', () => {
     rejects(linked((value) => {
       (value.publicResume as Envelope).projectLinks = [];
     }));
+  });
+});
+
+describe('resume render request size', () => {
+  it('decodes a request of exactly 557,056 bytes and refuses one more', () => {
+    const source = JSON.stringify(envelopeNamed('en-two-linked-entries'));
+    const sized = (bytes: number) => `${source.slice(0, -1)}${
+      ' '.repeat(bytes - Buffer.byteLength(source, 'utf8'))}}`;
+    expect(Buffer.byteLength(sized(557_056), 'utf8')).toBe(557_056);
+    expect(decodePublicRenderEnvelope(sized(557_056)).mode)
+      .toBe('continuous');
+    expect(() => decodePublicRenderEnvelope(sized(557_057)))
+      .toThrow(PUBLIC_RENDER_FAILURE);
   });
 });
 
@@ -231,6 +252,27 @@ describe('resume page entry points', () => {
       .toEqual([FIRST]);
     expect(page.querySelectorAll('a.public-projects')).toHaveLength(1);
   });
+
+  it('gives an untitled linked entry no anchor and keeps the bar link',
+    async () => {
+      const page = await render(linked((value) => {
+        delete document(value).content.project!.entries[1]!.title;
+      }));
+      expect([...page.querySelectorAll('a[data-project-entry]')]
+        .map((anchor) => anchor.getAttribute('data-project-entry')))
+        .toEqual([FIRST]);
+      expect(page.querySelectorAll('a.public-projects')).toHaveLength(1);
+    });
+
+  it('keeps the bar link when the only linked entry has no title',
+    async () => {
+      const envelope = envelopeNamed('en-hidden-linked-entry');
+      delete document(envelope).content.project!.entries[0]!.title;
+      const page = await render(envelope);
+      expect(page.querySelector('a[data-project-entry]')).toBeNull();
+      expect(page.querySelector('a.public-projects')?.getAttribute('href'))
+        .toBe(PROJECTS_URL);
+    });
 
   it('shows no link and no bar link without an available project',
     async () => {

@@ -299,18 +299,16 @@ const projectPageAddress = (value: unknown): boolean => {
   ) {
     return false;
   }
-  const rest = value.slice(value.indexOf('//') + 2);
-  const slash = rest.indexOf('/');
-  if (slash <= 0) return false;
+  let origin: string;
   try {
-    if (new URL(value).hostname === '') return false;
+    origin = new URL(value).origin;
   } catch {
     return false;
   }
-  const [root, resumeSlug, projects, projectSlug, ...extra]
-    = rest.slice(slash).split('/');
-  return root === ''
-    && validSlug(resumeSlug)
+  if (!value.startsWith(`${origin}/`)) return false;
+  const [resumeSlug, projects, projectSlug, ...extra]
+    = value.slice(origin.length + 1).split('/');
+  return validSlug(resumeSlug)
     && !isReservedPublicRoot(resumeSlug)
     && projects === 'projects'
     && PROJECT_SLUG.test(projectSlug ?? '')

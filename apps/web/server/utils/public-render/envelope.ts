@@ -19,7 +19,7 @@ import type {
   PublicRenderProjectRequest,
 } from './project-envelope';
 
-export const PUBLIC_RENDER_REQUEST_MAX_BYTES = 532_480;
+export const PUBLIC_RENDER_REQUEST_MAX_BYTES = 557_056;
 export const PUBLIC_RENDER_HTML_MAX_BYTES = 2_097_152;
 export const PUBLIC_RENDER_FAILURE = 'public render failed';
 
@@ -338,7 +338,7 @@ function decodeResumeEnvelope(
   return request;
 }
 
-const linkableProjectEntries = (
+const visibleProjectEntries = (
   document: PublicResume['document'],
 ): ReadonlySet<string> => {
   const ids = new Set<string>();
@@ -347,11 +347,7 @@ const linkableProjectEntries = (
     if (!Object.hasOwn(document.content, key)) continue;
     const section = document.content[key]!;
     if (section.sectionType !== 'project') continue;
-    for (const entry of section.entries) {
-      if (typeof entry.title === 'string' && entry.title !== '') {
-        ids.add(entry.id);
-      }
-    }
+    for (const entry of section.entries) ids.add(entry.id);
   }
   return ids;
 };
@@ -364,7 +360,7 @@ function validEntryPoints(request: PublicRenderResumeRequest): boolean {
   const links: unknown = request.projectLinks;
   if (links === undefined) return true;
   if (!Array.isArray(links) || links.length === 0) return false;
-  const linkable = linkableProjectEntries(request.publicResume.document);
+  const visible = visibleProjectEntries(request.publicResume.document);
   const seen = new Set<string>();
   return links.every((link: unknown) => {
     if (
@@ -377,7 +373,7 @@ function validEntryPoints(request: PublicRenderResumeRequest): boolean {
     const { entryId, url } = link as Record<string, unknown>;
     if (
       typeof entryId !== 'string'
-      || !linkable.has(entryId)
+      || !visible.has(entryId)
       || seen.has(entryId)
       || typeof url !== 'string'
       || !url.startsWith(`${projectsUrl}/`)

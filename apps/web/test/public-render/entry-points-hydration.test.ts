@@ -29,7 +29,11 @@ const link = (entryId: string, projectSlug: string): Link => ({
   entryId, projectSlug, url: `${PROJECTS_URL}/${projectSlug}`,
 });
 
-const resume = (revision: string, projectLinks?: Link[]) => {
+const resume = (
+  revision: string,
+  projectLinks?: Link[],
+  untitled = false,
+) => {
   const document = JSON.parse(readFileSync(
     resolve(process.cwd(), '../../packages/schema/fixtures/minimal.json'),
     'utf8',
@@ -40,7 +44,7 @@ const resume = (revision: string, projectLinks?: Link[]) => {
       sectionType: 'project',
       entries: [
         { id: ATLAS, title: 'Atlas', link: 'https://atlas.example/' },
-        { id: BEACON, title: 'Beacon' },
+        untitled ? { id: BEACON } : { id: BEACON, title: 'Beacon' },
       ],
     },
   };
@@ -229,6 +233,20 @@ describe('public page entry point hydration', () => {
       [BEACON, `${PROJECTS_URL}/beacon`],
     ]);
   });
+
+  it('gives an untitled linked entry no anchor and keeps the bar link',
+    async () => {
+      const root = await mountServerPage(true);
+      await hydratePublicResume(root, 'ada1', '1', async () => resume('1', []));
+      const updates = live(root, [
+        resume('2', [link(BEACON, 'beacon')], true),
+      ]);
+      await updates.next();
+      expect(root.querySelector('[data-project-entry]')).toBeNull();
+      expect(titleLinks(root)).toEqual([[null, 'https://atlas.example/']]);
+      expect(barLink(root)).toBe(PROJECTS_URL);
+      updates.stop();
+    });
 
   it('builds no map without the root marker', async () => {
     const root = await mountServerPage(false);

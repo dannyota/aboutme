@@ -77,6 +77,15 @@ describe('print envelope project links', () => {
     expect(decode(http)).toEqual(http);
   });
 
+  it('accepts a link to an entry without a title', () => {
+    const envelope = linked((value) => {
+      const content = (value.document as Envelope).content as Record<
+        string, { entries: Envelope[] }>;
+      delete content.project!.entries[1]!.title;
+    });
+    expect(decode(envelope)).toEqual(envelope);
+  });
+
   it('keeps the version rule', () => {
     rejects(linked((envelope) => {
       envelope.projectLinks = {};
@@ -135,6 +144,16 @@ describe('print envelope project links', () => {
       `${origin}/do-hoang-nam/projects/Beacon`,
       `${origin}/do%2Dhoang-nam/projects/beacon`,
       `${origin}/do-hoang-nam/projects/../beacon`,
+      'https://aboutme.example\\extra/do-hoang-nam/projects/beacon',
+      'https://aboutme.example\\/do-hoang-nam/projects/beacon',
+      `${origin}/do-hoang-nam\\projects/beacon`,
+      `${origin}//do-hoang-nam/projects/beacon`,
+      `${origin}/do-hoang-nam//projects/beacon`,
+      `${origin}/do-hoang-nam/./projects/beacon`,
+      'https://aboutme.example:443/do-hoang-nam/projects/beacon',
+      'https://AboutMe.example/do-hoang-nam/projects/beacon',
+      'https:aboutme.example/do-hoang-nam/projects/beacon',
+      'https:\\\\aboutme.example/do-hoang-nam/projects/beacon',
       `${origin}/do-hoang-nam/x/../projects/beacon`,
       `${origin}/do-hoang-nam/projects/beacón`,
       7,
@@ -177,6 +196,17 @@ describe('print title links', () => {
     }
     expect(withLinks.documentElement.outerHTML)
       .toBe(without.documentElement.outerHTML);
+  });
+
+  it('gives an untitled linked entry no anchor', async () => {
+    const page = await render(linked((value) => {
+      const content = (value.document as Envelope).content as Record<
+        string, { entries: Envelope[] }>;
+      delete content.project!.entries[1]!.title;
+    }));
+    expect([...page.querySelectorAll('a[data-project-entry]')]
+      .map((anchor) => anchor.getAttribute('data-project-entry')))
+      .toEqual([FIRST]);
   });
 
   it('renders the version 1 corpus envelope without links', async () => {
