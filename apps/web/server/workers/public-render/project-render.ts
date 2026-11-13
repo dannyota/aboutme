@@ -12,7 +12,6 @@ import {
   type PublicAssetVersions,
   validAssetVersion,
 } from './page-head';
-import { PROJECT_PAGE_STYLE } from './project-style';
 import {
   PUBLIC_RENDER_FAILURE,
   PUBLIC_RENDER_HTML_MAX_BYTES,
@@ -24,10 +23,11 @@ import type {
 
 // The two project pages Go renders through the direct render boundary
 // (docs/design/projects-contract.md "Render envelope"). Both are static: no
-// script, no form, no image, and no stylesheet but the fonts. The decoder has
-// already closed every request field; the head escapes each value it writes
-// and Vue escapes every text and attribute in the body. The description is
-// the only raw HTML (ProjectDescription).
+// script, no form, no image, and no inline CSS; they link the fonts and the
+// project stylesheet (project-style.ts), so they run under style-src 'self'.
+// The decoder has already closed every request field; the head escapes each
+// value it writes and Vue escapes every text and attribute in the body. The
+// description is the only raw HTML (ProjectDescription).
 
 type ProjectRequest
   = | PublicRenderProjectListRequest
@@ -56,15 +56,22 @@ const document = async (
     const head = [
       '<meta charset="utf-8">',
       '<meta name="viewport" content="width=device-width, initial-scale=1">',
+      // Safari links digit runs such as date ranges as telephone numbers;
+      // this opts the page out, as the resume page does.
+      '<meta name="format-detection" '
+      + 'content="telephone=no, date=no, address=no, email=no">',
       `<title>${escapeText(request.pageTitle)}</title>`,
       request.faviconHref === ''
         ? ''
         : `<link rel="icon" href="${escapeAttribute(request.faviconHref)}">`,
       `<link rel="canonical" href="${escapeAttribute(request.pageUrl)}">`,
       previewHead(request.pageUrl, preview, imageURL, 'website'),
+      // One content version covers both stylesheets
+      // (server/utils/print/assets.ts, publicStyleVersion).
       '<link rel="stylesheet" ',
       `href="/_nuxt/assets/print-fonts.css?v=${versions.style}">`,
-      `<style>${PROJECT_PAGE_STYLE}</style>`,
+      '<link rel="stylesheet" ',
+      `href="/_nuxt/assets/project-pages.css?v=${versions.style}">`,
     ].join('');
     const html = [
       '<!doctype html>',

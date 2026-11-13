@@ -44,11 +44,34 @@ export const projectPageURL = (
   kind: ProjectPageKind, lng: Lng, scheme: Scheme | 'system',
 ): string => `/_harness/render?mode=${kind}&lng=${lng}&scheme=${scheme}`;
 
-/** Opens a harness page and waits for its fonts, with no outside request. */
+// The harness keeps 'unsafe-inline' for Nuxt's own <style> elements. The
+// project pages run under style-src 'self', so the harness page is served
+// with that policy too: an inline style on a project page would not apply,
+// and the display checks below would see it.
+const INLINE_STYLES = 'style-src \'self\' \'unsafe-inline\'';
+
+async function serveWithoutInlineStyles(page: Page): Promise<void> {
+  await page.route((url) => url.pathname === '/_harness/render',
+    async (route) => {
+      const response = await route.fetch();
+      const headers = response.headers();
+      const policy = headers['content-security-policy'] ?? '';
+      expect(policy, 'Project page style policy.').toContain(INLINE_STYLES);
+      headers['content-security-policy']
+        = policy.replace(INLINE_STYLES, 'style-src \'self\'');
+      await route.fulfill({ response, headers });
+    });
+}
+
+/**
+ * Opens a harness page under the project pages' style policy and waits for
+ * its fonts, with no outside request.
+ */
 export async function openProjectPage(
   page: Page, kind: ProjectPageKind, lng: Lng, scheme: Scheme | 'system',
 ): Promise<string[]> {
   const external = await denyExternalRequests(page);
+  await serveWithoutInlineStyles(page);
   const response = await page.goto(projectPageURL(kind, lng, scheme));
   expect(response?.ok()).toBe(true);
   await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
@@ -224,6 +247,23 @@ export async function expectRowMeta(page: Page): Promise<void> {
       ? meta.left >= name.right && meta.top < name.bottom
       : meta.top >= name.bottom - 1 && Math.abs(meta.left - name.left) <= 1;
   }), 'Project row meta.').toBe(true);
+}
+
+/**
+ * The page takes its rules from the linked project stylesheet alone: the
+ * sheet loaded, and nothing on the page carries a style attribute.
+ */
+export async function expectProjectStylesheet(page: Page): Promise<void> {
+  await expect.poll(() => page.evaluate(() => {
+    const sheet = [...document.styleSheets].find((candidate) =>
+      candidate.href !== null
+      && new URL(candidate.href).pathname
+      === '/_nuxt/assets/project-pages.css');
+    const styled = document.querySelectorAll(
+      '.public-project-page[style], .public-project-page [style]');
+    return sheet !== undefined && !sheet.disabled
+      && sheet.cssRules.length > 0 && styled.length === 0;
+  }), 'Project stylesheet.').toBe(true);
 }
 
 /** Every role the page paints takes its scheme's token. */

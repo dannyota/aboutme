@@ -25,9 +25,6 @@ import type {
   PublicGateProvider,
 } from '../../../server/utils/public-render/envelope';
 import { GATE_STYLE } from '../../../server/workers/public-render/gate-style';
-import {
-  PROJECT_PAGE_STYLE,
-} from '../../../server/workers/public-render/project-style';
 import { resolveFontSelection } from '../../utils/fontCatalog';
 import { fontsReady } from '../../utils/fontsReady';
 import { sanitizeRichText } from '../../utils/sanitizeRichText';
@@ -160,13 +157,17 @@ if (isCorpus) {
   } else {
     projectDetail = projectFixture(pageLng, pageScheme);
   }
-  // The pages wear Be Vietnam Pro from the print-fonts sheet.
+  // The pages link the fonts and their own stylesheet, as the worker's
+  // pages do, so they need no inline CSS.
   selectedFontId = 'be-vietnam-pro';
   useHead({
     htmlAttrs: {
       'class': 'harness-project', 'lang': pageLng, 'data-scheme': pageScheme,
     },
-    style: [{ textContent: PROJECT_PAGE_STYLE }],
+    link: [
+      { rel: 'stylesheet', href: '/_nuxt/assets/print-fonts.css' },
+      { rel: 'stylesheet', href: '/_nuxt/assets/project-pages.css' },
+    ],
   });
 } else {
   requireAllowedKeys(

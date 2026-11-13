@@ -39,15 +39,25 @@ const PROJECT_SLUG = /^(?=.{2,40}$)[a-z0-9]+(?:-[a-z0-9]+)*$/u;
 export const validProjectSlug = (value: unknown): value is string =>
   typeof value === 'string' && PROJECT_SLUG.test(value);
 
-/**
- * The page head's preview text. A project page has no description when its
- * project has neither summary nor outcome, and the list page never has one
- * (docs/design/projects-contract.md "Render envelope"); every other page
- * always has one.
- */
+/** The size limits of a page's preview title and description. */
+export interface PreviewBounds {
+  readonly titleBytes: number;
+  /** Unicode code points; unlimited when absent. */
+  readonly titleCodePoints?: number;
+  readonly descriptionBytes: number;
+  /** Whether the page may have no description. */
+  readonly emptyDescription: boolean;
+}
+
+/** The resume page's and the gate's preview: always described. */
+export const PAGE_PREVIEW: PreviewBounds = {
+  titleBytes: 2240, descriptionBytes: 1024, emptyDescription: false,
+};
+
+/** The page head's preview text, within the page's bounds. */
 export const validPreview = (
   value: unknown,
-  allowEmptyDescription = false,
+  bounds: PreviewBounds = PAGE_PREVIEW,
 ): value is PublicRenderPreview => {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
     return false;
@@ -55,9 +65,11 @@ export const validPreview = (
   const preview = value as Record<string, unknown>;
   const keys = Object.keys(preview).sort().join(',');
   return (keys === PREVIEW_KEYS || keys === PREVIEW_KEYS_WITH_IMAGE)
-    && boundedText(preview.title, 2240)
-    && (boundedText(preview.description, 1024)
-      || (allowEmptyDescription && preview.description === ''))
+    && boundedText(preview.title, bounds.titleBytes)
+    && (bounds.titleCodePoints === undefined
+      || [...preview.title].length <= bounds.titleCodePoints)
+    && (boundedText(preview.description, bounds.descriptionBytes)
+      || (bounds.emptyDescription && preview.description === ''))
     && boundedText(preview.imageAlt, 1024)
     && typeof preview.locale === 'string'
     && (preview.locale === '' || PREVIEW_LOCALE.test(preview.locale));

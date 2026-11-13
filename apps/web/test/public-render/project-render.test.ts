@@ -2,6 +2,8 @@
 
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { HOSTILE_CORPUS } from '@aboutme/schema/sanitizer';
+import { ALLOWED_TAGS } from '@aboutme/schema/sanitizer-policy';
 import { JSDOM } from 'jsdom';
 import { describe, expect, it } from 'vitest';
 
@@ -54,6 +56,12 @@ const projectRequest = (
 ) => {
   const envelope = envelopeNamed(name);
   change(envelope);
+  // Go derives the page description from the project's text: the summary,
+  // else the first 160 characters of the outcome, else none.
+  const { summary, outcome }
+    = envelope.project as Record<string, string | undefined>;
+  (envelope.preview as Envelope).description = summary
+    ?? (outcome === undefined ? '' : [...outcome].slice(0, 160).join(''));
   return decodePublicRenderEnvelope(
     JSON.stringify(envelope),
   ) as PublicRenderProjectRequest;
@@ -91,10 +99,13 @@ const expectClosedDocument = (document: Document) => {
   expect(document.querySelectorAll('h1')).toHaveLength(1);
   expect(texts(document, 'a[href="#public-project"]'))
     .toEqual(['Skip to content']);
-  expect(document.querySelectorAll('style')).toHaveLength(1);
+  // No inline CSS: the pages run under style-src 'self'.
+  expect(document.querySelectorAll('style, [style]')).toHaveLength(0);
   expect([...document.querySelectorAll('link[rel="stylesheet"]')]
-    .map((link) => link.getAttribute('href')))
-    .toEqual(['/_nuxt/assets/print-fonts.css?v=0123456789abcdef']);
+    .map((link) => link.getAttribute('href'))).toEqual([
+    '/_nuxt/assets/print-fonts.css?v=0123456789abcdef',
+    '/_nuxt/assets/project-pages.css?v=0123456789abcdef',
+  ]);
   for (const element of document.querySelectorAll('*')) {
     for (const { name } of element.attributes) {
       expect(name.startsWith('on'), name).toBe(false);
@@ -573,6 +584,21 @@ describe('project page', () => {
 });
 
 describe('project page frame', () => {
+  it('opts out of telephone and date detection as the resume page does',
+    async () => {
+      // Safari links digit runs such as 03/2022 – 06/2024 as telephone
+      // numbers unless the head says otherwise.
+      const head = '<meta charset="utf-8"><meta name="viewport" '
+        + 'content="width=device-width, initial-scale=1"><meta '
+        + 'name="format-detection" '
+        + 'content="telephone=no, date=no, address=no, email=no"><title>';
+      for (const html of [await listHtml(), await projectHtml()]) {
+        expect(html).toContain(head);
+        expect(parse(html)
+          .querySelectorAll('meta[name="format-detection"]')).toHaveLength(1);
+      }
+    });
+
   it('rejects asset versions that are not 16 hex digits', async () => {
     await expect(renderPublicProject(projectRequest(), {
       style: '0123', script: VERSIONS.script,
@@ -592,16 +618,73 @@ describe('project page frame', () => {
     }
   });
 
-  it('keeps its one inline style within the inline style rule', () => {
-    // Go's unsafeInlineStyle check: no backslash, and no url, image-set or
-    // @import once comments and whitespace are removed.
-    const compact = PROJECT_PAGE_STYLE.toLowerCase()
-      .replaceAll(/\/\*[\s\S]*?\*\//gu, '')
-      .replaceAll(/[ \t\n\r\f]/gu, '');
-    expect(PROJECT_PAGE_STYLE).not.toContain('\\');
-    expect(compact).not.toMatch(/url|image-set|@import/u);
-    expect(PROJECT_PAGE_STYLE.toLowerCase()).not.toContain('</');
+  it('writes no style element or style attribute and no style text',
+    async () => {
+      for (const html of [await listHtml(), await projectHtml()]) {
+        expect(html).not.toMatch(/<style|\sstyle=/iu);
+        // The stylesheet's rules reach the page only through its link.
+        expect(html).not.toContain(PROJECT_PAGE_STYLE.slice(0, 40));
+      }
+    });
+
+  it('links the fonts and the project stylesheet at one content version',
+    async () => {
+      const html = await renderPublicProject(projectRequest(), {
+        style: 'fedcba9876543210', script: VERSIONS.script,
+      });
+      expect(html).toContain('<link rel="stylesheet" '
+        + 'href="/_nuxt/assets/print-fonts.css?v=fedcba9876543210">'
+        + '<link rel="stylesheet" '
+        + 'href="/_nuxt/assets/project-pages.css?v=fedcba9876543210">'
+        + '</head>');
+    });
+});
+
+describe('a Go-sanitized hostile description', () => {
+  // The server sanitizer's pinned output for each hostile payload
+  // (apps/server/internal/sanitize/sanitize_test.go, TestCorpusOutputGolden):
+  // exactly what the library stores and Go sends.
+  const sanitized = JSON.parse(readFileSync(
+    resolve(
+      process.cwd(),
+      '../server/internal/sanitize/testdata/corpus-output.golden.json',
+    ),
+    'utf8',
+  )) as Record<string, string>;
+  const cases = HOSTILE_CORPUS
+    .filter(({ id }) => (sanitized[id] ?? '') !== '')
+    .map(({ id }) => [id, sanitized[id]!] as const);
+
+  it('has hostile payloads that survive sanitizing as text or links', () => {
+    expect(cases.map(([id]) => id)).toEqual(expect.arrayContaining([
+      'event-handler-anchor-onclick',
+      'nested-script-tag-stripping-bypass',
+      'rel-hardening-target-blank-missing-rel',
+    ]));
   });
+
+  it.each(cases)('renders %s as given and nothing more',
+    async (_id, description) => {
+      const html = await projectHtml((envelope) => {
+        project(envelope).description = description;
+      });
+      expect(html.split('<div class="project-description">')).toHaveLength(2);
+      expect(html).toContain(
+        `<div class="project-description">${description}</div>`);
+      const document = parse(html);
+      expectClosedDocument(document);
+      expectAnchorAttributes(document);
+      const region = document.querySelector('.project-description')!;
+      expect(region.innerHTML).toBe(new JSDOM(description).window.document
+        .body.innerHTML);
+      for (const element of region.querySelectorAll('*')) {
+        expect(ALLOWED_TAGS).toContain(element.localName);
+      }
+      for (const anchor of region.querySelectorAll('a')) {
+        expect(anchor.getAttribute('href')).toMatch(/^https:\/\//u);
+        expect(anchor.getAttribute('rel')).toBe('noopener noreferrer');
+      }
+    });
 });
 
 describe('project HTML parity with the shared corpus', () => {

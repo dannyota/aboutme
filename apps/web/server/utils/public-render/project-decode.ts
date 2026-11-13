@@ -3,6 +3,7 @@ import type { DateRange } from '@aboutme/schema';
 import {
   boundedText,
   normalizedOrigin,
+  type PreviewBounds,
   validCardImageURL,
   validFaviconHref,
   validPageTitle,
@@ -53,8 +54,15 @@ const requireKeys = (
 
 const codePoints = (value: string): number => [...value].length;
 
+// The library stores no NUL and only valid UTF-8, which has no lone
+// surrogate.
+const storable = (value: string): boolean =>
+  !value.includes('\u0000') && value.isWellFormed();
+
 const text = (value: unknown, maxCodePoints: number): value is string =>
-  typeof value === 'string' && codePoints(value) <= maxCodePoints;
+  typeof value === 'string'
+  && codePoints(value) <= maxCodePoints
+  && storable(value);
 
 /** An optional text is absent, or present and not empty. */
 const optionalText = (value: unknown, maxCodePoints: number): boolean =>
@@ -67,6 +75,54 @@ const MAX_PROJECTS = 30;
 const MAX_TECHNOLOGIES = 20;
 const MAX_ROW_TECHNOLOGIES = 6;
 
+interface LinkParts {
+  readonly userinfo: string | undefined;
+  readonly host: string;
+  readonly port: string;
+  /** The path, query and fragment, as written. */
+  readonly rest: string;
+}
+
+// Splits an https link the way Go's net/url does: the authority ends at the
+// first /, ? or #, the userinfo at its last @, and the port follows the
+// host's last colon outside an IPv6 literal.
+const linkParts = (value: string): LinkParts => {
+  const afterScheme = value.slice('https://'.length);
+  const end = afterScheme.search(/[/?#]/u);
+  const authority = end === -1 ? afterScheme : afterScheme.slice(0, end);
+  const at = authority.lastIndexOf('@');
+  const hostPort = authority.slice(at + 1);
+  const colon = hostPort.lastIndexOf(':');
+  const hasPort = colon > hostPort.lastIndexOf(']');
+  return {
+    userinfo: at === -1 ? undefined : authority.slice(0, at),
+    host: hasPort ? hostPort.slice(0, colon) : hostPort,
+    port: hasPort ? hostPort.slice(colon + 1) : '',
+    rest: end === -1 ? '' : afterScheme.slice(end),
+  };
+};
+
+// What Go's url.Parse accepts and URL parsing alone would let through: no
+// control byte anywhere (URL parsing drops tabs and newlines), userinfo of
+// RFC 3986 characters, ASCII host characters Go's host parser allows, and a
+// numeric port.
+const USERINFO = /^[A-Za-z0-9\-._:~!$&'()*+,;=%@]*$/u;
+const HOST_ASCII = /^[A-Za-z0-9\-._~!$&'()*+,;=:[\]<>"%]$/u;
+
+const goParsable = (value: string): boolean => {
+  if ([...value].some((character) => {
+    const code = character.codePointAt(0)!;
+    return code < 0x20 || code === 0x7f;
+  })) {
+    return false;
+  }
+  const { userinfo, host, port } = linkParts(value);
+  return (userinfo === undefined || USERINFO.test(userinfo))
+    && /^[0-9]*$/u.test(port)
+    && [...host].every((character) =>
+      character.codePointAt(0)! >= 0x80 || HOST_ASCII.test(character));
+};
+
 // The library stores only absolute https links whose scheme it lowercased,
 // and the page writes them only into href.
 const externalLink = (value: unknown): value is string => {
@@ -74,6 +130,8 @@ const externalLink = (value: unknown): value is string => {
     typeof value !== 'string'
     || !value.startsWith('https://')
     || codePoints(value) > MAX_LINK_CODE_POINTS
+    || !storable(value)
+    || !goParsable(value)
   ) {
     return false;
   }
@@ -85,8 +143,37 @@ const externalLink = (value: unknown): value is string => {
   }
 };
 
+// The contract's link comparison: the scheme and host lowercased, the
+// default port dropped, and an empty path read as /; the rest byte for byte
+// (docs/design/projects-contract.md "Render envelope").
+const comparableLink = (value: string): string => {
+  const { userinfo, host, port, rest } = linkParts(value);
+  return [
+    'https://',
+    userinfo === undefined ? '' : `${userinfo}@`,
+    host.toLowerCase(),
+    port === '' || port === '443' ? '' : `:${port}`,
+    rest.startsWith('/') ? rest : `/${rest}`,
+  ].join('');
+};
+
+const sameLink = (link: string, other: string | undefined): boolean =>
+  other !== undefined && comparableLink(link) === comparableLink(other);
+
+/** The description is absent, or stored rich text within its bound. */
+const optionalDescription = (value: unknown): boolean =>
+  value === undefined
+  || (boundedText(value, MAX_DESCRIPTION_BYTES) && storable(value));
+
 const optionalLink = (value: unknown): boolean =>
   value === undefined || externalLink(value);
+
+// Go orders a range by year and month, an omitted month as January
+// (packages/schema/gen/go/store_validate.go, ValidateDateRange).
+const monthOrdinal = (value: unknown): number => {
+  const month = value as { y: number; m?: number };
+  return month.y * 12 + (month.m ?? 1);
+};
 
 const yearMonth = (value: unknown): boolean => {
   const month = requireKeys(value, ['y'], ['m']);
@@ -103,7 +190,10 @@ const validDates = (value: unknown): value is DateRange => {
   const range = requireKeys(value, ['start', 'end', 'present']);
   return typeof range.present === 'boolean'
     && yearMonth(range.start)
-    && (range.present ? range.end === null : yearMonth(range.end));
+    && (range.present
+      ? range.end === null
+      : yearMonth(range.end)
+        && monthOrdinal(range.start) <= monthOrdinal(range.end));
 };
 
 const technologies = (value: unknown, max: number): value is string[] =>
@@ -133,6 +223,7 @@ const resumeFields = (value: unknown, origin: string): ProjectPageResume => {
     || resume.url !== `${origin}/${resume.slug}`
     || !boundedText(resume.ownerName, 2240)
     || resume.ownerName.trim() === ''
+    || !storable(resume.ownerName)
     || typeof resume.lng !== 'string'
     || resume.lng.length > 35
     || !RESUME_LNG.test(resume.lng)
@@ -192,8 +283,7 @@ const projectDetail = (value: unknown, listURL: string): ProjectDetail => {
   if (
     !technologies(project.technologies, MAX_TECHNOLOGIES)
     || !optionalText(project.outcome, 600)
-    || !(project.description === undefined
-      || boundedText(project.description, MAX_DESCRIPTION_BYTES))
+    || !optionalDescription(project.description)
     || !optionalLink(project.repositoryUrl)
     || !optionalLink(project.demoUrl)
   ) {
@@ -201,6 +291,18 @@ const projectDetail = (value: unknown, listURL: string): ProjectDetail => {
   }
   return project as unknown as ProjectDetail;
 };
+
+// Go sends both titles uncut: "{name} · {ownerName}" on a project page,
+// at most 683 code points and 2,727 bytes. A project page's description is
+// its summary uncut, at most 300 code points and 1,200 bytes, else the
+// first 160 code points of its outcome; the list page has none.
+const PROJECT_PREVIEW: PreviewBounds = {
+  titleBytes: 2727,
+  titleCodePoints: 683,
+  descriptionBytes: 1200,
+  emptyDescription: true,
+};
+const OUTCOME_DESCRIPTION_CODE_POINTS = 160;
 
 const COMMON_KEYS = [
   'mode', 'canonicalOrigin', 'pageUrl', 'discoveryEnabled', 'pageTitle',
@@ -214,7 +316,7 @@ const commonFields = (envelope: Fields): ProjectPageResume => {
     || typeof envelope.discoveryEnabled !== 'boolean'
     || !validPageTitle(envelope.pageTitle)
     || !validFaviconHref(envelope.faviconHref)
-    || !validPreview(envelope.preview, true)
+    || !validPreview(envelope.preview, PROJECT_PREVIEW)
   ) {
     fail();
   }
@@ -239,6 +341,7 @@ export function decodeProjectListEnvelope(
   const projects = envelope.projects;
   if (
     envelope.pageUrl !== listURL
+    || (envelope.preview as Fields).description !== ''
     || !Array.isArray(projects)
     || projects.length === 0
     || projects.length > MAX_PROJECTS
@@ -260,14 +363,19 @@ export function decodeProjectEnvelope(
   const listURL = `${resume.url}/projects`;
   const project = projectDetail(envelope.project, listURL);
   const entryLink = envelope.entryLink;
+  const description = project.summary ?? (project.outcome === undefined
+    ? ''
+    : [...project.outcome].slice(0, OUTCOME_DESCRIPTION_CODE_POINTS)
+        .join(''));
   if (
     envelope.listUrl !== listURL
     || envelope.pageUrl !== project.url
+    || (envelope.preview as Fields).description !== description
     || typeof envelope.otherProjects !== 'boolean'
     || (entryLink !== undefined
       && (!externalLink(entryLink)
-        || entryLink === project.repositoryUrl
-        || entryLink === project.demoUrl))
+        || sameLink(entryLink, project.repositoryUrl)
+        || sameLink(entryLink, project.demoUrl)))
   ) {
     fail();
   }

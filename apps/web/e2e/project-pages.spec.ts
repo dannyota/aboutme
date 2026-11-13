@@ -6,6 +6,7 @@ import {
   expectProjectColumns,
   expectProjectMeasure,
   expectProjectStructure,
+  expectProjectStylesheet,
   expectRowMeta,
   type Lng,
   openProjectPage,
@@ -19,11 +20,11 @@ import {
 } from './style-mutation';
 
 // The public project list and project page, drawn by the renderer harness
-// from the public render worker's own components and inline style
-// (docs/design/ui/project-pages.md). Both pages run at 320, 768 and 1280 px
-// in the owner's light and dark schemes; the language rotates so each page,
-// scheme and width sees both. Match device runs under both viewer
-// preferences.
+// from the public render worker's own components and the built project
+// stylesheet, under style-src 'self' (docs/design/ui/project-pages.md).
+// Both pages run at 320, 768 and 1280 px in the owner's light and dark
+// schemes; the language rotates so each page, scheme and width sees both.
+// Match device runs under both viewer preferences.
 
 const KINDS: readonly ProjectPageKind[] = ['project-list', 'project'];
 const SCHEMES: readonly Scheme[] = ['light', 'dark'];
@@ -35,6 +36,7 @@ async function assertProjectPage(
 ): Promise<void> {
   expect(external).toEqual([]);
   await expect(page.locator('html')).toHaveAttribute('lang', lng);
+  await expectProjectStylesheet(page);
   await expectScreen(page, projectContract(kind, lng, scheme));
   await expectProjectMeasure(page, kind);
   if (kind === 'project') {
@@ -123,6 +125,30 @@ mutationTest('project page rejects a color outside its scheme', async ({
   await proveMutation(() => expectProjectColors(page, 'project', 'light'),
     () => applyStyleMutation(page.locator('.project-external-primary'),
       { 'background-color': 'rgb(255, 0, 0)' }), 'Project scheme colors.');
+});
+
+mutationTest('project page rejects a style attribute', async ({ page }) => {
+  await openWide('project')(page);
+  await proveMutation(() => expectProjectStylesheet(page),
+    () => mutateAttribute(page.locator('main h1'), 'style', 'color: red'),
+    'Project stylesheet.');
+});
+
+mutationTest('project list rejects a missing project stylesheet', async ({
+  page,
+}) => {
+  await openWide('project-list')(page);
+  await proveMutation(() => expectProjectStylesheet(page), async () => {
+    const toggle = (disabled: boolean) => page.evaluate((value) => {
+      for (const sheet of document.styleSheets) {
+        if (sheet.href?.includes('/_nuxt/assets/project-pages.css')) {
+          sheet.disabled = value;
+        }
+      }
+    }, disabled);
+    await toggle(true);
+    return () => toggle(false);
+  }, 'Project stylesheet.');
 });
 
 mutationTest('project page rejects an unnamed text section', async ({

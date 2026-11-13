@@ -307,8 +307,7 @@ describe('project resume and head fields', () => {
 
   it('accepts an empty preview description and rejects other gaps', () => {
     const preview = detail().preview as Envelope;
-    expect(decode({ ...detail(), preview: { ...preview, description: '' } }))
-      .toBeDefined();
+    expect(decode(nameOnly()).preview.description).toBe('');
     rejects({ ...detail(), preview: { ...preview, title: '' } });
     rejects({ ...detail(), preview: { ...preview, imageAlt: '' } });
     rejects({ ...detail(), preview: without(preview, 'description') });
@@ -334,6 +333,187 @@ describe('project resume and head fields', () => {
     rejects({ ...detail(), faviconHref: 'data:image/svg+xml,<svg>' });
     rejects({ ...detail(), canonicalOrigin: 'https://aboutme.example/' });
     rejects({ ...detail(), discoveryEnabled: 'false' });
+  });
+});
+
+describe('project envelope values Go can and cannot send', () => {
+  // U+1D49C is four bytes in UTF-8, so 300 of them are the longest summary
+  // the library stores, and the project page's description.
+  const longSummary = '𝒜'.repeat(300);
+  const withPreview = (envelope: Envelope, fields: Envelope): Envelope => ({
+    ...envelope,
+    preview: { ...envelope.preview as Envelope, ...fields },
+  });
+  const describedBy = (fields: Envelope, description: string) =>
+    withPreview(withProject(detail(), fields), { description });
+
+  it('admits the longest summary uncut as the page description', () => {
+    const envelope = describedBy({ summary: longSummary }, longSummary);
+    expect(Buffer.byteLength(longSummary, 'utf8')).toBe(1200);
+    expect(decode(envelope)).toEqual(envelope);
+    expect(decode(withRow(list(), 0, { summary: longSummary })))
+      .toBeDefined();
+  });
+
+  it('rejects a summary one character longer', () => {
+    const summary = `${longSummary}𝒜`;
+    rejects(describedBy({ summary }, summary));
+    rejects(withRow(list(), 0, { summary }));
+  });
+
+  it('admits only the summary, else the outcome start, else nothing', () => {
+    rejects(describedBy({}, 'Another description.'));
+    rejects(describedBy({}, ''));
+    const outcome = '𝒜'.repeat(200);
+    const noSummary = (description: string) => {
+      const envelope = describedBy({ outcome }, description);
+      delete (envelope.project as Envelope).summary;
+      return envelope;
+    };
+    expect(decode(noSummary('𝒜'.repeat(160))).preview.description)
+      .toBe('𝒜'.repeat(160));
+    rejects(noSummary('𝒜'.repeat(161)));
+    rejects(noSummary(outcome));
+    rejects(noSummary(''));
+    const short = describedBy({ outcome: 'Shipped.' }, 'Shipped.');
+    delete (short.project as Envelope).summary;
+    expect(decode(short)).toBeDefined();
+    const neither = describedBy({}, '');
+    delete (neither.project as Envelope).summary;
+    delete (neither.project as Envelope).outcome;
+    expect(decode(neither)).toBeDefined();
+    rejects(withPreview(list(), { description: 'Projects' }));
+  });
+
+  it('admits the longest uncut project title and no longer', () => {
+    // 681 four-byte characters and one three-byte euro sign make 2,727
+    // bytes; 683 ASCII letters make 683 code points.
+    const titles = {
+      accepted: [`${'𝒜'.repeat(681)}€`, 'a'.repeat(683)],
+      rejected: ['𝒜'.repeat(682), 'a'.repeat(684)],
+    };
+    expect(Buffer.byteLength(titles.accepted[0]!, 'utf8')).toBe(2727);
+    expect(Buffer.byteLength(titles.rejected[0]!, 'utf8')).toBe(2728);
+    for (const title of titles.accepted) {
+      expect(decode(withPreview(detail(), { title })).preview.title)
+        .toBe(title);
+      expect(decode(withPreview(list(), { title }))).toBeDefined();
+    }
+    for (const title of titles.rejected) {
+      rejects(withPreview(detail(), { title }));
+      rejects(withPreview(list(), { title }));
+    }
+  });
+
+  it('keeps the resume and gate preview bounds', () => {
+    const gate = {
+      mode: 'gate', canonicalOrigin: 'https://resume.example', slug: 'ada1',
+      lng: 'en', pageTitle: 'Ada', faviconHref: '',
+      preview: { title: 'Ada', description: 'Ada', locale: '',
+        imageAlt: 'Ada' },
+      providers: [], message: 'none',
+    };
+    expect(decode(gate)).toBeDefined();
+    const preview = (fields: Envelope) => ({
+      ...gate, preview: { ...gate.preview, ...fields },
+    });
+    rejects(preview({ description: longSummary }));
+    rejects(preview({ title: 'a'.repeat(2241) }));
+  });
+
+  it('rejects an entry link equal to a button link once normalized', () => {
+    for (const entryLink of [
+      'https://GitHub.com/ada/analytical-engine',
+      'https://github.com:443/ada/analytical-engine',
+      'https://GITHUB.COM:443/ada/analytical-engine',
+      'https://ADA.example/demo',
+      'https://ada.example:443/demo',
+    ]) {
+      rejects({ ...detail(), entryLink });
+    }
+    const bare = withProject(detail(), { demoUrl: 'https://ada.example' });
+    for (const entryLink of [
+      'https://ada.example/', 'https://Ada.Example:443/',
+      'https://ada.example:/',
+    ]) {
+      rejects({ ...bare, entryLink });
+    }
+    const query = withProject(detail(), { demoUrl: 'https://ada.example?x' });
+    rejects({ ...query, entryLink: 'https://ada.example/?x' });
+  });
+
+  it('accepts an entry link that differs after normalizing', () => {
+    for (const entryLink of [
+      'https://github.com/Ada/analytical-engine',
+      'https://github.com:8443/ada/analytical-engine',
+      'https://github.com/ada/analytical-engine/',
+      'https://ada.example/demo?x',
+      'https://user@github.com/ada/analytical-engine',
+    ]) {
+      expect(decode({ ...detail(), entryLink }).entryLink, entryLink)
+        .toBe(entryLink);
+    }
+  });
+
+  it('rejects a link with characters Go does not parse', () => {
+    for (const link of [
+      'https://github.com/ada\tx',
+      'https://git\nhub.com/ada',
+      'https://github.com/ada\r',
+      'https://github.com/\u0000',
+      'https://github.com/ada\u001b',
+      'https://github.com/ada\u007f',
+      'https://git hub.com/ada',
+      'https://us er@github.com/ada',
+      'https://us"er@github.com/ada',
+      'https://github.com{x}/ada',
+    ]) {
+      rejects(withProject(detail(), { repositoryUrl: link }));
+      rejects(withProject(detail(), { demoUrl: link }));
+      rejects({ ...detail(), entryLink: link });
+    }
+  });
+
+  it('accepts a space in a link path, as Go stores it', () => {
+    const repositoryUrl = 'https://github.com/ada/my project';
+    expect(decode(withProject(detail(), { repositoryUrl })))
+      .toBeDefined();
+  });
+
+  it('rejects dates that end before they start', () => {
+    for (const dates of [
+      { start: { y: 2021 }, end: { y: 2020 }, present: false },
+      { start: { y: 2020, m: 5 }, end: { y: 2020, m: 4 }, present: false },
+      // An omitted month counts as January, as in Go.
+      { start: { y: 2020, m: 5 }, end: { y: 2020 }, present: false },
+    ]) {
+      rejects(withProject(detail(), { dates }));
+      rejects(withRow(list(), 0, { dates }));
+    }
+    for (const dates of [
+      { start: { y: 2020 }, end: { y: 2020 }, present: false },
+      { start: { y: 2020 }, end: { y: 2020, m: 1 }, present: false },
+      { start: { y: 2020, m: 1 }, end: { y: 2020 }, present: false },
+      { start: { y: 2020, m: 12 }, end: { y: 2021 }, present: false },
+    ]) {
+      expect(decode(withProject(detail(), { dates }))).toBeDefined();
+    }
+  });
+
+  it('rejects NUL and lone surrogates in any text', () => {
+    for (const bad of ['a\u0000b', 'a\ud800b', 'a\udc00b', '\ud83d']) {
+      for (const key of ['name', 'role', 'outcome']) {
+        rejects(withProject(detail(), { [key]: bad }));
+      }
+      rejects(describedBy({ summary: bad }, bad));
+      rejects(withProject(detail(), { description: `<p>${bad}</p>` }));
+      rejects(withProject(detail(), { technologies: [bad] }));
+      rejects(withRow(list(), 0, { name: bad }));
+      rejects(withRow(list(), 0, { technologies: [bad, 'b', 'c', 'd', 'e',
+        'f'] }));
+      rejects(withResume(detail(), { ownerName: bad }));
+    }
+    expect(decode(withProject(detail(), { name: 'Rocket 🚀' }))).toBeDefined();
   });
 });
 

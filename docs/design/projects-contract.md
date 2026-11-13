@@ -222,8 +222,8 @@ The request types are `ProjectListRenderRequest` and `ProjectRenderRequest` in
 `apps/server/internal/publicapi/testdata/project-render.json` is the shared
 corpus: each envelope decodes into its Go type with no unknown field and encodes
 back unchanged, and each HTML is what the renderer writes and the validator
-accepts. Until the renderer exists that HTML is a reference; the change that
-adds the renderer replaces it with the renderer's exact output.
+accepts. The corpus HTML is the renderer's exact output; both sides test against
+it.
 
 - Go builds both requests from one admitted snapshot. They carry no project id,
   entry id, account data, contact detail, photo or other resume content.

@@ -1,10 +1,10 @@
-// The project pages' one inline <style> (docs/design/ui/project-pages.md).
-// The pages load no template CSS, so this holds everything they show: the
-// application tokens (docs/design/ui/typography-and-tokens.md) in the
-// resume's color scheme, the public page bar
-// (docs/design/public-page-bar.md), and both page layouts. It holds no
-// backslash, url(, image-set or @import, so it passes the inline style rule
-// Go applies (docs/design/projects-contract.md "Render envelope").
+// The project pages' stylesheet (docs/design/ui/project-pages.md), which the
+// build writes as /_nuxt/assets/project-pages.css (nuxt.config.ts,
+// server/utils/print/assets.ts). The pages carry no inline CSS and load no
+// template CSS, so this holds everything they show: the application tokens
+// (docs/design/ui/typography-and-tokens.md) in the resume's color scheme,
+// selected by the root's data-scheme, the public page bar
+// (docs/design/public-page-bar.md), and both page layouts.
 //
 // Every rule is scoped under .public-project-page, so the render harness,
 // which also loads the resume page's own bar rules, draws the same page.
