@@ -45,10 +45,7 @@ type Envelope struct {
 	PublicGeneration *string                           `json:"publicGeneration"`
 	Lng              string                            `json:"lng"`
 	Document         publicresume.PublicResumeDocument `json:"document"`
-	// ProjectLinks maps the id of each visible project entry with an
-	// available page to that page's absolute https URL. Version 2 carries it
-	// non-empty; version 1 has none (docs/design/projects-contract.md "Print").
-	ProjectLinks map[string]string `json:"projectLinks,omitempty"`
+	ProjectLinks     map[string]string                 `json:"projectLinks,omitempty"`
 }
 
 // FromOwner projects and freezes one already-authorized owner revision.
@@ -109,8 +106,7 @@ func FromPublic(source publicresume.Snapshot, photo []byte, contentType string) 
 }
 
 // Marshal validates and emits the exact frozen JSON bytes digested by the
-// render queue. Version 1 has no project links; version 2 has a non-empty
-// map whose keys are visible project entries and whose values are https.
+// render queue.
 func Marshal(source Envelope) ([]byte, error) {
 	if !validVersionLinks(source) || !canonicalUUID(source.ResumeID) || !canonicalPositiveInt64(source.Revision) {
 		return nil, errInvalid

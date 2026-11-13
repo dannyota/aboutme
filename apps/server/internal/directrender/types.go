@@ -34,27 +34,15 @@ type PublicRenderRequest struct {
 	// page, and omitted for every other public resume
 	// (docs/design/viewer-analytics/sign-in-to-view.md "Join invite"). It
 	// authorizes nothing; it only names the link the page's join invite uses.
-	JoinInvite string `json:"joinInvite,omitempty"`
-	// ProjectLinks holds the same entryId and url pairs as the public JSON's
-	// projectLinks at this revision, in layout and entry order. It is present
-	// only together with ProjectsURL, and only when at least one project is
-	// available (docs/design/projects-contract.md "Entry points on the resume
-	// page").
+	JoinInvite   string             `json:"joinInvite,omitempty"`
 	ProjectLinks []EntryProjectLink `json:"projectLinks,omitempty"`
-	// ProjectsURL is the page bar's link to the project list: the canonical
-	// origin + "/" + slug + "/projects". It is present only together with
-	// ProjectLinks.
-	ProjectsURL string `json:"projectsUrl,omitempty"`
+	ProjectsURL  string             `json:"projectsUrl,omitempty"`
 }
 
-// EntryProjectLink is the project page one visible resume entry's title
-// links to. It never carries the project id or slug.
+// EntryProjectLink binds the title anchor with data-project-entry="{EntryID}" to URL.
 type EntryProjectLink struct {
-	// EntryID is the id of the linking project entry.
 	EntryID string `json:"entryId"`
-	// URL is the project page's absolute https address at the canonical
-	// origin.
-	URL string `json:"url"`
+	URL     string `json:"url"`
 }
 
 // GateRenderRequest contains the renderer inputs for the sign-in-to-view

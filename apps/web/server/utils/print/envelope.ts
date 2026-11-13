@@ -24,25 +24,15 @@ interface PrintEnvelopeFields {
   document: PublicResumeDocument;
 }
 
-/** A resume print envelope with no project links. */
 export interface PrintEnvelopeV1 extends PrintEnvelopeFields {
   version: 1;
 }
 
-/**
- * A resume print envelope whose resume links at least one available project
- * page (docs/design/projects-contract.md "Print").
- */
 export interface PrintEnvelopeV2 extends PrintEnvelopeFields {
   version: 2;
-  /**
-   * The id of each visible project entry with an available page, mapped to
-   * that page's absolute https URL. Never empty.
-   */
   projectLinks: Record<string, string>;
 }
 
-/** A resume print envelope: version 2 only when it carries project links. */
 export type PrintEnvelope = PrintEnvelopeV1 | PrintEnvelopeV2;
 
 /**

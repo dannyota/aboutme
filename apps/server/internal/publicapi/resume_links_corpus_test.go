@@ -83,8 +83,6 @@ func resumeLinksSources() []resumeLinksSource {
 			prepare: func(entries []schema.ProjectEntry) { entries[1].IsHidden = &hidden },
 		},
 		{
-			// A project section whose entries link no project: both fields
-			// are omitted, and the print envelope stays version 1.
 			name: "en-no-available-project", sample: "engineer-compact.en.json", lng: "en", revision: 9, discoverable: true, download: true,
 			print: true,
 		},
@@ -191,14 +189,7 @@ func resumeLinksRequest(t *testing.T, snapshot publicresume.Snapshot) directrend
 	return withEntryPoints(publicRenderRequest(snapshot.Public, snapshot.DiscoveryEnabled, page, origin), snapshot.ProjectLinks, origin)
 }
 
-// withEntryPoints adds the resume page's entry points as the contract states
-// them: the snapshot's project links in their order, and the project list
-// address, both only when a project is available. The HTML route does not
-// send them yet.
 func withEntryPoints(request directrender.PublicRenderRequest, links []publicresume.ProjectLink, origin publicresume.PublicOrigin) directrender.PublicRenderRequest {
-	if len(links) == 0 {
-		return request
-	}
 	for _, link := range links {
 		request.ProjectLinks = append(request.ProjectLinks, directrender.EntryProjectLink{EntryID: link.EntryID, URL: link.URL})
 	}
@@ -206,21 +197,19 @@ func withEntryPoints(request directrender.PublicRenderRequest, links []publicres
 	return request
 }
 
-// printEnvelope freezes the snapshot as the public PDF does, at version 2
-// with the project links when a project is available. The PDF route does not
-// set version 2 yet.
+// printEnvelope freezes the snapshot as the public PDF does, and adds its
+// project links through printsnapshot.WithProjectLinks: version 2 when a
+// project is available, version 1 otherwise. The PDF route does not add the
+// links yet.
 func printEnvelope(t *testing.T, snapshot publicresume.Snapshot) []byte {
 	t.Helper()
 	envelope, err := printsnapshot.FromPublic(snapshot, nil, "")
 	if err != nil {
 		t.Fatalf("FromPublic: %v", err)
 	}
-	if len(snapshot.ProjectLinks) != 0 {
-		envelope.Version = 2
-		envelope.ProjectLinks = map[string]string{}
-		for _, link := range snapshot.ProjectLinks {
-			envelope.ProjectLinks[link.EntryID] = link.URL
-		}
+	envelope, err = printsnapshot.WithProjectLinks(envelope, mustPublicOrigin(t), snapshot.Public.Slug, snapshot.ProjectLinks)
+	if err != nil {
+		t.Fatalf("WithProjectLinks: %v", err)
 	}
 	encoded, err := printsnapshot.Marshal(envelope)
 	if err != nil {

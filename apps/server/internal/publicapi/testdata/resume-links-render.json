@@ -960,7 +960,8 @@
           "locale": "en_US",
           "imageAlt": "Đỗ Hoàng Nam · Senior Frontend Engineer · React, TypeScript, Next.js",
           "imageUrl": "https://aboutme.example/api/v1/public/resumes/do-hoang-nam/og/0123456789abcdef.png"
-        }
+        },
+        "projectsUrl": "https://aboutme.example/do-hoang-nam/projects"
       }
     },
     {

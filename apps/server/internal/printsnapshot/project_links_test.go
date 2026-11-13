@@ -13,8 +13,8 @@ import (
 )
 
 const (
-	linkedFirstURL  = "https://aboutme.example/ada/projects/atlas"
-	linkedSecondURL = "https://aboutme.example/ada/projects/beacon"
+	linkedFirstURL  = "https://aboutme.example/ada-lovelace/projects/atlas"
+	linkedSecondURL = "https://aboutme.example/ada-lovelace/projects/beacon"
 )
 
 // linkedOwnerEnvelope is a version-1 envelope of a resume with a profile
@@ -103,16 +103,29 @@ func TestMarshalRefusesProjectLinksThatBreakTheVersionRule(t *testing.T) {
 		{"hidden entry", withLinks(plain, 2, link("hidden", linkedSecondURL))},
 		{"entry of another section type", withLinks(plain, 2, link("profile-entry", linkedSecondURL))},
 		{"entry of a section outside the layout", withLinks(plain, 2, link("unlisted-entry", linkedSecondURL))},
-		{"ftp value", withLinks(plain, 2, link("second", "ftp://aboutme.example/ada/projects/beacon"))},
-		{"upper-case scheme", withLinks(plain, 2, link("second", "HTTPS://aboutme.example/ada/projects/beacon"))},
-		{"relative value", withLinks(plain, 2, link("second", "/ada/projects/beacon"))},
+		{"ftp value", withLinks(plain, 2, link("second", "ftp://aboutme.example/ada-lovelace/projects/beacon"))},
+		{"upper-case scheme", withLinks(plain, 2, link("second", "HTTPS://aboutme.example/ada-lovelace/projects/beacon"))},
+		{"relative value", withLinks(plain, 2, link("second", "/ada-lovelace/projects/beacon"))},
 		{"empty value", withLinks(plain, 2, link("second", ""))},
-		{"no host", withLinks(plain, 2, link("second", "https:///ada/projects/beacon"))},
-		{"user info", withLinks(plain, 2, link("second", "https://user@aboutme.example/ada/projects/beacon"))},
+		{"no host", withLinks(plain, 2, link("second", "https:///ada-lovelace/projects/beacon"))},
+		{"user info", withLinks(plain, 2, link("second", "https://user@aboutme.example/ada-lovelace/projects/beacon"))},
 		{"query", withLinks(plain, 2, link("second", linkedSecondURL+"?x=1"))},
 		{"fragment", withLinks(plain, 2, link("second", linkedSecondURL+"#top"))},
-		{"space", withLinks(plain, 2, link("second", "https://aboutme.example/ada/projects/be acon"))},
+		{"space", withLinks(plain, 2, link("second", "https://aboutme.example/ada-lovelace/projects/be acon"))},
 		{"javascript", withLinks(plain, 2, link("second", "javascript:alert(1)"))},
+		{"arbitrary http path", withLinks(plain, 2, link("second", "http://outside.example/arbitrary"))},
+		{"root path", withLinks(plain, 2, link("second", "https://aboutme.example/"))},
+		{"no path", withLinks(plain, 2, link("second", "https://aboutme.example"))},
+		{"project list path", withLinks(plain, 2, link("second", "https://aboutme.example/ada-lovelace/projects"))},
+		{"empty project slug", withLinks(plain, 2, link("second", "https://aboutme.example/ada-lovelace/projects/"))},
+		{"trailing slash", withLinks(plain, 2, link("second", linkedSecondURL+"/"))},
+		{"extra segment", withLinks(plain, 2, link("second", linkedSecondURL+"/extra"))},
+		{"other middle segment", withLinks(plain, 2, link("second", "https://aboutme.example/ada-lovelace/project/beacon"))},
+		{"invalid resume slug", withLinks(plain, 2, link("second", "https://aboutme.example/ada/projects/beacon"))},
+		{"reserved resume slug", withLinks(plain, 2, link("second", "https://aboutme.example/login/projects/beacon"))},
+		{"invalid project slug", withLinks(plain, 2, link("second", "https://aboutme.example/ada-lovelace/projects/Beacon"))},
+		{"percent-encoded path", withLinks(plain, 2, link("second", "https://aboutme.example/ada%2Dlovelace/projects/beacon"))},
+		{"dot segment", withLinks(plain, 2, link("second", "https://aboutme.example/ada-lovelace/projects/../beacon"))},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

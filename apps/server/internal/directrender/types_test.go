@@ -33,9 +33,6 @@ func TestPublicRenderRequestHasOnlyTheClosedWireFields(t *testing.T) {
 	}
 }
 
-// The entry points travel as two fields that are omitted together, so a
-// request for a resume without an available project keeps the closed shape
-// above (docs/design/projects-contract.md "Entry points on the resume page").
 func TestPublicRenderRequestEntryPointsAreTwoOptionalFields(t *testing.T) {
 	body, err := json.Marshal(PublicRenderRequest{
 		PublicResume: publicresume.PublicResume{Slug: "ada"},
@@ -65,6 +62,14 @@ func TestPublicRenderRequestEntryPointsAreTwoOptionalFields(t *testing.T) {
 	}
 	if bytes.Contains(body, []byte("projectLinks")) || bytes.Contains(body, []byte("projectsUrl")) {
 		t.Fatalf("request without entry points = %s", body)
+	}
+
+	body, err = json.Marshal(PublicRenderRequest{Mode: PublicRenderMode, ProjectLinks: []EntryProjectLink{}, ProjectsURL: "https://aboutme.example/ada/projects"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(body, []byte("projectLinks")) || !bytes.Contains(body, []byte(`"projectsUrl":"https://aboutme.example/ada/projects"`)) {
+		t.Fatalf("request with entry points and no links = %s", body)
 	}
 }
 

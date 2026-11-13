@@ -45,14 +45,8 @@ export interface PublicRenderPreview {
 /** The route the sign-in-to-view join invite links to (AC-VIEW-008). */
 type PublicRenderJoinInvite = '/register' | '/login';
 
-/**
- * The project page one visible resume entry's title links to. It never
- * carries the project id or slug.
- */
 export interface PublicRenderEntryProjectLink {
-  /** The id of the linking project entry. */
   entryId: string;
-  /** The project page's absolute https address at the canonical origin. */
   url: string;
 }
 
@@ -72,17 +66,7 @@ export interface PublicRenderResumeRequest {
    * (docs/design/viewer-analytics/sign-in-to-view.md#join-invite).
    */
   joinInvite?: PublicRenderJoinInvite;
-  /**
-   * The same entryId and url pairs as the public JSON's projectLinks at this
-   * revision, in layout and entry order. Present only together with
-   * projectsUrl, and only when at least one project is available
-   * (docs/design/projects-contract.md "Entry points on the resume page").
-   */
   projectLinks?: PublicRenderEntryProjectLink[];
-  /**
-   * The page bar's link to the project list: canonicalOrigin + '/' + slug +
-   * '/projects'. Present only together with projectLinks.
-   */
   projectsUrl?: string;
 }
 

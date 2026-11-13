@@ -6,15 +6,37 @@ import (
 
 	schema "danny.vn/aboutme/packages/schema/gen/go"
 
+	"danny.vn/aboutme/apps/server/internal/project"
 	"danny.vn/aboutme/apps/server/internal/publicresume"
+	"danny.vn/aboutme/apps/server/internal/publicroots"
 )
 
-// validVersionLinks reports whether the envelope's version and project links
-// agree (docs/design/projects-contract.md "Print"). Version 1 carries no
-// link; an empty map encodes as no map, so it stays byte for byte version 1.
-// Version 2 carries at least one link, each from the id of a visible project
-// entry of the document to a page address on the public origin's scheme:
-// https in production, http only on a local development origin.
+// WithProjectLinks is the only builder of version 2.
+func WithProjectLinks(envelope Envelope, origin publicresume.PublicOrigin, slug string, links []publicresume.ProjectLink) (Envelope, error) {
+	if envelope.Version != 1 || len(envelope.ProjectLinks) != 0 {
+		return Envelope{}, errInvalid
+	}
+	if len(links) == 0 {
+		return envelope, nil
+	}
+	if origin.String() == "" || !publicroots.ValidSlug(slug) {
+		return Envelope{}, errInvalid
+	}
+	pages := make(map[string]string, len(links))
+	for _, link := range links {
+		_, repeated := pages[link.EntryID]
+		if repeated || !project.ValidSlug(link.ProjectSlug) || link.URL != origin.Resolve("/"+slug+"/projects/"+link.ProjectSlug) {
+			return Envelope{}, errInvalid
+		}
+		pages[link.EntryID] = link.URL
+	}
+	envelope.Version, envelope.ProjectLinks = 2, pages
+	if _, err := Marshal(envelope); err != nil {
+		return Envelope{}, err
+	}
+	return envelope, nil
+}
+
 func validVersionLinks(source Envelope) bool {
 	switch source.Version {
 	case 1:
@@ -35,8 +57,6 @@ func validVersionLinks(source Envelope) bool {
 	}
 }
 
-// visibleProjectEntries is the set of entry ids of the project sections the
-// layout shows. The projection has already dropped hidden entries.
 func visibleProjectEntries(document publicresume.PublicResumeDocument) map[string]bool {
 	ids := map[string]bool{}
 	sections := document.Customization.Layout.Sections
@@ -56,11 +76,8 @@ func visibleProjectEntries(document publicresume.PublicResumeDocument) map[strin
 	return ids
 }
 
-// pageAddress accepts an absolute https or http address of printable ASCII
-// with a host and no user info, query or fragment, the schemes a public
-// origin may have (publicresume.ParsePublicOrigin).
 func pageAddress(value string) bool {
-	if !strings.HasPrefix(value, "https://") && !strings.HasPrefix(value, "http://") || strings.ContainsAny(value, "?#") {
+	if !strings.HasPrefix(value, "https://") && !strings.HasPrefix(value, "http://") || strings.ContainsAny(value, "?#%") {
 		return false
 	}
 	for index := range len(value) {
@@ -69,5 +86,9 @@ func pageAddress(value string) bool {
 		}
 	}
 	parsed, err := url.Parse(value)
-	return err == nil && parsed.Host != "" && parsed.User == nil
+	if err != nil || parsed.Host == "" || parsed.User != nil {
+		return false
+	}
+	segments := strings.Split(parsed.Path, "/")
+	return len(segments) == 4 && segments[0] == "" && publicroots.ValidSlug(segments[1]) && segments[2] == "projects" && project.ValidSlug(segments[3])
 }

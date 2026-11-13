@@ -14,10 +14,6 @@ import (
 	"danny.vn/aboutme/apps/server/internal/publicresume"
 )
 
-// strictShape returns a new value of a struct type with typ's fields and
-// tags, except that the field named raw holds its JSON undecoded. The public
-// resume types encode but have no decoder, so a strict decode reads every
-// other field into its Go type and the golden comparison covers the raw one.
 func strictShape(t *testing.T, typ reflect.Type, raw string) any {
 	t.Helper()
 	fields := make([]reflect.StructField, typ.NumField())
@@ -35,11 +31,6 @@ func strictShape(t *testing.T, typ reflect.Type, raw string) any {
 	return reflect.New(reflect.StructOf(fields)).Interface()
 }
 
-// TestResumeLinksRenderCorpusMatchesRequestType proves each envelope decodes
-// into PublicRenderRequest's fields with no unknown field, encodes back to the
-// same JSON, and keeps the entry point rules: both fields or neither,
-// projectsUrl at the resume's /projects, and each link one project page
-// under it.
 func TestResumeLinksRenderCorpusMatchesRequestType(t *testing.T) {
 	raw, err := os.ReadFile(resumeLinksCorpusPath)
 	if err != nil {
@@ -67,69 +58,78 @@ func TestResumeLinksRenderCorpusMatchesRequestType(t *testing.T) {
 			if got := encodeCorpusJSON(t, shape, ""); !bytes.Equal(got, want.Bytes()) {
 				t.Fatalf("envelope does not round-trip:\n got %s\nwant %s", got, want.Bytes())
 			}
-
-			var request struct {
-				CanonicalOrigin string `json:"canonicalOrigin"`
-				PublicResume    struct {
-					Slug string `json:"slug"`
-				} `json:"publicResume"`
-				ProjectLinks []directrender.EntryProjectLink `json:"projectLinks"`
-				ProjectsURL  string                          `json:"projectsUrl"`
-			}
-			if err := json.Unmarshal(entry.Envelope, &request); err != nil {
-				t.Fatal(err)
-			}
-			if (len(request.ProjectLinks) == 0) != (request.ProjectsURL == "") {
-				t.Fatalf("projectLinks %v and projectsUrl %q are not present together", request.ProjectLinks, request.ProjectsURL)
-			}
-			if request.ProjectsURL == "" {
-				return
-			}
-			if want := request.CanonicalOrigin + "/" + request.PublicResume.Slug + "/projects"; request.ProjectsURL != want {
-				t.Fatalf("projectsUrl = %q, want %q", request.ProjectsURL, want)
-			}
-			entries, urls := map[string]bool{}, map[string]bool{}
-			for _, link := range request.ProjectLinks {
-				slug, under := strings.CutPrefix(link.URL, request.ProjectsURL+"/")
-				if !under || !project.ValidSlug(slug) || urls[link.URL] || link.EntryID == "" || entries[link.EntryID] {
-					t.Fatalf("link %+v is not one entry's own project page under %q", link, request.ProjectsURL)
-				}
-				entries[link.EntryID], urls[link.URL] = true, true
-			}
+			requireEntryPointRules(t, entry.Envelope)
 		})
 	}
 }
 
-// TestResumeLinksCasesFollowTheEntryPointRules proves, on the values the
-// corpus is generated from, that the links are the visible linked project
-// entries in layout and entry order, and pins what each case is for, so a
-// regenerated corpus cannot quietly lose one.
-func TestResumeLinksCasesFollowTheEntryPointRules(t *testing.T) {
-	requests := map[string]directrender.PublicRenderRequest{}
-	for _, source := range resumeLinksSources() {
-		request := resumeLinksRequest(t, readResumeLinksSnapshot(t, source))
-		requests[source.name] = request
-		stored := resumeLinksSourceDocument(t, source).Content["project"].ProjectEntries
-		linked := map[string]bool{}
-		for index, slug := range source.linked {
-			linked[stored[index].ID] = slug != ""
+func requireEntryPointRules(t *testing.T, envelope json.RawMessage) {
+	t.Helper()
+	var request struct {
+		CanonicalOrigin string `json:"canonicalOrigin"`
+		PublicResume    struct {
+			Slug     string `json:"slug"`
+			Document struct {
+				Content map[string]struct {
+					SectionType string `json:"sectionType"`
+					Entries     []struct {
+						ID string `json:"id"`
+					} `json:"entries"`
+				} `json:"content"`
+				Customization struct {
+					Layout struct {
+						Sections struct {
+							Main    []string `json:"main"`
+							Sidebar []string `json:"sidebar"`
+						} `json:"sections"`
+					} `json:"layout"`
+				} `json:"customization"`
+			} `json:"document"`
+		} `json:"publicResume"`
+		ProjectLinks []directrender.EntryProjectLink `json:"projectLinks"`
+		ProjectsURL  string                          `json:"projectsUrl"`
+	}
+	if err := json.Unmarshal(envelope, &request); err != nil {
+		t.Fatal(err)
+	}
+	if want := request.CanonicalOrigin + "/" + request.PublicResume.Slug + "/projects"; request.ProjectsURL != want {
+		t.Fatalf("projectsUrl = %q, want %q", request.ProjectsURL, want)
+	}
+	if request.ProjectLinks != nil && len(request.ProjectLinks) == 0 {
+		t.Fatal("projectLinks is present but empty")
+	}
+	linked := map[string]bool{}
+	var got []string
+	for _, link := range request.ProjectLinks {
+		slug, under := strings.CutPrefix(link.URL, request.ProjectsURL+"/")
+		if !under || !project.ValidSlug(slug) || link.EntryID == "" || linked[link.EntryID] {
+			t.Fatalf("link %+v is not one entry's own project page under %q", link, request.ProjectsURL)
 		}
-		// The public document holds only visible entries, so walking it in
-		// layout and entry order gives the links the contract expects.
-		document := request.PublicResume.Document
-		var visible []string
-		for _, keys := range [][]string{document.Customization.Layout.Sections.Main, document.Customization.Layout.Sections.Sidebar} {
-			for _, key := range keys {
-				for _, entry := range document.Content[key].ProjectEntries {
-					if linked[entry.ID] {
-						visible = append(visible, entry.ID)
-					}
+		linked[link.EntryID] = true
+		got = append(got, link.EntryID)
+	}
+	var visible []string
+	document := request.PublicResume.Document
+	for _, key := range append(document.Customization.Layout.Sections.Main, document.Customization.Layout.Sections.Sidebar...) {
+		if section := document.Content[key]; section.SectionType == "project" {
+			for _, item := range section.Entries {
+				if linked[item.ID] {
+					visible = append(visible, item.ID)
 				}
 			}
 		}
-		if got := linkedIDs(request); !slices.Equal(got, visible) {
-			t.Fatalf("%s: linked entries %v, want the visible linked entries in layout order %v", source.name, got, visible)
-		}
+	}
+	if !slices.Equal(got, visible) {
+		t.Fatalf("linked entries %v, want each once among the visible project entries in layout order %v", got, visible)
+	}
+}
+
+func TestResumeLinksCasesKeepTheirPurpose(t *testing.T) {
+	requests := map[string]directrender.PublicRenderRequest{}
+	for _, source := range resumeLinksSources() {
+		request := resumeLinksRequest(t, readResumeLinksSnapshot(t, source))
+		requireEntryPointRules(t, encodeCorpusJSON(t, request, ""))
+		requests[source.name] = request
 	}
 
 	two := requests["en-two-linked-entries"]
@@ -145,8 +145,8 @@ func TestResumeLinksCasesFollowTheEntryPointRules(t *testing.T) {
 	}
 
 	none := requests["en-no-available-project"]
-	if len(projectEntries(none)) == 0 || none.ProjectLinks != nil || none.ProjectsURL != "" {
-		t.Fatalf("en-no-available-project: want a project section and neither field; got %+v %q", none.ProjectLinks, none.ProjectsURL)
+	if len(projectEntries(none)) == 0 || none.ProjectLinks != nil || none.ProjectsURL != "https://aboutme.example/do-hoang-nam/projects" {
+		t.Fatalf("en-no-available-project: want a project section, projectsUrl and no projectLinks; got %+v %q", none.ProjectLinks, none.ProjectsURL)
 	}
 
 	vi := requests["vi-linked-entries"]
