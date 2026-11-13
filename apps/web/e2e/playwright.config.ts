@@ -81,6 +81,7 @@ export default defineConfig({
         'preview-gap.spec.ts',
         'card.spec.ts',
         'sign-in-gate.spec.ts',
+        'project-pages.spec.ts',
       ]
     : [
         'normal-csp.spec.ts',

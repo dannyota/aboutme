@@ -11,6 +11,9 @@ import {
 } from './server/utils/public-render/worker-build';
 import { buildPrintWorker } from './server/utils/print/worker-build';
 import {
+  PROJECT_PAGE_STYLE,
+} from './server/workers/public-render/project-style';
+import {
   buildPrintAssets,
   publicScriptVersion,
   publicStyleVersion,
@@ -411,14 +414,16 @@ export default defineNuxtConfig({
     'nitro:build:before': async () => {
       buildPublicResumeValidator(publicRenderBuildDir);
       buildPrintDocumentValidator(printBuildDir);
-      // The public worker bakes in content versions of print.css and the
-      // hydration bundle, so both are written before it builds.
+      // The public worker bakes in content versions of the public
+      // stylesheets and the hydration bundle, so all are written before it
+      // builds.
       await buildPrintWorker(printBuildDir, printDocumentValidator);
       await buildPublicResumeHydration();
       await buildPublicRenderWorker(
         publicStyleVersion(
           readFileSync(resolve(printBuildDir, 'print.css'), 'utf8'),
           readFileSync(resolve('app/assets/css/fonts.css'), 'utf8'),
+          PROJECT_PAGE_STYLE,
         ),
         publicScriptVersion(readFileSync(publicResumeHydration, 'utf8')),
       );
@@ -426,6 +431,7 @@ export default defineNuxtConfig({
         publicRenderAssetsDir,
         resolve(printAssetsDir, 'fonts'),
         resolve(printBuildDir, 'print.css'),
+        PROJECT_PAGE_STYLE,
       );
     },
     'pages:extend': (pages) => {

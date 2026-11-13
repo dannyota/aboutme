@@ -37,12 +37,14 @@ describe('print static assets', () => {
     mkdirSync(assets);
     writeFileSync(join(assets, 'public-resume.mjs'), 'export default true;');
 
-    buildPrintAssets(assets, fonts, printCSS);
+    buildPrintAssets(assets, fonts, printCSS, '.public-project-page{}');
 
     expect(readFileSync(join(assets, 'public-resume.mjs'), 'utf8'))
       .toBe('export default true;');
     expect(readFileSync(join(assets, 'print.css'), 'utf8'))
       .toBe('.resume-document { color: black; }');
+    expect(readFileSync(join(assets, 'project-pages.css'), 'utf8'))
+      .toBe('.public-project-page{}');
     expect(readFileSync(join(assets, 'print-fonts.css'), 'utf8'))
       .toContain('@font-face');
     expect(existsSync(join(fonts, 'inter-var.woff2'))).toBe(true);
@@ -51,14 +53,17 @@ describe('print static assets', () => {
 });
 
 describe('public style version', () => {
-  it('is 16 hex characters that change with either stylesheet', () => {
-    const base = publicStyleVersion('a{}', 'b{}');
+  it('is 16 hex characters that change with any stylesheet', () => {
+    const base = publicStyleVersion('a{}', 'b{}', 'c{}');
     expect(base).toMatch(/^[0-9a-f]{16}$/u);
-    expect(publicStyleVersion('a{}', 'b{}')).toBe(base);
-    expect(publicStyleVersion('a{color:red}', 'b{}')).not.toBe(base);
-    expect(publicStyleVersion('a{}', 'b{color:red}')).not.toBe(base);
+    expect(publicStyleVersion('a{}', 'b{}', 'c{}')).toBe(base);
+    expect(publicStyleVersion('a{color:red}', 'b{}', 'c{}')).not.toBe(base);
+    expect(publicStyleVersion('a{}', 'b{color:red}', 'c{}')).not.toBe(base);
+    // The project pages' stylesheet versions every public page's links.
+    expect(publicStyleVersion('a{}', 'b{}', 'c{color:red}')).not.toBe(base);
     // The separator keeps a byte moved across the boundary distinct.
-    expect(publicStyleVersion('a{}b', '{}')).not.toBe(base);
+    expect(publicStyleVersion('a{}b', '{}', 'c{}')).not.toBe(base);
+    expect(publicStyleVersion('a{}', 'b{}c', '{}')).not.toBe(base);
   });
 });
 

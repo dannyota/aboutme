@@ -7,10 +7,15 @@ import PublicResumeApp from '../../../app/components/public/PublicResumeApp.vue'
 import PublicGate from '../../../app/components/public/PublicGate.vue';
 import { GATE_STYLE } from './gate-style';
 import {
+  escapeAttribute,
+  escapeText,
+  previewHead,
+  type PublicAssetVersions,
+} from './page-head';
+import {
   PUBLIC_RENDER_FAILURE,
   PUBLIC_RENDER_HTML_MAX_BYTES,
   type PublicRenderGateRequest,
-  type PublicRenderPreview,
   type PublicRenderResumeRequest,
 } from '../../utils/public-render/envelope';
 
@@ -28,18 +33,6 @@ const jsonString = (value: string): string => {
   }
   return `${result}"`;
 };
-
-// HTML-escapes plain text for a text context (<title>). It is complete for
-// RCDATA text but does not escape single quotes, so never reuse it for an HTML
-// attribute value.
-const escapeText = (value: string): string => value
-  .replaceAll('&', '&amp;')
-  .replaceAll('<', '&lt;')
-  .replaceAll('>', '&gt;')
-  .replaceAll('"', '&quot;');
-
-const escapeAttribute = (value: string): string => escapeText(value)
-  .replaceAll('\'', '&#39;');
 
 const isHTTPSURL = (value: string): boolean => {
   try {
@@ -87,73 +80,6 @@ const jsonLd = (request: PublicRenderResumeRequest): string => {
   const json = `{"@context":"https://schema.org","@type":"ProfilePage","url":${jsonString(`${origin}/${request.publicResume.slug}`)},"name":${jsonString(`${person.fullName} — Resume`)},"inLanguage":${jsonString(request.publicResume.lng)},"mainEntity":{${main}}}`;
   return `<script type="application/ld+json">${json}</script>`;
 };
-
-const meta = (
-  attribute: 'name' | 'property',
-  key: string,
-  value: string,
-): string =>
-  `<meta ${attribute}="${key}" content="${escapeAttribute(value)}">`;
-
-// The link-preview tags in the order of docs/design/link-previews.md, "Page
-// head". The server's validator accepts each exactly once with the value it
-// computed, and rejects twitter:title, twitter:description and theme-color.
-// A request without preview text gets only the image tags.
-const previewHead = (
-  pageURL: string,
-  preview: PublicRenderPreview | undefined,
-  imageURL: string | undefined,
-): string => {
-  // Without an image URL the head names no image and no twitter:card at all:
-  // a gate has no card of its own to show, and the resume's PNG would reveal
-  // the resume (docs/design/viewer-analytics/sign-in-to-view.md#gate). Go's
-  // gate validator accepts twitter:card only as summary_large_image.
-  const image = imageURL === undefined
-    ? []
-    : [
-        meta('property', 'og:image', imageURL),
-        ...(preview === undefined
-          ? []
-          : [meta('property', 'og:image:type', 'image/png')]),
-        meta('property', 'og:image:width', '1200'),
-        meta('property', 'og:image:height', '630'),
-      ];
-  const card = imageURL === undefined
-    ? []
-    : [
-        meta('name', 'twitter:card', 'summary_large_image'),
-        meta('name', 'twitter:image', imageURL),
-      ];
-  if (preview === undefined) return [...image, ...card].join('');
-  return [
-    meta('name', 'description', preview.description),
-    meta('property', 'og:type', 'profile'),
-    meta('property', 'og:site_name', 'aboutme.vn'),
-    meta('property', 'og:title', preview.title),
-    meta('property', 'og:description', preview.description),
-    meta('property', 'og:url', pageURL),
-    ...(preview.locale === ''
-      ? []
-      : [meta('property', 'og:locale', preview.locale)]),
-    ...image,
-    ...(imageURL === undefined
-      ? []
-      : [meta('property', 'og:image:alt', preview.imageAlt)]),
-    ...card,
-    ...(imageURL === undefined
-      ? []
-      : [meta('name', 'twitter:image:alt', preview.imageAlt)]),
-  ].join('');
-};
-
-/**
- * Content versions of the fixed-name, immutable assets the public page loads;
- * each is 16 lowercase hex characters.
- */
-export interface PublicAssetVersions {
-  readonly style: string;
-  readonly script: string;
-}
 
 export async function renderPublicResume(
   request: PublicRenderResumeRequest,
@@ -254,6 +180,7 @@ export async function renderPublicGate(
             providers: request.providers,
             message: request.message,
             homeHref: `${request.canonicalOrigin}/`,
+            ...(request.page === undefined ? {} : { page: request.page }),
           }),
       }),
     );
