@@ -116,9 +116,12 @@ step booleans and four error counters.
 
 The publish check retains `publish-proof.json`, mode 0600 and at most 8,192
 bytes. It contains only fixed step booleans, response statuses, the bounded
-revocation time, mutation-header presence flags, and error counters. It never
-stores header values, cookies, passwords, request or response bodies, resume
-content, or personal data.
+revocation time, mutation-header presence flags, and error counters, plus a
+`projects` block for the project pages: nine step booleans (linked, served,
+unknownUniform, hiddenUniform, gate, pass, unpublishedUniform, renamed,
+cleanup), four error counters, and the counts of stylesheets, style attributes,
+uniform 404s and gated addresses. It never stores header values, cookies,
+passwords, request or response bodies, resume content, or personal data.
 
 The privacy check exports a portable account attachment, cancels deletion, then
 proves provider reauthentication and a fresh explicit confirmation before real
