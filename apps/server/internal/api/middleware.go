@@ -72,7 +72,7 @@ type statusWriter struct {
 }
 
 func (sw *statusWriter) WriteHeader(status int) {
-	// net/http uses only the first WriteHeader call for a request and logs later calls as superfluous.
+	// net/http keeps the first final (non-1xx) WriteHeader status and logs later calls as superfluous (pkg.go.dev/net/http#ResponseWriter).
 	if !sw.wroteHeader {
 		sw.status = status
 		sw.wroteHeader = true

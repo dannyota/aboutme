@@ -4,7 +4,7 @@ package printrender
 
 import "syscall"
 
-// Non-Linux hosts have no parent-death signal (Linux prctl PR_SET_PDEATHSIG), so the supervisor or watchdog cleans up.
+// This build sets no parent-death signal outside Linux (syscall.SysProcAttr.Pdeathsig), so the supervisor or watchdog cleans up.
 func browserProcessAttributes() *syscall.SysProcAttr {
 	return &syscall.SysProcAttr{Setpgid: true}
 }
