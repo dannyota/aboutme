@@ -5,6 +5,7 @@ import {
   type OAuthConsentRequest,
   type OAuthConsentView,
   OAuthConsentFailure,
+  canonicalScopeSet,
   useOAuthConsent,
 } from '../composables/useOAuthConsent';
 import StatusBanner from '@/components/app/StatusBanner.vue';
@@ -35,6 +36,13 @@ function queryString(value: unknown): string | null {
 }
 
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]']);
+
+const requestsProjects = computed(() => view.value?.scopes.some(
+  (scope) => scope === 'projects:read' || scope === 'projects:write',
+) ?? false);
+const requestsProjectWrites = computed(
+  () => view.value?.scopes.includes('projects:write') ?? false,
+);
 
 const returnToLine = computed(() => {
   if (view.value === null || authorizeQuery === null) return null;
@@ -67,7 +75,8 @@ function parseQuery(): OAuthConsentRequest | null {
   const clientId = queryString(values.client_id);
   const redirectURI = queryString(values.redirect_uri);
   const responseType = queryString(values.response_type);
-  const scope = queryString(values.scope);
+  const rawScope = queryString(values.scope);
+  const scope = rawScope === null ? null : canonicalScopeSet(rawScope);
   const codeChallenge = queryString(values.code_challenge);
   const codeChallengeMethod = queryString(values.code_challenge_method);
   const stateValue = values.state;
@@ -75,9 +84,7 @@ function parseQuery(): OAuthConsentRequest | null {
     clientId === null
     || redirectURI === null
     || responseType !== 'code'
-    || (scope !== 'resumes:read'
-      && scope !== 'resumes:write'
-      && scope !== 'resumes:read resumes:write')
+    || scope === null
     || codeChallenge === null
     || codeChallengeMethod !== 'S256'
     || (stateValue !== undefined && typeof stateValue !== 'string')
@@ -189,10 +196,21 @@ onMounted(() => {
           class="[overflow-wrap:anywhere]"
           dir="ltr"
           data-testid="consent-client-host"
-        >{{ view.clientHost }}</bdi>{{ copy.hostRequestAfter }}
+        >{{ view.clientHost }}</bdi>{{
+          requestsProjects
+            ? copy.hostRequestAfterProjects
+            : copy.hostRequestAfter
+        }}
+      </template>
+      <template v-else-if="view">
+        {{
+          requestsProjects
+            ? copy.allowClientProjects(view.clientName)
+            : copy.allowClient(view.clientName)
+        }}
       </template>
       <template v-else>
-        {{ view ? copy.allowClient(view.clientName) : copy.title }}
+        {{ copy.title }}
       </template>
     </h1>
     <p
@@ -209,7 +227,11 @@ onMounted(() => {
         <strong data-testid="consent-client-name">{{
           view.clientName
         }}</strong>
-        {{ copy.clientRequest }}
+        {{
+          requestsProjects
+            ? copy.clientRequestProjects
+            : copy.clientRequest
+        }}
       </template>
     </p>
     <p
@@ -291,6 +313,13 @@ onMounted(() => {
           </dd>
         </template>
       </dl>
+      <p
+        v-if="requestsProjectWrites"
+        class="text-sm text-muted-foreground"
+        data-testid="consent-projects-public"
+      >
+        {{ copy.projectsPublicAtOnce }}
+      </p>
       <div class="flex flex-wrap gap-2">
         <Button
           class="h-9"

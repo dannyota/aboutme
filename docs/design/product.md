@@ -57,8 +57,9 @@ ships no writing assistant of its own. The agent speaks MCP to one remote
 endpoint on the canonical origin and authenticates through the service's own
 OAuth 2.1 authorization server; it never holds a session cookie. Consent is
 explicit, names the client and the scopes it asked for, and grants account-wide
-`resumes:read` and `resumes:write`. The settings page lists every connected
-agent with its last-used time and revokes any of them.
+`resumes:read`, `resumes:write`, `projects:read`, and `projects:write`. The
+settings page lists every connected agent with its last-used time and revokes
+any of them.
 
 Agent tools reach the same validation, sanitizing, bounds, and concurrency
 boundary as the editor, so an agent cannot store a document a person could not.

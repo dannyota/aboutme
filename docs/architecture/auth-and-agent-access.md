@@ -52,16 +52,18 @@ generated TypeScript types and regeneration commands.
 
 ## Implemented agent access
 
-Users authorize public agent clients with account-wide `resumes:read` and
-`resumes:write` scopes. Client redirect URIs are exact-match; codes are
-60-second, digest-only, single-use, and bound to S256 PKCE. Access and rotating
-refresh tokens are stored only as digests. Code replay, refresh-token replay,
-and connected-agent revocation invalidate the applicable token family.
+Users authorize public agent clients with account-wide `resumes:read`,
+`resumes:write`, `projects:read`, and `projects:write` scopes. Client redirect
+URIs are exact-match; codes are 60-second, digest-only, single-use, and bound to
+S256 PKCE. Access and rotating refresh tokens are stored only as digests. Code
+replay, refresh-token replay, and connected-agent revocation invalidate the
+applicable token family.
 
-The `/mcp` bearer boundary never reads cookies. Its fifteen tools provide
+The `/mcp` bearer boundary never reads cookies. Its fifteen resume tools provide
 private editor parity for resume read/write and photo operations, including
-delete of private or published resumes, but expose no publish, unpublish, or
-public-read capability. Mutations share the REST ownership, validation,
+delete of private or published resumes, and its seven project tools read and
+change the project library and link it to resumes; none publishes, unpublishes,
+or reads public pages. Mutations share the REST ownership, validation,
 sanitizing, bounds, and revision compare-and-swap path. The settings page lists
 live grants and revokes them through the existing session, Origin, and CSRF
 chain.

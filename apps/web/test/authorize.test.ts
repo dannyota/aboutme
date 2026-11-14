@@ -21,7 +21,7 @@ const consentMocks = vi.hoisted(() => ({
   get: vi.fn(),
   decide: vi.fn(),
 }));
-vi.mock('../app/composables/useOAuthConsent', () => ({
+vi.mock('../app/composables/useOAuthConsent', async (importOriginal) => ({
   OAuthConsentFailure: class OAuthConsentFailure extends Error {
     readonly kind: string;
     constructor(kind: string) {
@@ -29,6 +29,9 @@ vi.mock('../app/composables/useOAuthConsent', () => ({
       this.kind = kind;
     }
   },
+  canonicalScopeSet: (await importOriginal<
+    typeof import('../app/composables/useOAuthConsent')
+  >()).canonicalScopeSet,
   useOAuthConsent: () => consentMocks,
 }));
 
@@ -213,6 +216,128 @@ describe('/authorize', () => {
       expect(wrapper.text()).not.toContain('resumes:read');
     },
   );
+
+  it.each([
+    ['en', 'cimd', 'agent.example wants access to your resumes and projects.'],
+    ['vi', 'cimd', 'agent.example muốn truy cập CV và dự án của bạn.'],
+    ['en', 'dcr', 'Allow Resume agent to edit your resumes and projects?'],
+    ['vi', 'dcr', 'Cho phép Resume agent chỉnh sửa CV và dự án của bạn?'],
+  ] as const)(
+    'names resumes and projects for a project scope in %s (%s)',
+    async (language, clientKind, headline) => {
+      setSiteLocale(language);
+      consentMocks.get.mockResolvedValue({
+        clientName: 'Resume agent', clientKind,
+        clientHost: clientKind === 'cimd' ? 'agent.example' : null,
+        scopes: ['resumes:read', 'projects:read'],
+      });
+      const wrapper = await mountSuspended(AuthorizePage, { route: route() });
+      await flushPromises();
+      expect(wrapper.get('[data-page-title]').text()).toBe(headline);
+      expect(wrapper.find('[data-testid="consent-projects-public"]').exists())
+        .toBe(false);
+    },
+  );
+
+  it.each([
+    [
+      'en', ['resumes:read', 'resumes:write'],
+      'Allow Resume agent to edit your resumes?',
+      'Resume agent is requesting access to your resumes.',
+    ],
+    [
+      'vi', ['resumes:read', 'resumes:write'],
+      'Cho phép Resume agent chỉnh sửa CV của bạn?',
+      'Resume agent đang yêu cầu quyền truy cập CV của bạn.',
+    ],
+    [
+      'en', ['resumes:read', 'projects:write'],
+      'Allow Resume agent to edit your resumes and projects?',
+      'Resume agent is requesting access to your resumes and projects.',
+    ],
+    [
+      'vi', ['resumes:read', 'projects:write'],
+      'Cho phép Resume agent chỉnh sửa CV và dự án của bạn?',
+      'Resume agent đang yêu cầu quyền truy cập CV và dự án của bạn.',
+    ],
+  ] as const)(
+    'shows the DCR headline and request line in %s for %j',
+    async (language, scopes, headline, requestLine) => {
+      setSiteLocale(language);
+      consentMocks.get.mockResolvedValue({
+        clientName: 'Resume agent', clientKind: 'dcr', clientHost: null,
+        scopes: [...scopes],
+      });
+      const wrapper = await mountSuspended(AuthorizePage, { route: route() });
+      await flushPromises();
+      expect(wrapper.get('[data-page-title]').text()).toBe(headline);
+      const line = wrapper.get('[data-testid="consent-client-name"]')
+        .element.parentElement?.textContent?.replace(/\s+/g, ' ').trim();
+      expect(line).toBe(requestLine);
+    },
+  );
+
+  it.each([
+    [
+      'en',
+      ['Read resumes', 'Write resumes', 'Read projects', 'Write projects'],
+      'View the projects in your library.',
+      'Create, edit, and delete projects in your library.',
+      'A change to a project shown on a published resume is public at once.',
+    ],
+    [
+      'vi',
+      ['Đọc CV', 'Chỉnh sửa CV', 'Đọc dự án', 'Chỉnh sửa dự án'],
+      'Xem các dự án trong thư viện của bạn.',
+      'Tạo, sửa và xóa dự án trong thư viện của bạn.',
+      'Thay đổi trên một dự án đang hiện trên CV đã xuất bản '
+      + 'sẽ công khai ngay.',
+    ],
+  ] as const)(
+    'lists the project permissions and the public line in %s',
+    async (language, names, readDescription, writeDescription, publicLine) => {
+      setSiteLocale(language);
+      consentMocks.get.mockResolvedValue({
+        clientName: 'Resume agent', clientKind: 'dcr', clientHost: null,
+        scopes: [
+          'resumes:read', 'resumes:write', 'projects:read', 'projects:write',
+        ],
+      });
+      const wrapper = await mountSuspended(AuthorizePage, { route: route() });
+      await flushPromises();
+      const scopes = wrapper.get('[data-testid="consent-scopes"]');
+      expect(scopes.findAll('dt').map((term) => term.text())).toEqual(names);
+      expect(scopes.text()).toContain(readDescription);
+      expect(scopes.text()).toContain(writeDescription);
+      expect(wrapper.get('[data-testid="consent-projects-public"]').text())
+        .toBe(publicLine);
+      expect(wrapper.text()).not.toContain('projects:write');
+    },
+  );
+
+  it('sorts a requested scope set and refuses a repeated scope', async () => {
+    const sorted = await mountSuspended(AuthorizePage, {
+      route: `/authorize?${new URLSearchParams({
+        ...query, scope: 'projects:write resumes:read projects:read',
+      })}`,
+    });
+    await flushPromises();
+    expect(sorted.find('[data-testid="consent-form"]').exists()).toBe(true);
+    expect(consentMocks.get).toHaveBeenLastCalledWith({
+      ...query, scope: 'resumes:read projects:read projects:write',
+    });
+
+    consentMocks.get.mockClear();
+    const repeated = await mountSuspended(AuthorizePage, {
+      route: `/authorize?${new URLSearchParams({
+        ...query, scope: 'projects:read projects:read',
+      })}`,
+    });
+    await flushPromises();
+    expect(repeated.get('[data-testid="consent-error"]').text())
+      .toContain('invalid');
+    expect(consentMocks.get).not.toHaveBeenCalled();
+  });
 
   it(
     'changes loaded consent copy without repeating the read or changing '

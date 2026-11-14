@@ -4,6 +4,24 @@ import { describe, expect, it } from "vitest";
 
 const doc = parse(readFileSync("docs/api/openapi.yaml", "utf8")) as any;
 
+const SCOPE_SETS = [
+  "resumes:read",
+  "resumes:write",
+  "resumes:read resumes:write",
+  "projects:read",
+  "resumes:read projects:read",
+  "resumes:write projects:read",
+  "resumes:read resumes:write projects:read",
+  "projects:write",
+  "resumes:read projects:write",
+  "resumes:write projects:write",
+  "resumes:read resumes:write projects:write",
+  "projects:read projects:write",
+  "resumes:read projects:read projects:write",
+  "resumes:write projects:read projects:write",
+  "resumes:read resumes:write projects:read projects:write",
+];
+
 const OPERATIONS = {
   getOAuthConsent: { method: "get", path: "/oauth/consent" },
   postOAuthConsentDecision: { method: "post", path: "/oauth/consent" },
@@ -101,7 +119,7 @@ describe("OAuth consent and agent grant OpenAPI contract", () => {
     });
     expect(parameters.scope.schema).toEqual({
       type: "string",
-      enum: ["resumes:read", "resumes:write", "resumes:read resumes:write"],
+      enum: SCOPE_SETS,
     });
     expect(parameters.code_challenge_method.schema).toEqual({
       type: "string",
@@ -126,7 +144,7 @@ describe("OAuth consent and agent grant OpenAPI contract", () => {
     ]);
     expect(decisionSchema.properties.scope).toEqual({
       type: "string",
-      enum: ["resumes:read", "resumes:write", "resumes:read resumes:write"],
+      enum: SCOPE_SETS,
     });
     expect(decisionSchema.properties.decision.enum).toEqual([
       "approve",

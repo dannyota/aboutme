@@ -93,7 +93,7 @@ func (h httpRevocation) Refresh(ctx context.Context, refreshToken string) (refre
 		RefreshToken string `json:"refresh_token"`
 		Scope        string `json:"scope"`
 	}
-	if !strictJSON(body, &token) || token.TokenType != "Bearer" || token.ExpiresIn <= 0 || token.Scope != "resumes:read resumes:write" ||
+	if !strictJSON(body, &token) || token.TokenType != "Bearer" || token.ExpiresIn <= 0 || token.Scope != workflowScope ||
 		!validBearerValue(token.AccessToken) || !validBearerValue(token.RefreshToken) || token.RefreshToken == refreshToken {
 		return refreshOutcome{}, errRevocation
 	}

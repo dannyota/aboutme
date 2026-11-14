@@ -121,6 +121,13 @@ trên CV đã xuất bản sẽ công khai ngay." / "A change to a project shown
 published resume is public at once." Settings > Connected agents uses the same
 names. Connected agents in Settings shows the same host beside the stored name.
 
+**Project scopes for a DCR client** (owner, 2026-11-14). Only when a request
+includes a project scope, the DCR headline reads "Cho phép {name} chỉnh sửa CV
+và dự án của bạn?" / "Allow {name} to edit your resumes and projects?" and the
+line under it reads "…đang yêu cầu quyền truy cập CV và dự án của bạn." / "…is
+requesting access to your resumes and projects." A request for resume scopes
+only keeps the existing lines.
+
 **Silent reauthorization.** An authorize request whose user already holds a live
 grant covering the scopes gets a code without the consent page. For a URL client
 with a loopback redirect, the server always shows consent instead. Every Claude

@@ -1581,9 +1581,9 @@ export interface components {
          * @description Account-wide permission granted to a connected agent.
          * @enum {string}
          */
-        OAuthConsentScope: "resumes:read" | "resumes:write";
+        OAuthConsentScope: "resumes:read" | "resumes:write" | "projects:read" | "projects:write";
         /**
-         * @description Account-wide permission a connected agent's grant holds. Consent offers only the resume scopes; a grant may also hold the project scopes.
+         * @description Account-wide permission a connected agent's grant holds.
          * @enum {string}
          */
         OAuthAgentGrantScope: "resumes:read" | "resumes:write" | "projects:read" | "projects:write";
@@ -1600,7 +1600,7 @@ export interface components {
             /** @constant */
             response_type: "code";
             /** @enum {string} */
-            scope: "resumes:read" | "resumes:write" | "resumes:read resumes:write";
+            scope: "resumes:read" | "resumes:write" | "resumes:read resumes:write" | "projects:read" | "resumes:read projects:read" | "resumes:write projects:read" | "resumes:read resumes:write projects:read" | "projects:write" | "resumes:read projects:write" | "resumes:write projects:write" | "resumes:read resumes:write projects:write" | "projects:read projects:write" | "resumes:read projects:read projects:write" | "resumes:write projects:read projects:write" | "resumes:read resumes:write projects:read projects:write";
             /** @description Opaque client state, echoed on redirect when present. */
             state?: string;
             code_challenge: string;
@@ -6713,8 +6713,8 @@ export interface operations {
                 /** @description DCR matches exactly. CIMD checks the current document; loopback ports may differ. */
                 redirect_uri: string;
                 response_type: "code";
-                /** @description One or both account-wide scopes. This is a closed list, not free text. Multiple scopes use OAuth's canonical space-delimited form. */
-                scope: "resumes:read" | "resumes:write" | "resumes:read resumes:write";
+                /** @description One or more account-wide scopes. This is a closed list, not free text. Multiple scopes use OAuth's space-delimited form in this canonical order; the server sorts a set sent in another order into it, and refuses an unknown or repeated scope. */
+                scope: "resumes:read" | "resumes:write" | "resumes:read resumes:write" | "projects:read" | "resumes:read projects:read" | "resumes:write projects:read" | "resumes:read resumes:write projects:read" | "projects:write" | "resumes:read projects:write" | "resumes:write projects:write" | "resumes:read resumes:write projects:write" | "projects:read projects:write" | "resumes:read projects:read projects:write" | "resumes:write projects:read projects:write" | "resumes:read resumes:write projects:read projects:write";
                 /** @description Opaque client state, bounded to 512 bytes and echoed on redirect. */
                 state?: string;
                 /** @description RFC 7636 S256 challenge (43 base64url characters). */

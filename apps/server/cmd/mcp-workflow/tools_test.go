@@ -48,7 +48,7 @@ func TestTools(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(names) != 15 || !sort.StringsAreSorted(names) {
+	if len(names) != 22 || !sort.StringsAreSorted(names) {
 		t.Fatalf("tools = %v", names)
 	}
 	if got := strings.Join(client.calls, ","); got != ",next" {

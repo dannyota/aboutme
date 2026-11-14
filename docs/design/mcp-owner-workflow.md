@@ -13,19 +13,24 @@ raw JSON-RPC browser proof stays a separate server regression test. The workflow
 follows [ADR 0018](../adr/0018-mcp-agent-access.md) and changes no MCP tool,
 resume schema, or public contract.
 
-The exact tool registry has 15 tools: `list_resumes`, `get_resume`,
+The exact tool registry has 22 tools: `list_resumes`, `get_resume`,
 `create_resume`, `delete_resume`, `update_resume_metadata`, `upsert_entry`,
 `delete_entry`, `update_section`, `update_structure`, `update_personal_details`,
-`update_customization`, `get_photo`, `upload_photo`, `update_photo_crop`, and
-`delete_photo`.
+`update_customization`, `get_photo`, `upload_photo`, `update_photo_crop`,
+`delete_photo`, and the seven project tools of the
+[projects contract](projects-contract.md#agents): `list_projects`,
+`get_project`, `create_project`, `update_project`, `delete_project`,
+`link_project`, and `refresh_project_entry`. The runner checks the whole
+registry but calls no project tool.
 
 ## OAuth server contract
 
 `/.well-known/oauth-protected-resource` includes the exact ordered field
-`"scopes_supported":["resumes:read","resumes:write"]`; the SDK derives its
-requested scopes from it. The unauthenticated `/mcp` challenge still names only
-the protected-resource metadata URL, which stays at the root
-`/.well-known/oauth-protected-resource` rather than a `/mcp`-specific path (see
+`"scopes_supported":["resumes:read","resumes:write","projects:read","projects:write"]`;
+the SDK derives its requested scopes from it. The unauthenticated `/mcp`
+challenge still names only the protected-resource metadata URL, which stays at
+the root `/.well-known/oauth-protected-resource` rather than a `/mcp`-specific
+path (see
 [MCP client compatibility](mcp-client-compatibility.md#open-questions)).
 
 The authorization endpoint, the code exchange, and refresh each accept zero or
@@ -56,8 +61,10 @@ The shared return line names the actual validated redirect hostname.
 The runner uses the pinned `github.com/modelcontextprotocol/go-sdk v1.8.0`,
 `mcp.StreamableClientTransport`, and the SDK authorization-code handler, and
 reimplements none of JSON-RPC, discovery, DCR, PKCE, or token exchange. Consent
-requests exactly `resumes:read resumes:write`. The callback binds `127.0.0.1` on
-an ephemeral port, accepts one matching callback, and closes.
+requests exactly the four scopes, in any order, and the runner sends them in the
+canonical order `resumes:read resumes:write projects:read projects:write`. The
+callback binds `127.0.0.1` on an ephemeral port, accepts one matching callback,
+and closes.
 
 One restricted HTTP client carries metadata, registration, token, refresh,
 revocation, and MCP traffic. It allows only the configured local origin or the
@@ -153,7 +160,7 @@ cross-origin frames, and redirects, and fills credentials once.
 | Credential keys | `ABOUTME_TEST_EMAIL`, `ABOUTME_TEST_PASSWORD` |
 | Source          | The only canonical resume with `lng: en`      |
 | Target          | `lng: vi`, title `CV tiếng Việt`              |
-| Scope           | `resumes:read resumes:write`                  |
+| Scope           | All four resume and project scopes            |
 | Limit           | One create intent, plus target photo writes   |
 
 The account must hold exactly one English resume and at most two resumes, or the
@@ -272,7 +279,7 @@ runner reads the target, accepts an already exact result, and otherwise stops
 without rebasing onto owner changes. The runner enforces these caps outside
 model control: one create intent; no `delete_resume` and no mutation naming the
 source; only photo upload and crop on the target after creation; no call outside
-the 15-tool registry.
+the resume reads, the create, and those photo writes, so no project tool.
 
 ## Privacy, revocation, and evidence
 

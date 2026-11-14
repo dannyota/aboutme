@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"danny.vn/aboutme/apps/server/internal/auth"
+	"danny.vn/aboutme/apps/server/internal/oauthsrv"
 	"danny.vn/aboutme/apps/server/internal/publicstate"
 	"danny.vn/aboutme/apps/server/internal/resume"
 	"danny.vn/aboutme/apps/server/internal/store"
@@ -43,6 +44,8 @@ type mutationContext struct {
 	SessionID                   uuid.UUID
 	Session                     store.Session
 	Agent                       *AgentPrincipal
+	AgentRequired               []oauthsrv.Scope
+	AgentScopes                 oauthsrv.Scopes
 	ExpectedDiscoveryGeneration *int64
 	ExpectedRevision            *int64
 	WireVersion                 int32
@@ -77,6 +80,7 @@ type mutationSpec struct {
 	Run                 mutationOperation
 	Finalize            func(context.Context, preparedInput, resume.ExecuteResult, error)
 	Transition          func(context.Context, resume.Resume, preparedInput) (mutationTransition, error)
+	AgentRequired       []oauthsrv.Scope
 }
 
 type mutationTransition struct {
@@ -186,6 +190,7 @@ func (s *Service) executeMutation(w http.ResponseWriter, r *http.Request, spec m
 	}
 	if agentOK {
 		mutation.Agent = &agent
+		mutation.AgentRequired = spec.AgentRequired
 	}
 	if spec.Transition != nil {
 		transitionContext := context.WithValue(r.Context(), mutationRequestKeyContext{}, headers.Key)

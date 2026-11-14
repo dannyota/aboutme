@@ -81,15 +81,16 @@ or out. Sections, in order:
 
 Every claim maps to shipped behavior:
 
-| Claim                                    | Source                                          |
-| ---------------------------------------- | ----------------------------------------------- |
-| 15 tools; no publish or public read      | [MCP owner workflow](mcp-owner-workflow.md)     |
-| Read and write scopes, account-wide      | [Security](security.md), ADR 0018               |
-| Delete of a published resume unpublishes | [API](api.md#agent-access-and-the-bearer-world) |
-| Three resumes per account                | [Product](product.md)                           |
-| Ten live grants; eleventh refused        | [Budgets](budgets.md)                           |
-| Revoke kills access and refresh tokens   | [Security](security.md)                         |
-| No PDF export, view counts, or import    | The tool list has none of them                  |
+| Claim                                    | Source                                           |
+| ---------------------------------------- | ------------------------------------------------ |
+| 22 tools; no publish or public read      | [MCP owner workflow](mcp-owner-workflow.md)      |
+| Resume and project scopes, account-wide  | [Security](security.md), ADR 0018                |
+| Project edits are public at once         | [Projects contract](projects-contract.md#agents) |
+| Delete of a published resume unpublishes | [API](api.md#agent-access-and-the-bearer-world)  |
+| Three resumes per account                | [Product](product.md)                            |
+| Ten live grants; eleventh refused        | [Budgets](budgets.md)                            |
+| Revoke kills access and refresh tokens   | [Security](security.md)                          |
+| No PDF export, view counts, or import    | The tool list has none of them                   |
 
 The page never promises a response time, a specific model, or that changes
 appear live in an open editor.

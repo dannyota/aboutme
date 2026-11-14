@@ -25,6 +25,7 @@ import (
 
 	"danny.vn/aboutme/apps/server/internal/media"
 	"danny.vn/aboutme/apps/server/internal/oauthsrv"
+	"danny.vn/aboutme/apps/server/internal/projectapi"
 	"danny.vn/aboutme/apps/server/internal/publicstate"
 	"danny.vn/aboutme/apps/server/internal/resume"
 	"danny.vn/aboutme/apps/server/internal/resume/docmigrate"
@@ -49,6 +50,20 @@ func (e *recordingAgentExecutor) ExecuteAgent(_ context.Context, _ resumeapi.Age
 	if response, ok := e.responses[call.Operation]; ok {
 		return response
 	}
+	return resumeapi.AgentResponse{Status: http.StatusOK, Header: make(http.Header), Body: []byte(`{"data":{}}`)}
+}
+
+type recordingProjectExecutor struct {
+	mu    sync.Mutex
+	calls []projectapi.AgentCall
+}
+
+func (e *recordingProjectExecutor) ExecuteAgent(_ context.Context, _ resumeapi.AgentPrincipal,
+	call projectapi.AgentCall,
+) resumeapi.AgentResponse {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.calls = append(e.calls, call)
 	return resumeapi.AgentResponse{Status: http.StatusOK, Header: make(http.Header), Body: []byte(`{"data":{}}`)}
 }
 
@@ -107,7 +122,7 @@ func mustTestMCPRates(t *testing.T) *RatePolicies {
 func TestServer_InitializeResultCarriesBrandedServerInfo(t *testing.T) {
 	h := newBearerHarness(t, "resumes:read")
 	raw, _ := h.createToken(t, oauthsrv.TokenKindAccess)
-	handler, err := NewServer(ServerDependencies{Bearer: h.bearer, Resumes: &recordingAgentExecutor{}, Rates: mustTestMCPRates(t), MaxRequestBodyBytes: maxMCPRequestBytes})
+	handler, err := NewServer(ServerDependencies{Bearer: h.bearer, Resumes: &recordingAgentExecutor{}, Projects: &recordingProjectExecutor{}, Rates: mustTestMCPRates(t), MaxRequestBodyBytes: maxMCPRequestBytes})
 	if err != nil {
 		t.Fatalf("NewServer: %v", err)
 	}
@@ -132,7 +147,7 @@ func TestServer_InitializeResultCarriesBrandedServerInfo(t *testing.T) {
 	}
 }
 
-func TestServer_GoSDKListsExactlyFifteenToolsAndCallsRead(t *testing.T) {
+func TestServer_GoSDKListsEveryResumeAndProjectToolAndCallsRead(t *testing.T) {
 	h := newBearerHarness(t, "resumes:read resumes:write")
 	raw, _ := h.createToken(t, oauthsrv.TokenKindAccess)
 	executor := &recordingAgentExecutor{responses: map[resumeapi.AgentOperation]resumeapi.AgentResponse{
@@ -141,7 +156,7 @@ func TestServer_GoSDKListsExactlyFifteenToolsAndCallsRead(t *testing.T) {
 			Body: []byte(`{"data":[{"id":"01890f47-7e8a-7b2a-8d70-9a1f2c3d4e5f","revision":"1"}]}`),
 		},
 	}}
-	handler, err := NewServer(ServerDependencies{Bearer: h.bearer, Resumes: executor, Rates: mustTestMCPRates(t), MaxRequestBodyBytes: maxMCPRequestBytes})
+	handler, err := NewServer(ServerDependencies{Bearer: h.bearer, Resumes: executor, Projects: &recordingProjectExecutor{}, Rates: mustTestMCPRates(t), MaxRequestBodyBytes: maxMCPRequestBytes})
 	if err != nil {
 		t.Fatalf("NewServer: %v", err)
 	}
@@ -162,9 +177,10 @@ func TestServer_GoSDKListsExactlyFifteenToolsAndCallsRead(t *testing.T) {
 	}
 	sort.Strings(names)
 	want := []string{
-		"create_resume", "delete_entry", "delete_photo", "delete_resume", "get_photo",
-		"get_resume", "list_resumes", "update_customization", "update_personal_details",
-		"update_photo_crop", "update_resume_metadata", "update_section", "update_structure",
+		"create_project", "create_resume", "delete_entry", "delete_photo", "delete_project", "delete_resume",
+		"get_photo", "get_project", "get_resume", "link_project", "list_projects", "list_resumes",
+		"refresh_project_entry", "update_customization", "update_personal_details", "update_photo_crop",
+		"update_project", "update_resume_metadata", "update_section", "update_structure",
 		"upload_photo", "upsert_entry",
 	}
 	if !reflect.DeepEqual(names, want) {
@@ -184,7 +200,7 @@ func TestServer_GoSDKListsExactlyFifteenToolsAndCallsRead(t *testing.T) {
 func TestServer_MutatingToolSchemasRequireIdempotencyKey(t *testing.T) {
 	h := newBearerHarness(t, "resumes:read resumes:write")
 	raw, _ := h.createToken(t, oauthsrv.TokenKindAccess)
-	handler, err := NewServer(ServerDependencies{Bearer: h.bearer, Resumes: &recordingAgentExecutor{}, Rates: mustTestMCPRates(t), MaxRequestBodyBytes: maxMCPRequestBytes})
+	handler, err := NewServer(ServerDependencies{Bearer: h.bearer, Resumes: &recordingAgentExecutor{}, Projects: &recordingProjectExecutor{}, Rates: mustTestMCPRates(t), MaxRequestBodyBytes: maxMCPRequestBytes})
 	if err != nil {
 		t.Fatalf("NewServer: %v", err)
 	}
@@ -200,8 +216,13 @@ func TestServer_MutatingToolSchemasRequireIdempotencyKey(t *testing.T) {
 		"upsert_entry": true, "delete_entry": true, "update_section": true,
 		"update_structure": true, "update_personal_details": true, "update_customization": true,
 		"upload_photo": true, "update_photo_crop": true, "delete_photo": true,
+		"create_project": true, "update_project": true, "delete_project": true,
+		"link_project": true, "refresh_project_entry": true,
 	}
-	reads := map[string]bool{"list_resumes": true, "get_resume": true, "get_photo": true}
+	reads := map[string]bool{
+		"list_resumes": true, "get_resume": true, "get_photo": true,
+		"list_projects": true, "get_project": true,
+	}
 	for _, tool := range listed.Tools {
 		var schema struct {
 			Properties map[string]json.RawMessage `json:"properties"`
@@ -247,7 +268,7 @@ func TestServer_MutatingToolsForwardIdempotencyKey(t *testing.T) {
 		responses[op] = canonical
 	}
 	executor := &recordingAgentExecutor{responses: responses}
-	handler, err := NewServer(ServerDependencies{Bearer: h.bearer, Resumes: executor, Rates: mustTestMCPRates(t), MaxRequestBodyBytes: maxMCPRequestBytes})
+	handler, err := NewServer(ServerDependencies{Bearer: h.bearer, Resumes: executor, Projects: &recordingProjectExecutor{}, Rates: mustTestMCPRates(t), MaxRequestBodyBytes: maxMCPRequestBytes})
 	if err != nil {
 		t.Fatalf("NewServer: %v", err)
 	}
@@ -315,7 +336,7 @@ func TestServer_DeleteToolsUseRetainedMutationResponseWithoutRead(t *testing.T) 
 		resumeapi.AgentDeletePhoto: canonical,
 		resumeapi.AgentGetResume:   canonical,
 	}}
-	handler, err := NewServer(ServerDependencies{Bearer: h.bearer, Resumes: executor, Rates: mustTestMCPRates(t), MaxRequestBodyBytes: maxMCPRequestBytes})
+	handler, err := NewServer(ServerDependencies{Bearer: h.bearer, Resumes: executor, Projects: &recordingProjectExecutor{}, Rates: mustTestMCPRates(t), MaxRequestBodyBytes: maxMCPRequestBytes})
 	if err != nil {
 		t.Fatalf("NewServer: %v", err)
 	}
@@ -357,7 +378,7 @@ func TestServer_WriteScopeDeniedBeforeResumeStateAndCookieCannotAuthenticate(t *
 	h := newBearerHarness(t, "resumes:read")
 	raw, _ := h.createToken(t, oauthsrv.TokenKindAccess)
 	executor := &recordingAgentExecutor{}
-	handler, err := NewServer(ServerDependencies{Bearer: h.bearer, Resumes: executor, Rates: mustTestMCPRates(t), MaxRequestBodyBytes: maxMCPRequestBytes})
+	handler, err := NewServer(ServerDependencies{Bearer: h.bearer, Resumes: executor, Projects: &recordingProjectExecutor{}, Rates: mustTestMCPRates(t), MaxRequestBodyBytes: maxMCPRequestBytes})
 	if err != nil {
 		t.Fatalf("NewServer: %v", err)
 	}
@@ -435,7 +456,7 @@ func TestServer_CreateUpsertGetChainsRevisionAndClosesStaleConflict(t *testing.T
 			Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), Clock: h.clock.Now,
 			Coordinator: coordinator, RecoveryPool: h.pool,
 		})
-	handler, err := NewServer(ServerDependencies{Bearer: h.bearer, Resumes: resumes, Rates: mustTestMCPRates(t), MaxRequestBodyBytes: maxMCPRequestBytes})
+	handler, err := NewServer(ServerDependencies{Bearer: h.bearer, Resumes: resumes, Projects: &recordingProjectExecutor{}, Rates: mustTestMCPRates(t), MaxRequestBodyBytes: maxMCPRequestBytes})
 	if err != nil {
 		t.Fatalf("NewServer: %v", err)
 	}
@@ -721,7 +742,7 @@ func decodeStructuredState(t *testing.T, result *mcp.CallToolResult) map[string]
 func TestServer_RejectsBatchAndEnforcesFourMiBBoundary(t *testing.T) {
 	h := newBearerHarness(t, "resumes:read")
 	raw, _ := h.createToken(t, oauthsrv.TokenKindAccess)
-	handler, err := NewServer(ServerDependencies{Bearer: h.bearer, Resumes: &recordingAgentExecutor{}, Rates: mustTestMCPRates(t), MaxRequestBodyBytes: maxMCPRequestBytes})
+	handler, err := NewServer(ServerDependencies{Bearer: h.bearer, Resumes: &recordingAgentExecutor{}, Projects: &recordingProjectExecutor{}, Rates: mustTestMCPRates(t), MaxRequestBodyBytes: maxMCPRequestBytes})
 	if err != nil {
 		t.Fatalf("NewServer: %v", err)
 	}
@@ -775,7 +796,7 @@ func TestServer_JSONOnlyAcceptAndUnknownToolAreRejectedWithoutExecution(t *testi
 	h := newBearerHarness(t, "resumes:read resumes:write")
 	raw, _ := h.createToken(t, oauthsrv.TokenKindAccess)
 	executor := &recordingAgentExecutor{}
-	handler, err := NewServer(ServerDependencies{Bearer: h.bearer, Resumes: executor, Rates: mustTestMCPRates(t), MaxRequestBodyBytes: maxMCPRequestBytes})
+	handler, err := NewServer(ServerDependencies{Bearer: h.bearer, Resumes: executor, Projects: &recordingProjectExecutor{}, Rates: mustTestMCPRates(t), MaxRequestBodyBytes: maxMCPRequestBytes})
 	if err != nil {
 		t.Fatalf("NewServer: %v", err)
 	}
@@ -818,7 +839,7 @@ func TestServer_UploadPhotoRejectsDecodedBytesOverExistingCeiling(t *testing.T) 
 	h := newBearerHarness(t, "resumes:write")
 	raw, _ := h.createToken(t, oauthsrv.TokenKindAccess)
 	executor := &recordingAgentExecutor{}
-	handler, err := NewServer(ServerDependencies{Bearer: h.bearer, Resumes: executor, Rates: mustTestMCPRates(t), MaxRequestBodyBytes: maxMCPRequestBytes})
+	handler, err := NewServer(ServerDependencies{Bearer: h.bearer, Resumes: executor, Projects: &recordingProjectExecutor{}, Rates: mustTestMCPRates(t), MaxRequestBodyBytes: maxMCPRequestBytes})
 	if err != nil {
 		t.Fatalf("NewServer: %v", err)
 	}
@@ -843,7 +864,7 @@ func TestServer_UploadPhotoRejectsDecodedBytesOverExistingCeiling(t *testing.T) 
 func TestServer_SchemaFailuresUseClosedValidationError(t *testing.T) {
 	h := newBearerHarness(t, "resumes:read")
 	raw, _ := h.createToken(t, oauthsrv.TokenKindAccess)
-	handler, err := NewServer(ServerDependencies{Bearer: h.bearer, Resumes: &recordingAgentExecutor{}, Rates: mustTestMCPRates(t), MaxRequestBodyBytes: maxMCPRequestBytes})
+	handler, err := NewServer(ServerDependencies{Bearer: h.bearer, Resumes: &recordingAgentExecutor{}, Projects: &recordingProjectExecutor{}, Rates: mustTestMCPRates(t), MaxRequestBodyBytes: maxMCPRequestBytes})
 	if err != nil {
 		t.Fatalf("NewServer: %v", err)
 	}
@@ -872,7 +893,7 @@ func TestServer_ToolCallRateLimitReturnsClosedHTTPError(t *testing.T) {
 		t.Fatalf("NewRatePolicies: %v", err)
 	}
 	handler, err := NewServer(ServerDependencies{
-		Bearer: h.bearer, Resumes: &recordingAgentExecutor{}, Rates: rates,
+		Bearer: h.bearer, Resumes: &recordingAgentExecutor{}, Projects: &recordingProjectExecutor{}, Rates: rates,
 		MaxRequestBodyBytes: maxMCPRequestBytes,
 	})
 	if err != nil {
@@ -900,7 +921,7 @@ func TestServer_ToolCallRateLimitReturnsClosedHTTPError(t *testing.T) {
 func TestServer_UpdateSectionDescribesDrawableIconKeys(t *testing.T) {
 	h := newBearerHarness(t, "resumes:read resumes:write")
 	raw, _ := h.createToken(t, oauthsrv.TokenKindAccess)
-	handler, err := NewServer(ServerDependencies{Bearer: h.bearer, Resumes: &recordingAgentExecutor{}, Rates: mustTestMCPRates(t), MaxRequestBodyBytes: maxMCPRequestBytes})
+	handler, err := NewServer(ServerDependencies{Bearer: h.bearer, Resumes: &recordingAgentExecutor{}, Projects: &recordingProjectExecutor{}, Rates: mustTestMCPRates(t), MaxRequestBodyBytes: maxMCPRequestBytes})
 	if err != nil {
 		t.Fatalf("NewServer: %v", err)
 	}
@@ -946,7 +967,7 @@ func TestServer_UpdateSectionDescribesDrawableIconKeys(t *testing.T) {
 func TestServer_AcceptsPublicHostOnLoopbackListener(t *testing.T) {
 	h := newBearerHarness(t, "resumes:read resumes:write")
 	raw, _ := h.createToken(t, oauthsrv.TokenKindAccess)
-	handler, err := NewServer(ServerDependencies{Bearer: h.bearer, Resumes: &recordingAgentExecutor{}, Rates: mustTestMCPRates(t), MaxRequestBodyBytes: maxMCPRequestBytes})
+	handler, err := NewServer(ServerDependencies{Bearer: h.bearer, Resumes: &recordingAgentExecutor{}, Projects: &recordingProjectExecutor{}, Rates: mustTestMCPRates(t), MaxRequestBodyBytes: maxMCPRequestBytes})
 	if err != nil {
 		t.Fatalf("NewServer: %v", err)
 	}

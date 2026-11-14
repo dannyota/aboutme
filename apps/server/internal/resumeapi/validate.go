@@ -36,6 +36,8 @@ func (p AgentPrincipal) valid() bool {
 
 func (p AgentPrincipal) GrantID() uuid.UUID { return p.grantID }
 
+func (p AgentPrincipal) UserID() uuid.UUID { return p.userID }
+
 type agentPrincipalContextKey struct{}
 
 func contextWithAgentPrincipal(ctx context.Context, principal AgentPrincipal) context.Context {
@@ -65,6 +67,8 @@ const (
 	AgentUploadPhoto           AgentOperation = "upload_photo"
 	AgentUpdatePhotoCrop       AgentOperation = "update_photo_crop"
 	AgentDeletePhoto           AgentOperation = "delete_photo"
+	AgentLinkProject           AgentOperation = "link_project"
+	AgentRefreshProjectEntry   AgentOperation = "refresh_project_entry"
 )
 
 type AgentCall struct {
@@ -155,6 +159,10 @@ func (s *Service) ExecuteAgent(ctx context.Context, principal AgentPrincipal, ca
 		method, handler, mutation, requireRevision = http.MethodPatch, s.handleUpdateResumePhotoCrop, true, true
 	case AgentDeletePhoto:
 		method, handler, mutation, requireRevision = http.MethodDelete, s.handleDeleteResumePhoto, true, true
+	case AgentLinkProject:
+		method, handler, mutation, requireRevision = http.MethodPost, s.handleLinkResumeProject, true, true
+	case AgentRefreshProjectEntry:
+		method, handler, mutation, requireRevision = http.MethodPost, s.handleRefreshResumeProjectEntry, true, true
 	default:
 		writeResumeError(w, &clientError{Status: http.StatusBadRequest, Code: "request_invalid", Message: "agent operation is invalid"})
 		return AgentResponse{Status: w.status, Header: w.header.Clone(), Body: bytes.Clone(w.body.Bytes())}

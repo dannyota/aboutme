@@ -1704,8 +1704,10 @@ paths:
           in: query
           required: true
           description: >-
-            One or both account-wide scopes. This is a closed list, not free
-            text. Multiple scopes use OAuth's canonical space-delimited form.
+            One or more account-wide scopes. This is a closed list, not free
+            text. Multiple scopes use OAuth's space-delimited form in this
+            canonical order; the server sorts a set sent in another order
+            into it, and refuses an unknown or repeated scope.
           style: form
           schema:
             type: string
@@ -1713,6 +1715,18 @@ paths:
               - resumes:read
               - resumes:write
               - resumes:read resumes:write
+              - projects:read
+              - resumes:read projects:read
+              - resumes:write projects:read
+              - resumes:read resumes:write projects:read
+              - projects:write
+              - resumes:read projects:write
+              - resumes:write projects:write
+              - resumes:read resumes:write projects:write
+              - projects:read projects:write
+              - resumes:read projects:read projects:write
+              - resumes:write projects:read projects:write
+              - resumes:read resumes:write projects:read projects:write
         - name: state
           in: query
           required: false
@@ -6970,12 +6984,10 @@ components:
     OAuthConsentScope:
       type: string
       description: Account-wide permission granted to a connected agent.
-      enum: [resumes:read, resumes:write]
+      enum: [resumes:read, resumes:write, projects:read, projects:write]
     OAuthAgentGrantScope:
       type: string
-      description: >-
-        Account-wide permission a connected agent's grant holds. Consent offers
-        only the resume scopes; a grant may also hold the project scopes.
+      description: Account-wide permission a connected agent's grant holds.
       enum: [resumes:read, resumes:write, projects:read, projects:write]
     OAuthPublicClientID:
       type: string
@@ -7020,6 +7032,18 @@ components:
             - resumes:read
             - resumes:write
             - resumes:read resumes:write
+            - projects:read
+            - resumes:read projects:read
+            - resumes:write projects:read
+            - resumes:read resumes:write projects:read
+            - projects:write
+            - resumes:read projects:write
+            - resumes:write projects:write
+            - resumes:read resumes:write projects:write
+            - projects:read projects:write
+            - resumes:read projects:read projects:write
+            - resumes:write projects:read projects:write
+            - resumes:read resumes:write projects:read projects:write
         state:
           type: string
           maxLength: 512
@@ -7057,7 +7081,7 @@ components:
             scopes:
               type: array
               minItems: 1
-              maxItems: 2
+              maxItems: 4
               uniqueItems: true
               items:
                 $ref: "#/components/schemas/OAuthConsentScope"

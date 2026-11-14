@@ -22,13 +22,18 @@ import (
 
 const grantScopesWithProjects = "resumes:read resumes:write projects:read projects:write"
 
-var refusedProjectScopeRequests = []string{
-	"projects:read",
-	"projects:write",
-	"projects:read projects:write",
-	"resumes:read projects:read",
-	"resumes:write projects:write",
-	"resumes:read resumes:write projects:read projects:write",
+type projectScopeRequest struct {
+	requested string
+	canonical string
+}
+
+var projectScopeRequests = []projectScopeRequest{
+	{"projects:read", "projects:read"},
+	{"projects:write", "projects:write"},
+	{"projects:read projects:write", "projects:read projects:write"},
+	{"resumes:read projects:read", "resumes:read projects:read"},
+	{"projects:write resumes:write", "resumes:write projects:write"},
+	{"projects:write projects:read resumes:write resumes:read", "resumes:read resumes:write projects:read projects:write"},
 }
 
 type listedAgentGrant struct {
@@ -131,48 +136,61 @@ func TestSessionAgentGrantHTTPHandlers_ListAndRevokeGrantHoldingProjectScopes(t 
 	}
 }
 
-func TestAuthorize_RefusesProjectScopesWhileConsentDoesNotOfferThem(t *testing.T) {
+func TestAuthorize_SortsProjectScopeRequestsAndShowsConsent(t *testing.T) {
 	s, q, client, user := newAuthorizeHarness(t)
 	sess := issueTestSession(t, s.pool, user.ID, s.clock(), nil)
-	for _, scope := range refusedProjectScopeRequests {
-		t.Run(scope, func(t *testing.T) {
-			for _, signedIn := range []bool{false, true} {
-				req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, authorizeURL(client.ID, scope), nil)
-				if signedIn {
-					req = req.WithContext(auth.ContextWithSession(req.Context(), sess))
-				}
-				rec := httptest.NewRecorder()
-				s.HandleAuthorize(rec, req)
-				if rec.Code != http.StatusFound {
-					t.Fatalf("signed in %t: status = %d, want 302 invalid_scope", signedIn, rec.Code)
-				}
-				redirect := urlMustParse(t, rec.Header().Get("Location"))
-				if redirect.Host != "agent.example" || redirect.Query().Get("error") != "invalid_scope" ||
-					redirect.Query().Get("code") != "" || redirect.Query().Get("state") != "opaque<&state" {
-					t.Fatalf("signed in %t: redirect = %q, want the registered redirect with error=invalid_scope and no code", signedIn, redirect.String())
-				}
+	for _, tc := range projectScopeRequests {
+		t.Run(tc.requested, func(t *testing.T) {
+			signedOut := httptest.NewRecorder()
+			s.HandleAuthorize(signedOut, httptest.NewRequestWithContext(context.Background(), http.MethodGet, authorizeURL(client.ID, tc.requested), nil))
+			login := urlMustParse(t, signedOut.Header().Get("Location"))
+			if signedOut.Code != http.StatusFound || login.Path != "/login" {
+				t.Fatalf("signed out = %d %q, want 302 to /login", signedOut.Code, login.String())
+			}
+			if next := urlMustParse(t, login.Query().Get("next")); next.Path != "/oauth/authorize" || next.Query().Get("scope") != tc.canonical {
+				t.Fatalf("signed out next = %q, want /oauth/authorize with scope %q", next.String(), tc.canonical)
+			}
+			req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, authorizeURL(client.ID, tc.requested), nil)
+			signedIn := httptest.NewRecorder()
+			s.HandleAuthorize(signedIn, req.WithContext(auth.ContextWithSession(req.Context(), sess)))
+			consent := urlMustParse(t, signedIn.Header().Get("Location"))
+			if signedIn.Code != http.StatusFound || consent.Path != "/authorize" || consent.Query().Get("scope") != tc.canonical ||
+				consent.Query().Get("code") != "" {
+				t.Fatalf("signed in = %d %q, want 302 to the consent page with scope %q", signedIn.Code, consent.String(), tc.canonical)
+			}
+		})
+	}
+	for _, scope := range []string{"projects:read projects:read", "projects:admin", "resumes:read projects:read resumes:read"} {
+		t.Run("refuses "+scope, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			s.HandleAuthorize(rec, httptest.NewRequestWithContext(context.Background(), http.MethodGet, authorizeURL(client.ID, scope), nil))
+			redirect := urlMustParse(t, rec.Header().Get("Location"))
+			if rec.Code != http.StatusFound || redirect.Host != "agent.example" || redirect.Query().Get("error") != "invalid_scope" {
+				t.Fatalf("%q = %d %q, want error=invalid_scope on the registered redirect", scope, rec.Code, redirect.String())
 			}
 		})
 	}
 	if _, err := q.GetLiveOAuthGrant(t.Context(), store.GetLiveOAuthGrantParams{UserID: user.ID, ClientID: client.ID}); !errors.Is(err, pgx.ErrNoRows) {
-		t.Fatalf("refused project-scope requests left a grant: %v", err)
-	}
-	var codes int
-	if err := s.pool.QueryRow(t.Context(), "SELECT count(*) FROM oauth_authorization_codes WHERE user_id = $1", user.ID).Scan(&codes); err != nil || codes != 0 {
-		t.Fatalf("refused project-scope requests left %d codes, error = %v", codes, err)
+		t.Fatalf("authorize without consent left a grant: %v", err)
 	}
 }
 
-func TestSessionConsentHTTPHandler_RefusesProjectScopesWhileConsentDoesNotOfferThem(t *testing.T) {
+func TestSessionConsentHTTPHandler_ShowsApprovesAndNarrowsProjectScopes(t *testing.T) {
 	h := newOAuthSessionHTTPHarness(t)
 	handler := h.service.ConsentHTTPHandler(h.sessions)
-	for _, scope := range refusedProjectScopeRequests {
-		t.Run(scope, func(t *testing.T) {
-			q := consentQuery(h.client.ID, scope)
+	for _, tc := range append(projectScopeRequests, projectScopeRequest{"resumes:read", "resumes:read"}) {
+		t.Run(tc.requested, func(t *testing.T) {
+			q := consentQuery(h.client.ID, tc.requested)
 			view := httptest.NewRecorder()
 			handler.ServeHTTP(view, h.request(http.MethodGet, "https://aboutme.example/api/v1/oauth/consent?"+q.values().Encode(), "", true, false))
-			if view.Code != http.StatusBadRequest || responseErrorCode(t, view) != "request_invalid" {
-				t.Fatalf("consent view = %d %q, want 400 request_invalid", view.Code, view.Body.String())
+			var shown struct {
+				Data struct {
+					Scopes []string `json:"scopes"`
+				} `json:"data"`
+			}
+			if view.Code != http.StatusOK || json.Unmarshal(view.Body.Bytes(), &shown) != nil ||
+				strings.Join(shown.Data.Scopes, " ") != tc.canonical {
+				t.Fatalf("consent view = %d %q, want 200 listing %q", view.Code, view.Body.String(), tc.canonical)
 			}
 			body, err := json.Marshal(map[string]string{
 				"client_id": q.ClientID.String(), "redirect_uri": q.RedirectURI,
@@ -185,21 +203,30 @@ func TestSessionConsentHTTPHandler_RefusesProjectScopesWhileConsentDoesNotOfferT
 			}
 			approve := httptest.NewRecorder()
 			handler.ServeHTTP(approve, h.request(http.MethodPost, "https://aboutme.example/api/v1/oauth/consent", string(body), true, true))
-			if approve.Code != http.StatusBadRequest || responseErrorCode(t, approve) != "request_invalid" || strings.Contains(approve.Body.String(), "redirectTo") {
-				t.Fatalf("consent approval = %d %q, want 400 request_invalid", approve.Code, approve.Body.String())
+			var decided struct {
+				Data struct {
+					RedirectTo string `json:"redirectTo"`
+				} `json:"data"`
+			}
+			if approve.Code != http.StatusOK || json.Unmarshal(approve.Body.Bytes(), &decided) != nil {
+				t.Fatalf("consent approval = %d %q, want 200 with a redirect", approve.Code, approve.Body.String())
+			}
+			digest, err := ParseCode(urlMustParse(t, decided.Data.RedirectTo).Query().Get("code"))
+			if err != nil {
+				t.Fatalf("approval redirect %q carries no code: %v", decided.Data.RedirectTo, err)
+			}
+			code, err := h.queries.GetOAuthAuthorizationCodeByDigest(t.Context(), digest[:])
+			if err != nil || code.Scopes != tc.canonical {
+				t.Fatalf("code scopes = %q, %v; want %q", code.Scopes, err, tc.canonical)
+			}
+			if got := mustLiveGrant(t, h.queries, h.user.ID, h.client.ID).Scopes; got != tc.canonical {
+				t.Fatalf("live grant = %q, want %q", got, tc.canonical)
 			}
 		})
 	}
-	if _, err := h.queries.GetLiveOAuthGrant(t.Context(), store.GetLiveOAuthGrantParams{UserID: h.user.ID, ClientID: h.client.ID}); !errors.Is(err, pgx.ErrNoRows) {
-		t.Fatalf("refused project-scope approvals left a grant: %v", err)
-	}
-	var codes int
-	if err := h.service.pool.QueryRow(t.Context(), "SELECT count(*) FROM oauth_authorization_codes WHERE user_id = $1", h.user.ID).Scan(&codes); err != nil || codes != 0 {
-		t.Fatalf("refused project-scope approvals left %d codes, error = %v", codes, err)
-	}
 }
 
-func TestMetadata_AdvertisesOnlyResumeScopesWhileConsentDoesNotOfferProjectScopes(t *testing.T) {
+func TestMetadata_AdvertisesResumeAndProjectScopes(t *testing.T) {
 	for _, cimdEnabled := range []bool{false, true} {
 		s, _, _, _ := newAuthorizeHarness(t)
 		s.cimdEnabled = cimdEnabled
@@ -215,8 +242,9 @@ func TestMetadata_AdvertisesOnlyResumeScopesWhileConsentDoesNotOfferProjectScope
 			if recorder.Code != http.StatusOK || json.Unmarshal(recorder.Body.Bytes(), &document) != nil {
 				t.Fatalf("%s metadata (CIMD %t) = %d %q", name, cimdEnabled, recorder.Code, recorder.Body.String())
 			}
-			if !reflect.DeepEqual(document.ScopesSupported, []string{"resumes:read", "resumes:write"}) {
-				t.Fatalf("%s metadata (CIMD %t) scopes_supported = %v, want [resumes:read resumes:write]", name, cimdEnabled, document.ScopesSupported)
+			want := []string{"resumes:read", "resumes:write", "projects:read", "projects:write"}
+			if !reflect.DeepEqual(document.ScopesSupported, want) {
+				t.Fatalf("%s metadata (CIMD %t) scopes_supported = %v, want %v", name, cimdEnabled, document.ScopesSupported, want)
 			}
 		}
 	}
@@ -254,30 +282,30 @@ func TestAuthorize_HeldProjectScopeGrantCoversNarrowerResumeRequestAsToday(t *te
 	}
 }
 
-func TestRegister_RefusesProjectScopesWhileConsentDoesNotOfferThem(t *testing.T) {
+func TestRegister_AcceptsProjectScopes(t *testing.T) {
 	const base = `{"client_name":"Agent","redirect_uris":["https://agent.example/callback"]`
-	for _, scope := range refusedProjectScopeRequests {
-		t.Run(scope, func(t *testing.T) {
+	for _, tc := range projectScopeRequests {
+		t.Run(tc.requested, func(t *testing.T) {
 			q := &registrationQueries{id: uuid.New()}
 			s := newRegistrationService(t, q, &registrationAdmissionFake{allowed: true})
 			rec := httptest.NewRecorder()
-			s.HandleRegister(rec, registerRequest(http.MethodPost, "application/json", base+`,"scope":"`+scope+`"}`))
-			if rec.Code != http.StatusBadRequest || len(q.created) != 0 {
-				t.Fatalf("registration declaring %q = %d, created %d; want 400 and nothing created", scope, rec.Code, len(q.created))
+			s.HandleRegister(rec, registerRequest(http.MethodPost, "application/json", base+`,"scope":"`+tc.requested+`"}`))
+			if rec.Code != http.StatusCreated || len(q.created) != 1 {
+				t.Fatalf("registration declaring %q = %d, created %d; want 201 and one client", tc.requested, rec.Code, len(q.created))
 			}
 		})
 	}
 }
 
-func TestCIMDDocumentValidation_RefusesProjectScopesWhileConsentDoesNotOfferThem(t *testing.T) {
+func TestCIMDDocumentValidation_AcceptsProjectScopes(t *testing.T) {
 	id := "https://client.example/metadata"
 	valid := `{"client_id":"` + id + `","client_name":"Fixture","redirect_uris":["https://client.example/callback"],"token_endpoint_auth_method":"none"`
-	if _, err := validateCIMDDocument([]byte(valid+`,"scope":"resumes:read resumes:write"}`), id, "client.example"); err != nil {
-		t.Fatalf("document declaring the resume scopes: %v, want accepted", err)
-	}
-	for _, scope := range refusedProjectScopeRequests {
-		if _, err := validateCIMDDocument([]byte(valid+`,"scope":"`+scope+`"}`), id, "client.example"); err == nil {
-			t.Fatalf("document declaring %q accepted, want refused", scope)
+	for _, tc := range projectScopeRequests {
+		if _, err := validateCIMDDocument([]byte(valid+`,"scope":"`+tc.requested+`"}`), id, "client.example"); err != nil {
+			t.Fatalf("document declaring %q: %v, want accepted", tc.requested, err)
 		}
+	}
+	if _, err := validateCIMDDocument([]byte(valid+`,"scope":"projects:read projects:read"}`), id, "client.example"); err == nil {
+		t.Fatal("document declaring a repeated scope accepted, want refused")
 	}
 }

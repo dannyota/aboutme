@@ -31,6 +31,7 @@ const (
 var closedToolErrors = map[string]bool{
 	"not_found": true, "revision_conflict": true, "validation_failed": true, "payload_too_large": true,
 	"rate_limited": true, "agent_access_unavailable": true, "scope_denied": true,
+	"limit_reached": true, "slug_unavailable": true,
 }
 
 var (

@@ -10,31 +10,31 @@ import (
 )
 
 func (b boundApply) change(ctx context.Context, q *store.Queries) (project.Change, error) {
-	return b.service.projects.ChangeTx(ctx, q, b.sess.UserID, b.id, b.revision, b.input.slug(), b.input.Document)
+	return b.service.projects.ChangeTx(ctx, q, b.actor.owner, b.id, b.revision, b.input.slug(), b.input.Document)
 }
 
 func (b boundApply) authorizeReplace(ctx context.Context, q *store.Queries) error {
-	if err := b.service.reauthenticate(ctx, q, b.sess); err != nil {
+	if err := b.actor.authorize(ctx, q); err != nil {
 		return err
 	}
-	current, err := b.service.match(ctx, q, b.sess.UserID, b.id, b.revision)
+	current, err := b.service.match(ctx, q, b.actor.owner, b.id, b.revision)
 	if err != nil {
 		return err
 	}
 	if current.Slug != b.input.slug() {
-		return b.service.requireRecent(ctx, q, b.sess, b.service.now())
+		return b.requireRecent(ctx, q)
 	}
 	return nil
 }
 
 func (b boundApply) replace(ctx context.Context, q *store.Queries, changed []resumeapi.ChangedResume) (resume.StoredResponse, error) {
 	now := b.service.now()
-	admit := project.SlugAdmission(func() bool { return b.service.allowSlug(b.sess.UserID, now) })
-	p, err := b.service.projects.ReplaceTx(ctx, q, b.sess.UserID, b.id, b.revision, b.input.slug(), b.input.Document, now, admit)
+	admit := project.SlugAdmission(func() bool { return b.service.allowSlug(b.actor.owner, now) })
+	p, err := b.service.projects.ReplaceTx(ctx, q, b.actor.owner, b.id, b.revision, b.input.slug(), b.input.Document, now, admit)
 	if err != nil {
 		return resume.StoredResponse{}, err
 	}
-	links, err := b.service.links.LinkedResumeIDs(ctx, q, b.sess.UserID)
+	links, err := b.service.links.LinkedResumeIDs(ctx, q, b.actor.owner)
 	if err != nil {
 		return resume.StoredResponse{}, err
 	}

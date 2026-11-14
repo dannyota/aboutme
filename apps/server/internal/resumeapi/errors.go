@@ -171,6 +171,9 @@ func mapMutationError(err error) *clientError {
 	if errors.Is(err, auth.ErrSessionInvalid) {
 		return &clientError{Status: http.StatusUnauthorized, Code: "session_required", Message: "a valid session is required"}
 	}
+	if errors.Is(err, ErrAgentScopeDenied) {
+		return &clientError{Status: http.StatusForbidden, Code: "scope_denied", Message: "the grant does not allow this change"}
+	}
 	if errors.Is(err, ErrAgentAccessUnavailable) {
 		return &clientError{Status: http.StatusServiceUnavailable, Code: "agent_access_unavailable", Message: "agent access is unavailable"}
 	}

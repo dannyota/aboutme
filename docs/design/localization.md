@@ -109,9 +109,9 @@ second consent read or decision. Errors keep `role="alert"`; status states keep
 their semantics, and a locale change creates no false announcement.
 
 Locale never changes HTTP methods, paths, query keys, redirect URIs, request
-bodies, identifiers, OAuth decisions `approve` and `deny`, scopes `resumes:read`
-and `resumes:write`, provider identifiers, error codes, or the exact uppercase
-ASCII deletion token `DELETE`.
+bodies, identifiers, OAuth decisions `approve` and `deny`, scope identifiers
+such as `resumes:read` and `projects:write`, provider identifiers, error codes,
+or the exact uppercase ASCII deletion token `DELETE`.
 
 ## Security
 

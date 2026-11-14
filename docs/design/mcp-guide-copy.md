@@ -93,6 +93,12 @@ troubleshooting question from its answer.
   5. - vi: Xóa CV. Xóa một CV đã xuất bản cũng gỡ đường dẫn công khai của CV đó.
      - en: Delete a resume. Deleting a published resume also takes its public
        link down.
+  6. (owner, 2026-11-14)
+     - vi: Đọc và chỉnh sửa dự án trong thư viện, và gắn dự án vào CV. Thay đổi
+       trên một dự án đang hiện trên CV đã xuất bản sẽ công khai ngay.
+     - en: Read and edit the projects in your library and link them to your
+       resumes. A change to a project shown on a published resume is public at
+       once.
 - Cannot heading
   - vi: Không được phép
   - en: Cannot

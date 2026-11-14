@@ -14,7 +14,8 @@ import (
 )
 
 type toolRuntime struct {
-	resumes AgentExecutor
+	resumes  AgentExecutor
+	projects ProjectExecutor
 }
 
 type emptyInput struct{}
@@ -49,7 +50,13 @@ func (e closedToolError) Error() string { return string(e) }
 func (r *toolRuntime) execute(ctx context.Context, scope oauthsrv.Scope,
 	call resumeapi.AgentCall,
 ) (resumeapi.AgentResponse, error) {
-	authority, err := r.require(ctx, scope)
+	return r.executeWith(ctx, []oauthsrv.Scope{scope}, call)
+}
+
+func (r *toolRuntime) executeWith(ctx context.Context, scopes []oauthsrv.Scope,
+	call resumeapi.AgentCall,
+) (resumeapi.AgentResponse, error) {
+	authority, err := r.require(ctx, scopes...)
 	if err != nil {
 		return resumeapi.AgentResponse{}, err
 	}
@@ -60,13 +67,15 @@ func (r *toolRuntime) execute(ctx context.Context, scope oauthsrv.Scope,
 	return response, nil
 }
 
-func (r *toolRuntime) require(ctx context.Context, scope oauthsrv.Scope) (requestAuthority, error) {
+func (r *toolRuntime) require(ctx context.Context, scopes ...oauthsrv.Scope) (requestAuthority, error) {
 	authority, err := authorityFromContext(ctx)
 	if err != nil {
 		return requestAuthority{}, closedToolError("agent_access_unavailable")
 	}
-	if err := RequireScope(authority.principal, scope); err != nil {
-		return requestAuthority{}, closedToolError("scope_denied")
+	for _, scope := range scopes {
+		if err := RequireScope(authority.principal, scope); err != nil {
+			return requestAuthority{}, closedToolError("scope_denied")
+		}
 	}
 	return authority, nil
 }
@@ -87,6 +96,10 @@ func mapAgentResponseError(response resumeapi.AgentResponse) error {
 		return closedToolError("validation_failed")
 	case unmarshalErr == nil && envelope.Error.Code == "scope_denied":
 		return closedToolError("scope_denied")
+	case unmarshalErr == nil && (envelope.Error.Code == "resume_cap_exceeded" || envelope.Error.Code == "project_limit"):
+		return closedToolError("limit_reached")
+	case unmarshalErr == nil && (envelope.Error.Code == "project_slug_taken" || envelope.Error.Code == "project_slug_held"):
+		return closedToolError("slug_unavailable")
 	case response.Status == http.StatusRequestEntityTooLarge:
 		return closedToolError("payload_too_large")
 	case response.Status == http.StatusTooManyRequests || (unmarshalErr == nil && envelope.Error.Code == "media_busy") ||

@@ -45,7 +45,31 @@ type deleteResult struct {
 	ChangedResumes []changedResume `json:"changedResumes"`
 }
 
+type mutationActor struct {
+	owner     uuid.UUID
+	authorize func(context.Context, *store.Queries) error
+	recent    func(context.Context, *store.Queries) error
+}
+
+func (s *Service) sessionActor(sess store.Session) mutationActor {
+	return mutationActor{
+		owner:     sess.UserID,
+		authorize: func(ctx context.Context, q *store.Queries) error { return s.reauthenticate(ctx, q, sess) },
+		recent:    func(ctx context.Context, q *store.Queries) error { return s.requireRecent(ctx, q, sess, s.now()) },
+	}
+}
+
 func (s *Service) mutate(w http.ResponseWriter, r *http.Request) {
+	s.mutateAs(w, r, func(ctx context.Context) (mutationActor, bool) {
+		sess, ok := auth.SessionFromContext(ctx)
+		if !ok {
+			return mutationActor{}, false
+		}
+		return s.sessionActor(sess), true
+	})
+}
+
+func (s *Service) mutateAs(w http.ResponseWriter, r *http.Request, actorOf func(context.Context) (mutationActor, bool)) {
 	headers, headerErr := parseHeaders(r)
 	if headerErr != nil {
 		writeError(w, headerErr)
@@ -69,13 +93,13 @@ func (s *Service) mutate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, decodeErr)
 		return
 	}
-	sess, ok := auth.SessionFromContext(r.Context())
+	actor, ok := actorOf(r.Context())
 	if !ok {
 		writeError(w, sessionError())
 		return
 	}
 	operation, fingerprint := identity(r.Method, id, headers.revision, body)
-	cached, replayed, err := s.idempotency.Inspect(r.Context(), sess.UserID, operation, headers.key, fingerprint)
+	cached, replayed, err := s.idempotency.Inspect(r.Context(), actor.owner, operation, headers.key, fingerprint)
 	if err != nil {
 		writeError(w, mapError(err))
 		return
@@ -84,21 +108,21 @@ func (s *Service) mutate(w http.ResponseWriter, r *http.Request) {
 		writeStored(w, cached)
 		return
 	}
-	call := boundApply{service: s, ctx: r.Context(), sess: sess, id: id, revision: headers.revision, input: input}
+	call := boundApply{service: s, ctx: r.Context(), actor: actor, id: id, revision: headers.revision, input: input}
 	var result resume.ExecuteResult
 	switch r.Method {
 	case http.MethodDelete:
 		result, err = s.links.RemoveProject(r.Context(), resumeapi.ProjectRemoval{
-			UserID: sess.UserID, ProjectID: id, Operation: operation, Key: headers.key, RequestHash: fingerprint,
+			UserID: actor.owner, ProjectID: id, Operation: operation, Key: headers.key, RequestHash: fingerprint,
 			Authorize: call.authorizeDelete, Remove: call.remove,
 		})
 	case http.MethodPut:
 		result, err = s.links.ReplaceProject(r.Context(), resumeapi.ProjectReplacement{
-			UserID: sess.UserID, ProjectID: id, Operation: operation, Key: headers.key, RequestHash: fingerprint,
+			UserID: actor.owner, ProjectID: id, Operation: operation, Key: headers.key, RequestHash: fingerprint,
 			Change: call.change, Authorize: call.authorizeReplace, Replace: call.replace,
 		})
 	default:
-		result, err = s.idempotency.Execute(r.Context(), sess.UserID, operation, headers.key, fingerprint, call.run)
+		result, err = s.idempotency.Execute(r.Context(), actor.owner, operation, headers.key, fingerprint, call.run)
 	}
 	if err != nil {
 		writeError(w, mapError(err))
@@ -110,31 +134,38 @@ func (s *Service) mutate(w http.ResponseWriter, r *http.Request) {
 type boundApply struct {
 	service  *Service
 	ctx      context.Context
-	sess     store.Session
+	actor    mutationActor
 	id       uuid.UUID
 	revision int64
 	input    projectInput
 }
 
 func (b boundApply) run(q *store.Queries) (resume.StoredResponse, error) {
-	if err := b.service.reauthenticate(b.ctx, q, b.sess); err != nil {
+	if err := b.actor.authorize(b.ctx, q); err != nil {
 		return resume.StoredResponse{}, err
 	}
-	return b.service.create(b.ctx, q, b.sess, b.input)
+	return b.service.create(b.ctx, q, b.actor.owner, b.input)
+}
+
+func (b boundApply) requireRecent(ctx context.Context, q *store.Queries) error {
+	if b.actor.recent == nil {
+		return nil
+	}
+	return b.actor.recent(ctx, q)
 }
 
 func (b boundApply) authorizeDelete(ctx context.Context, q *store.Queries) error {
-	if err := b.service.reauthenticate(ctx, q, b.sess); err != nil {
+	if err := b.actor.authorize(ctx, q); err != nil {
 		return err
 	}
-	if _, err := b.service.match(ctx, q, b.sess.UserID, b.id, b.revision); err != nil {
+	if _, err := b.service.match(ctx, q, b.actor.owner, b.id, b.revision); err != nil {
 		return err
 	}
-	return b.service.requireRecent(ctx, q, b.sess, b.service.now())
+	return b.requireRecent(ctx, q)
 }
 
 func (b boundApply) remove(ctx context.Context, q *store.Queries, changed []resumeapi.ChangedResume) (resume.StoredResponse, error) {
-	if err := b.service.projects.DeleteTx(ctx, q, b.sess.UserID, b.id, b.revision, b.service.now()); err != nil {
+	if err := b.service.projects.DeleteTx(ctx, q, b.actor.owner, b.id, b.revision, b.service.now()); err != nil {
 		return resume.StoredResponse{}, err
 	}
 	return stored(200, deleteResult{ChangedResumes: changedResumes(changed)}, nil)
@@ -191,10 +222,10 @@ func decodeInput(r *http.Request) ([]byte, projectInput, *clientError) {
 	return body, input, nil
 }
 
-func (s *Service) create(ctx context.Context, q *store.Queries, sess store.Session, input projectInput) (resume.StoredResponse, error) {
+func (s *Service) create(ctx context.Context, q *store.Queries, owner uuid.UUID, input projectInput) (resume.StoredResponse, error) {
 	now := s.now()
-	admit := project.SlugAdmission(func() bool { return s.allowSlug(sess.UserID, now) })
-	p, err := s.projects.CreateTx(ctx, q, sess.UserID, input.slug(), input.Document, now, admit)
+	admit := project.SlugAdmission(func() bool { return s.allowSlug(owner, now) })
+	p, err := s.projects.CreateTx(ctx, q, owner, input.slug(), input.Document, now, admit)
 	if err != nil {
 		return resume.StoredResponse{}, err
 	}

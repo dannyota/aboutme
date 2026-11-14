@@ -20,6 +20,7 @@ import (
 	"danny.vn/aboutme/apps/server/internal/media"
 	"danny.vn/aboutme/apps/server/internal/oauthsrv"
 	"danny.vn/aboutme/apps/server/internal/project"
+	"danny.vn/aboutme/apps/server/internal/projectapi"
 	"danny.vn/aboutme/apps/server/internal/publicstate"
 	"danny.vn/aboutme/apps/server/internal/resume"
 	"danny.vn/aboutme/apps/server/internal/resume/docmigrate"
@@ -102,8 +103,11 @@ func startProjectToolServer(t *testing.T, h *bearerHarness) *mcp.ClientSession {
 			Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), Clock: h.clock.Now,
 			Coordinator: coordinator, RecoveryPool: h.pool,
 		})
+	projects := projectapi.New(h.pool, resume.NewIdempotencyStore(h.pool), projectapi.Options{
+		AllowSlug: func(uuid.UUID, time.Time) bool { return true }, Clock: h.clock.Now, Links: resumes,
+	})
 	handler, err := NewServer(ServerDependencies{
-		Bearer: h.bearer, Resumes: resumes, Rates: mustTestMCPRates(t), MaxRequestBodyBytes: maxMCPRequestBytes,
+		Bearer: h.bearer, Resumes: resumes, Projects: projects, Rates: mustTestMCPRates(t), MaxRequestBodyBytes: maxMCPRequestBytes,
 	})
 	if err != nil {
 		t.Fatalf("NewServer: %v", err)
@@ -360,11 +364,37 @@ func narrowGrantWhileCallWaits(t *testing.T, h *bearerHarness, scopes string,
 	call func() (*mcp.CallToolResult, error),
 ) projectToolCallOutcome {
 	t.Helper()
-	ctx := context.Background()
 	parsed, err := oauthsrv.ParseScopes(scopes)
 	if err != nil {
 		t.Fatalf("setup: scope registry refuses narrowed scopes %q: %v", scopes, err)
 	}
+	return changeGrantWhileCallWaits(t, h, func(ctx context.Context, qtx *store.Queries) error {
+		_, upsertErr := qtx.UpsertOAuthGrant(ctx, store.UpsertOAuthGrantParams{
+			UserID: h.user.ID, ClientID: h.client.ID, Scopes: parsed.String(), CreatedAt: h.clock.Now(), AuthEpoch: h.user.AuthEpoch,
+		})
+		return upsertErr
+	}, call)
+}
+
+func revokeGrantWhileCallWaits(t *testing.T, h *bearerHarness, call func() (*mcp.CallToolResult, error)) projectToolCallOutcome {
+	t.Helper()
+	return changeGrantWhileCallWaits(t, h, func(ctx context.Context, qtx *store.Queries) error {
+		now := h.clock.Now()
+		if _, revokeErr := qtx.RevokeOAuthGrantForUser(ctx, store.RevokeOAuthGrantForUserParams{
+			ID: h.grant.ID, UserID: h.user.ID, RevokedAt: now,
+		}); revokeErr != nil {
+			return revokeErr
+		}
+		_, revokeErr := qtx.RevokeOAuthTokensForGrant(ctx, store.RevokeOAuthTokensForGrantParams{GrantID: h.grant.ID, RevokedAt: now})
+		return revokeErr
+	}, call)
+}
+
+func changeGrantWhileCallWaits(t *testing.T, h *bearerHarness, change func(context.Context, *store.Queries) error,
+	call func() (*mcp.CallToolResult, error),
+) projectToolCallOutcome {
+	t.Helper()
+	ctx := context.Background()
 	tx, err := h.pool.Begin(ctx)
 	if err != nil {
 		t.Fatalf("begin owner lock: %v", err)
@@ -381,10 +411,8 @@ func narrowGrantWhileCallWaits(t *testing.T, h *bearerHarness, scopes string,
 	if _, lockErr := qtx.LockUserForResumeWrite(ctx, h.user.ID); lockErr != nil {
 		t.Fatalf("lock owner row: %v", lockErr)
 	}
-	if _, narrowErr := qtx.UpsertOAuthGrant(ctx, store.UpsertOAuthGrantParams{
-		UserID: h.user.ID, ClientID: h.client.ID, Scopes: parsed.String(), CreatedAt: h.clock.Now(), AuthEpoch: h.user.AuthEpoch,
-	}); narrowErr != nil {
-		t.Fatalf("narrow grant to %q: %v", parsed.String(), narrowErr)
+	if changeErr := change(ctx, qtx); changeErr != nil {
+		t.Fatalf("change grant under the owner lock: %v", changeErr)
 	}
 	var pid int32
 	if pidErr := tx.QueryRow(ctx, "SELECT pg_backend_pid()").Scan(&pid); pidErr != nil {

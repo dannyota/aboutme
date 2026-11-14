@@ -63,7 +63,7 @@ func newAgentRouteRegistrar(enabled bool, registry []publicroots.Route, handlers
 }
 
 func NewAgents(ctx context.Context, cfg config.Config, pool *store.Pool, queries store.OAuthQueries,
-	resumes mcpapi.AgentExecutor, sessions *auth.SessionManager,
+	resumes mcpapi.AgentExecutor, projects mcpapi.ProjectExecutor, sessions *auth.SessionManager,
 ) (func(*http.ServeMux), error) {
 	if err := cfg.ValidateAgentAccess(); err != nil {
 		return nil, err
@@ -117,7 +117,7 @@ func NewAgents(ctx context.Context, cfg config.Config, pool *store.Pool, queries
 		return nil, err
 	}
 	mcpHandler, err := mcpapi.NewServer(mcpapi.ServerDependencies{
-		Bearer: bearer, Resumes: resumes, Rates: mcpRates, MaxRequestBodyBytes: a.MCPBodyLimitBytes,
+		Bearer: bearer, Resumes: resumes, Projects: projects, Rates: mcpRates, MaxRequestBodyBytes: a.MCPBodyLimitBytes,
 	})
 	if err != nil {
 		return nil, err

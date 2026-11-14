@@ -189,7 +189,7 @@ func run() error {
 	projectService := app.NewProjects(app.ProjectDependencies{
 		Config: cfg, Pool: pool, Sessions: sessionManager, Resumes: resumeService,
 	})
-	agentRoutes, err := app.NewAgents(ctx, cfg, pool, queries, resumeService, sessionManager)
+	agentRoutes, err := app.NewAgents(ctx, cfg, pool, queries, resumeService, projectService, sessionManager)
 	if err != nil {
 		return fmt.Errorf("create agent access: %w", err)
 	}

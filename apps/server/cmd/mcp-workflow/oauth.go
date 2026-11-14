@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 
@@ -93,11 +94,24 @@ func newCallbackFetcher(redirectURI, issuer string, browser browserHandoff, list
 	}
 }
 
-// RFC 6749 section 3.3 gives scope order no meaning, and the MCP Go SDK's authutil.UnionScopes returns either order at random.
-const (
-	scopeReadWrite = "resumes:read resumes:write"
-	scopeWriteRead = "resumes:write resumes:read"
-)
+// RFC 6749 section 3.3 gives scope order no meaning, and the MCP Go SDK's authutil.UnionScopes returns any order at random.
+const workflowScope = "resumes:read resumes:write projects:read projects:write"
+
+func canonicalWorkflowScope(raw string) bool {
+	want := strings.Fields(workflowScope)
+	fields := strings.Split(raw, " ")
+	if len(fields) != len(want) {
+		return false
+	}
+	seen := make(map[string]bool, len(fields))
+	for _, field := range fields {
+		if !slices.Contains(want, field) || seen[field] {
+			return false
+		}
+		seen[field] = true
+	}
+	return true
+}
 
 func validateAuthorizationURL(args *auth.AuthorizationArgs, redirectURI, issuer string) (string, string, error) {
 	if args == nil {
@@ -124,7 +138,7 @@ func validateAuthorizationURL(args *auth.AuthorizationArgs, redirectURI, issuer 
 		return "", "", errAuthorizationRedirect
 	}
 	scope := values.Get("scope")
-	if scope != scopeReadWrite && scope != scopeWriteRead {
+	if !canonicalWorkflowScope(scope) {
 		return "", "", errAuthorizationScope
 	}
 	resource := issuer + mcpEndpointPath
@@ -136,8 +150,8 @@ func validateAuthorizationURL(args *auth.AuthorizationArgs, redirectURI, issuer 
 		values.Get("code_challenge_method") != "S256" || !isS256Challenge(values.Get("code_challenge")) {
 		return "", "", errAuthorizationChallenge
 	}
-	if scope == scopeWriteRead {
-		values.Set("scope", scopeReadWrite)
+	if scope != workflowScope {
+		values.Set("scope", workflowScope)
 		authorizationURL.RawQuery = values.Encode()
 	}
 	return authorizationURL.String(), state, nil

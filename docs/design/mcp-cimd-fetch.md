@@ -162,7 +162,7 @@ before discarding unknown values. Members:
 | `token_endpoint_auth_method` | Required and exactly `none`                                                                                  |
 | `grant_types`                | If present, a nonempty string array including `authorization_code`; unknown values are ignored               |
 | `response_types`             | If present, exactly `["code"]`                                                                               |
-| `scope`                      | If present, names only `resumes:read` and `resumes:write`; grants nothing                                    |
+| `scope`                      | If present, names only the four account-wide scopes; grants nothing                                          |
 | `application_type`           | If present, only `native` (loopback redirects only) or `web` (`https` redirects only); any other value fails |
 | `client_secret`, `jwks`      | `client_secret`, `client_secret_expires_at`, `jwks`, and `jwks_uri` make the document invalid                |
 | Any other member             | Ignored, never stored, never fetched; this covers `client_uri`, `logo_uri`, `policy_uri`, `tos_uri`          |

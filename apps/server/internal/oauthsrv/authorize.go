@@ -204,7 +204,7 @@ func consentQueryFromValues(values url.Values) (ConsentQuery, error) {
 		ClientID:            clientID,
 		RedirectURI:         values.Get(redirectKey),
 		ResponseType:        values.Get(responseKey),
-		Scope:               values.Get(scopeKey),
+		Scope:               canonicalScope(values.Get(scopeKey)),
 		State:               values.Get(stateKey),
 		CodeChallenge:       values.Get(challengeKey),
 		CodeChallengeMethod: values.Get(methodKey),

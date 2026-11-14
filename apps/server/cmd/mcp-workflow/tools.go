@@ -11,9 +11,10 @@ import (
 var errToolRegistry = errors.New("tool_registry_invalid")
 
 var requiredTools = [...]string{
-	"create_resume", "delete_entry", "delete_photo", "delete_resume", "get_photo",
-	"get_resume", "list_resumes", "update_customization", "update_personal_details",
-	"update_photo_crop", "update_resume_metadata", "update_section", "update_structure",
+	"create_project", "create_resume", "delete_entry", "delete_photo", "delete_project", "delete_resume",
+	"get_photo", "get_project", "get_resume", "link_project", "list_projects", "list_resumes",
+	"refresh_project_entry", "update_customization", "update_personal_details", "update_photo_crop",
+	"update_project", "update_resume_metadata", "update_section", "update_structure",
 	"upload_photo", "upsert_entry",
 }
 

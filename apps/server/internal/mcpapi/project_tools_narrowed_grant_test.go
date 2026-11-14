@@ -57,7 +57,7 @@ func TestProjectTools_LibraryWritesRereadTheGrantUnderTheOwnerLock(t *testing.T)
 			outcome := narrowGrantWhileCallWaits(t, w.h, projectToolScopesWithout("projects:write"), func() (*mcp.CallToolResult, error) {
 				return callProjectTool(w.session, tool, args)
 			})
-			requireNarrowedCallRefused(t, tool, outcome, "scope_denied", "agent_access_unavailable")
+			requireNarrowedCallRefused(t, tool, outcome, "scope_denied")
 			if after := w.snapshot(t, w.h.user.ID); after != before {
 				t.Fatalf("refused %s changed the project or its linking resume:\nbefore %s\nafter  %s", tool, before, after)
 			}
@@ -82,7 +82,20 @@ func TestProjectTools_ResumeWriteRereadsTheGrantUnderTheOwnerLock(t *testing.T) 
 	outcome := narrowGrantWhileCallWaits(t, w.h, "resumes:read", func() (*mcp.CallToolResult, error) {
 		return callProjectTool(w.session, "update_section", args)
 	})
-	requireNarrowedCallRefused(t, "update_section", outcome, "scope_denied", "agent_access_unavailable")
+	requireNarrowedCallRefused(t, "update_section", outcome, "scope_denied")
+	if after := w.snapshot(t, w.h.user.ID); after != before {
+		t.Fatalf("refused update_section wrote:\nbefore %s\nafter  %s", before, after)
+	}
+}
+
+func TestProjectTools_ResumeWriteUnderARevokedGrantIsUnavailable(t *testing.T) {
+	w := newProjectToolWorld(t, projectToolOldGrant)
+	before := w.snapshot(t, w.h.user.ID)
+	args := w.sectionRenameArguments()
+	outcome := revokeGrantWhileCallWaits(t, w.h, func() (*mcp.CallToolResult, error) {
+		return callProjectTool(w.session, "update_section", args)
+	})
+	requireNarrowedCallRefused(t, "update_section", outcome, "agent_access_unavailable")
 	if after := w.snapshot(t, w.h.user.ID); after != before {
 		t.Fatalf("refused update_section wrote:\nbefore %s\nafter  %s", before, after)
 	}

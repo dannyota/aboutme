@@ -37,18 +37,26 @@ const REDIRECT_URI = `http://localhost:${REDIRECT_PORT}/callback`;
 const UAT_ACCOUNT = 'MCP Proof — mcp-proof@example.invalid';
 const RESUME_TITLE = 'MCP TS SDK Proof Resume';
 const REFRESH_FORM_KEYS = ['client_id', 'grant_type', 'refresh_token', 'resource'];
+const ALL_SCOPES = 'resumes:read resumes:write projects:read projects:write';
 
 const EXPECTED_TOOLS = [
+  'create_project',
   'create_resume',
   'delete_entry',
   'delete_photo',
+  'delete_project',
   'delete_resume',
   'get_photo',
+  'get_project',
   'get_resume',
+  'link_project',
+  'list_projects',
   'list_resumes',
+  'refresh_project_entry',
   'update_customization',
   'update_personal_details',
   'update_photo_crop',
+  'update_project',
   'update_resume_metadata',
   'update_section',
   'update_structure',
@@ -247,7 +255,7 @@ test('proves the official TypeScript MCP SDK client over trusted HTTPS', async (
     grant_types: ['authorization_code', 'refresh_token'],
     response_types: ['code'],
     token_endpoint_auth_method: 'none',
-    scope: 'resumes:read resumes:write',
+    scope: ALL_SCOPES,
     software_id: 'aboutme-mcp-ts-sdk-proof',
   } as OAuthClientMetadata);
 
@@ -301,7 +309,7 @@ test('proves the official TypeScript MCP SDK client over trusted HTTPS', async (
     stage('provider-login-heading');
     await expect(
       page.getByRole('heading', {
-        name: `Allow ${clientName} to edit your resumes?`,
+        name: `Allow ${clientName} to edit your resumes and projects?`,
         exact: true,
       }),
     ).toBeVisible();
@@ -311,6 +319,8 @@ test('proves the official TypeScript MCP SDK client over trusted HTTPS', async (
     const permissions = page.getByTestId('consent-scopes');
     await expect(permissions).toContainText('Read resumes');
     await expect(permissions).toContainText('Write resumes');
+    await expect(permissions).toContainText('Read projects');
+    await expect(permissions).toContainText('Write projects');
     stage('provider-login-return-to');
     await expect(page.getByTestId('consent-return-to')).toHaveText(
       'After you approve, you return to an app on this computer (localhost).',
@@ -348,7 +358,7 @@ test('proves the official TypeScript MCP SDK client over trusted HTTPS', async (
     const { tools } = await client.listTools();
     const names = tools.map((tool) => tool.name).sort();
     expect(names).toEqual([...EXPECTED_TOOLS].sort());
-    expect(tools).toHaveLength(15);
+    expect(tools).toHaveLength(22);
 
     stage('create-resume');
     const created = mutationState(
@@ -599,7 +609,7 @@ async function proveCIMDSDK(page: Page, clientName: string): Promise<void> {
   const provider = new ProofOAuthProvider(REDIRECT_URI, {
     client_name: clientName, redirect_uris: [REDIRECT_URI],
     grant_types: ['authorization_code', 'refresh_token'], response_types: ['code'],
-    token_endpoint_auth_method: 'none', scope: 'resumes:read resumes:write',
+    token_endpoint_auth_method: 'none', scope: ALL_SCOPES,
   });
   provider.saveClientInformation({ ...provider.clientMetadata, client_id: clientID });
   const observation: RefreshObservation = {
@@ -630,7 +640,7 @@ async function proveCIMDSDK(page: Page, clientName: string): Promise<void> {
     await page.goto(authorization.href);
     await waitForHydration(page);
     await expect(page.getByRole('heading', { level: 1 }))
-      .toHaveText('client.example wants access to your resumes.');
+      .toHaveText('client.example wants access to your resumes and projects.');
     await expect(page.getByTestId('consent-client-host')).toHaveText('client.example');
     await expect(page.getByTestId('consent-client-name')).toHaveText(clientName);
     await expect(page.getByTestId('consent-loopback-warning')).toBeVisible();

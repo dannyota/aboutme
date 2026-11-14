@@ -25,17 +25,26 @@ const REDIRECT_URI = 'http://127.0.0.1:20090/callback';
 const UAT_ACCOUNT = 'MCP Proof — mcp-proof@example.invalid';
 const ENTRY_TITLE = 'MCP UAT Entry';
 const ENTRY_ID = '53000000-0000-4000-8000-000000000021';
+const PROJECT_NAME = 'MCP UAT Project';
+const ALL_SCOPES = 'resumes:read resumes:write projects:read projects:write';
 const EXPECTED_TOOLS = [
+  'create_project',
   'create_resume',
   'delete_entry',
   'delete_photo',
+  'delete_project',
   'delete_resume',
   'get_photo',
+  'get_project',
   'get_resume',
+  'link_project',
+  'list_projects',
   'list_resumes',
+  'refresh_project_entry',
   'update_customization',
   'update_personal_details',
   'update_photo_crop',
+  'update_project',
   'update_resume_metadata',
   'update_section',
   'update_structure',
@@ -276,6 +285,20 @@ async function bestEffortDelete(
   }
 }
 
+async function bestEffortDeleteProject(
+  ca: Buffer,
+  accessToken: string,
+  projectID: string,
+): Promise<void> {
+  try {
+    await mcpRequest(ca, accessToken, 99, 'tools/call', {
+      arguments: { idempotency_key: randomUUID(), project_id: projectID, revision: '1' },
+      name: 'delete_project',
+    });
+  } catch {
+  }
+}
+
 test('proves MCP agent access over trusted HTTPS', async ({
   context,
   page,
@@ -296,6 +319,8 @@ test('proves MCP agent access over trusted HTTPS', async ({
     /^aboutme MCP UAT [0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
   );
   let resumeID: string | null = null;
+  let projectID: string | null = null;
+  let accessToken: unknown = null;
   let teardownComplete = false;
   const createIdempotencyKey = randomUUID();
   const upsertIdempotencyKey = randomUUID();
@@ -336,7 +361,7 @@ test('proves MCP agent access over trusted HTTPS', async ({
       client_id: clientID as string,
       redirect_uri: REDIRECT_URI,
       response_type: 'code',
-      scope: 'resumes:read resumes:write',
+      scope: ALL_SCOPES,
       state: oauthState,
       code_challenge: challenge,
       code_challenge_method: 'S256',
@@ -373,7 +398,7 @@ test('proves MCP agent access over trusted HTTPS', async ({
     stage('provider-login-heading');
     await expect(
       page.getByRole('heading', {
-        name: `Allow ${clientName} to edit your resumes?`,
+        name: `Allow ${clientName} to edit your resumes and projects?`,
         exact: true,
       }),
     ).toBeVisible();
@@ -385,6 +410,11 @@ test('proves MCP agent access over trusted HTTPS', async ({
     const permissions = page.getByTestId('consent-scopes');
     await expect(permissions).toContainText('Read resumes');
     await expect(permissions).toContainText('Write resumes');
+    await expect(permissions).toContainText('Read projects');
+    await expect(permissions).toContainText('Write projects');
+    await expect(page.getByTestId('consent-projects-public')).toHaveText(
+      'A change to a project shown on a published resume is public at once.',
+    );
     let consentRequests = 0;
     const countConsentRequests = (request: { url(): string }): void => {
       const url = new URL(request.url());
@@ -393,9 +423,11 @@ test('proves MCP agent access over trusted HTTPS', async ({
     page.on('request', countConsentRequests);
     await page.getByTestId('landing-locale-vi').click();
     await expect(page.locator('html')).toHaveAttribute('lang', 'vi');
-    await expect(page.getByRole('heading', { name: `Cho phép ${clientName} chỉnh sửa CV của bạn?`, exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: `Cho phép ${clientName} chỉnh sửa CV và dự án của bạn?`, exact: true })).toBeVisible();
     await expect(permissions).toContainText('Đọc CV');
     await expect(permissions).toContainText('Chỉnh sửa CV');
+    await expect(permissions).toContainText('Đọc dự án');
+    await expect(permissions).toContainText('Chỉnh sửa dự án');
     await page.getByTestId('landing-locale-en').click();
     await expect(page.getByRole('button', { name: 'Approve', exact: true })).toBeVisible();
     expect(consentRequests).toBe(0);
@@ -436,11 +468,11 @@ test('proves MCP agent access over trusted HTTPS', async ({
     expect(tokenResponse.status).toBe(200);
     expect(tokenResponse.headers['cache-control']).toBe('no-store');
     const tokens = parseJSON(tokenResponse.body, 'token exchange');
-    const accessToken = tokens.access_token;
+    accessToken = tokens.access_token;
     expect(typeof accessToken).toBe('string');
     expect(tokens.token_type).toBe('Bearer');
     expect(tokens.expires_in).toBe(3600);
-    expect(tokens.scope).toBe('resumes:read resumes:write');
+    expect(tokens.scope).toBe(ALL_SCOPES);
     expect(typeof tokens.refresh_token).toBe('string');
 
     stage('list-tools');
@@ -458,7 +490,7 @@ test('proves MCP agent access over trusted HTTPS', async ({
       .filter((name): name is string => typeof name === 'string')
       .sort();
     expect(names).toEqual([...EXPECTED_TOOLS]);
-    expect(tools).toHaveLength(15);
+    expect(tools).toHaveLength(22);
 
     stage('create-resume');
     const created = mutation(
@@ -509,6 +541,54 @@ test('proves MCP agent access over trusted HTTPS', async ({
     );
     expect(upserted.revision).toBe('2');
 
+    stage('create-project');
+    const createdProject = object(
+      (
+        await callTool(ca, accessToken as string, 20, 'create_project', {
+          idempotency_key: randomUUID(),
+          document: { defaultLanguage: 'en', text: { en: { name: PROJECT_NAME } } },
+        })
+      ).structuredContent,
+    );
+    const project = object(createdProject?.project);
+    expect(createdProject?.revision).toBe('1');
+    expect(project?.id).toMatch(/^[0-9a-f-]{36}$/i);
+    projectID = project?.id as string;
+
+    stage('list-projects');
+    const listedProjects = object(
+      (await callTool(ca, accessToken as string, 21, 'list_projects', {})).structuredContent,
+    )?.projects;
+    expect(Array.isArray(listedProjects)).toBe(true);
+    expect((listedProjects as unknown[]).map((item) => object(item)?.id)).toContain(projectID);
+
+    stage('link-project');
+    const linked = mutation(
+      await callTool(ca, accessToken as string, 22, 'link_project', {
+        idempotency_key: randomUUID(),
+        resume_id: resumeID,
+        revision: upserted.revision,
+        project_id: projectID,
+      }),
+    );
+    expect(linked.revision).toBe('3');
+    const linkedEntryID = Object.values(object(object(linked.state.document)?.content) ?? {})
+      .flatMap((section) => (Array.isArray(object(section)?.entries) ? (object(section)?.entries as unknown[]) : []))
+      .map((entry) => object(entry))
+      .find((entry) => entry?.projectId === projectID)?.id;
+    expect(linkedEntryID).toMatch(/^[0-9a-f-]{36}$/i);
+
+    stage('refresh-project-entry');
+    const refreshed = mutation(
+      await callTool(ca, accessToken as string, 23, 'refresh_project_entry', {
+        idempotency_key: randomUUID(),
+        resume_id: resumeID,
+        revision: linked.revision,
+        entry_id: linkedEntryID,
+      }),
+    );
+    expect(refreshed.revision).toBe('4');
+
     stage('open-editor');
     const editor = await page.goto(`/app/resumes/${resumeID}`);
     expect(editor?.status()).toBe(200);
@@ -525,6 +605,23 @@ test('proves MCP agent access over trusted HTTPS', async ({
     await expect(
       agentEntry.getByRole('heading', { name: ENTRY_TITLE }),
     ).toBeVisible();
+
+    stage('delete-project');
+    const deletedProject = object(
+      (
+        await callTool(ca, accessToken as string, 24, 'delete_project', {
+          idempotency_key: randomUUID(),
+          project_id: projectID,
+          revision: '1',
+        })
+      ).structuredContent,
+    );
+    expect(deletedProject).toEqual({
+      id: projectID,
+      deleted: true,
+      changed_resumes: [{ id: resumeID, revision: '5' }],
+    });
+    projectID = null;
 
     stage('revoke-grant');
     const settings = await page.goto('/app/settings/sessions');
@@ -635,6 +732,9 @@ test('proves MCP agent access over trusted HTTPS', async ({
       { flag: 'wx', mode: 0o600 },
     );
   } finally {
+    if (projectID !== null && typeof accessToken === 'string') {
+      await bestEffortDeleteProject(ca, accessToken, projectID);
+    }
     if (!teardownComplete) await bestEffortDelete(page, resumeID);
   }
 });

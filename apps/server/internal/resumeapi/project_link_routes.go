@@ -13,12 +13,17 @@ import (
 	schema "danny.vn/aboutme/packages/schema/gen/go"
 
 	"danny.vn/aboutme/apps/server/internal/api"
+	"danny.vn/aboutme/apps/server/internal/oauthsrv"
 	"danny.vn/aboutme/apps/server/internal/project"
 	"danny.vn/aboutme/apps/server/internal/resume"
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
 const linkedSectionKey = "projects"
+
+func projectLinkAgentScopes() []oauthsrv.Scope {
+	return []oauthsrv.Scope{oauthsrv.ScopeResumesWrite, oauthsrv.ScopeProjectsRead}
+}
 
 func projectLinkRoutes() []routeSpec {
 	return []routeSpec{
@@ -230,6 +235,7 @@ func (s *Service) handleLinkResumeProject(w http.ResponseWriter, r *http.Request
 		Prepare:             s.prepareProjectLink,
 		Run:                 projectLinkOperation{service: s},
 		Transition:          s.nonDrainingTransition,
+		AgentRequired:       projectLinkAgentScopes(),
 	})
 }
 
@@ -242,5 +248,6 @@ func (s *Service) handleRefreshResumeProjectEntry(w http.ResponseWriter, r *http
 		Prepare:             s.prepareProjectLink,
 		Run:                 projectLinkOperation{service: s},
 		Transition:          s.nonDrainingTransition,
+		AgentRequired:       projectLinkAgentScopes(),
 	})
 }

@@ -161,7 +161,7 @@ func decodeConsentDecision(w http.ResponseWriter, r *http.Request) (ConsentDecis
 	return ConsentDecision{ConsentQuery: ConsentQuery{
 		PublicClientID: fields["client_id"],
 		ClientID:       clientID, RedirectURI: fields["redirect_uri"], ResponseType: fields["response_type"],
-		Scope: fields["scope"], State: fields["state"], CodeChallenge: fields["code_challenge"],
+		Scope: canonicalScope(fields["scope"]), State: fields["state"], CodeChallenge: fields["code_challenge"],
 		CodeChallengeMethod: fields["code_challenge_method"],
 	}, Decision: fields["decision"]}, nil
 }
