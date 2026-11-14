@@ -135,6 +135,7 @@ if [[ $args == *' /usr/local/lib/aboutme/deploy-host.sh '* ]]; then
     exit 1
   fi
   if [[ ${FAIL_CLOSED:-0} == 1 && $args == *' fail-closed '* ]]; then exit 1; fi
+  if [[ ${FAIL_PRUNE:-0} == 1 && $args == *' prune-images '* ]]; then exit 1; fi
   exit 0
 fi
 exit 0
@@ -669,5 +670,44 @@ for mode in rollback activate; do
 done
 unset SCHEMA_FLOOR
 
-((edge_failures == 0 && egress_failures == 0 && floor_failures == 0)) || exit 1
+prune_failures=0
+prune_fail() { echo "$*" >&2; prune_failures=1; }
+for prune_case in deploy rollback failing-prune; do
+  rm -f "$work/edge-count" "$work/ban-count" "$work/probe.pid"
+  : >"$work/host.log"
+  : >"$work/order.log"
+  args=(v0.1.1)
+  [[ $prune_case != rollback ]] || args=(--rollback v0.1.1)
+  status=0
+  FAIL_PRUNE=$([[ $prune_case == failing-prune ]] && echo 1 || echo 0) EDGE_CASE=delayed \
+    "$repo_root/deploy/vn/scripts/deploy.sh" "${args[@]}" >"$work/prune-$prune_case.out" 2>&1 || status=$?
+  prune=$(grep -n ' prune-images ' "$work/host.log" | cut -d: -f1) || true
+  ban_del=$(grep -n ' ban-test del ' "$work/host.log" | tail -n1 | cut -d: -f1) || true
+  pruned_at=$(grep -n ' prune-images ' "$work/order.log" | cut -d: -f1) || true
+  released_at=$(grep -n '/fence.sh release ' "$work/order.log" | cut -d: -f1) || true
+  if [[ $status != 0 || $(grep -c ' prune-images ' "$work/host.log") != 1 || -z $ban_del || $prune -lt $ban_del ]] ||
+     [[ $(tail -n 1 "$work/host.log") != *' prune-images '* || -z $released_at || $pruned_at -gt $released_at ]] ||
+     ! grep -q 'deploy: deployed v0.1.1' "$work/prune-$prune_case.out"; then
+    prune_fail "a successful $prune_case (exit $status) did not prune images once after the smoke checks and before the lock release"
+    tail -n 5 "$work/prune-$prune_case.out" "$work/host.log" >&2
+  fi
+  if [[ $prune_case == failing-prune ]] &&
+     ! grep -q 'deploy: warning: could not remove unused images' "$work/prune-$prune_case.out"; then
+    prune_fail 'a failing prune step gave no warning'
+  fi
+done
+for prune_case in smoke render activate; do
+  : >"$work/host.log"
+  args=(v0.1.1)
+  [[ $prune_case != activate ]] || args=(--activate v0.1.1)
+  status=0
+  FAIL_RENDER=$([[ $prune_case == render ]] && echo 1 || echo 0) \
+    "$repo_root/deploy/vn/scripts/deploy.sh" "${args[@]}" >"$work/prune-$prune_case.out" 2>&1 || status=$?
+  [[ $prune_case == activate || $status != 0 ]] || prune_fail "the $prune_case case did not fail"
+  if grep -q ' prune-images ' "$work/host.log"; then
+    prune_fail "the $prune_case case pruned images"
+  fi
+done
+
+((edge_failures == 0 && egress_failures == 0 && floor_failures == 0 && prune_failures == 0)) || exit 1
 echo "deployment failure test passed"

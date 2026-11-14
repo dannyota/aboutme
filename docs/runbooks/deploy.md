@@ -70,7 +70,10 @@ The deployer then:
    `nosniff`, and a CrowdSec 403 for the operator's test ban (polls 5 s apart
    for up to 150 s after adding it, up to 10 s a request). Deletes the ban,
    polls `/` until HTTP 200 (sleeps of two ticks plus 5 s, rounded up to 5 s
-   steps, and up to 10 s a request: about 85 s), then releases the lock.
+   steps, and up to 10 s a request: about 85 s).
+9. Removes each `aboutme-*` image that no release record, retained operation,
+   installed unit, or container uses, by digest and never with force, then
+   releases the lock. A removal failure is a warning; the deploy still succeeds.
 
 The 403 wait gives the new Caddy's first decision pull 150 s, inside the
 3-minute test ban. If the local API fails that pull, the bouncer retries after a
