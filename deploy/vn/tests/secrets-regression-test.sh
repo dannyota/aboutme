@@ -95,4 +95,35 @@ sed -n '/^cmd_import_s3() {/,/^}/p' "$root/deploy/vn/scripts/secrets-host.sh" >"
 source "$work/import"
 printf existing >"$dir/media-access-key-id"
 if (printf '[default]\naws_access_key_id=NEW\naws_secret_access_key=NEW\n' | cmd_import_s3 media) >"$work/out" 2>&1; then exit 1; fi
+sed -n '/^step_db_bootstrap() {/,/^}/p' "$root/deploy/vn/scripts/deploy-host.sh" >"$work/bootstrap"
+# shellcheck disable=SC1091
+source "$work/bootstrap"
+secrets=$work/db-secrets
+mkdir -p "$secrets"
+db_password=synthetic-db-password-7f3c
+printf '%s\n' "$db_password" >"$secrets/db-admin-password"
+: >"$work/db-argv"
+runuser() {
+  printf 'runuser %s\n' "$*" >>"$work/db-argv"
+  shift 3
+  if [[ $1 == psql ]]; then cat >"$work/db-stdin"; else "$@"; fi
+}
+pgbackrest() {
+  printf 'pgbackrest %s\n' "$*" >>"$work/db-argv"
+  if [[ $* == *' info '* ]]; then printf '[{"status":{"code":0}}]\n'; fi
+}
+jq() {
+  printf 'jq %s\n' "$*" >>"$work/db-argv"
+  cat >/dev/null
+}
+(step_db_bootstrap) >"$work/out" 2>&1 || { echo "FAIL db-bootstrap: $(cat "$work/out")" >&2; exit 1; }
+grep -qF "\\set pw '$db_password'" "$work/db-stdin" || { echo 'FAIL db-bootstrap-password-stdin' >&2; exit 1; }
+if grep -F "$db_password" "$work/db-argv" "$work/out" >&2; then
+  echo 'FAIL db-bootstrap-password-argv' >&2; exit 1
+fi
+panic_line=$(grep -nxF 'SET log_min_error_statement = panic;' "$work/db-stdin" | cut -d: -f1)
+password_line=$(grep -n '^\\set pw ' "$work/db-stdin" | cut -d: -f1)
+if ! [[ $panic_line =~ ^[0-9]+$ && $password_line =~ ^[0-9]+$ ]] || ((panic_line > password_line)); then
+  echo 'FAIL db-bootstrap-log-level-before-password' >&2; exit 1
+fi
 echo 'secret generation and rotation tests passed'
