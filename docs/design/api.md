@@ -179,11 +179,11 @@ cookies entirely, so no CSRF surface exists there.
 redirects to. The OAuth error vocabulary is closed and carries one fixed generic
 sentence, never dependency or input detail. The MCP tool error vocabulary is
 separately closed: `validation_failed`, `revision_conflict`, `not_found`,
-`payload_too_large`, `scope_denied`, `rate_limited`, and
-`agent_access_unavailable`. Tool arguments passed through to REST, including
-each `update_structure` `commands` item and each `update_customization` `deltas`
-item, use the exact REST names; a case variant returns `validation_failed`
-without the field path.
+`payload_too_large`, `scope_denied`, `rate_limited`, `limit_reached`,
+`slug_unavailable`, and `agent_access_unavailable`. Tool arguments passed
+through to REST, including each `update_structure` `commands` item and each
+`update_customization` `deltas` item, use the exact REST names; a case variant
+returns `validation_failed` without the field path.
 
 **These routes are not in the OpenAPI contract.** The named RFCs and the MCP
 specification define them. OpenAPI holds only the session-authenticated consent
