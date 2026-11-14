@@ -47,6 +47,7 @@ type deleteResult struct {
 
 type mutationActor struct {
 	owner     uuid.UUID
+	caller    string
 	authorize func(context.Context, *store.Queries) error
 	recent    func(context.Context, *store.Queries) error
 }
@@ -54,6 +55,7 @@ type mutationActor struct {
 func (s *Service) sessionActor(sess store.Session) mutationActor {
 	return mutationActor{
 		owner:     sess.UserID,
+		caller:    resumeapi.SessionCaller,
 		authorize: func(ctx context.Context, q *store.Queries) error { return s.reauthenticate(ctx, q, sess) },
 		recent:    func(ctx context.Context, q *store.Queries) error { return s.requireRecent(ctx, q, sess, s.now()) },
 	}
@@ -98,7 +100,7 @@ func (s *Service) mutateAs(w http.ResponseWriter, r *http.Request, actorOf func(
 		writeError(w, sessionError())
 		return
 	}
-	operation, fingerprint := identity(r.Method, id, headers.revision, body)
+	operation, fingerprint := identity(r.Method, id, headers.revision, actor.caller, body)
 	cached, replayed, err := s.idempotency.Inspect(r.Context(), actor.owner, operation, headers.key, fingerprint)
 	if err != nil {
 		writeError(w, mapError(err))

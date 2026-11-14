@@ -38,6 +38,10 @@ func (p AgentPrincipal) GrantID() uuid.UUID { return p.grantID }
 
 func (p AgentPrincipal) UserID() uuid.UUID { return p.userID }
 
+const SessionCaller = "session"
+
+func (p AgentPrincipal) Caller() string { return "grant:" + p.grantID.String() }
+
 type agentPrincipalContextKey struct{}
 
 func contextWithAgentPrincipal(ctx context.Context, principal AgentPrincipal) context.Context {

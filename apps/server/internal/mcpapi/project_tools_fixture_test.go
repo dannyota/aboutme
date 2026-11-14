@@ -2,6 +2,7 @@ package mcpapi
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"io"
@@ -43,6 +44,7 @@ var projectToolNames = []string{
 type projectToolWorld struct {
 	h           *bearerHarness
 	session     *mcp.ClientSession
+	url         string
 	resumes     *resume.Store
 	atlas       project.Project
 	beacon      project.Project
@@ -84,6 +86,12 @@ func newProjectToolHarness(t *testing.T, scopes string) *bearerHarness {
 
 func startProjectToolServer(t *testing.T, h *bearerHarness) *mcp.ClientSession {
 	t.Helper()
+	session, _ := startProjectToolServerAt(t, h)
+	return session
+}
+
+func startProjectToolServerAt(t *testing.T, h *bearerHarness) (*mcp.ClientSession, string) {
+	t.Helper()
 	raw, _ := h.createToken(t, oauthsrv.TokenKindAccess)
 	projector := docmigrate.NewIdentityProjector()
 	backend, err := media.NewFS(t.TempDir())
@@ -114,14 +122,14 @@ func startProjectToolServer(t *testing.T, h *bearerHarness) *mcp.ClientSession {
 	}
 	httpServer := httptest.NewServer(handler)
 	t.Cleanup(httpServer.Close)
-	return connectMCPClient(t, httpServer.URL, raw, "")
+	return connectMCPClient(t, httpServer.URL, raw, ""), httpServer.URL
 }
 
 func newProjectToolWorld(t *testing.T, scopes string) *projectToolWorld {
 	t.Helper()
 	h := newProjectToolHarness(t, scopes)
 	w := &projectToolWorld{h: h, resumes: resume.NewStore(h.pool, docmigrate.NewIdentityProjector())}
-	w.session = startProjectToolServer(t, h)
+	w.session, w.url = startProjectToolServerAt(t, h)
 	w.atlas = createProjectToolProject(t, h, h.user.ID, "atlas", "Atlas")
 	w.beacon = createProjectToolProject(t, h, h.user.ID, "beacon", "Beacon")
 	w.carto = createProjectToolProject(t, h, h.user.ID, "carto", "Carto")
@@ -147,6 +155,44 @@ func newProjectToolWorld(t *testing.T, scopes string) *projectToolWorld {
 	w.otherEntry = otherLinked.ID
 	w.otherResume = createProjectToolResume(t, w, other.ID, otherLinked)
 	return w
+}
+
+func (w *projectToolWorld) grantSession(t *testing.T, scopes string) *mcp.ClientSession {
+	t.Helper()
+	ctx := context.Background()
+	parsed, err := oauthsrv.ParseScopes(scopes)
+	if err != nil {
+		t.Fatalf("setup: scope registry refuses grant scopes %q: %v", scopes, err)
+	}
+	client, err := w.h.q.CreateOAuthClient(ctx, store.CreateOAuthClientParams{
+		ClientName: "Second agent", RedirectURIs: json.RawMessage(`["https://second.example/callback"]`), CreatedAt: w.h.clock.Now(),
+	})
+	if err != nil {
+		t.Fatalf("CreateOAuthClient second: %v", err)
+	}
+	t.Cleanup(func() {
+		if _, cleanupErr := w.h.q.DeleteOAuthClient(context.Background(), client.ID); cleanupErr != nil {
+			t.Errorf("delete second OAuth client: %v", cleanupErr)
+		}
+	})
+	grant, err := w.h.q.UpsertOAuthGrant(ctx, store.UpsertOAuthGrantParams{
+		UserID: w.h.user.ID, ClientID: client.ID, Scopes: parsed.String(), CreatedAt: w.h.clock.Now(), AuthEpoch: w.h.user.AuthEpoch,
+	})
+	if err != nil {
+		t.Fatalf("UpsertOAuthGrant second: %v", err)
+	}
+	raw, digest, err := oauthsrv.NewToken(oauthsrv.TokenKindAccess, rand.Reader)
+	if err != nil {
+		t.Fatalf("NewToken second: %v", err)
+	}
+	now := w.h.clock.Now()
+	if _, tokenErr := w.h.q.CreateOAuthToken(ctx, store.CreateOAuthTokenParams{
+		TokenDigest: digest[:], Kind: string(oauthsrv.TokenKindAccess), FamilyID: uuid.New(), ClientID: client.ID,
+		UserID: w.h.user.ID, GrantID: grant.ID, CreatedAt: now, ExpiresAt: now.Add(time.Hour), FamilyExpiresAt: now.Add(30 * 24 * time.Hour),
+	}); tokenErr != nil {
+		t.Fatalf("CreateOAuthToken second: %v", tokenErr)
+	}
+	return connectMCPClient(t, w.url, raw, "")
 }
 
 func createProjectToolProject(t *testing.T, h *bearerHarness, owner uuid.UUID, slug, name string) project.Project {

@@ -97,7 +97,7 @@ func (s *Service) ExecuteAgent(ctx context.Context, principal resumeapi.AgentPri
 		r.Header.Set("Content-Type", "application/json")
 	}
 	s.mutateAs(w, r, func(context.Context) (mutationActor, bool) {
-		return mutationActor{owner: owner, authorize: func(ctx context.Context, q *store.Queries) error {
+		return mutationActor{owner: owner, caller: principal.Caller(), authorize: func(ctx context.Context, q *store.Queries) error {
 			_, err := resumeapi.RequireAgentScopesTx(ctx, q, principal, s.now(), required...)
 			return err
 		}}, true

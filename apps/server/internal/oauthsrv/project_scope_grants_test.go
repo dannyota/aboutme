@@ -309,3 +309,20 @@ func TestCIMDDocumentValidation_AcceptsProjectScopes(t *testing.T) {
 		t.Fatal("document declaring a repeated scope accepted, want refused")
 	}
 }
+
+func TestSessionConsentHTTPHandler_SortsTheSchemaNonCanonicalExample(t *testing.T) {
+	h := newOAuthSessionHTTPHarness(t)
+	q := consentQuery(h.client.ID, "projects:write resumes:write")
+	view := httptest.NewRecorder()
+	h.service.ConsentHTTPHandler(h.sessions).ServeHTTP(view,
+		h.request(http.MethodGet, "https://aboutme.example/api/v1/oauth/consent?"+q.values().Encode(), "", true, false))
+	var shown struct {
+		Data struct {
+			Scopes []string `json:"scopes"`
+		} `json:"data"`
+	}
+	if view.Code != http.StatusOK || json.Unmarshal(view.Body.Bytes(), &shown) != nil ||
+		!reflect.DeepEqual(shown.Data.Scopes, []string{"resumes:write", "projects:write"}) {
+		t.Fatalf("consent view of %q = %d %q, want 200 listing resumes:write then projects:write", q.Scope, view.Code, view.Body.String())
+	}
+}

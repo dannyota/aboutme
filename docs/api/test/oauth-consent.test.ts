@@ -4,6 +4,9 @@ import { describe, expect, it } from "vitest";
 
 const doc = parse(readFileSync("docs/api/openapi.yaml", "utf8")) as any;
 
+const SCOPE = "(resumes:read|resumes:write|projects:read|projects:write)";
+const SCOPE_PATTERN = `^${SCOPE}( ${SCOPE}){0,3}$`;
+
 const SCOPE_SETS = [
   "resumes:read",
   "resumes:write",
@@ -119,8 +122,26 @@ describe("OAuth consent and agent grant OpenAPI contract", () => {
     });
     expect(parameters.scope.schema).toEqual({
       type: "string",
-      enum: SCOPE_SETS,
+      pattern: SCOPE_PATTERN,
     });
+    const scope = new RegExp(parameters.scope.schema.pattern);
+    for (const accepted of [
+      ...SCOPE_SETS,
+      "projects:write resumes:write",
+      "projects:write projects:read resumes:write resumes:read",
+    ]) {
+      expect(scope.test(accepted), accepted).toBe(true);
+    }
+    for (const refused of [
+      "",
+      "projects:admin",
+      "resumes:read  projects:read",
+      " resumes:read",
+      "resumes:read,projects:read",
+      "resumes:read resumes:write projects:read projects:write resumes:read",
+    ]) {
+      expect(scope.test(refused), refused).toBe(false);
+    }
     expect(parameters.code_challenge_method.schema).toEqual({
       type: "string",
       const: "S256",

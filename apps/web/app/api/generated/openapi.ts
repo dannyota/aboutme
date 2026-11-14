@@ -6713,8 +6713,8 @@ export interface operations {
                 /** @description DCR matches exactly. CIMD checks the current document; loopback ports may differ. */
                 redirect_uri: string;
                 response_type: "code";
-                /** @description One or more account-wide scopes. This is a closed list, not free text. Multiple scopes use OAuth's space-delimited form in this canonical order; the server sorts a set sent in another order into it, and refuses an unknown or repeated scope. */
-                scope: "resumes:read" | "resumes:write" | "resumes:read resumes:write" | "projects:read" | "resumes:read projects:read" | "resumes:write projects:read" | "resumes:read resumes:write projects:read" | "projects:write" | "resumes:read projects:write" | "resumes:write projects:write" | "resumes:read resumes:write projects:write" | "projects:read projects:write" | "resumes:read projects:read projects:write" | "resumes:write projects:read projects:write" | "resumes:read resumes:write projects:read projects:write";
+                /** @description One to four account-wide scopes, space-delimited, in any order. This is a closed list, not free text. The server sorts the set into the canonical order `resumes:read resumes:write projects:read projects:write`, and refuses an unknown or repeated scope. */
+                scope: string;
                 /** @description Opaque client state, bounded to 512 bytes and echoed on redirect. */
                 state?: string;
                 /** @description RFC 7636 S256 challenge (43 base64url characters). */

@@ -55,8 +55,9 @@ func parseHeaders(r *http.Request) (mutationHeaders, *clientError) {
 }
 func revisionTag(revision int64) string { return `"r` + strconv.FormatInt(revision, 10) + `"` }
 
-func identity(method string, id uuid.UUID, revision int64, body []byte) (string, [32]byte) {
+func identity(method string, id uuid.UUID, revision int64, caller string, body []byte) (string, [32]byte) {
 	operation := sha256.Sum256([]byte("aboutme.project.operation.v1\x00" + method + "\x00" + id.String()))
 	request := append(strconv.AppendInt(nil, revision, 10), 0)
+	request = append(append(request, caller...), 0)
 	return hex.EncodeToString(operation[:]), sha256.Sum256(append(request, body...))
 }

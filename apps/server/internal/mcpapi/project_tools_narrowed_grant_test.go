@@ -108,3 +108,41 @@ func (w *projectToolWorld) sectionRenameArguments() map[string]any {
 		"display_name": "Renamed while narrowed",
 	}
 }
+
+func TestProjectTools_MidRequestNarrowingRefusesEveryLibraryWrite(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		tool    string
+		dropped string
+		args    func(w *projectToolWorld) map[string]any
+	}{
+		{"create_project without projects:write", "create_project", "projects:write", func(w *projectToolWorld) map[string]any {
+			return w.arguments("create_project")
+		}},
+		{"link_project without projects:read", "link_project", "projects:read", func(w *projectToolWorld) map[string]any {
+			return w.arguments("link_project")
+		}},
+		{"update_project without resumes:write", "update_project", "resumes:write", func(w *projectToolWorld) map[string]any {
+			return w.arguments("update_project")
+		}},
+		{"delete_project without resumes:write", "delete_project", "resumes:write", func(w *projectToolWorld) map[string]any {
+			return map[string]any{
+				"idempotency_key": uuid.NewString(), "project_id": w.atlas.ID.String(),
+				"revision": strconv.FormatInt(w.atlas.Revision, 10),
+			}
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w := newProjectToolWorld(t, projectToolAllScopes)
+			before := w.snapshot(t, w.h.user.ID)
+			args := tc.args(w)
+			outcome := narrowGrantWhileCallWaits(t, w.h, projectToolScopesWithout(tc.dropped), func() (*mcp.CallToolResult, error) {
+				return callProjectTool(w.session, tc.tool, args)
+			})
+			requireNarrowedCallRefused(t, tc.tool, outcome, "scope_denied")
+			if after := w.snapshot(t, w.h.user.ID); after != before {
+				t.Fatalf("refused %s wrote:\nbefore %s\nafter  %s", tc.tool, before, after)
+			}
+		})
+	}
+}
