@@ -77,7 +77,17 @@ case "$tool $*" in
   'findmnt -no SOURCE /') echo /dev/vda1 ;;
   'lsblk -no PKNAME '*) echo vda ;;
   'mountpoint '*) exit 1 ;;
-  'blkid -p -o value -s TYPE '*) [[ -n $HOST_RULES_SIGNATURE ]] || exit 2; echo "$HOST_RULES_SIGNATURE" ;;
+  'blkid -p '*)
+    [[ -z $HOST_RULES_PROBE_RC ]] || exit "$HOST_RULES_PROBE_RC"
+    [[ -n $HOST_RULES_SIGNATURE$HOST_RULES_PARTITION_TABLE ]] || exit 2
+    case " $* " in
+      *' -o export '*)
+        echo "DEVNAME=${!#}"
+        [[ -z $HOST_RULES_PARTITION_TABLE ]] || echo "PTTYPE=$HOST_RULES_PARTITION_TABLE"
+        [[ -z $HOST_RULES_SIGNATURE ]] || echo "TYPE=$HOST_RULES_SIGNATURE" ;;
+      *' -o value -s TYPE '*) [[ -z $HOST_RULES_SIGNATURE ]] || echo "$HOST_RULES_SIGNATURE" ;;
+      *) exit 4 ;;
+    esac ;;
   'blkid -o value -s LABEL '*) [[ -n $HOST_RULES_LABEL ]] || exit 2; echo "$HOST_RULES_LABEL" ;;
 esac
 exit 0
@@ -106,34 +116,47 @@ sed -e "s|^mnt=/srv/data\$|mnt=$work/srv/data|" \
 [[ $(grep -c "^mnt=$work/srv/data\$\|^fstab=$work/fstab\$\|\[ -f \"\$dev\" \]" "$work/data-volume.sh") == 3 &&
   $(grep -c "^  \"[^\"]* $work/root/" "$work/data-volume.sh") == 9 ]] ||
   fail 'data-volume.sh paths changed; update the rewrite'
+host_paths=$(grep -oE "(^|[[:space:]\"'=<>(])/[[:alnum:]_.-][^[:space:]\"';|)<>]*" "$work/data-volume.sh" |
+  sed -E 's|^[^/]||' | grep -vxF -e /dev/null -e '/dev/$root_disk' | grep -v "^$work/" || true)
+[[ -z $host_paths ]] || fail "rewritten data-volume.sh still names host paths: $(paste -sd' ' <<<"$host_paths")"
 device=$work/dev/vdb
 : >"$device"
 run_volume() {
-  local signature=$1 label=$2
-  shift 2
+  local signature=$1 partition_table=$2 label=$3
+  shift 3
   : >"$HOST_RULES_CALLS"
   rm -rf "$work/srv" "$work/root" "$work/fstab"
   "$HOST_RULES_REAL_MKDIR" -p "$work/root"
   : >"$work/fstab"
-  HOST_RULES_SIGNATURE=$signature HOST_RULES_LABEL=$label PATH=$work/volume-bin:$PATH \
+  HOST_RULES_SIGNATURE=$signature HOST_RULES_PARTITION_TABLE=$partition_table HOST_RULES_LABEL=$label \
+    HOST_RULES_PROBE_RC=${HOST_RULES_PROBE_RC:-} PATH=$work/volume-bin:$PATH \
     bash "$work/data-volume.sh" "$device" "$@" >"$work/volume-out" 2>&1
 }
 assert_no_format() {
   if grep -nE '^(mkfs\.ext4|wipefs) ' "$HOST_RULES_CALLS" >&2; then fail "$1 formatted or wiped the device"; fi
 }
 
-if run_volume '' ''; then fail 'data-volume.sh accepted a blank device without --format'; fi
+if run_volume '' '' ''; then fail 'data-volume.sh accepted a blank device without --format'; fi
 grep -q 're-run with --format' "$work/volume-out" || fail "blank device without --format: $(cat "$work/volume-out")"
 assert_no_format 'a blank device without --format'
 
-if run_volume xfs '' --format; then fail 'data-volume.sh accepted a foreign xfs signature with --format'; fi
+if run_volume xfs '' '' --format; then fail 'data-volume.sh accepted a foreign xfs signature with --format'; fi
 grep -q 'refusing' "$work/volume-out" || fail "foreign signature: $(cat "$work/volume-out")"
 assert_no_format 'a foreign signature with --format'
 
-run_volume ext4 aboutme-data --format || fail "own volume with --format: $(cat "$work/volume-out")"
+run_volume ext4 '' aboutme-data --format || fail "own volume with --format: $(cat "$work/volume-out")"
 assert_no_format 'an existing aboutme-data volume with --format'
 
-run_volume '' '' --format || fail "blank device with --format: $(cat "$work/volume-out")"
+if run_volume '' gpt '' --format; then fail 'data-volume.sh accepted a partition-table-only device with --format'; fi
+grep -q 'refusing' "$work/volume-out" || fail "partition table only: $(cat "$work/volume-out")"
+assert_no_format 'a partition-table-only device with --format'
+
+if HOST_RULES_PROBE_RC=8 run_volume '' '' '' --format; then
+  fail 'data-volume.sh accepted an ambivalent probe with --format'
+fi
+assert_no_format 'an ambivalent probe with --format'
+
+run_volume '' '' '' --format || fail "blank device with --format: $(cat "$work/volume-out")"
 [[ $(grep -E '^(mkfs\.ext4|wipefs) ' "$HOST_RULES_CALLS") == "mkfs.ext4 -q -L aboutme-data $device" ]] ||
   fail "blank device with --format must call mkfs.ext4 once: $(grep -E '^(mkfs\.ext4|wipefs) ' "$HOST_RULES_CALLS" | paste -sd'|')"
 

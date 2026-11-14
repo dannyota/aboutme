@@ -58,7 +58,11 @@ fi
 if [ "$already_ours" = yes ]; then
   kept "$dev is mounted at $mnt"
 else
-  sig=$(blkid -p -o value -s TYPE "$dev" 2>/dev/null || true)
+  probe_rc=0
+  probe=$(blkid -p -o export "$dev" 2>/dev/null) || probe_rc=$?
+  sig=$(sed -n -E 's/^(PT)?TYPE=//p' <<<"$probe")
+  sig=${sig%%$'\n'*}
+  if [ -z "$sig" ] && [ "$probe_rc" -ne 2 ]; then sig=blkid-$probe_rc; fi
   if [ -n "$sig" ]; then
     have=$(blkid -o value -s LABEL "$dev" 2>/dev/null || true)
     if [ "$have" = "$label" ]; then
