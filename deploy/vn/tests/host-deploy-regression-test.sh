@@ -267,9 +267,10 @@ podman() {
       [[ ${PRUNE_FAIL:-} != inspect ]] || return 125
       grep -F -- "$6 " "$p/local" | cut -d' ' -f2
       ;;
-    'image rm -- '*)
-      printf '%s\n' "$4" >>"$p/rm"
-      [[ $4 != "${PRUNE_FAIL_RM:-}" ]]
+    'image rm --no-prune -- '*)
+      [[ $# == 5 ]] || { printf 'unexpected podman call: %s\n' "$*" >>"$p/unexpected"; return 125; }
+      printf '%s\n' "$5" >>"$p/rm"
+      [[ $5 != "${PRUNE_FAIL_RM:-}" ]]
       ;;
     *) printf 'unexpected podman call: %s\n' "$*" >>"$p/unexpected"; return 125 ;;
   esac

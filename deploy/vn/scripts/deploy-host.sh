@@ -43,8 +43,6 @@ checkpoint() {
   esac
 }
 
-# Every state file and flags.env is parsed here, by jq, against one strict
-# shape, so no two readers can disagree about what a file says.
 release_shape='
   def img($n): type == "string" and test("^ghcr\\.io/dannyota/aboutme-" + $n + "@sha256:[0-9a-f]{64}$");
   def tag: type == "string" and test("^v(0|[1-9][0-9]{0,2})\\.(0|[1-9][0-9]{0,2})\\.(0|[1-9][0-9]{0,2})$");
@@ -589,7 +587,7 @@ step_prune_images() {
     [[ -n $id ]] || continue
     if [[ -n ${keep[$id]:-} ]]; then
       kept=$((kept + 1))
-    elif podman image rm -- "$ref" >/dev/null 2>&1; then
+    elif podman image rm --no-prune -- "$ref" >/dev/null 2>&1; then
       removed=$((removed + 1))
     else
       say "warning: could not remove $ref"
