@@ -211,10 +211,12 @@ and `projects:write`.
   tool: any bearer write that adds a `projectId` to a resume or changes one
   needs `projects:read`, whichever tool or route carries it. `projects:write`
   alone does not satisfy it. A write that keeps or removes existing references
-  needs only `resumes:write`. The check reads the grant's scopes inside the
-  write transaction, so a grant narrowed meanwhile is honoured. `link_project`
-  and `refresh_project_entry` check `projects:read` before reading any project,
-  so an agent without it cannot tell its own project id from another account's.
+  needs only `resumes:write`. Every agent mutation, library or resume, rereads
+  the grant inside its transaction under the owner lock and checks its complete
+  scope set before it reads a project or writes anything, so a grant narrowed
+  meanwhile is honoured. `link_project` and `refresh_project_entry` check
+  `projects:read` before reading any project, so an agent without it cannot tell
+  its own project id from another account's.
 - Two codes join the closed tool error vocabulary: `limit_reached` (the project
   or resume cap) and `slug_unavailable` (a slug taken or held). Another
   account's project is `not_found`.
@@ -222,9 +224,15 @@ and `projects:write`.
   scope set canonically before checking it, since OAuth scope order carries no
   meaning; unknown or repeated scopes still fail. A client that asks again with
   fewer scopes keeps only those, as today.
-- The release that adds the scopes raises the release fence floor to itself: an
-  older server cannot read a grant that holds a project scope. The migration's
-  down step refuses while any such grant or code exists.
+- The scopes ship in two releases, as the
+  [schema floor](release-floors.md#schema-floor) requires for a change older
+  releases cannot read. The first adds the migration that allows the project
+  scope strings and teaches bearer checks, token refresh and Connected agents to
+  accept a grant that holds them, while no tool, consent or metadata offers
+  them; it is published and verified. The second adds the tools, consent and
+  metadata, and raises the schema floor and the tracked fence floor to the
+  first. The migration's down step refuses while any project-scope grant or code
+  exists.
 - No tool publishes, attaches evidence or connects an account.
 - Until reviewed changes ship (v0.10), an agent edit to a library project of a
   published resume is public at once, as an agent edit to the resume is today;
