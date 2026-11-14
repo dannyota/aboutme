@@ -325,7 +325,7 @@ async function assertGuide(
   );
   await expect(guide.getByRole('heading', { level: 2 }))
     .toHaveText(headings);
-  await expect(page.getByTestId('guide-can').locator('li')).toHaveCount(5);
+  await expect(page.getByTestId('guide-can').locator('li')).toHaveCount(6);
   await expect(page.getByTestId('guide-cannot').locator('li'))
     .toHaveCount(5);
   await expect(page.getByTestId('guide-claude-web-disk')).toHaveCount(6);
