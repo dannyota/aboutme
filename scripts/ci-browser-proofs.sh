@@ -13,10 +13,11 @@
 # parallel tests against one harness (totp.spec.ts "Enabled-proof
 # sharding"). Each shard's evidence moves to
 # .dev/proof-evidence/KIND-browser-proof-evidence-SHARD/, the directory name
-# the shard coverage checks read the shard from. The exports and
+# the shard coverage checks read the shard from. The editor, exports and
 # linkedin-import proofs are not sharded and need no coverage check, but each
-# writes redacted evidence on a mid-test failure (exports.spec.ts,
-# linkedin-import.spec.ts), so their evidence moves too, to
+# writes redacted evidence on a mid-test failure (editor.spec.ts,
+# exports.spec.ts, linkedin-import.spec.ts), so their evidence moves too, to
+# .dev/proof-evidence/editor-browser-proof-evidence/,
 # .dev/proof-evidence/exports-browser-proof-evidence/ and
 # .dev/proof-evidence/linkedin-import-browser-proof-evidence/. Every other
 # proof's evidence is never moved out of the evidence root and so is never
@@ -57,6 +58,15 @@ move_shard_evidence() {
   dest=$staging/$kind-browser-proof-evidence-$shard
   install -d -m 0700 "$staging" "$dest"
   for dir in "$evidence_root/$kind"-*; do
+    [ -d "$dir" ] || continue
+    mv -- "$dir" "$dest/"
+  done
+}
+
+move_editor_evidence() {
+  local dest=$staging/editor-browser-proof-evidence dir
+  install -d -m 0700 "$staging" "$dest"
+  for dir in "$evidence_root"/editor.*; do
     [ -d "$dir" ] || continue
     mv -- "$dir" "$dest/"
   done
@@ -170,6 +180,7 @@ for proof in "$@"; do
   totp) stage_totp_evidence "$shard" || status=1 ;;
   passkey) move_shard_evidence "$kind" "$shard" || status=1 ;;
   esac
+  [ "$proof" != editor ] || move_editor_evidence || status=1
   [ "$proof" != exports ] || move_exports_evidence || status=1
   [ "$proof" != linkedin-import ] || move_linkedin_import_evidence || status=1
   echo "::endgroup::"

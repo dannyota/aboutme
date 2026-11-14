@@ -207,12 +207,8 @@ export async function provePhotoSessionPersistence(
   await expect(page.getByLabel('Headline')).toBeVisible();
   state.editorDiagnosticStage = 'session-destroyed';
   const reauthPage = await context.newPage();
+  state.failureDiagnostic?.trackReauthPage(reauthPage);
   await reauthPage.goto('/');
-  // The edit's own save must be the first request to meet the ended session.
-  // Otherwise the editor's realtime stream can read the resume first, once
-  // the server ends the stream of the dead session; the editor then turns
-  // signed out and refuses the edit, and the Headline drops the value checked
-  // below. So the save is dispatched and held before the session ends.
   state.editorDiagnosticStage = 'session-local-edit';
   const personalPath = `/api/v1/resumes/${resumeID}/personal-details`;
   diagnostics.expectHTTPFailure('PATCH', personalPath, 401);
@@ -249,6 +245,7 @@ export async function provePhotoSessionPersistence(
     await expectURLUnchanged(page, baseline);
     await expectNoPersistenceWrites(probes);
     state.editorDiagnosticStage = 'session-reauth-signin-start';
+    state.failureDiagnostic?.markReauthSignIn();
     await loginAsDevelopmentUser(reauthPage, (step) => {
       state.editorDiagnosticStage = `session-reauth-signin-${step}`;
     });
@@ -271,6 +268,7 @@ export async function provePhotoSessionPersistence(
     await expectURLUnchanged(page, baseline);
     await expectNoPersistenceWrites(probes);
   } catch (error) {
+    state.failureDiagnostic?.markFailure();
     if (sessionWindow !== undefined) {
       state.editorDiagnosticStage = `${state.editorDiagnosticStage}-${sessionWindow.label()}`;
     }
@@ -434,6 +432,7 @@ async function expectHeadlineOrDiagnose(
   try {
     await expect(headline).toHaveValue('Retained after session loss');
   } catch (error) {
+    state.failureDiagnostic?.markFailure();
     const value = await headline.inputValue({ timeout: 1_000 }).catch(() => null);
     const shown = value === null ? 'missing' : value === '' ? 'empty' : 'other';
     const saveState = await page.getByTestId('save-status')

@@ -10,6 +10,7 @@ import { proveConflictAndTemplate } from './editor-conflicts';
 import { provePhotoSessionPersistence } from './editor-photo-session';
 import { proveAccessibility } from './editor-accessibility';
 import { installDiagnostics } from './editor-diagnostics';
+import { installEditorFailureDiagnostic } from './editor-diagnostic';
 import {
   classifyLocaleFailure,
   type LocaleScenarioState,
@@ -17,6 +18,7 @@ import {
   proveLocaleDraft,
 } from './editor-locale';
 import {
+  ORIGIN,
   type EditorProofState,
   prepareEditor,
   type EditorSteps,
@@ -35,6 +37,12 @@ test.afterEach(async ({ context }, testInfo) => {
   const stage = testInfo.title === 'keeps a date draft focused when the interface locale changes'
     ? state.localeDiagnosticStage
     : state.editorDiagnosticStage;
+  if (
+    testInfo.title === 'proves authenticated editor behavior over trusted HTTPS'
+    && testInfo.status !== testInfo.expectedStatus
+  ) {
+    await state.failureDiagnostic?.write(testInfo.errors);
+  }
   try {
     if (state.recordedResumeIDs.size > 0) {
       const cleanup = await context.newPage();
@@ -62,6 +70,7 @@ test('proves authenticated editor behavior over trusted HTTPS', async ({
   page,
 }) => {
   state.editorDiagnosticStage = 'setup';
+  state.failureDiagnostic = installEditorFailureDiagnostic(state, page, { origin: ORIGIN });
   await prepareEditor(state, () => pinEnglish(context));
   const steps: EditorSteps = {
     auth: false,
@@ -138,6 +147,7 @@ test('proves authenticated editor behavior over trusted HTTPS', async ({
     steps.teardown = true;
     scenarioSucceeded = true;
   } catch (error) {
+    state.failureDiagnostic?.markFailure();
     const sourceLine = error instanceof Error
       ? /editor\.spec\.ts:([0-9]{1,4}):/u.exec(error.stack ?? '')?.[1]
       : undefined;
@@ -184,6 +194,7 @@ test('proves authenticated editor behavior over trusted HTTPS', async ({
     state.editorDiagnosticStage = 'post-evidence';
     await writeEditorEvidence(steps);
   } catch (error) {
+    state.failureDiagnostic?.markFailure();
     process.stderr.write(`editor-stage:${state.editorDiagnosticStage}\n`);
     throw error;
   }

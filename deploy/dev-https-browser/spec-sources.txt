@@ -8,6 +8,7 @@ editor-conflicts.ts
 editor-photo-session.ts
 editor-accessibility.ts
 editor-diagnostics.ts
+editor-diagnostic.ts
 editor-locale.ts
 editor-proof-state.ts
 public.spec.ts

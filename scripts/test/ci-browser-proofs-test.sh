@@ -54,6 +54,11 @@ dev-https-totp-check)
   fi
   ;;
 dev-https-editor-check)
+  if [ "${EDITOR_FAIL:-0}" = 1 ]; then
+    mkdir -p "$evidence/editor.e"
+    : >"$evidence/editor.e/editor-diagnostic.json"
+    exit 4
+  fi
   for second in $(seq 0 70); do
     status=200
     [ "$second" -ne 5 ] || status=429
@@ -117,6 +122,11 @@ fi
 if compgen -G "$REPO/.dev/native-https/evidence/*" >/dev/null; then
   fail "shard evidence was left in the evidence root"
 fi
+[ -d "$staged/editor-browser-proof-evidence" ] ||
+  fail "a passing editor proof did not create its staging directory"
+if compgen -G "$staged/editor-browser-proof-evidence/*" >/dev/null; then
+  fail "a passing editor proof with no evidence staged something"
+fi
 grep -Fq '| editor | passed |' "$WORK/ok.summary" ||
   fail "summary lacks the passing proof row"
 grep -Eq '^\| editor \| passed \| [0-9]+ \| 60 \| 1 \|$' "$WORK/ok.summary" ||
@@ -158,6 +168,25 @@ awk -F '\t' '
   NR == 3 { if ($1 != "auth" || $2 != 0) exit 1 }
   END { if (NR != 3) exit 1 }
 ' "$timing" || fail "failed proof timings lost the failure or the later proof"
+
+mkdir -p "$REPO/.dev/native-https/evidence/exports.kept"
+if EDITOR_FAIL=1 run_group failing-editor editor auth; then
+  fail "a group with a failing editor proof passed"
+fi
+grep -Fq 'dev-https-auth-check' "$WORK/failing-editor.calls" ||
+  fail "a failing editor proof stopped the rest of its group"
+grep -Fq '| editor | failed (exit 4) |' "$WORK/failing-editor.summary" ||
+  fail "summary lacks the failing editor proof row"
+grep -Fq 'failed proofs: editor' "$WORK/failing-editor.out" ||
+  fail "the group did not name its failing editor proof"
+[ -f "$staged/editor-browser-proof-evidence/editor.e/editor-diagnostic.json" ] ||
+  fail "a failing editor proof's diagnostic was not staged for upload"
+if compgen -G "$REPO/.dev/native-https/evidence/editor.*" >/dev/null; then
+  fail "a failing editor proof's evidence was left in the evidence root"
+fi
+[ -d "$REPO/.dev/native-https/evidence/exports.kept" ] ||
+  fail "the editor proof moved another proof's evidence"
+rm -rf -- "$REPO/.dev/native-https/evidence/exports.kept"
 
 for bad in '' 'totp:' 'Editor' '../x' 'totp:skew;id' 'totp:skew,' 'totp:,skew' \
   'passkey:primary-disabled,recovery-attempts' 'editor,exports'; do
