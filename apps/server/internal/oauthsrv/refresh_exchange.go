@@ -75,6 +75,10 @@ func (s *Service) processRefreshToken(ctx context.Context, raw string, claimedCl
 		}
 		return tokenResponse{}, errOAuthInvalidGrant
 	}
+	scopes, err := ParseStoredScopes(grant.Scopes)
+	if err != nil {
+		return tokenResponse{}, errOAuthInvalidGrant
+	}
 	if !issue {
 		return tokenResponse{}, nil
 	}
@@ -98,7 +102,7 @@ func (s *Service) processRefreshToken(ctx context.Context, raw string, claimedCl
 	if err = tx.Commit(ctx); err != nil {
 		return tokenResponse{}, err
 	}
-	return tokenResponse{AccessToken: pair.access, TokenType: "Bearer", ExpiresIn: int64(accessExpiresAt.Sub(now) / time.Second), RefreshToken: pair.refresh, Scope: grant.Scopes}, nil
+	return tokenResponse{AccessToken: pair.access, TokenType: "Bearer", ExpiresIn: int64(accessExpiresAt.Sub(now) / time.Second), RefreshToken: pair.refresh, Scope: scopes.String()}, nil
 }
 
 func tokenStateError(err error) error {

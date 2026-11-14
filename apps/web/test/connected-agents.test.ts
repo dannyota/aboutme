@@ -496,6 +496,77 @@ describe('ConnectedAgents', () => {
     },
   );
 
+  it('lists and revokes a grant that also holds project scopes', async () => {
+    const projectScopeGrant = {
+      ...grant,
+      scopes: [
+        'resumes:read',
+        'resumes:write',
+        'projects:read',
+        'projects:write',
+      ],
+    };
+    let gets = 0;
+    let deletes = 0;
+    agentHandler = () => {
+      gets += 1;
+      return { data: { grants: gets === 1 ? [projectScopeGrant] : [] } };
+    };
+    deleteHandler = (event) => {
+      deletes += 1;
+      setResponseStatus(event, 204);
+      return null;
+    };
+    const wrapper = await mountSuspended(ConnectedAgents);
+    await flushPromises();
+    expect(wrapper.find('[data-testid="agents-error"]').exists()).toBe(false);
+    expect(wrapper.findAll('[data-testid="agent-row"]')).toHaveLength(1);
+    expect(wrapper.get('[data-testid="agent-row"] h3').text()).toBe(
+      `${grant.clientName} (client.example)`,
+    );
+    expect(
+      wrapper
+        .findAll('[data-testid="agent-row"] [data-slot="badge"]')
+        .map((badge) => badge.text()),
+    ).toEqual([
+      'Read resumes',
+      'Write resumes',
+      'Read projects',
+      'Write projects',
+    ]);
+
+    await wrapper.get('[data-testid="agent-revoke"]').trigger('click');
+    await nextTick();
+    document.body
+      .querySelector<HTMLButtonElement>('[data-action="agent-revoke-confirm"]')!
+      .click();
+    await flushPromises();
+    await flushPromises();
+    expect(deletes).toBe(1);
+    expect(gets).toBe(2);
+    expect(wrapper.find('[data-testid="agent-row"]').exists()).toBe(false);
+  });
+
+  it('names project scopes in Vietnamese', async () => {
+    setSiteLocale('vi');
+    registerCommon([{
+      ...grant,
+      scopes: [
+        'resumes:read',
+        'resumes:write',
+        'projects:read',
+        'projects:write',
+      ],
+    }]);
+    const wrapper = await mountSuspended(ConnectedAgents);
+    await flushPromises();
+    expect(
+      wrapper
+        .findAll('[data-testid="agent-row"] [data-slot="badge"]')
+        .map((badge) => badge.text()),
+    ).toEqual(['Đọc CV', 'Chỉnh sửa CV', 'Đọc dự án', 'Chỉnh sửa dự án']);
+  });
+
   it('integrates after password settings', async () => {
     const wrapper = await mountSuspended(SessionsPage);
     await flushPromises();

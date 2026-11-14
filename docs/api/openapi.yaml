@@ -6971,6 +6971,12 @@ components:
       type: string
       description: Account-wide permission granted to a connected agent.
       enum: [resumes:read, resumes:write]
+    OAuthAgentGrantScope:
+      type: string
+      description: >-
+        Account-wide permission a connected agent's grant holds. Consent offers
+        only the resume scopes; a grant may also hold the project scopes.
+      enum: [resumes:read, resumes:write, projects:read, projects:write]
     OAuthPublicClientID:
       type: string
       minLength: 9
@@ -7094,10 +7100,10 @@ components:
         scopes:
           type: array
           minItems: 1
-          maxItems: 2
+          maxItems: 4
           uniqueItems: true
           items:
-            $ref: "#/components/schemas/OAuthConsentScope"
+            $ref: "#/components/schemas/OAuthAgentGrantScope"
         createdAt:
           type: string
           format: date-time
