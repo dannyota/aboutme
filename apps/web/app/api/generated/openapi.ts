@@ -1599,8 +1599,8 @@ export interface components {
             redirect_uri: string;
             /** @constant */
             response_type: "code";
-            /** @enum {string} */
-            scope: "resumes:read" | "resumes:write" | "resumes:read resumes:write" | "projects:read" | "resumes:read projects:read" | "resumes:write projects:read" | "resumes:read resumes:write projects:read" | "projects:write" | "resumes:read projects:write" | "resumes:write projects:write" | "resumes:read resumes:write projects:write" | "projects:read projects:write" | "resumes:read projects:read projects:write" | "resumes:write projects:read projects:write" | "resumes:read resumes:write projects:read projects:write";
+            /** @description One to four account-wide scopes, space-delimited, in any order. This is a closed list, not free text. The server sorts the set into the canonical order `resumes:read resumes:write projects:read projects:write`, and refuses an unknown or repeated scope. */
+            scope: string;
             /** @description Opaque client state, echoed on redirect when present. */
             state?: string;
             code_challenge: string;

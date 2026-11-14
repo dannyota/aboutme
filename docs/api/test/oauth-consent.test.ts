@@ -163,10 +163,21 @@ describe("OAuth consent and agent grant OpenAPI contract", () => {
       "code_challenge_method",
       "decision",
     ]);
-    expect(decisionSchema.properties.scope).toEqual({
-      type: "string",
-      enum: SCOPE_SETS,
-    });
+    const decisionScope = decisionSchema.properties.scope;
+    expect(decisionScope.type).toBe("string");
+    expect(decisionScope.enum).toBeUndefined();
+    expect(decisionScope.pattern).toBe(SCOPE_PATTERN);
+    expect(decisionScope.description).toMatch(
+      /refuses an unknown or repeated scope/,
+    );
+    const decisionPattern = new RegExp(decisionScope.pattern);
+    expect(decisionPattern.test("projects:write resumes:write")).toBe(true);
+    for (const refused of [
+      "projects:admin",
+      "resumes:read resumes:write projects:read projects:write resumes:read",
+    ]) {
+      expect(decisionPattern.test(refused), refused).toBe(false);
+    }
     expect(decisionSchema.properties.decision.enum).toEqual([
       "approve",
       "deny",

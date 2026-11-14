@@ -78,9 +78,7 @@ function isScope(value: unknown): value is OAuthConsentScope {
     && (SCOPES as readonly string[]).includes(value);
 }
 
-export function canonicalScopeSet(
-  raw: string,
-): OAuthConsentRequest['scope'] | null {
+export function canonicalScopeSet(raw: string): string | null {
   const fields = raw.split(' ');
   if (
     !fields.every(isScope)
@@ -88,8 +86,7 @@ export function canonicalScopeSet(
   ) {
     return null;
   }
-  return SCOPES.filter((scope) => fields.includes(scope))
-    .join(' ') as OAuthConsentRequest['scope'];
+  return SCOPES.filter((scope) => fields.includes(scope)).join(' ');
 }
 
 function isClientIdentity(candidate: {
