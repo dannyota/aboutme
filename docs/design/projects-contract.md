@@ -180,10 +180,8 @@ existing precondition and validation errors.
 [ADR 0018](../adr/0018-mcp-agent-access.md) gains two scopes, `projects:read`
 and `projects:write`.
 
-- A grant made before this change keeps `resumes:read` and `resumes:write` only.
-  Library tools answer `scope_denied` until the owner approves the new scopes on
-  the consent page; a client that requests them is shown consent, as the subset
-  rule already requires.
+- A grant made before this change keeps its resume scopes; library tools answer
+  `scope_denied` until the owner approves the new scopes on the consent page.
 - Tools dispatch in process into the same project and resume executors as the
   owner API, as resume tools do; `/api/v1/projects` itself stays session-only.
   Arguments are snake_case, `revision` is a decimal string, every write takes
@@ -202,8 +200,7 @@ and `projects:write`.
 
   `update_project` replaces the whole document, as `PUT` does, and
   `changed_resumes` lists each `id` and new `revision` of a resume the change
-  rewrote. Update and delete need `resumes:write` because they rewrite linking
-  resumes. A rename or delete over MCP needs no recent reauthentication, as
+  rewrote. A rename or delete over MCP needs no recent reauthentication, as
   `delete_resume` does not; the scopes are the gate. A project result has no
   evidence field until evidence ships.
 
@@ -217,13 +214,12 @@ and `projects:write`.
   meanwhile is honoured. `link_project` and `refresh_project_entry` check
   `projects:read` before reading any project, so an agent without it cannot tell
   its own project id from another account's.
-- Two codes join the closed tool error vocabulary: `limit_reached` (the project
-  or resume cap) and `slug_unavailable` (a slug taken or held). Another
-  account's project is `not_found`.
-- The authorization server advertises all four scopes and orders a requested
-  scope set canonically before checking it, since OAuth scope order carries no
-  meaning; unknown or repeated scopes still fail. A client that asks again with
-  fewer scopes keeps only those, as today.
+- `limit_reached` (project or resume cap) and `slug_unavailable` (slug taken or
+  held) join the closed tool error vocabulary; another account's project is
+  `not_found`.
+- The authorization server advertises all four scopes and sorts a requested set
+  canonically before checking it; unknown or repeated scopes still fail, and
+  asking again with fewer scopes keeps only those.
 - The scopes ship in two releases, as the
   [schema floor](release-floors.md#schema-floor) requires for a change older
   releases cannot read. The first adds the migration that allows the project
