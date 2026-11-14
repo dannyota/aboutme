@@ -75,12 +75,12 @@ func (s *Service) processRefreshToken(ctx context.Context, raw string, claimedCl
 		}
 		return tokenResponse{}, errOAuthInvalidGrant
 	}
-	if !issue {
-		return tokenResponse{}, nil
-	}
 	scopes, err := ParseStoredScopes(grant.Scopes)
 	if err != nil {
 		return tokenResponse{}, errOAuthInvalidGrant
+	}
+	if !issue {
+		return tokenResponse{}, nil
 	}
 	pair, err := s.newTokenPair()
 	if err != nil {
