@@ -432,4 +432,5 @@ retry "$edge_attempts" 5 status_ok / || {
   exit 1
 }
 phase=finished
+step prune-images || say "warning: could not remove unused images"
 say "deployed $tag"
