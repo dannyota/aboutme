@@ -4,7 +4,7 @@ import type { components } from '../api/generated/openapi';
 import { useAuth } from './useAuth';
 
 export type AgentGrant = components['schemas']['OAuthAgentGrant'];
-export type AgentGrantScope = components['schemas']['OAuthConsentScope'];
+export type AgentGrantScope = components['schemas']['OAuthAgentGrantScope'];
 type GrantID = components['parameters']['GrantID'];
 
 export type AgentGrantsError
@@ -54,6 +54,8 @@ function mapAgentGrantsError(error: unknown): AgentGrantsFailure {
 const scopes: readonly AgentGrantScope[] = [
   'resumes:read',
   'resumes:write',
+  'projects:read',
+  'projects:write',
 ];
 
 function isScope(value: unknown): value is AgentGrantScope {

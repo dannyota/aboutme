@@ -524,13 +524,16 @@ describe('ConnectedAgents', () => {
     expect(wrapper.get('[data-testid="agent-row"] h3').text()).toBe(
       `${grant.clientName} (client.example)`,
     );
-    expect(wrapper.text()).toContain('Read resumes');
-    expect(wrapper.text()).toContain('Write resumes');
-    for (const badge of wrapper.findAll(
-      '[data-testid="agent-row"] [data-slot="badge"]',
-    )) {
-      expect(badge.text()).not.toBe('');
-    }
+    expect(
+      wrapper
+        .findAll('[data-testid="agent-row"] [data-slot="badge"]')
+        .map((badge) => badge.text()),
+    ).toEqual([
+      'Read resumes',
+      'Write resumes',
+      'Read projects',
+      'Write projects',
+    ]);
 
     await wrapper.get('[data-testid="agent-revoke"]').trigger('click');
     await nextTick();
@@ -542,6 +545,26 @@ describe('ConnectedAgents', () => {
     expect(deletes).toBe(1);
     expect(gets).toBe(2);
     expect(wrapper.find('[data-testid="agent-row"]').exists()).toBe(false);
+  });
+
+  it('names project scopes in Vietnamese', async () => {
+    setSiteLocale('vi');
+    registerCommon([{
+      ...grant,
+      scopes: [
+        'resumes:read',
+        'resumes:write',
+        'projects:read',
+        'projects:write',
+      ],
+    }]);
+    const wrapper = await mountSuspended(ConnectedAgents);
+    await flushPromises();
+    expect(
+      wrapper
+        .findAll('[data-testid="agent-row"] [data-slot="badge"]')
+        .map((badge) => badge.text()),
+    ).toEqual(['Đọc CV', 'Chỉnh sửa CV', 'Đọc dự án', 'Chỉnh sửa dự án']);
   });
 
   it('integrates after password settings', async () => {

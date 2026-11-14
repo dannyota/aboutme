@@ -2,6 +2,7 @@ package migrations_test
 
 import (
 	"context"
+	"maps"
 	"testing"
 
 	"github.com/google/uuid"
@@ -45,6 +46,32 @@ func countProjectScopeRows(ctx context.Context, t *testing.T, conn *pgx.Conn) (g
 	return grants, codes
 }
 
+func oauthScopeConstraintDefinitions(ctx context.Context, t *testing.T, conn *pgx.Conn) map[string]string {
+	t.Helper()
+	rows, err := conn.Query(ctx, `
+		SELECT conname, pg_get_constraintdef(oid) FROM pg_constraint
+		WHERE conname IN ('oauth_grants_scopes_check', 'oauth_authorization_codes_scopes_check')`)
+	if err != nil {
+		t.Fatalf("read scope constraints: %v", err)
+	}
+	defer rows.Close()
+	definitions := map[string]string{}
+	for rows.Next() {
+		var name, definition string
+		if err = rows.Scan(&name, &definition); err != nil {
+			t.Fatalf("scan scope constraint: %v", err)
+		}
+		definitions[name] = definition
+	}
+	if err = rows.Err(); err != nil {
+		t.Fatalf("read scope constraints: %v", err)
+	}
+	if len(definitions) != 2 {
+		t.Fatalf("scope constraints = %v, want both", definitions)
+	}
+	return definitions
+}
+
 func TestOAuthProjectScopesMigrationUpDownUp(t *testing.T) {
 	t.Parallel()
 	const lastVersionWithoutProjectScopes = 18
@@ -77,6 +104,7 @@ func TestOAuthProjectScopesMigrationUpDownUp(t *testing.T) {
 	if _, err = provider.UpTo(ctx, lastVersionWithoutProjectScopes); err != nil {
 		t.Fatalf("UpTo(%d) error: %v", lastVersionWithoutProjectScopes, err)
 	}
+	original := oauthScopeConstraintDefinitions(ctx, t, conn)
 	userID := createTestUser(ctx, t, conn)
 	resumeClient := insertOAuthClient(ctx, t, conn)
 	resumeGrant := insertOAuthGrant(ctx, t, conn, userID, resumeClient)
@@ -138,6 +166,9 @@ func TestOAuthProjectScopesMigrationUpDownUp(t *testing.T) {
 	}
 	if version, versionErr := provider.GetDBVersion(ctx); versionErr != nil || version != lastVersionWithoutProjectScopes {
 		t.Fatalf("version after down = %d, %v; want %d", version, versionErr, lastVersionWithoutProjectScopes)
+	}
+	if restored := oauthScopeConstraintDefinitions(ctx, t, conn); !maps.Equal(restored, original) {
+		t.Fatalf("scope constraints after down = %v, want the version %d definitions %v", restored, lastVersionWithoutProjectScopes, original)
 	}
 	_, err = insertOAuthGrantWithScopes(ctx, conn, userID, unusedClient, oauthScopesWithProjects)
 	requirePGError(t, err, "oauth_grants_scopes_check")

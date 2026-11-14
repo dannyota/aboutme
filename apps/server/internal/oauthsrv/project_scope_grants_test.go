@@ -221,3 +221,63 @@ func TestMetadata_AdvertisesOnlyResumeScopesWhileConsentDoesNotOfferProjectScope
 		}
 	}
 }
+
+func TestAuthorize_HeldProjectScopeGrantCoversNarrowerResumeRequestAsToday(t *testing.T) {
+	s, q, client, user := newAuthorizeHarness(t)
+	if _, err := q.UpsertOAuthGrant(t.Context(), store.UpsertOAuthGrantParams{
+		UserID: user.ID, ClientID: client.ID, Scopes: grantScopesWithProjects, CreatedAt: s.clock(),
+	}); err != nil {
+		t.Fatalf("store a grant holding %q the way consent stores it: %v", grantScopesWithProjects, err)
+	}
+	sess := issueTestSession(t, s.pool, user.ID, s.clock(), nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, authorizeURL(client.ID, "resumes:read resumes:write"), nil)
+	req = req.WithContext(auth.ContextWithSession(req.Context(), sess))
+	rec := httptest.NewRecorder()
+	s.HandleAuthorize(rec, req)
+	if rec.Code != http.StatusFound {
+		t.Fatalf("status = %d, want 302 with a code", rec.Code)
+	}
+	redirect := urlMustParse(t, rec.Header().Get("Location"))
+	if redirect.Host != "agent.example" || redirect.Query().Get("code") == "" {
+		t.Fatalf("redirect = %q, want a silent code on the registered redirect", redirect.String())
+	}
+	digest, err := ParseCode(redirect.Query().Get("code"))
+	if err != nil {
+		t.Fatalf("ParseCode: %v", err)
+	}
+	code, err := q.GetOAuthAuthorizationCodeByDigest(t.Context(), digest[:])
+	if err != nil || code.Scopes != "resumes:read resumes:write" {
+		t.Fatalf("code scopes = %q, %v; want the requested resume scopes", code.Scopes, err)
+	}
+	if got := mustLiveGrant(t, q, user.ID, client.ID).Scopes; got != "resumes:read resumes:write" {
+		t.Fatalf("live grant after the narrower request = %q, want the requested resume scopes", got)
+	}
+}
+
+func TestRegister_RefusesProjectScopesWhileConsentDoesNotOfferThem(t *testing.T) {
+	const base = `{"client_name":"Agent","redirect_uris":["https://agent.example/callback"]`
+	for _, scope := range refusedProjectScopeRequests {
+		t.Run(scope, func(t *testing.T) {
+			q := &registrationQueries{id: uuid.New()}
+			s := newRegistrationService(t, q, &registrationAdmissionFake{allowed: true})
+			rec := httptest.NewRecorder()
+			s.HandleRegister(rec, registerRequest(http.MethodPost, "application/json", base+`,"scope":"`+scope+`"}`))
+			if rec.Code != http.StatusBadRequest || len(q.created) != 0 {
+				t.Fatalf("registration declaring %q = %d, created %d; want 400 and nothing created", scope, rec.Code, len(q.created))
+			}
+		})
+	}
+}
+
+func TestCIMDDocumentValidation_RefusesProjectScopesWhileConsentDoesNotOfferThem(t *testing.T) {
+	id := "https://client.example/metadata"
+	valid := `{"client_id":"` + id + `","client_name":"Fixture","redirect_uris":["https://client.example/callback"],"token_endpoint_auth_method":"none"`
+	if _, err := validateCIMDDocument([]byte(valid+`,"scope":"resumes:read resumes:write"}`), id, "client.example"); err != nil {
+		t.Fatalf("document declaring the resume scopes: %v, want accepted", err)
+	}
+	for _, scope := range refusedProjectScopeRequests {
+		if _, err := validateCIMDDocument([]byte(valid+`,"scope":"`+scope+`"}`), id, "client.example"); err == nil {
+			t.Fatalf("document declaring %q accepted, want refused", scope)
+		}
+	}
+}

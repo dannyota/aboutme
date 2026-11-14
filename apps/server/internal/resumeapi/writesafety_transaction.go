@@ -36,7 +36,7 @@ func (s *Service) transactionMutation(ctx context.Context, qtx *store.Queries, m
 			now = s.clock()
 		}
 		token, grant := authority.OAuthToken, authority.OAuthGrant
-		scopes, scopeErr := oauthsrv.ParseScopes(grant.Scopes)
+		scopes, scopeErr := oauthsrv.ParseStoredScopes(grant.Scopes)
 		if scopeErr != nil || !scopes.Has(oauthsrv.ScopeResumesWrite) ||
 			subtle.ConstantTimeCompare(token.TokenDigest, mutation.Agent.tokenDigest[:]) != 1 ||
 			token.ID != mutation.Agent.tokenID || token.UserID != mutation.Agent.userID || token.GrantID != mutation.Agent.grantID ||

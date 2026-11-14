@@ -1582,6 +1582,11 @@ export interface components {
          * @enum {string}
          */
         OAuthConsentScope: "resumes:read" | "resumes:write";
+        /**
+         * @description Account-wide permission a connected agent's grant holds. Consent offers only the resume scopes; a grant may also hold the project scopes.
+         * @enum {string}
+         */
+        OAuthAgentGrantScope: "resumes:read" | "resumes:write" | "projects:read" | "projects:write";
         /** @description DCR UUID or exact CIMD HTTPS URL. CIMD uses a lowercase ASCII DNS host, a nonempty path, no userinfo, port, query, fragment, backslash or dot segments. Canonical-host and local-name exclusions and address checks follow docs/design/mcp-cimd-fetch.md. Identity is byte for byte. */
         OAuthPublicClientID: string & (unknown | unknown);
         /** @description Strict JSON representation of the validated authorization request and the user's decision. Unknown and duplicate fields are rejected. */
@@ -1631,7 +1636,7 @@ export interface components {
             /** @description ASCII stored metadata URL hostname for CIMD, null for DCR. */
             clientHost: string | null;
             clientName: string;
-            scopes: components["schemas"]["OAuthConsentScope"][];
+            scopes: components["schemas"]["OAuthAgentGrantScope"][];
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */

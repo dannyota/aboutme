@@ -68,7 +68,7 @@ func (b *Bearer) Authenticate(r *http.Request) (Principal, error) {
 		grant.AuthEpoch != authority.User.AuthEpoch {
 		return Principal{}, b.unauthorized()
 	}
-	scopes, err := oauthsrv.ParseScopes(grant.Scopes)
+	scopes, err := oauthsrv.ParseStoredScopes(grant.Scopes)
 	if err != nil {
 		return Principal{}, b.unauthorized()
 	}

@@ -223,7 +223,7 @@ func (s *Service) handleAgentGrants(w http.ResponseWriter, r *http.Request) {
 	grants := make([]agentGrantData, 0, len(rows))
 	for _, row := range rows {
 		kind, host := clientDisplay(row.MetadataUrl)
-		scopes, parseErr := ParseScopes(row.Scopes)
+		scopes, parseErr := ParseStoredScopes(row.Scopes)
 		if parseErr != nil {
 			writeSessionInternalError(w)
 			return

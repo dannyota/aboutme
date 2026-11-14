@@ -36,6 +36,8 @@ export const agentSettingsCopy: WorkspaceCopy<AgentSettingsCopy> = {
     scopes: {
       'resumes:read': 'Đọc CV',
       'resumes:write': 'Chỉnh sửa CV',
+      'projects:read': 'Đọc dự án',
+      'projects:write': 'Chỉnh sửa dự án',
     },
     created: 'Đã tạo ngày',
     lastUsed: 'Dùng lần cuối vào',
@@ -59,6 +61,8 @@ export const agentSettingsCopy: WorkspaceCopy<AgentSettingsCopy> = {
     scopes: {
       'resumes:read': 'Read resumes',
       'resumes:write': 'Write resumes',
+      'projects:read': 'Read projects',
+      'projects:write': 'Write projects',
     },
     created: 'Created',
     lastUsed: 'Last used',

@@ -2,6 +2,7 @@ package oauthsrv
 
 import (
 	"errors"
+	"slices"
 	"strings"
 )
 
@@ -10,36 +11,59 @@ var ErrScopeInvalid = errors.New("oauth scope invalid")
 type Scope string
 
 const (
-	ScopeResumesRead  Scope = "resumes:read"
-	ScopeResumesWrite Scope = "resumes:write"
+	ScopeResumesRead   Scope = "resumes:read"
+	ScopeResumesWrite  Scope = "resumes:write"
+	ScopeProjectsRead  Scope = "projects:read"
+	ScopeProjectsWrite Scope = "projects:write"
 )
 
-func canonicalScopes() [2]Scope { return [2]Scope{ScopeResumesRead, ScopeResumesWrite} }
+func requestableScopes() []Scope { return []Scope{ScopeResumesRead, ScopeResumesWrite} }
 
-const scopesMaxBytes = len(ScopeResumesRead) + 1 + len(ScopeResumesWrite)
+func storableScopes() []Scope {
+	return []Scope{ScopeResumesRead, ScopeResumesWrite, ScopeProjectsRead, ScopeProjectsWrite}
+}
 
 type Scopes []Scope
 
 func ParseScopes(raw string) (Scopes, error) {
-	if len(raw) == 0 || len(raw) > scopesMaxBytes {
+	return parseScopeSet(raw, requestableScopes())
+}
+
+func ParseStoredScopes(raw string) (Scopes, error) {
+	scopes, err := parseScopeSet(raw, storableScopes())
+	if err != nil || scopes.String() != raw {
 		return nil, ErrScopeInvalid
 	}
-	scopes := canonicalScopes()
-	var granted [len(scopes)]bool
+	return scopes, nil
+}
+
+func parseScopeSet(raw string, known []Scope) (Scopes, error) {
+	if len(raw) == 0 || len(raw) > joinedScopeBytes(known) {
+		return nil, ErrScopeInvalid
+	}
+	granted := make([]bool, len(known))
 	for _, field := range strings.Split(raw, " ") {
-		index, ok := canonicalScopeIndex(field)
-		if !ok || granted[index] {
+		index := slices.Index(known, Scope(field))
+		if index < 0 || granted[index] {
 			return nil, ErrScopeInvalid
 		}
 		granted[index] = true
 	}
-	out := make(Scopes, 0, len(scopes))
+	out := make(Scopes, 0, len(known))
 	for i, ok := range granted {
 		if ok {
-			out = append(out, scopes[i])
+			out = append(out, known[i])
 		}
 	}
 	return out, nil
+}
+
+func joinedScopeBytes(scopes []Scope) int {
+	total := len(scopes) - 1
+	for _, scope := range scopes {
+		total += len(scope)
+	}
+	return total
 }
 
 func (s Scopes) String() string {
@@ -57,13 +81,4 @@ func (s Scopes) Has(scope Scope) bool {
 		}
 	}
 	return false
-}
-
-func canonicalScopeIndex(field string) (int, bool) {
-	for i, scope := range canonicalScopes() {
-		if field == string(scope) {
-			return i, true
-		}
-	}
-	return 0, false
 }

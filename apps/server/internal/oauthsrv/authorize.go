@@ -228,7 +228,7 @@ func registeredRedirect(client store.OAuthClient, redirectURI string) bool {
 }
 
 func grantAllows(raw string, requested Scopes) bool {
-	granted, err := ParseScopes(raw)
+	granted, err := ParseStoredScopes(raw)
 	if err != nil {
 		return false
 	}

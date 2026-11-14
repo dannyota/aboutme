@@ -176,3 +176,61 @@ func TestScopeErrorCarriesNoInput(t *testing.T) {
 		t.Errorf("ErrScopeInvalid.Error() = %q, want %q", got, "oauth scope invalid")
 	}
 }
+
+func TestParseScopesRefusesProjectScopes(t *testing.T) {
+	t.Parallel()
+
+	for _, raw := range []string{
+		"projects:read",
+		"projects:write",
+		"resumes:read projects:read",
+		"resumes:read resumes:write projects:read projects:write",
+	} {
+		if got, err := ParseScopes(raw); !errors.Is(err, ErrScopeInvalid) || got != nil {
+			t.Errorf("ParseScopes(%q) = %v, %v; want ErrScopeInvalid", raw, got, err)
+		}
+	}
+}
+
+func TestParseStoredScopesAcceptsCanonicalSubsetsOnly(t *testing.T) {
+	t.Parallel()
+
+	for _, raw := range []string{
+		"resumes:read",
+		"resumes:read resumes:write",
+		"projects:read",
+		"resumes:write projects:write",
+		"resumes:read resumes:write projects:read projects:write",
+	} {
+		got, err := ParseStoredScopes(raw)
+		if err != nil || got.String() != raw {
+			t.Errorf("ParseStoredScopes(%q) = %q, %v; want the same canonical set", raw, got.String(), err)
+		}
+	}
+	for _, raw := range []string{
+		"",
+		"resumes:write resumes:read",
+		"projects:read resumes:read",
+		"projects:write projects:read",
+		"projects:read projects:read",
+		"projects:admin",
+		"resumes:read  projects:read",
+		strings.Repeat("projects:read ", 8),
+	} {
+		if got, err := ParseStoredScopes(raw); !errors.Is(err, ErrScopeInvalid) || got != nil {
+			t.Errorf("ParseStoredScopes(%q) = %v, %v; want ErrScopeInvalid", raw, got, err)
+		}
+	}
+	both, err := ParseStoredScopes("resumes:read resumes:write projects:read projects:write")
+	if err != nil {
+		t.Fatalf("ParseStoredScopes: %v", err)
+	}
+	for _, scope := range []Scope{ScopeResumesRead, ScopeResumesWrite, ScopeProjectsRead, ScopeProjectsWrite} {
+		if !both.Has(scope) {
+			t.Errorf("four-scope set lacks %s", scope)
+		}
+	}
+	if got := string(ScopeProjectsRead) + " " + string(ScopeProjectsWrite); got != "projects:read projects:write" {
+		t.Errorf("project scope constants = %q", got)
+	}
+}

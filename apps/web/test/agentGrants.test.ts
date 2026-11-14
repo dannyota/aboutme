@@ -87,6 +87,41 @@ describe('useAgentGrants', () => {
     },
   );
 
+  it('accepts a grant that also holds the project scopes', async () => {
+    const projectScopeGrant = {
+      ...grant,
+      scopes: [
+        'resumes:read',
+        'resumes:write',
+        'projects:read',
+        'projects:write',
+      ],
+    };
+    registerEndpoint('/api/v1/me/agents', {
+      method: 'GET',
+      handler: () => ({ data: { grants: [projectScopeGrant] } }),
+    });
+    const wrapper = await mountSuspended(Probe);
+    await wrapper.vm.refresh();
+    expect(wrapper.vm.grants).toEqual([projectScopeGrant]);
+  });
+
+  it.each([
+    [['projects:admin']],
+    [['resumes:read', 'projects:read', 'projects:read']],
+    [['resumes:read', 'resumes:write', 'projects:read', 'projects:write',
+      'resumes:read']],
+  ])('rejects a grant holding scopes %j', async (scopes) => {
+    registerEndpoint('/api/v1/me/agents', {
+      method: 'GET',
+      handler: () => ({ data: { grants: [{ ...grant, scopes }] } }),
+    });
+    const wrapper = await mountSuspended(Probe);
+    await expect(wrapper.vm.refresh()).rejects.toMatchObject({
+      kind: 'unavailable',
+    });
+  });
+
   it.each([
     [401, 'session_required', 'session-required'],
     [404, 'not_found', 'not-found'],
