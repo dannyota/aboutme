@@ -59,7 +59,9 @@ offered.
 **Project scopes.** The account project library
 ([ADR 0029](0029-account-project-library.md)) is read with `projects:read` and
 changed with `projects:write`. A grant made before these scopes exist does not
-hold them; a client that requests them is shown the consent page.
+hold them; a client that requests them is shown the consent page. Seven project
+tools join the fifteen resume tools under the same single validation path
+([projects contract](../design/projects-contract.md#agents)).
 
 ## Alternatives rejected
 

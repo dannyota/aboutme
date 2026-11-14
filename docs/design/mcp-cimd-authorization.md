@@ -105,8 +105,21 @@ name:
   this sign-in from an app on this computer.”
 
 The host and name render as text, never markup or links. C6 approves both
-languages. Connected agents in Settings shows the same host beside the stored
-name.
+languages.
+
+**Project scopes** (owner, 2026-11-14). When a request includes a project scope,
+the headline names both: "muốn truy cập CV và dự án của bạn." / "wants access to
+your resumes and projects." The permission list adds:
+
+| Scope            | vi name         | vi description                                | en name        | en description                                     |
+| ---------------- | --------------- | --------------------------------------------- | -------------- | -------------------------------------------------- |
+| `projects:read`  | Đọc dự án       | Xem các dự án trong thư viện của bạn.         | Read projects  | View the projects in your library.                 |
+| `projects:write` | Chỉnh sửa dự án | Tạo, sửa và xóa dự án trong thư viện của bạn. | Write projects | Create, edit, and delete projects in your library. |
+
+Only with `projects:write`, one more line: "Thay đổi trên một dự án đang hiện
+trên CV đã xuất bản sẽ công khai ngay." / "A change to a project shown on a
+published resume is public at once." Settings > Connected agents uses the same
+names. Connected agents in Settings shows the same host beside the stored name.
 
 **Silent reauthorization.** An authorize request whose user already holds a live
 grant covering the scopes gets a code without the consent page. For a URL client

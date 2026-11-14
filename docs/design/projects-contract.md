@@ -9,11 +9,11 @@ project pages with their dispatch, and the resume page's
 
 ## Routes and dispatch
 
-| Path                              | Dispatch              | Notes           |
-| --------------------------------- | --------------------- | --------------- |
-| `/{slug}/projects`                | Go public gateway     | HTML only       |
-| `/{slug}/projects/{project-slug}` | Go public gateway     | HTML only       |
-| `/api/v1/projects…`               | Go, session or bearer | Owner API below |
+| Path                              | Dispatch          | Notes           |
+| --------------------------------- | ----------------- | --------------- |
+| `/{slug}/projects`                | Go public gateway | HTML only       |
+| `/{slug}/projects/{project-slug}` | Go public gateway | HTML only       |
+| `/api/v1/projects…`               | Go, session       | Owner API below |
 
 - The generated Caddy matcher and the Go route classifier gain the two nested
   shapes. `projects` is a literal second segment, so the public root registry
@@ -184,13 +184,47 @@ and `projects:write`.
   Library tools answer `scope_denied` until the owner approves the new scopes on
   the consent page; a client that requests them is shown consent, as the subset
   rule already requires.
-- Tools: `list_projects`, `get_project`, `create_project`, `update_project`,
-  `delete_project` under the project scopes; `link_project` and
-  `refresh_project_entry` need `resumes:write` and `projects:read`.
+- Tools dispatch in process into the same project and resume executors as the
+  owner API, as resume tools do; `/api/v1/projects` itself stays session-only.
+  Arguments are snake_case, `revision` is a decimal string, every write takes
+  `idempotency_key`, and `document` uses the REST names and the same strict
+  decoder. A project result is the REST project resource.
+
+  | Tool                    | Arguments                                                                     | Result                                   | Scopes                            |
+  | ----------------------- | ----------------------------------------------------------------------------- | ---------------------------------------- | --------------------------------- |
+  | `list_projects`         | none                                                                          | `projects`                               | `projects:read`                   |
+  | `get_project`           | `project_id`                                                                  | `project`                                | `projects:read`                   |
+  | `create_project`        | `idempotency_key`, `document`, optional `slug`                                | `revision`, `project`                    | `projects:write`                  |
+  | `update_project`        | `idempotency_key`, `project_id`, `revision`, `slug`, `document`               | `revision`, `project`, `changed_resumes` | `projects:write`, `resumes:write` |
+  | `delete_project`        | `idempotency_key`, `project_id`, `revision`                                   | `id`, `deleted`, `changed_resumes`       | `projects:write`, `resumes:write` |
+  | `link_project`          | `idempotency_key`, `resume_id`, `revision`, `project_id`, optional `entry_id` | `revision`, `state`                      | `resumes:write`, `projects:read`  |
+  | `refresh_project_entry` | `idempotency_key`, `resume_id`, `revision`, `entry_id`                        | `revision`, `state`                      | `resumes:write`, `projects:read`  |
+
+  `update_project` replaces the whole document, as `PUT` does, and
+  `changed_resumes` lists each `id` and new `revision` of a resume the change
+  rewrote. Update and delete need `resumes:write` because they rewrite linking
+  resumes. A rename or delete over MCP needs no recent reauthentication, as
+  `delete_resume` does not; the scopes are the gate. A project result has no
+  evidence field until evidence ships.
+
 - The scope check sits at the shared resume-write boundary, not only in the link
   tool: any bearer write that adds a `projectId` to a resume or changes one
-  needs `projects:read`, whichever tool or route carries it. A write that keeps
-  or removes existing references needs only `resumes:write`.
+  needs `projects:read`, whichever tool or route carries it. `projects:write`
+  alone does not satisfy it. A write that keeps or removes existing references
+  needs only `resumes:write`. The check reads the grant's scopes inside the
+  write transaction, so a grant narrowed meanwhile is honoured. `link_project`
+  and `refresh_project_entry` check `projects:read` before reading any project,
+  so an agent without it cannot tell its own project id from another account's.
+- Two codes join the closed tool error vocabulary: `limit_reached` (the project
+  or resume cap) and `slug_unavailable` (a slug taken or held). Another
+  account's project is `not_found`.
+- The authorization server advertises all four scopes and orders a requested
+  scope set canonically before checking it, since OAuth scope order carries no
+  meaning; unknown or repeated scopes still fail. A client that asks again with
+  fewer scopes keeps only those, as today.
+- The release that adds the scopes raises the release fence floor to itself: an
+  older server cannot read a grant that holds a project scope. The migration's
+  down step refuses while any such grant or code exists.
 - No tool publishes, attaches evidence or connects an account.
 - Until reviewed changes ship (v0.10), an agent edit to a library project of a
   published resume is public at once, as an agent edit to the resume is today;
