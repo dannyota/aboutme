@@ -21,8 +21,8 @@ runtime image stays.
 
 ## Version and installation
 
-Use the latest pnpm 12 release that is at least seven days old, pinned exactly
-in `.tool-versions` and in the `packageManager` field of both project roots.
+Use the latest pnpm 12 release that is at least one day old, pinned exactly in
+`.tool-versions` and in the `packageManager` field of both project roots.
 `make tools-check` fails on drift. pnpm refuses to run when its version differs
 from `packageManager` and never downloads another pnpm; the implementer names
 the pnpm 12 settings that do this and tests both refusals.
@@ -36,11 +36,13 @@ longer bundle it.
 
 Both `pnpm-workspace.yaml` files set:
 
-- `minimumReleaseAge: 10080` (seven days) with `minimumReleaseAgeStrict: true`.
-  A security fix newer than that goes in `minimumReleaseAgeExclude` by exact
-  name, with the advisory in the commit message, and leaves once it is seven
-  days old. pnpm 12 applies the age to frozen installs too, so a lockfile entry
-  younger than seven days fails every install until it matures.
+- `minimumReleaseAge: 1440` (one day, pnpm 12's default) with
+  `minimumReleaseAgeStrict: true` (owner, 2026-11-15: seven days blocked
+  ordinary updates for a week). A security fix newer than that goes in
+  `minimumReleaseAgeExclude` by exact name, with the advisory in the commit
+  message, and leaves once it is a day old. pnpm 12 applies the age to frozen
+  installs too, so a lockfile entry younger than a day fails every install until
+  it matures.
 - Dependency build scripts run only for packages listed in `allowBuilds`.
   `strictDepBuilds` stays on, so a new build script fails the install until a
   reviewed change allows it.
@@ -109,7 +111,7 @@ snapshot entry they reach, and follows `workspace:` sources the way it follows
 CI installs with the pinned pnpm and caches the pnpm store.
 
 Dependabot keeps the `npm` ecosystem, which covers pnpm, for `/` and
-`/deploy/dev-https-browser`, with a seven-day cooldown matching
+`/deploy/dev-https-browser`, with a one-day cooldown matching
 `minimumReleaseAge` and the current ignore lists.
 
 ## Migration and acceptance
