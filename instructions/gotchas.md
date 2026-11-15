@@ -5,7 +5,7 @@ Read this file when running repository tools. Task-specific gotchas live in [Go]
 - `.env` is ignored and holds credentials. Never print, document, or stage values; add names with empty values to `.env.example`.
 - Run `make` at the repository root.
 - Use `pnpm exec redocly` from the repository root; never `npx redocly` or `pnpm dlx redocly`, which fetch an unrelated placeholder package.
-- Run pnpm from the repository root workspace or from `deploy/dev-https-browser`, its own project. `pnpm install --frozen-lockfile` fails while a locked version is younger than `minimumReleaseAge` (7 days); only a security fix goes in `minimumReleaseAgeExclude`, by exact name.
+- Run pnpm from the repository root workspace or from `deploy/dev-https-browser`, its own project. `pnpm install --frozen-lockfile` fails while a locked version is younger than `minimumReleaseAge` (1 day); only a security fix goes in `minimumReleaseAgeExclude`, by exact name.
 - A pnpm installed with `--ignore-scripts` is a shell script without a shebang; Python and Node spawn it with `ENOEXEC` on macOS. Start it through Bash, for example `run-capped.sh -- bash -c 'pnpm install --frozen-lockfile --offline'`.
 - `make docs-lint` follows `package.json` and `.prettierignore`; [agent-only files](documentation.md#agent-file-formatting) are excluded.
 

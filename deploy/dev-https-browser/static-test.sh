@@ -80,7 +80,7 @@ if (JSON.stringify(shared(workspace)) !== JSON.stringify(shared(harness))) {
   throw new Error(`settings differ: ${JSON.stringify(shared(workspace))} ${JSON.stringify(shared(harness))}`);
 }
 const required = {
-  pmOnFail: 'error', minimumReleaseAge: '10080', minimumReleaseAgeStrict: 'true',
+  pmOnFail: 'error', minimumReleaseAge: '1440', minimumReleaseAgeStrict: 'true',
   strictDepBuilds: 'true', verifyDepsBeforeRun: 'error', packageImportMethod: 'clone-or-copy',
   nodeLinker: 'isolated', virtualStoreType: 'project', virtualStoreDir: 'node_modules/.pnpm',
 };

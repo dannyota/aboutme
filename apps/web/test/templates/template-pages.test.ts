@@ -200,7 +200,7 @@ describe('template page freshness', () => {
 
   it.each([
     ['package.json', '"packageManager": "pnpm@', '"packageManager": "pnpm@0.'],
-    ['pnpm-workspace.yaml', 'minimumReleaseAge: 10080', 'minimumReleaseAge: 1'],
+    ['pnpm-workspace.yaml', 'minimumReleaseAge: 1440', 'minimumReleaseAge: 1'],
     ['pnpm-workspace.yaml', 'pmOnFail: error', 'pmOnFail: ignore'],
     ['pnpm-lock.yaml', '        version: 12.', '        version: 0.'],
   ])('rejects a changed pnpm pin or policy in %s', (path, from, to) => {

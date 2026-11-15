@@ -1570,7 +1570,7 @@ test("Dependabot contract rejects missing grouping and changed scope or cadence"
         "package-ecosystem": "npm",
         directories: ["/"],
         schedule: { interval: "weekly" },
-        cooldown: { "default-days": 7 },
+        cooldown: { "default-days": 1 },
         "open-pull-requests-limit": 2,
         groups: { npm: { patterns: ["*"], "update-types": ["minor", "patch"] } },
         ignore: [
@@ -1586,7 +1586,7 @@ test("Dependabot contract rejects missing grouping and changed scope or cadence"
         "package-ecosystem": "npm",
         directories: ["/deploy/dev-https-browser"],
         schedule: { interval: "weekly" },
-        cooldown: { "default-days": 7 },
+        cooldown: { "default-days": 1 },
         "open-pull-requests-limit": 2,
         groups: { npm: { patterns: ["*"], "update-types": ["minor", "patch"] } },
         ignore: [
@@ -1619,7 +1619,7 @@ test("Dependabot contract rejects missing grouping and changed scope or cadence"
       ...(index === 0 ? [] : [(entry) => { delete Object.values(entry.groups)[0]["update-types"]; }]),
       (entry) => { entry.schedule.interval = "daily"; },
       (entry) => { entry.schedule.day = "monday"; },
-      (entry) => { if (entry.cooldown) entry.cooldown["default-days"] = 1; else entry.cooldown = { "default-days": 7 }; },
+      (entry) => { if (entry.cooldown) entry.cooldown["default-days"] = 7; else entry.cooldown = { "default-days": 1 }; },
       ...(update.cooldown ? [(entry) => { delete entry.cooldown; }] : []),
       (entry) => { entry["package-ecosystem"] = "docker"; },
       (entry) => { entry["open-pull-requests-limit"] = 10; },
@@ -1727,7 +1727,7 @@ function checkDependabot(config) {
     "package-ecosystem": ecosystem,
     ...(ecosystem === "github-actions" ? { directory: "/" } : { directories }),
     schedule: { interval: "weekly" },
-    ...(ecosystem === "npm" ? { cooldown: { "default-days": 7 } } : {}),
+    ...(ecosystem === "npm" ? { cooldown: { "default-days": 1 } } : {}),
     "open-pull-requests-limit": 2,
     groups: {
       [ecosystem]: {

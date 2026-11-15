@@ -1,5 +1,5 @@
 pmOnFail: error
-minimumReleaseAge: 10080
+minimumReleaseAge: 1440
 minimumReleaseAgeStrict: true
 strictDepBuilds: true
 allowBuilds: {}
