@@ -76,6 +76,81 @@ drift=$(override_drift "$WORK/drifted.yaml" "$ROOT/apps/web/package.json")
 [[ $drift == 'openapi-typescript>typescript is 0.0.1, apps/web declares typescript '* ]] ||
   fail "a drifted typescript override was not reported: ${drift:-nothing}"
 
+external_drift() {
+  node - "$1" "$2" "$3" <<'NODE'
+const fs = require('node:fs');
+const [lockPath, manifestPath, listPath] = process.argv.slice(2);
+const declared = JSON.parse(fs.readFileSync(manifestPath, 'utf8')).dependencies ?? {};
+const list = fs.readFileSync(listPath, 'utf8').split('\n').filter(Boolean).map((line) => line.split(/\s+/));
+const docs = fs.readFileSync(lockPath, 'utf8').split(/^---$/m);
+const lines = docs[docs.length - 1].split('\n');
+const versions = new Map();
+const consumers = new Map();
+const note = (map, name, version) => map.set(name, (map.get(name) ?? new Set()).add(version));
+const bare = (version) => version.replace(/^'|'$/g, '').split('(')[0];
+let section = '', key = '', importer = '', entry = '', webVersions = new Map();
+for (const line of lines) {
+  if (/^\S/.test(line)) { section = line.replace(/:$/, ''); continue; }
+  let match;
+  if ((match = /^  (?! )'?(.+?)'?:(?: \{\})?$/.exec(line))) {
+    key = match[1];
+    if (section === 'importers') importer = key;
+    if (section === 'packages' || section === 'snapshots') {
+      const at = key.indexOf('@', 1);
+      note(versions, key.slice(0, at), bare(key.slice(at + 1)));
+    }
+    continue;
+  }
+  if (section === 'importers' && (match = /^      '?([^':]+)'?:$/.exec(line))) { entry = match[1]; continue; }
+  if (section === 'importers' && (match = /^        version: (.+)$/.exec(line))) {
+    if (!match[1].startsWith('link:')) note(versions, entry, bare(match[1]));
+    if (importer === 'apps/web') webVersions.set(entry, bare(match[1]));
+    continue;
+  }
+  if (section === 'snapshots' && (match = /^      '?([^':]+)'?: (.+)$/.exec(line))) {
+    note(versions, match[1], bare(match[2]));
+    const at = key.indexOf('@', 1);
+    note(consumers, `${key.slice(0, at)}@${bare(key.slice(at + 1))}>${match[1]}`, bare(match[2]));
+  }
+}
+for (const [name, consumer] of list) {
+  const want = declared[name];
+  const resolved = [...(versions.get(name) ?? [])].sort();
+  if (!want) { console.log(`apps/web does not declare ${name}`); continue; }
+  if (webVersions.get(name) !== want) console.log(`apps/web declares ${name} ${want}, its lockfile importer resolves ${webVersions.get(name) ?? 'nothing'}`);
+  if (!consumer) {
+    if (resolved.length !== 1 || resolved[0] !== want) console.log(`${name} resolves to ${resolved.join(', ') || 'nothing'} in the lockfile, apps/web declares ${want}`);
+    continue;
+  }
+  const at = `${consumer}@${webVersions.get(consumer)}>${name}`;
+  const used = [...(consumers.get(at) ?? [])].sort();
+  if (used.length !== 1 || used[0] !== want) console.log(`${consumer} ${webVersions.get(consumer)} resolves ${name} ${used.join(', ') || 'nothing'}, apps/web declares ${want}`);
+}
+NODE
+}
+
+externals="$ROOT/scripts/test/pnpm-externals.txt"
+drift=$(external_drift "$ROOT/pnpm-lock.yaml" "$ROOT/apps/web/package.json" "$externals") ||
+  fail 'cannot compare the externalized packages with pnpm-lock.yaml'
+[[ -z $drift ]] || fail "externalized packages drifted: $drift"
+awk '{ print } /^packages:$/ { print ""; print "  defu@6.1.6:"; print "    resolution: {integrity: sha512-drift}" }' \
+  "$ROOT/pnpm-lock.yaml" >"$WORK/second-version.yaml"
+drift=$(external_drift "$WORK/second-version.yaml" "$ROOT/apps/web/package.json" "$externals")
+[[ $drift == *'defu resolves to 6.1.6, '* ]] || fail "a second defu version was not reported: ${drift:-nothing}"
+node -e 'const fs = require("node:fs"); const [from, to] = process.argv.slice(1);
+  const manifest = JSON.parse(fs.readFileSync(from, "utf8"));
+  manifest.dependencies.ufo = "0.0.1";
+  fs.writeFileSync(to, JSON.stringify(manifest));' "$ROOT/apps/web/package.json" "$WORK/declared.json"
+drift=$(external_drift "$ROOT/pnpm-lock.yaml" "$WORK/declared.json" "$externals")
+[[ $drift == *'ufo resolves to '*', apps/web declares 0.0.1'* ]] ||
+  fail "a declared ufo version that differs from the lockfile was not reported: ${drift:-nothing}"
+awk '/^snapshots:$/ { s = 1 } s && /^  [^ ]/ { n = ($0 ~ /^  nuxt@/) }
+  n && /^      cookie-es: / { sub(/cookie-es: .*/, "cookie-es: 2.0.1") } { print }' \
+  "$ROOT/pnpm-lock.yaml" >"$WORK/consumer.yaml"
+drift=$(external_drift "$WORK/consumer.yaml" "$ROOT/apps/web/package.json" "$externals")
+[[ $drift == 'nuxt '*' resolves cookie-es 2.0.1, apps/web declares '* ]] ||
+  fail "nuxt resolving another cookie-es was not reported: ${drift:-nothing}"
+
 grep -Fqx 'pmOnFail: error' "$ROOT/pnpm-workspace.yaml" ||
   fail 'pnpm-workspace.yaml must set pmOnFail: error'
 grep -Fqx 'verifyDepsBeforeRun: error' "$ROOT/pnpm-workspace.yaml" ||
