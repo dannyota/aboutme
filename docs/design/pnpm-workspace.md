@@ -134,9 +134,15 @@ The change is accepted when:
   names every differing file and its cause. Build metadata may differ. Code that
   npm resolved from `.output/server/node_modules` at run time may be bundled
   into the server and worker chunks, because the isolated layout hides
-  transitive packages from the bundler, when the report shows each such package
-  at the same version in both images and the same public pages answer with the
-  same status and size;
+  transitive packages from the bundler, when the report shows all of:
+  - each such package with the same version and lockfile integrity in both
+    builds, and the entry file the bundler selected for it;
+  - every added, removed, or changed file attributed to those packages or to
+    build metadata through the bundler's chunk module lists or source maps;
+  - the same public pages answering with the same status and the same body after
+    removing build ids;
+  - the renderer golden HTML tests and the print and PDF proofs passing in
+    hosted CI on the head;
 - no `package-lock.json` and no npm install or run call remains, outside docs
   that record history and the pnpm bootstrap line;
 - [resources](../../instructions/resources.md),
