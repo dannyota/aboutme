@@ -13,15 +13,7 @@
 # parallel tests against one harness (totp.spec.ts "Enabled-proof
 # sharding"). Each shard's evidence moves to
 # .dev/proof-evidence/KIND-browser-proof-evidence-SHARD/, the directory name
-# the shard coverage checks read the shard from. The editor, exports and
-# linkedin-import proofs are not sharded and need no coverage check, but each
-# writes redacted evidence on a mid-test failure (editor.spec.ts,
-# exports.spec.ts, linkedin-import.spec.ts), so their evidence moves too, to
-# .dev/proof-evidence/editor-browser-proof-evidence/,
-# .dev/proof-evidence/exports-browser-proof-evidence/ and
-# .dev/proof-evidence/linkedin-import-browser-proof-evidence/. Every other
-# proof's evidence is never moved out of the evidence root and so is never
-# uploaded.
+# the shard coverage checks read the shard from.
 #
 # Every request the proofs send reaches the server from one client IP, so
 # the job summary and log also list each proof's peak server requests in any

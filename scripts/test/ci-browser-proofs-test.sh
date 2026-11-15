@@ -74,6 +74,17 @@ dev-https-exports-check)
   : >"$evidence/exports.z/exports-failure.json"
   exit 3
   ;;
+dev-https-linkedin-import-check)
+  mkdir -p "$evidence/linkedin-import.l"
+  : >"$evidence/linkedin-import.l/linkedin-import-failure.json"
+  exit 5
+  ;;
+dev-https-auth-check)
+  if [ "${AUTH_EVIDENCE:-0}" = 1 ]; then
+    mkdir -p "$evidence/auth.a"
+    : >"$evidence/auth.a/auth-proof.json"
+  fi
+  ;;
 esac
 exit 0
 EOF
@@ -187,6 +198,21 @@ fi
 [ -d "$REPO/.dev/native-https/evidence/exports.kept" ] ||
   fail "the editor proof moved another proof's evidence"
 rm -rf -- "$REPO/.dev/native-https/evidence/exports.kept"
+
+run_group failing-linkedin-import linkedin-import || :
+[ -f "$staged/linkedin-import-browser-proof-evidence/linkedin-import.l/linkedin-import-failure.json" ] ||
+  fail "a failing linkedin-import proof's evidence was not staged for upload"
+if compgen -G "$REPO/.dev/native-https/evidence/*" >/dev/null; then
+  fail "a failing linkedin-import proof left evidence in the evidence root"
+fi
+
+AUTH_EVIDENCE=1 run_group kept-auth auth || :
+[ -f "$REPO/.dev/native-https/evidence/auth.a/auth-proof.json" ] ||
+  fail "a proof outside editor, exports and linkedin-import lost its evidence from the evidence root"
+if [ -n "$(find "$staged" -name 'auth.*' -print -quit)" ]; then
+  fail "a proof outside editor, exports and linkedin-import had its evidence staged for upload"
+fi
+rm -rf -- "$REPO/.dev/native-https/evidence/auth.a"
 
 for bad in '' 'totp:' 'Editor' '../x' 'totp:skew;id' 'totp:skew,' 'totp:,skew' \
   'passkey:primary-disabled,recovery-attempts' 'editor,exports'; do
