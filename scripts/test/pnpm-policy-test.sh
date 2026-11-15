@@ -16,10 +16,10 @@ pin=$(awk '$1 == "pnpm" { print $2 }' "$ROOT/.tool-versions")
 [[ $pin =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]] || fail '.tool-versions has no exact pnpm pin'
 other=${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.$((BASH_REMATCH[3] + 1))
 command -v pnpm >/dev/null || fail 'pnpm is not installed'
-[[ $(realpath "$(command -v pnpm)") != */corepack/* ]] ||
-  fail 'pnpm on PATH is the corepack shim; install pnpm with npm install --global --ignore-scripts'
-running=$(cd "$WORK" && pnpm --version </dev/null)
-[[ $running == "$pin" ]] || fail "pnpm $running is running, .tool-versions pins $pin"
+running=$(cd "$ROOT" && pnpm --version </dev/null)
+[[ $running == "$pin" ]] || fail "pnpm $running runs in the repository, .tool-versions pins $pin"
+npm_installed=1
+[[ $(realpath "$(command -v pnpm)") != */corepack/* ]] || npm_installed=0
 
 isolated=(--registry http://127.0.0.1:9/ --store-dir "$WORK/store"
   --state-dir "$WORK/state" "--config.cache-dir=$WORK/cache")
@@ -28,12 +28,17 @@ project() {
   local dir=$1 manifest=$2 settings=$3
   mkdir -p "$WORK/$dir"
   printf '%s\n' "$manifest" >"$WORK/$dir/package.json"
-  if [[ $settings == committed ]]; then
-    sed '/^packages:$/,/^$/d' "$ROOT/pnpm-workspace.yaml" >"$WORK/$dir/pnpm-workspace.yaml"
-  else
+  case $settings in
+  committed) sed '/^packages:$/,/^$/d' "$ROOT/pnpm-workspace.yaml" >"$WORK/$dir/pnpm-workspace.yaml" ;;
+  without-pm-on-fail)
     sed -e '/^packages:$/,/^$/d' -e '/^pmOnFail:/d' "$ROOT/pnpm-workspace.yaml" \
       >"$WORK/$dir/pnpm-workspace.yaml"
-  fi
+    ;;
+  pin-unrecorded)
+    sed -e '/^packages:$/,/^$/d' -e 's/^pmOnFail: .*/pmOnFail: ignore/' "$ROOT/pnpm-workspace.yaml" \
+      >"$WORK/$dir/pnpm-workspace.yaml"
+    ;;
+  esac
 }
 
 run_pnpm() {
@@ -76,24 +81,28 @@ grep -Fqx 'pmOnFail: error' "$ROOT/pnpm-workspace.yaml" ||
 grep -Fqx 'verifyDepsBeforeRun: error' "$ROOT/pnpm-workspace.yaml" ||
   fail 'pnpm-workspace.yaml must set verifyDepsBeforeRun: error'
 
-project mismatch "{\"name\":\"mismatch\",\"private\":true,\"packageManager\":\"pnpm@$other\"}" committed
-if run_pnpm mismatch install --offline "${isolated[@]}"; then
-  fail "pnpm $pin ran a project pinned to pnpm $other"
-fi
-grep -Fq 'ERR_PNPM_BAD_PM_VERSION' "$WORK/out" || fail 'missing the version mismatch refusal'
-if grep -Fq "resolve pnpm@$other" "$WORK/out"; then
-  fail 'pnpm tried to fetch the pinned pnpm'
-fi
-[[ ! -e $WORK/store && ! -e $WORK/cache/v12 ]] || fail 'the refused command wrote the pnpm store or cache'
+if ((npm_installed)); then
+  project mismatch "{\"name\":\"mismatch\",\"private\":true,\"packageManager\":\"pnpm@$other\"}" committed
+  if run_pnpm mismatch install --offline "${isolated[@]}"; then
+    fail "pnpm $pin ran a project pinned to pnpm $other"
+  fi
+  grep -Fq 'ERR_PNPM_BAD_PM_VERSION' "$WORK/out" || fail 'missing the version mismatch refusal'
+  if grep -Fq "resolve pnpm@$other" "$WORK/out"; then
+    fail 'pnpm tried to fetch the pinned pnpm'
+  fi
+  [[ ! -e $WORK/store && ! -e $WORK/cache/v12 ]] || fail 'the refused command wrote the pnpm store or cache'
 
-project control "{\"name\":\"control\",\"private\":true,\"packageManager\":\"pnpm@$other\"}" without-pm-on-fail
-if run_pnpm control install --offline "${isolated[@]}"; then
-  fail 'the control project installed without its pinned pnpm'
+  project control "{\"name\":\"control\",\"private\":true,\"packageManager\":\"pnpm@$other\"}" without-pm-on-fail
+  if run_pnpm control install --offline "${isolated[@]}"; then
+    fail 'the control project installed without its pinned pnpm'
+  fi
+  grep -Fq "resolve pnpm@$other" "$WORK/out" ||
+    fail 'without pmOnFail pnpm should try to fetch the pinned pnpm; the control no longer proves the setting'
+else
+  printf 'pnpm-policy-test: skipping the version-mismatch refusal: pnpm on PATH is the corepack shim, which switches versions itself; CI and images install pnpm with npm\n'
 fi
-grep -Fq "resolve pnpm@$other" "$WORK/out" ||
-  fail 'without pmOnFail pnpm should try to fetch the pinned pnpm; the control no longer proves the setting'
 
-project stale '{"name":"stale","private":true,"scripts":{"probe":"node -e \"process.exit(0)\""}}' committed
+project stale "{\"name\":\"stale\",\"private\":true,\"packageManager\":\"pnpm@$pin\",\"scripts\":{\"probe\":\"node -e 0\"}}" pin-unrecorded
 run_pnpm stale install --offline "${isolated[@]}" || fail 'the fresh fixture did not install offline'
 run_pnpm stale run "${isolated[@]}" probe || fail 'pnpm run refused current dependencies'
 cp "$WORK/stale/pnpm-lock.yaml" "$WORK/stale.lock"

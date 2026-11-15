@@ -1712,12 +1712,52 @@ select_and_run_checks() {
   done
 }
 
+web_launch_drift() {
+  python3 -I - "$1" "$2" <<'PY'
+import json, re, shlex, sys
+session, manifest = sys.argv[1:]
+line = next((text for text in open(session) if re.match(r"\s*web\) launch_service ", text)), None)
+if line is None:
+    sys.exit("no web launch line")
+words = shlex.split(line.split(") ", 1)[1].strip().rstrip(";"))
+steps = [step.strip() for step in words[words.index("-c") + 1].split("&&")]
+launch = [re.sub(r"^(exec )?node_modules/\.bin/nuxt ", "", step) for step in steps
+          if re.match(r"(exec )?node_modules/\.bin/nuxt ", step)]
+dev = [step.strip() for step in json.load(open(manifest))["scripts"]["dev"].split("&&")]
+if steps[0] != "pnpm exec true" or len(launch) != len(steps) - 1:
+    print(f"web launch must be pnpm exec true followed only by nuxt commands: {steps}")
+elif not all(step.startswith("nuxt ") for step in dev):
+    print(f"apps/web dev script runs more than nuxt: {dev}")
+else:
+    expected = [step[len("nuxt "):] for step in dev]
+    expected[-1] += " --port 20440 --host 127.0.0.1"
+    if launch != expected:
+        print(f"dev-https web runs nuxt {launch}; the apps/web dev script implies nuxt {expected}")
+PY
+}
+
+check_web_launch_matches_dev_script() {
+  local drift fixture
+  drift=$(web_launch_drift "$SOURCE_LIB_DIR/dev-https-session.sh" "$SOURCE_ROOT/apps/web/package.json") ||
+    fail 'cannot compare the web launch with the apps/web dev script'
+  [ -z "$drift" ] || fail "web launch drifted from the apps/web dev script: $drift"
+  fixture=$(mktemp -d)
+  python3 -I -c 'import json, sys
+manifest = json.load(open(sys.argv[1]))
+manifest["scripts"]["dev"] = "nuxt prepare && nuxt dev --open"
+json.dump(manifest, open(sys.argv[2], "w"))' "$SOURCE_ROOT/apps/web/package.json" "$fixture/package.json"
+  drift=$(web_launch_drift "$SOURCE_LIB_DIR/dev-https-session.sh" "$fixture/package.json") || drift=
+  rm -rf -- "$fixture"
+  [[ $drift == *'implies nuxt'* ]] || fail 'a changed apps/web dev script was not reported'
+}
+
 main() {
   [ "${1-}" = --static ] && [ "$#" -eq 1 ] || fail 'usage: scripts/dev-https-test.sh --static'
   [ -f "$SOURCE_SCRIPT" ] || fail "missing production script: $SOURCE_SCRIPT"
   compgen -G "$SOURCE_LIB_DIR/dev-https-*.sh" >/dev/null || fail "missing production library files: $SOURCE_LIB_DIR"
   bash "$SOURCE_ROOT/scripts/test/dev-https-diagnostics-test.sh"
   check_checks_array_is_complete
+  check_web_launch_matches_dev_script
   case ${DEV_HTTPS_TEST_CASE-} in
   session-anchor) run_session_anchor_checks; return ;;
   session-monitor) run_session_monitor_checks; return ;;

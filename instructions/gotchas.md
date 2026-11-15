@@ -6,7 +6,8 @@ Read this file when running repository tools. Task-specific gotchas live in [Go]
 - Run `make` at the repository root.
 - Use `pnpm exec redocly` from the repository root; never `npx redocly` or `pnpm dlx redocly`, which fetch an unrelated placeholder package.
 - Run pnpm from the repository root workspace or from `deploy/dev-https-browser`, its own project. `pnpm install --frozen-lockfile` fails while a locked version is younger than `minimumReleaseAge` (1 day); only a security fix goes in `minimumReleaseAgeExclude`, by exact name.
-- A pnpm installed with `--ignore-scripts` is a shell script without a shebang; Python and Node spawn it with `ENOEXEC` on macOS. Start it through Bash, for example `run-capped.sh -- bash -c 'pnpm install --frozen-lockfile --offline'`.
+- A pnpm installed with `--ignore-scripts` is a shell script without a shebang; Python and Node spawn it with `ENOEXEC` on macOS. Start it through Bash, for example `run-capped.sh -- bash -c 'pnpm install --frozen-lockfile --offline'`. A corepack shim starts normally and switches to the `packageManager` pin itself; check the version with `pnpm --version` from the repository root, not by which launcher `pnpm` resolves to.
+- `pnpm run` and `pnpm exec` start their command in a process group of their own. Code that checks process groups, such as the dev-https listener check, must start long-running services without them; `scripts/lib/dev-https-session.sh` runs `pnpm exec true` for the stale-dependency check and then the `nuxt` binaries directly.
 - `make docs-lint` follows `package.json` and `.prettierignore`; [agent-only files](documentation.md#agent-file-formatting) are excluded.
 
 ## macOS local tooling
