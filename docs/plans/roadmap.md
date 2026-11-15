@@ -1,8 +1,10 @@
-# Roadmap: v0.9 to v1.0
+# Roadmap: v0.9 to v1.x
 
-Status: planned. Accepted by the owner on 2026-11-10 with the [decisions](#owner-decisions) below. v0.8 is closed.
+Status: in progress. Accepted by the owner on 2026-11-10 and amended on 2026-11-15 with the [decisions](#owner-decisions) below. v0.8 is closed; v0.9.0 to v0.9.10 are released.
 
 Direction (owner, 2026-11-09): create a resume, then prove your skills, then improve your career. Each minor version below has one vision. Each patch release ships one feature (AGENTS.md "Small releases"). A feature starts only after its named design or ADR is written and accepted.
+
+Direction (owner, 2026-11-15): build it for the owner's own use first. After v1.0, aboutme grows into a place that helps junior developers and new graduates build a career: their resume, their knowledge, and their record of progress.
 
 ## Fixed rules
 
@@ -12,13 +14,13 @@ These hold for every version and are not reopened by this plan.
 - Bring your own AI: aboutme hosts no model and charges nothing for AI (`docs/design/product.md:55-56`). AI features are tools and prompts for the user's own assistant over MCP.
 - Evidence, not claims (proposed content rule, not yet enforced): an assistant never invents an achievement and never confirms a skill on its own. An assistant never publishes: MCP has no publish tool (`docs/adr/0018-mcp-agent-access.md:51-52`).
 - Public URLs belong to a resume, not a person; an account has no public page (`docs/adr/0003-public-namespace-and-no-operator-surface.md:21-23`).
-- A developer network (discovery, recruiters, connections) is a separate product. aboutme links to a profile there only with the user's consent.
+- Discovery, recruiters and connections are a separate product. aboutme links to a profile there only with the user's consent. Review of a resume by other signed-in people joins aboutme in [v1.x](#v1x-a-place-to-build-a-career).
 
 ## Facts that shape the order
 
 - A live resume has no separate published snapshot. Public reads select the same row that saves write (`GetPublicRealtimeResume` in `apps/server/sql/queries.sql`), and open pages refresh in place (`docs/design/realtime.md:24-25`). An MCP write to a published resume is public on the next request, with no owner review; an already open page follows within its refresh interval (`docs/design/realtime.md:18-25`).
-- No accept or reject of agent edits and no restorable history exist: none of the 15 MCP tools proposes or restores (`docs/design/mcp-owner-workflow.md:16-20`), and `revision` is only a compare-and-swap counter.
-- A project is a print-sized entry: title, subtitle, link, dates, description (`packages/schema/resume.schema.json:230-247`). No project page exists.
+- No accept or reject of agent edits and no restorable history exist: none of the 22 MCP tools proposes or restores ([owner workflow](../design/mcp-owner-workflow.md)), and `revision` is only a compare-and-swap counter.
+- Projects live once in an account library, each resume chooses which it shows, and each chosen project of a published resume has a public page ([projects contract](../design/projects-contract.md)). An assistant's edit to a library project reaches every live resume that shows it at once.
 - GitHub sign-in is built but off in production, with scope `user:email`; its client reads only the profile and email, with no repository or evidence client, and provider tokens are discarded after sign-in (`githubScopes` in `apps/server/internal/auth/github.go`, [sign-in security](../design/security-sign-in.md#oauth-transaction), [product](../design/product.md)).
 - Only Claude Code is proven as an MCP client in production; ChatGPT is not named (`docs/design/mcp-guide.md:145-164`).
 - GitHub: a token with no scope reads public repositories, pull requests and releases ([scopes](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/scopes-for-oauth-apps)). Limits are 5,000 REST requests an hour per user and 30 non-code searches a minute ([REST limits](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api), [search](https://docs.github.com/en/rest/search/search)). Pull requests and releases carry the author's numeric id; commits are linked by email only ([commit linking](https://docs.github.com/en/pull-requests/committing-changes-to-your-project/troubleshooting-commits/why-are-my-commits-linked-to-the-wrong-user)).
@@ -35,6 +37,7 @@ Projects and evidence first, then reviewed changes, then assistant-led review. T
 |v0.11|Review with your own AI|Ask their assistant to review a resume, compare it with a job post, and propose changes for approval|
 |v0.12|Plan the next step|Ask their assistant for skill gaps, next steps, and interview practice grounded in their own evidence|
 |v1.0|A stable base|Rely on frozen contracts; nothing new|
+|v1.x|A place to build a career|Use a mobile app, keep a record of progress, learn from guidance, and get their resume reviewed by others|
 
 ## v0.9: show the work
 
@@ -42,7 +45,9 @@ Vision: a project stops being three lines on a resume and becomes a page that pr
 
 Release numbers (owner, 2026-11-12): the first release in which a person can write a project and show it on a resume is v0.9.0; each later feature of this list is v0.9.1 and up. An urgent fix released before v0.9.0 stays in v0.8.x.
 
-Features, in shipping order:
+Features 1 to 4 and 8 shipped in v0.9.0 to v0.9.9. Next come 9 and 10; features 5 to 7 follow once the owner has created the production GitHub OAuth app ([GitHub evidence](../design/github-evidence.md)). Feature numbers are stable and are not renumbered.
+
+Features:
 
 1. Project library: projects live once per account, private, with no public URL of their own. A project has role, technologies, outcome, repository link and demo link, with its text held per resume language.
 2. Projects on a resume: each resume chooses which library projects it shows and in what order. Nothing is shown by default; creating a project asks which resumes get it. The printed resume keeps one compact entry per chosen project.
@@ -52,12 +57,25 @@ Features, in shipping order:
 6. Evidence picker: the owner picks repositories, merged pull requests and releases to attach to a project. aboutme checks each item against the connected account (author id for pull requests and releases; owner or contributor for repositories, as the design defines) and stores a snapshot (title, URL, date, counts) with the time it was checked. Evidence belongs to the library project, so every resume that shows the project shows it.
 7. Evidence on the page: attached evidence renders on the project page with its checked date. Disconnecting GitHub removes the "confirmed" mark, and the owner chooses whether the links stay.
 8. MCP: assistants can read and edit library projects and a resume's selection. They cannot attach evidence or connect accounts.
+9. Home page (owner, 2026-11-15): a new home page that reads as made by a person, warm and colorful, with a new palette if the chosen direction needs one. Every claim on it stays true.
+10. Web layout for the public resume (owner, 2026-11-15): the public page gets a layout made for screens, phones first, with contact actions and readable text. The PDF and the print layout keep the template.
 
 Out of scope: private repositories, commit-level evidence, contribution graphs, automatic skill inference, ranking, any score.
 
 Done when: a developer with two resumes can write a project once, show it on one resume and not the other, publish two project pages, one with confirmed GitHub evidence, reach them from the resume page and from the title links in its PDF, and print the resume with compact project entries; hiding, deleting or renaming a project, sign in to view, indexing opt-out, link previews and unpublish revoke or gate the project pages exactly as the resume page; and a test shows no MCP tool can attach evidence or connect an account.
 
-Before code: an amendment to ADR 0003 for project routes; a design and ADR for the account project library (a new aggregate beside the resume document, its per-language text, limits, export and deletion, and how existing project entries migrate); a design for project pages, viewer entry points and their print mapping that covers every public representation (page, Markdown, JSON, previews, indexing) under ADR 0010 revocation and ADR 0022 viewer privacy; a schema version for project detail (ADR 0004); a design and ADR for GitHub connection and evidence that decide account binding, token lifetime, storage and revocation, what "confirmed" means per item type, snapshot behavior when the upstream item is deleted or made private, retention and removal.
+Before code for 9 and 10: the owner picks a direction from mockups; an amendment to [ADR 0020](../adr/0020-application-visual-identity.md) for any identity rule the direction changes; a design for the public web layout that keeps every public representation under ADR 0010 revocation and ADR 0022 viewer privacy. Claude subagents do UI design and frontend work ([workflow](../../instructions/workflow.md#models-and-ownership)).
+
+Before code for the rest: an amendment to ADR 0003 for project routes; a design and ADR for the account project library (a new aggregate beside the resume document, its per-language text, limits, export and deletion, and how existing project entries migrate); a design for project pages, viewer entry points and their print mapping that covers every public representation (page, Markdown, JSON, previews, indexing) under ADR 0010 revocation and ADR 0022 viewer privacy; a schema version for project detail (ADR 0004); a design and ADR for GitHub connection and evidence that decide account binding, token lifetime, storage and revocation, what "confirmed" means per item type, snapshot behavior when the upstream item is deleted or made private, retention and removal.
+
+## Foundation work
+
+These run beside the features, ship as their own patch releases, and add nothing a user sees.
+
+- Remove the undeployed AWS code ([ADR 0026](../adr/0026-vietnam-hosted-production.md)).
+- Move JavaScript dependencies to one [pnpm workspace](../design/pnpm-workspace.md).
+- Slim the server runtime image, then carry [third-party licences](../design/third-party-licences.md) in every release image.
+- Small removals: the unused root `@playwright/mcp`, the second test DOM, and the [approval probe](../design/production-pull-deploy/README.md#release-order-and-owner-decisions).
 
 ## v0.10: changes you approve
 
@@ -114,11 +132,21 @@ Before code: a design for the skill evidence view and both prompts.
 
 No features. The owner decides when to cut the first candidate; that commit records the supported contracts and adds `.v1-baseline`, which freezes migrations and released schemas (`AGENTS.md:99`, `docs/adr/0004-resume-document-contract.md:67-77`, `docs/adr/0005-database-migrations.md:40-49`). Launch gates stay in [backlog.md](backlog.md).
 
+## v1.x: a place to build a career
+
+Vision (owner, 2026-11-15): after v1.0, aboutme helps a junior developer or new graduate build a career, not only write a resume. Nothing here is designed or ordered yet; each item needs its design and decisions before code.
+
+- Mobile app: the Flutter app, deferred until web v1 (`docs/design/product.md:39`), starts here.
+- Knowledge: information and guidance for developers starting out, beginning from the [Vietnam tech resume guide](../design/vietnam-tech-resumes.md).
+- Tracks: a private record of what a person learns and does over time, like a diary, that can feed projects, evidence and the resume.
+- Shared review: signed-in people can read and review another person's resume when its owner allows it. Review is on by default for a resume with open access, and the owner can turn it off.
+
+Before code: an amendment to ADR 0003 for whatever a reviewer sees of the owner and of other reviewers; a design for review that covers who may review, moderation, reporting and removal, abuse limits, what a review stores and for how long, and the privacy notice; a decision on whether tracks are ever public; and the mobile contract against the frozen v1 API.
+
 ## Later
 
 - Using a visitor's ChatGPT plan on the website: documented for open-source apps that run locally; a hosted site must apply through an interest form, so approval is assumed to be required (inference). Not committed; never described as supported.
-- The developer network: a separate product.
-- The Flutter app: deferred beyond web v1 (`docs/design/product.md:39`).
+- Discovery, recruiters and connections: a separate product.
 - A publish scope for assistants: deferred, not designed away (`docs/adr/0018-mcp-agent-access.md:93-94`).
 
 ## Owner decisions
@@ -130,6 +158,14 @@ Decided on 2026-11-10; the designs named under each version follow them.
 3. GitHub (v0.9): a separate connection for evidence with no scope, independent of sign-in.
 4. Proposals (v0.10): on by default for published resumes.
 5. ChatGPT directory (v0.11): decide after the client proofs.
+
+Decided on 2026-11-15:
+
+1. Build for the owner's own use first.
+2. v0.9 adds the home page and the public resume's web layout, ahead of GitHub evidence.
+3. UI design and frontend work go to Claude subagents, not `gpt-6-astra`.
+4. The undeployed AWS code is removed; dependencies move to pnpm with a one-day minimum release age; release images carry third-party licences, with a written source offer for base-layer GPL software.
+5. v1.x follows v1.0 with the mobile app, knowledge, tracks and shared review, as [above](#v1x-a-place-to-build-a-career).
 
 ## Document conflicts found
 

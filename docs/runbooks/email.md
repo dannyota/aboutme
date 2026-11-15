@@ -16,7 +16,8 @@ record inventory. The root SPF authorizes both Bizfly and Google Workspace.
 Bizfly uses `dkim._domainkey` for its domain check and signs with
 `etrans._domainkey`; both records hold the same key. Google Workspace uses
 `google._domainkey`. The root MX is `smtp.google.com`, and DMARC uses
-`p=quarantine` with no report address (owner decisions, 2026-10-15).
+`p=quarantine` (owner decision, 2026-10-15), with aggregate reports sent to
+Cloudflare DMARC Management (owner, 2026-11-15).
 
 ## Feedback
 
@@ -62,8 +63,8 @@ Bizfly product and rejects these credentials.
   characters. The loader preserves every byte, including leading and trailing
   spaces. The password comes from the host secret store, never from a tracked
   file.
-- `SES_CONFIGURATION_SET` and the capture fields must be absent; `AWS_REGION` is
-  ignored. The `SMTP_*` names must be absent in SES and capture mode.
+- The capture fields must be absent. The `SMTP_*` names must be absent in
+  capture mode.
 
 A startup failure names the variable, never its value.
 

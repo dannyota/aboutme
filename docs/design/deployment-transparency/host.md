@@ -3,7 +3,8 @@
 The GreenNode vServer reports its running Podman containers to an observer
 container, which checks their signed build records and publishes
 `/.well-known/deployment.json`. The root reporter and observer share the host.
-The report is weaker evidence than the AWS ECS observer's platform API report
+The host reports itself, so the report is weaker evidence than a report from an
+independent platform API
 ([ADR 0027](../../adr/0027-deployment-transparency-observer.md)).
 
 ## Source and publication
@@ -79,10 +80,6 @@ reports its own Podman state and an observer container on that host checks the
 signatures. The report does not prove host or operator honesty, runtime
 integrity, configuration, secrets, or source quality. Only an image whose
 signature was checked may carry a verified build claim.
-
-AWS ECS keeps its off-host observer, S3 document, CloudFront route, and
-verification cache. Kubernetes keeps its read-only pod adapter and the same
-verifier. Neither platform depends on the host reporter or its Caddy route.
 
 ## Network isolation
 

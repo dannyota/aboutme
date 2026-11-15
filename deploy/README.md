@@ -1,19 +1,18 @@
 # Deployment artifacts
 
-`deploy/` contains local Compose, the live Vietnam deployment, and retained
-undeployed AWS code. The intended environment and trust boundaries live in the
+`deploy/` contains local Compose and the live Vietnam deployment. The intended
+environment and trust boundaries live in the
 [deployment design](../docs/design/deployment.md).
 
 | Path                 | Purpose                                                    |
 | -------------------- | ---------------------------------------------------------- |
 | `compose.yml`        | Podman Compose services and isolated networks              |
-| `server.Dockerfile`  | Go server, one-shot database commands, RDS CA bundle       |
+| `server.Dockerfile`  | Go server and one-shot database commands                   |
 | `web.Dockerfile`     | Nuxt production image                                      |
 | `caddy/Caddyfile`    | Current one-origin route table and client-IP boundary      |
 | `caddy/production/`  | Caddy image: direct Vietnam edge and retained AWS listener |
 | `dev-https-browser/` | Pinned disposable browser for local HTTPS auth proof       |
 | `vn/`                | Live Vietnam host, OpenTofu root, and deploy scripts       |
-| `aws/`               | Retained undeployed AWS roots, modules, and scripts        |
 
 `deploy/vn/` holds the production OpenTofu root, host bundle, and deploy
 scripts. GitHub Actions builds images for `linux/amd64` and `linux/arm64`. See
@@ -145,8 +144,8 @@ The current Caddyfile is a development trust boundary. Do not expose it to the
 Internet or place it unchanged behind another proxy. Production uses
 `caddy/production/` with `EDGES=direct` on the Vietnam host. Caddy terminates
 TLS on 443, strips forwarding headers, and uses the socket address. The
-[Vietnam deployment](vn/README.md) owns host setup; the CloudFront listener is
-kept for the undeployed AWS path.
+[Vietnam deployment](vn/README.md) owns host setup; no deployed edge uses the
+CloudFront listener.
 
 The [self-hosting guide](../docs/guides/self-hosting.md) states the current
 operator scope and TLS limits.

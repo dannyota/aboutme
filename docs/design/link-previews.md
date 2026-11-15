@@ -243,12 +243,6 @@ The per-IP limits stay: 300 artifact reads and 20 render misses a minute.
 an edge cache; Cloudflare provides DNS only. A stored card costs the gate read
 and one row read at the origin, so its first byte is close to the page's 0.39 s.
 
-**AWS reference.** The undeployed
-[CloudFront edge](cloudfront-delivery.md#cache-and-forwarding) must pass public
-routes through uncached. A revalidating edge behavior for the card is left out:
-it would save little, and whether CloudFront stores a `no-cache` response at
-minimum TTL 0 is unclear in its documentation [cf-exp].
-
 **Cost.** One card render of about 1 second per card change, on the existing
 host. At most 512 KiB of database storage per live resume. About 150 KB of
 transfer per crawler fetch. No new cloud resource.
@@ -368,5 +362,3 @@ crop, then the same after unpublish.
   https://developer.apple.com/documentation/technotes/tn3156-create-rich-previews-for-messages
 [waf-ip]:
   https://docs.aws.amazon.com/waf/latest/developerguide/aws-managed-rule-groups-ip-rep.html
-[cf-exp]:
-  https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/Expiration.html

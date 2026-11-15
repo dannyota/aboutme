@@ -38,10 +38,10 @@ For each image, after the push:
 3. The SBOM and digest files are uploaded as job artifacts.
 
 The observer publishes separate single-platform images: the plain version tag is
-`linux/arm64` for Lambda, and `<tag>-amd64` is `linux/amd64` for the Vietnam
-host. Both build on native GitHub-hosted runners with the same smoke, Trivy,
-provenance, and SBOM checks. An observer job failure does not block the app
-images or their release.
+`linux/arm64`, which no deployment uses, and `<tag>-amd64` is `linux/amd64` for
+the Vietnam host. Both build on native GitHub-hosted runners with the same
+smoke, Trivy, provenance, and SBOM checks. An observer job failure does not
+block the app images or their release.
 
 **Owner approval (A3):** a final `release` job, which waits for every image job
 and requires only the app image jobs to pass, runs with only `contents: write`,
@@ -65,9 +65,8 @@ on a future Kubernetes cluster. Revisit it then.
 ## What "verified" means
 
 The [host reporter](host.md) supplies unchecked observations to an observer
-container on the same host. The Podman, ECS, and Kubernetes observers use the
-same verifier below. Independent checks use the same GitHub and Sigstore
-commands on every platform.
+container on the same host. The observer uses the verifier below. Independent
+checks use the same GitHub and Sigstore commands.
 
 For one running digest, the observer uses `sigstore-go` with the public-good
 trust root (refreshed through TUF) and requires all of:
@@ -99,8 +98,7 @@ predicate the workflow wrote.
 | `invalid`   | A bundle exists and a check failed                                       |
 | `unchecked` | The observer could not finish (network, rate limit, trust root, timeout) |
 
-A digest's result is cached for 24 hours, then checked again. ECS and Kubernetes
-use the bucket under `verified/<digest>.json`; Podman uses process memory.
+A digest's result is cached in process memory for 24 hours, then checked again.
 Digests are immutable, so the cache only saves API calls. An `unchecked` result
 is not reused.
 

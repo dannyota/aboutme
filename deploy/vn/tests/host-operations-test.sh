@@ -72,7 +72,7 @@ echo 'host operation bounds and bundle checks passed'
 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
-mkdir -p "$work/client/deploy/vn" "$work/client/deploy/aws/scripts" "$work/client/scripts" "$work/bin"
+mkdir -p "$work/client/deploy/vn" "$work/client/scripts" "$work/bin"
 cp -R "$here/host" "$here/scripts" "$work/client/deploy/vn/"
 cat >"$work/client/scripts/release-eligibility.sh" <<'STUB'
 #!/usr/bin/env bash
@@ -81,7 +81,7 @@ printf 'eligibility %s\n' "$*" >>"$CLIENT_FIXTURE/calls"
 [[ $# == 1 || ${REJECT_TAG_ELIGIBILITY:-0} == 0 ]] || exit 1
 printf '%040d\n' 0
 STUB
-cat >"$work/client/deploy/aws/scripts/provenance.sh" <<'STUB'
+cat >"$work/client/deploy/vn/scripts/provenance.sh" <<'STUB'
 provenance_verify() { [[ ${REJECT_PROVENANCE:-0} == 0 ]]; }
 STUB
 cat >"$work/bin/ssh" <<'STUB'
@@ -276,9 +276,9 @@ checkout_refused() {
 : >"$work/client/untracked"
 checkout_refused untracked
 rm "$work/client/untracked"
-printf '# local edit\n' >>"$work/client/deploy/aws/scripts/provenance.sh"
+printf '# local edit\n' >>"$work/client/deploy/vn/scripts/provenance.sh"
 checkout_refused modified
-client checkout -q -- deploy/aws/scripts/provenance.sh
+client checkout -q -- deploy/vn/scripts/provenance.sh
 client checkout -q -b feature
 checkout_refused 'non-main branch'
 client checkout -q main

@@ -2,7 +2,7 @@
 
 Status: historical recommendation from 2026-09-06. ADR 0025 superseded this UAT
 and autoscaling path for the first release. The current release authority is the
-[single-host production design](../../design/single-host-production.md).
+[single-host production design](https://github.com/dannyota/aboutme/blob/aa7ec9f6fff739047346f8ad2be08636dee5b8b4/docs/design/single-host-production.md).
 
 The owner approved part-time UAT and production autoscaling on 2026-09-06:
 **$20–30/month for UAT**, **$140–170/month for production**, and

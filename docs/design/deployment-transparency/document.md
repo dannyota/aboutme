@@ -102,7 +102,7 @@ level. Readers ignore fields they do not know (see [versions](#versions)).
 | `platform.provider`                | `aws` or `greennode`                                                                                    | Observer platform adapter                |
 | `platform.orchestrator`            | `ecs`, `kubernetes`, or `podman`                                                                        | Observer platform adapter                |
 | `platform.region`                  | `ap-southeast-1`, or a GreenNode region code such as `HCM03`                                            | Observer configuration                   |
-| `observed_at`, `stale_after`       | RFC 3339 UTC, whole seconds; `stale_after` is `observed_at` plus 180 s                                  | Observer clock, or Podman reporter clock |
+| `observed_at`, `stale_after`       | RFC 3339 UTC, whole seconds; `stale_after` is `observed_at` plus 180 s                                  | Podman reporter clock                    |
 | `summary`                          | `verified`, `rolling_out`, `unverified`, or `mismatch` (rules below)                                    | Computed from the components             |
 | `release`                          | Object or `null` (rules below)                                                                          | Computed from the components             |
 | `components[].name`                | `server`, `web`, `caddy`, or `maintenance`, in that order                                               | Fixed mapping from service and container |
@@ -161,14 +161,9 @@ before it shows any summary.
 
 ### Component mapping
 
-| Platform unit                                           | Container | Component     |
-| ------------------------------------------------------- | --------- | ------------- |
-| ECS service `aboutme-prod-app`                          | `server`  | `server`      |
-| ECS service `aboutme-prod-app`                          | `caddy`   | `caddy`       |
-| ECS service `aboutme-prod-web`                          | `web`     | `web`         |
-| ECS service `aboutme-prod-maintenance`                  | `caddy`   | `maintenance` |
-| Kubernetes pod labeled `app.kubernetes.io/component: X` | named X   | X             |
-| Podman host reporter                                    | aboutme-X | X             |
+| Platform unit        | Container | Component |
+| -------------------- | --------- | --------- |
+| Podman host reporter | aboutme-X | X         |
 
 A container outside this table is ignored. A digest whose signed subject names a
 different image than the component's (for example, the web image running as
@@ -206,10 +201,9 @@ commit authors; and the GitHub attestation `initiator`.
 
 The test `TestDocumentLeaksNothing` in `deploy/observer/internal/document`:
 
-1. Feeds recorded-shape fixtures to both adapters: a `DescribeTasks` response
-   and a Kubernetes `PodList`, each with every field above filled with a unique
-   canary value (for example `canary-cluster-7f3a`, `10.9.8.7`, `123456789012`,
-   `ap-southeast-1b`, `containerd://canary…`).
+1. Reads a host observation through the Podman adapter. Its self-reported
+   signatures, versions, commits, log indexes, release, and observer stamp carry
+   canary values (for example `123456789012` and `c0ffee00c0ffee00`).
 2. Builds the document and asserts no canary string appears in its bytes.
 3. Asserts the bytes match none of these patterns: a 12-digit number, `arn:`, an
    IPv4 or IPv6 address, an availability zone name, `://` outside the allowed
@@ -217,8 +211,8 @@ The test `TestDocumentLeaksNothing` in `deploy/observer/internal/document`:
 4. Walks every key path in the document and asserts each is in the allowlist
    generated from the JSON Schema, so a new output field fails until the schema
    and this test list it.
-5. Adds a fixture field the adapters do not know (a new AWS response member) and
-   asserts the output is unchanged.
+5. Reads the same runtime fields without the self-reported claims and asserts
+   the output is unchanged.
 
 ## Versions
 

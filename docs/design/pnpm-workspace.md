@@ -21,26 +21,30 @@ runtime image stays.
 
 ## Version and installation
 
-Use the latest pnpm 12 release that is at least seven days old, pinned exactly
-in `.tool-versions` and in the `packageManager` field of both project roots.
+Use the latest pnpm 12 release that is at least one day old, pinned exactly in
+`.tool-versions` and in the `packageManager` field of both project roots.
 `make tools-check` fails on drift. pnpm refuses to run when its version differs
 from `packageManager` and never downloads another pnpm; the implementer names
 the pnpm 12 settings that do this and tests both refusals.
 
-Every environment installs that exact version with
-`npm install --global --ignore-scripts pnpm@<pin>`: CI, image build stages, the
-Mac, and the Ubuntu host. Corepack is not used, because Node.js 25 and later no
-longer bundle it.
+CI, image build stages, and the Ubuntu host install that exact version with
+`npm install --global --ignore-scripts pnpm@<pin>`. They do not use Corepack,
+because Node.js 25 and later no longer bundle it. A developer machine may reach
+pnpm through a Corepack shim that another project enabled; the tooling there
+checks only that `pnpm --version` inside the checkout equals the pin, and the
+no-download refusal test runs where pnpm is the npm-installed one.
 
 ## Install settings
 
 Both `pnpm-workspace.yaml` files set:
 
-- `minimumReleaseAge: 10080` (seven days) with `minimumReleaseAgeStrict: true`.
-  A security fix newer than that goes in `minimumReleaseAgeExclude` by exact
-  name, with the advisory in the commit message, and leaves once it is seven
-  days old. pnpm 12 applies the age to frozen installs too, so a lockfile entry
-  younger than seven days fails every install until it matures.
+- `minimumReleaseAge: 1440` (one day, pnpm 12's default) with
+  `minimumReleaseAgeStrict: true` (owner, 2026-11-15: seven days blocked
+  ordinary updates for a week). A security fix newer than that goes in
+  `minimumReleaseAgeExclude` by exact name, with the advisory in the commit
+  message, and leaves once it is a day old. pnpm 12 applies the age to frozen
+  installs too, so a lockfile entry younger than a day fails every install until
+  it matures.
 - Dependency build scripts run only for packages listed in `allowBuilds`.
   `strictDepBuilds` stays on, so a new build script fails the install until a
   reviewed change allows it.
@@ -109,7 +113,7 @@ snapshot entry they reach, and follows `workspace:` sources the way it follows
 CI installs with the pinned pnpm and caches the pnpm store.
 
 Dependabot keeps the `npm` ecosystem, which covers pnpm, for `/` and
-`/deploy/dev-https-browser`, with a seven-day cooldown matching
+`/deploy/dev-https-browser`, with a one-day cooldown matching
 `minimumReleaseAge` and the current ignore lists.
 
 ## Migration and acceptance
@@ -127,7 +131,18 @@ The change is accepted when:
   merge;
 - the linux/amd64 web image built from the head has the same `.output` path list
   and file hashes as the one built from the migration's base commit. The report
-  names every differing file and its cause, and only build metadata may differ;
+  names every differing file and its cause. Build metadata may differ. Code that
+  npm resolved from `.output/server/node_modules` at run time may be bundled
+  into the server and worker chunks, because the isolated layout hides
+  transitive packages from the bundler, when the report shows all of:
+  - each such package with the same version and lockfile integrity in both
+    builds, and the entry file the bundler selected for it;
+  - every added, removed, or changed file attributed to those packages or to
+    build metadata through the bundler's chunk module lists or source maps;
+  - the same public pages answering with the same status and the same body after
+    removing build ids;
+  - the renderer golden HTML tests and the print and PDF proofs passing in
+    hosted CI on the head;
 - no `package-lock.json` and no npm install or run call remains, outside docs
   that record history and the pnpm bootstrap line;
 - [resources](../../instructions/resources.md),

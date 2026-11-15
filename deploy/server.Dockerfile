@@ -22,11 +22,6 @@ RUN CGO_ENABLED=0 go -C apps/server build -trimpath -ldflags="-s -w" -o /out/ren
 RUN CGO_ENABLED=0 go -C apps/server build -trimpath -ldflags="-s -w" -o /out/migrate ./cmd/migrate
 RUN CGO_ENABLED=0 go -C apps/server build -trimpath -ldflags="-s -w" -o /out/db-setup ./cmd/db-setup
 
-# AWS RDS CA bundle for sslmode=verify-full. A changed upstream bundle fails the
-# build until this hash is reviewed and updated.
-ARG RDS_BUNDLE_SHA256=90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b
-RUN wget -qO /out/rds-global-bundle.pem https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem \
-    && echo "${RDS_BUNDLE_SHA256}  /out/rds-global-bundle.pem" | sha256sum -c -
 
 FROM mcr.microsoft.com/playwright:v1.64.0-noble@sha256:06a9939e57531807f8d5fd76ce44b53165ffb7d7501d87ab10e285c20b1e971f AS chromium
 
@@ -75,7 +70,6 @@ COPY --from=build /out/server /usr/local/bin/server
 COPY --from=build /out/render-browser-supervisor /usr/local/bin/render-browser-supervisor
 COPY --from=build /out/migrate /usr/local/bin/migrate
 COPY --from=build /out/db-setup /usr/local/bin/db-setup
-COPY --from=build /out/rds-global-bundle.pem /etc/ssl/rds/global-bundle.pem
 
 USER pwuser
 EXPOSE 8080 8081

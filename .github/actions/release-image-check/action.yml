@@ -16,7 +16,6 @@ runs:
       run: |
         case "$NAME" in
           observer*)
-            # Lambda requires a single-platform manifest without buildx provenance (AWS Lambda container image docs).
             docker build --platform "linux/$ARCH" --provenance=false \
               --build-arg VERSION="$VERSION" --build-arg COMMIT="$COMMIT" \
               -f "$DOCKERFILE" -t "$IMAGE" .
@@ -40,7 +39,6 @@ runs:
               /opt/chromium/chrome --version
               timeout 60 /opt/chromium/chrome --headless --no-sandbox --disable-gpu --disable-dev-shm-usage \
                 --dump-dom "data:text/html,<title>smoke-ok</title>" | grep -q smoke-ok
-              test -s /etc/ssl/rds/global-bundle.pem
               test -x /usr/local/bin/db-setup'
             ;;
           web)

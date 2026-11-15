@@ -43,7 +43,7 @@ CSRF checks. The HTTP boundary emits structured logs.
 Password credentials are one Argon2id hash per user; verification and reset
 tokens are stored only as digests. Transactional authentication mail is sealed
 into an encrypted outbox and delivered by a bounded worker through Bizfly SMTP
-(production), SES, or a loopback-only, secret-authenticated capture server
+(production) or a loopback-only, secret-authenticated capture server
 (development). Every password login and credential mutation serializes on the
 user lock and fences session issuance and reset.
 

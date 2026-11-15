@@ -107,13 +107,11 @@ every object, and a store smoke flow under `aboutme_app`.
 
 ## Scheduled jobs
 
-The server exposes five one-shot lifecycle commands before HTTP or Chromium
+The server exposes four one-shot lifecycle commands before HTTP or Chromium
 initialization. Database commands load only their required database settings;
-media commands also load the private media backend. `release-snapshot-sweep`
-uses AWS RDS snapshot metadata and needs no database or media configuration.
-Vietnam production schedules only idempotency expiry, queued media deletion,
-orphan reconciliation, and privacy retention through four systemd timers.
-pgBackRest expires production backups. The
-[privacy runbook](../runbooks/privacy.md#commands-and-schedules) owns command
-configuration, schedules, deadlines, overlap locks, fixed results, cancellation,
-and failure handling.
+media commands also load the private media backend. Vietnam production schedules
+idempotency expiry, queued media deletion, orphan reconciliation, and privacy
+retention through four systemd timers. pgBackRest expires production backups.
+The [privacy runbook](../runbooks/privacy.md#commands-and-schedules) owns
+command configuration, schedules, deadlines, overlap locks, fixed results,
+cancellation, and failure handling.
