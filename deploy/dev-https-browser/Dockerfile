@@ -9,12 +9,16 @@ USER root
 
 WORKDIR /opt/aboutme-auth
 
-COPY package.json package-lock.json ./
-RUN npm ci --ignore-scripts \
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+RUN npm install --global --ignore-scripts pnpm@12.18.0 \
+    && pnpm fetch \
+    && pnpm install --frozen-lockfile --offline --ignore-scripts \
+    && rm -rf "$(pnpm store path)" "$(pnpm cache path)" \
+    && npm uninstall --global pnpm \
     && npm cache clean --force
 
 COPY run.sh verify-evidence.mjs spec-sources.txt ./
-RUN chmod 0444 package.json package-lock.json verify-evidence.mjs spec-sources.txt \
+RUN chmod 0444 package.json pnpm-workspace.yaml pnpm-lock.yaml verify-evidence.mjs spec-sources.txt \
     && chmod 0555 run.sh
 
 USER pwuser

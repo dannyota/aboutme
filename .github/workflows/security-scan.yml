@@ -88,7 +88,7 @@ jobs:
         run: echo "### govulncheck failed (reachable vulnerability or scan error)" >>"$GITHUB_STEP_SUMMARY"
 
   npm-audit:
-    name: Scan npm dependencies
+    name: Scan pnpm dependencies
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -96,6 +96,10 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24.22.2
+      - name: Install the pinned pnpm
+        run: |
+          npm install --global --ignore-scripts pnpm@12.18.0
+          test "$(pnpm --version)" = "$(awk '$1 == "pnpm" { print $2 }' .tool-versions)"
       - name: repository root
         run: bash scripts/npm-audit.sh .
       - if: ${{ !cancelled() }}
@@ -108,7 +112,7 @@ jobs:
         name: deploy/dev-https-browser
         run: bash scripts/npm-audit.sh deploy/dev-https-browser
       - if: failure()
-        run: echo "### npm audit found a high or critical advisory" >>"$GITHUB_STEP_SUMMARY"
+        run: echo "### pnpm audit found a high or critical advisory" >>"$GITHUB_STEP_SUMMARY"
 
   image-scan:
     needs: trivy-db

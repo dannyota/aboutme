@@ -1,0 +1,30 @@
+packages:
+  - apps/web
+  - packages/schema
+
+pmOnFail: error
+minimumReleaseAge: 10080
+minimumReleaseAgeStrict: true
+strictDepBuilds: true
+allowBuilds:
+  esbuild: false
+  unrs-resolver: false
+verifyDepsBeforeRun: error
+packageImportMethod: clone-or-copy
+nodeLinker: isolated
+virtualStoreType: project
+virtualStoreDir: node_modules/.pnpm
+
+overrides:
+  markdownlint>re2js: 2.8.7
+  micromark-extension-math>katex: 0.18.2
+  openapi-typescript>typescript: 6.0.3
+  '@redocly/openapi-core>js-yaml': ^4.3.2
+  altcha-lib>h3: 1.15.11
+  glob: 14.0.2
+  '@eslint/config-array>minimatch': 11.0.1
+  editorconfig>minimatch: 11.0.1
+  eslint>minimatch: 11.0.1
+  readdir-glob>minimatch: 11.0.1
+  '@typescript-eslint/typescript-estree>minimatch': 11.0.1
+  quicktype>stream-json: 3.7.0

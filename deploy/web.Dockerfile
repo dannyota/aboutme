@@ -2,7 +2,11 @@ FROM docker.io/library/node:24.22.2-alpine3.24@sha256:8a32c8cf649a49915a66e81e7a
 
 WORKDIR /src
 
-COPY apps/web/package.json apps/web/package-lock.json apps/web/nuxt.config.ts apps/web/tsconfig.json ./apps/web/
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+RUN npm install --global --ignore-scripts pnpm@12.18.0 \
+    && pnpm fetch
+
+COPY apps/web/package.json apps/web/nuxt.config.ts apps/web/tsconfig.json ./apps/web/
 COPY apps/web/types/ ./apps/web/types/
 COPY apps/web/app/ ./apps/web/app/
 COPY apps/web/public/ ./apps/web/public/
@@ -14,9 +18,9 @@ COPY packages/schema/samples/ ./packages/schema/samples/
 COPY packages/schema/fixtures/full.json packages/schema/fixtures/vn-full.json ./packages/schema/fixtures/
 COPY packages/schema/validation/store.ts ./packages/schema/validation/
 
-RUN npm --prefix apps/web ci
+RUN pnpm install --frozen-lockfile --offline --filter "@aboutme/web..."
 
-RUN npm --prefix apps/web run build
+RUN pnpm --dir apps/web run build
 
 # Busybox grep has no --exclude, so manifests are filtered afterward (BusyBox grep).
 RUN set -e; out=apps/web/.output; test -f "$out/server/index.mjs"; \
@@ -37,7 +41,7 @@ RUN addgroup -S aboutme && adduser -S aboutme -G aboutme \
     && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /opt/yarn-v* \
     && rm -f /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack \
         /usr/local/bin/yarn /usr/local/bin/yarnpkg \
-    && for tool in npm npx corepack yarn yarnpkg; do \
+    && for tool in npm npx corepack yarn yarnpkg pnpm pnpx; do \
         ! command -v "$tool" >/dev/null || exit 1; \
     done
 

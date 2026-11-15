@@ -61,11 +61,11 @@ See the [documentation map](docs/README.md) for authority and lifecycle rules.
 ## Development
 
 Use the exact local and CI tool versions in [`.tool-versions`](.tool-versions).
-The Node and Go declarations in component manifests mirror that file.
+The Node, pnpm, and Go declarations in component manifests mirror that file.
+Install the pinned pnpm with `npm install --global --ignore-scripts pnpm@<pin>`.
 
 ```sh
-npm ci
-(cd apps/web && npm ci)
+pnpm install --frozen-lockfile
 make tools-check ARGS=dev
 make dev-native
 ```

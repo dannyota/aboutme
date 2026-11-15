@@ -152,10 +152,10 @@ INNER
 printf 'go-build:%s:%s\n' "${out##*/}" "$package" >>"$FAKE_MUTATIONS"
 EOF
 
-  cat >"$fakebin/npm" <<'EOF'
+  cat >"$fakebin/pnpm" <<'EOF'
 #!/usr/bin/env bash
 set -Eeuo pipefail
-printf 'npm:%s\n' "$*" >>"$FAKE_EFFECTS"
+printf 'pnpm:%s\n' "$*" >>"$FAKE_EFFECTS"
 exec fake-service web
 EOF
 
@@ -392,7 +392,7 @@ run_happy_path_and_lifecycle_checks() (
   assert_log_line "$FAKE_EFFECTS" 'migrate:operation=apply'
   assert_log_line "$FAKE_EFFECTS" 'service:mock-oauth host=127.0.0.1 port=20442 origin=https://localhost:20443 client=aboutme-local-google linkedin=aboutme-local-linkedin db='
   assert_log_line "$FAKE_EFFECTS" 'service:server host=127.0.0.1 port=20441 origin=https://localhost:20443 render=http://127.0.0.1:20440 app=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa renderer=sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb issuer=http://127.0.0.1:20442/google linkedin=http://127.0.0.1:20442/linkedin db=postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme_dev?sslmode=disable'
-  assert_log_line "$FAKE_EFFECTS" 'npm:run dev -- --port 20440 --host 127.0.0.1'
+  assert_log_line "$FAKE_EFFECTS" 'pnpm:run dev --port 20440 --host 127.0.0.1'
   assert_log_line "$FAKE_EFFECTS" 'caddy-config-validated'
   assert_log_line "$FAKE_MUTATIONS" 'go-build:mail-capture:./cmd/mail-capture'
   assert_log_line "$FAKE_MUTATIONS" 'start:mail-capture'

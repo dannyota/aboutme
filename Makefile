@@ -17,7 +17,8 @@ DEV_HTTPS_BROWSER_MANIFEST := .dev/native-https/browser-image.manifest
 DEV_HTTPS_BROWSER_SOURCES := \
 	deploy/dev-https-browser/Dockerfile \
 	deploy/dev-https-browser/package.json \
-	deploy/dev-https-browser/package-lock.json \
+	deploy/dev-https-browser/pnpm-lock.yaml \
+	deploy/dev-https-browser/pnpm-workspace.yaml \
 	deploy/dev-https-browser/run.sh \
 	deploy/dev-https-browser/spec-sources.txt \
 	deploy/dev-https-browser/verify-evidence.mjs
@@ -60,7 +61,7 @@ operational-test-fast: ## operational-test's sub-second-to-low-single-digit-seco
 	bash scripts/test/platform-helpers-test.sh
 	bash -n scripts/test/native-http-capture-test.sh
 	bash scripts/test/native-http-capture-test.sh
-	for f in scripts/check-path-case.sh scripts/test/check-path-case-test.sh scripts/check-adr-sections.sh scripts/test/check-adr-sections-test.sh scripts/check-tool-versions.sh scripts/check-migrations-append-only.sh scripts/check-released-schemas.sh scripts/ci.sh scripts/check-lengths.sh scripts/scan.sh scripts/security-scan.sh scripts/dev-native.sh scripts/dev-https.sh scripts/lib/dev-https-state.sh scripts/lib/dev-https-identity.sh scripts/lib/dev-https-caddy.sh scripts/lib/dev-https-preflight.sh scripts/lib/dev-https-lifecycle.sh scripts/dev-https-test.sh scripts/test-media-s3.sh scripts/test/test-media-s3-test.sh scripts/generate-web-e2e-source-manifest.sh scripts/generate-web-e2e-source-manifest-test.sh scripts/web-e2e-source.sh scripts/web-e2e-source-test.sh deploy/dev-https-browser/run.sh deploy/dev-https-browser/static-test.sh scripts/mcp-owner-workflow.sh scripts/lib/mcp-workflow-fixture.sh scripts/mcp-owner-workflow-test.sh scripts/test/render-topology-test.sh scripts/test/ci-failure-propagation-test.sh scripts/test/ci-lifecycle-test.sh scripts/test/ci-scan-adversarial-test.sh scripts/test/live-db-transcript-secrecy-test.sh scripts/test/server-db-package-inventory-test.sh scripts/test/makefile-safety-test.sh scripts/test/migration-append-only-test.sh scripts/test/scan-products-contract-test.sh scripts/test/toolchain-contract-test.sh scripts/test/workflow-safety-test.sh scripts/test/vmonitor-renew-test.sh scripts/totp-production-proof.sh scripts/lib/dev-https-browser-stage.sh scripts/test/totp-production-proof-test.sh scripts/run-capped.sh scripts/lib/platform.sh scripts/test/run-capped-test.sh scripts/pre-push.sh scripts/test/pre-push-test.sh scripts/ci-browser-proofs.sh scripts/test/ci-browser-proofs-test.sh scripts/ci-background.sh scripts/test/ci-background-test.sh scripts/deployment-document-check.sh scripts/test/deployment-document-check-test.sh scripts/npm-audit.sh scripts/test/npm-audit-test.sh scripts/codex-agent.sh scripts/test/codex-agent-test.sh scripts/test/check-lengths-test.sh; do bash -n "$$f" || exit 1; done
+	for f in scripts/check-path-case.sh scripts/test/check-path-case-test.sh scripts/check-adr-sections.sh scripts/test/check-adr-sections-test.sh scripts/check-tool-versions.sh scripts/check-migrations-append-only.sh scripts/check-released-schemas.sh scripts/ci.sh scripts/check-lengths.sh scripts/scan.sh scripts/security-scan.sh scripts/dev-native.sh scripts/dev-https.sh scripts/lib/dev-https-state.sh scripts/lib/dev-https-identity.sh scripts/lib/dev-https-caddy.sh scripts/lib/dev-https-preflight.sh scripts/lib/dev-https-lifecycle.sh scripts/dev-https-test.sh scripts/test-media-s3.sh scripts/test/test-media-s3-test.sh scripts/generate-web-e2e-source-manifest.sh scripts/generate-web-e2e-source-manifest-test.sh scripts/web-e2e-source.sh scripts/web-e2e-source-test.sh deploy/dev-https-browser/run.sh deploy/dev-https-browser/static-test.sh scripts/mcp-owner-workflow.sh scripts/lib/mcp-workflow-fixture.sh scripts/mcp-owner-workflow-test.sh scripts/test/render-topology-test.sh scripts/test/ci-failure-propagation-test.sh scripts/test/ci-lifecycle-test.sh scripts/test/ci-scan-adversarial-test.sh scripts/test/live-db-transcript-secrecy-test.sh scripts/test/server-db-package-inventory-test.sh scripts/test/makefile-safety-test.sh scripts/test/migration-append-only-test.sh scripts/test/scan-products-contract-test.sh scripts/test/toolchain-contract-test.sh scripts/test/workflow-safety-test.sh scripts/test/vmonitor-renew-test.sh scripts/totp-production-proof.sh scripts/lib/dev-https-browser-stage.sh scripts/test/totp-production-proof-test.sh scripts/run-capped.sh scripts/lib/platform.sh scripts/test/run-capped-test.sh scripts/pre-push.sh scripts/test/pre-push-test.sh scripts/ci-browser-proofs.sh scripts/test/ci-browser-proofs-test.sh scripts/ci-background.sh scripts/test/ci-background-test.sh scripts/deployment-document-check.sh scripts/test/deployment-document-check-test.sh scripts/npm-audit.sh scripts/test/npm-audit-test.sh scripts/test/pnpm-policy-test.sh scripts/codex-agent.sh scripts/test/codex-agent-test.sh scripts/test/check-lengths-test.sh; do bash -n "$$f" || exit 1; done
 	bash scripts/test/check-adr-sections-test.sh
 	bash scripts/test/check-path-case-test.sh
 	bash scripts/check-path-case.sh
@@ -94,6 +95,7 @@ operational-test-fast: ## operational-test's sub-second-to-low-single-digit-seco
 	scripts/test/ci-background-test.sh
 	scripts/test/deployment-document-check-test.sh
 	scripts/test/npm-audit-test.sh
+	bash scripts/test/pnpm-policy-test.sh
 	scripts/test/codex-agent-test.sh
 	bash -n scripts/generate-codex-agents.sh
 	bash -n scripts/test/codex-agents-test.sh
@@ -122,7 +124,7 @@ lengths-check: ## Fail when a doc passes 400 lines, non-test apps/server Go pass
 
 docs-lint: ## Check markdown formatting + lint
 	bash scripts/check-adr-sections.sh
-	npm run docs:lint
+	pnpm run docs:lint
 
 .PHONY: docs-links-check docs-links-test
 docs-links-check: ## Check local links in changed Markdown and affected indexes (DOC_LINK_BASE defaults to HEAD)
@@ -132,27 +134,23 @@ docs-links-test: ## Test local Markdown file, anchor, and scope checks
 	node --test scripts/test/check-doc-links.test.mjs
 
 docs-fmt: ## Format + autofix markdown, then re-lint (catches non-convergence)
-	npm run docs:fmt
+	pnpm run docs:fmt
 	$(MAKE) docs-lint
 
 generate: schema-gen api-gen sqlc-gen ## Regenerate all generated artifacts (schema types, API client, then sqlc)
 
 schema-gen: ## Regenerate schema types (Go/TS)
-	cd packages/schema && npm run generate
+	cd packages/schema && pnpm run generate
 
 schema-check: ## Fail if generated types drift from the schema
-	cd packages/schema && for attempt in 1 2; do \
-	  timeout -k 10 180 npm ci && break; \
-	  echo "npm ci attempt $$attempt did not finish" >&2; rm -rf node_modules; \
-	  [ $$attempt = 1 ] || exit 1; \
-	done && npm test
+	cd packages/schema && pnpm run test
 
 api-gen: ## Regenerate the committed TypeScript API client from docs/api/openapi.yaml
-	cd apps/web && npm run api:gen
+	cd apps/web && pnpm run api:gen
 
 api-check: ## Lint and test the OpenAPI contract, and fail on generated-client drift
-	npx @redocly/cli lint docs/api/openapi.yaml --config docs/api/redocly.yaml
-	npx vitest run --dir docs/api/test
+	pnpm exec redocly lint docs/api/openapi.yaml --config docs/api/redocly.yaml
+	pnpm exec vitest run --dir docs/api/test
 	bash apps/web/scripts/api-drift-check.sh
 
 server-build: ## Build the Go API server
@@ -209,17 +207,17 @@ server-test-resumeapi-s3: ## Run the fail-closed resume API suite with S3 media 
 	bash scripts/test-media-s3.sh run bash -c 'cd apps/server && REQUIRE_TEST_DB=1 TEST_MEDIA_BACKEND=s3 TEST_DATABASE_URL=$${TEST_DATABASE_URL:-postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme?sslmode=disable} go test ./internal/resumeapi/... -race -count=1 -v'
 
 web-build: ## Build the Nuxt web app
-	cd apps/web && npm run build
-	cd apps/web && npx vitest run test/fonts.test.ts -t 'retains every license byte-for-byte after nuxt build'
+	cd apps/web && pnpm run build
+	cd apps/web && pnpm exec vitest run test/fonts.test.ts -t 'retains every license byte-for-byte after nuxt build'
 
 web-lint: ## Lint the Nuxt web app
-	cd apps/web && npm run lint
+	cd apps/web && pnpm run lint
 
 web-typecheck: ## Typecheck the Nuxt web app
-	cd apps/web && npm run typecheck
+	cd apps/web && pnpm run typecheck
 
 web-test: ## Test the Nuxt web app
-	cd apps/web && npm run test
+	cd apps/web && pnpm run test
 
 web-source-manifest-check: ## Fail when the generated e2e source manifest drifts
 	bash scripts/generate-web-e2e-source-manifest.sh --check
@@ -261,7 +259,7 @@ web-template-pages: ## Generate review-only product page images in the pinned Li
 	  -e TEMPLATE_PAGES_COMMIT="$$commit" \
 	  -e TEMPLATE_PAGES_MANIFEST_SHA256="$$manifest_sha" \
 	  -e TEMPLATE_PAGES_TAR_SHA256="$$tar_sha" -w /tmp '$(WEB_E2E_IMAGE)' \
-	  sh -eu -c 'test "$$(uname -m)" = x86_64; test "$$(uname -s)" = Linux; locale -a | grep -qx C.utf8; test "$$(locale charmap)" = UTF-8; mkdir /tmp/aboutme; tar -xf /candidate.tar -C /tmp/aboutme; test ! -e /tmp/aboutme/.git; test ! -e /tmp/aboutme/.env; test ! -e /tmp/aboutme/.dev; test ! -e /tmp/aboutme/.superpowers; cd /tmp/aboutme/apps/web; npm ci --ignore-scripts; NUXT_HARNESS=1 node node_modules/nuxt/bin/nuxt.mjs build; node scripts/generate-template-pages.mts --candidate /results/candidate'; \
+	  sh -eu -c 'test "$$(uname -m)" = x86_64; test "$$(uname -s)" = Linux; locale -a | grep -qx C.utf8; test "$$(locale charmap)" = UTF-8; mkdir /tmp/aboutme; tar -xf /candidate.tar -C /tmp/aboutme; test ! -e /tmp/aboutme/.git; test ! -e /tmp/aboutme/.env; test ! -e /tmp/aboutme/.dev; test ! -e /tmp/aboutme/.superpowers; cd /tmp/aboutme; npm install --global --ignore-scripts pnpm@12.18.0; pnpm install --frozen-lockfile --ignore-scripts --filter "@aboutme/web..."; cd apps/web; NUXT_HARNESS=1 node node_modules/nuxt/bin/nuxt.mjs build; node scripts/generate-template-pages.mts --candidate /results/candidate'; \
 	test "$$(git rev-parse --verify 'HEAD^{commit}')" = "$$commit"; \
 	test -z "$$(git status --porcelain=v1 --untracked-files=all)"
 
@@ -307,7 +305,7 @@ web-e2e: ## Assert display rules in the pinned AMD64 browser
 	  -e WEB_E2E_MUTATIONS="$${WEB_E2E_MUTATIONS-1}" \
 	  -e WEB_E2E_HARNESS_SPECS="$$harness_specs" -e WEB_E2E_NORMAL_SPECS="$$normal_specs" \
 	  -e PLAYWRIGHT_RESULTS_DIR=/results -w /tmp '$(WEB_E2E_IMAGE)' \
-	  sh -eu -c 'test "$$(uname -m)" = x86_64; test "$$TZ" = UTC; test "$$LANG" = C.UTF-8; test "$$LC_ALL" = C.UTF-8; locale -a | grep -qx C.utf8; test "$$(locale charmap)" = UTF-8; chrome_version="$$(/ms-playwright/chromium-1248/chrome-linux64/chrome --version)"; chrome_version="$$(printf "%s" "$$chrome_version" | sed "s/[[:space:]]*$$//")"; test "$$chrome_version" = "Google Chrome for Testing 156.0.8078.4"; mkdir /tmp/aboutme; tar -xf /candidate.tar -C /tmp/aboutme; test ! -e /tmp/aboutme/.git; test ! -e /tmp/aboutme/.env; test ! -e /tmp/aboutme/.dev; test ! -e /tmp/aboutme/.superpowers; cd /tmp/aboutme/apps/web; npm ci --ignore-scripts; status=0; if [ -n "$$WEB_E2E_HARNESS_SPECS" ]; then PLAYWRIGHT_SURFACE=harness npx --no-install playwright test --config e2e/playwright.config.ts $$WEB_E2E_HARNESS_SPECS || status=$$?; fi; if [ "$$status" -eq 0 ] && [ -n "$$WEB_E2E_NORMAL_SPECS" ]; then PLAYWRIGHT_SURFACE=normal npx --no-install playwright test --config e2e/playwright.config.ts $$WEB_E2E_NORMAL_SPECS || status=$$?; fi; post=0; for path in playwright-report test-results blob-report; do if [ -e "/tmp/aboutme/apps/web/$$path" ]; then echo "unexpected default Playwright output: $$path" >&2; post=1; fi; done; test "$$post" -eq 0 || exit 1; exit "$$status"'; \
+	  sh -eu -c 'test "$$(uname -m)" = x86_64; test "$$TZ" = UTC; test "$$LANG" = C.UTF-8; test "$$LC_ALL" = C.UTF-8; locale -a | grep -qx C.utf8; test "$$(locale charmap)" = UTF-8; chrome_version="$$(/ms-playwright/chromium-1248/chrome-linux64/chrome --version)"; chrome_version="$$(printf "%s" "$$chrome_version" | sed "s/[[:space:]]*$$//")"; test "$$chrome_version" = "Google Chrome for Testing 156.0.8078.4"; mkdir /tmp/aboutme; tar -xf /candidate.tar -C /tmp/aboutme; test ! -e /tmp/aboutme/.git; test ! -e /tmp/aboutme/.env; test ! -e /tmp/aboutme/.dev; test ! -e /tmp/aboutme/.superpowers; cd /tmp/aboutme; npm install --global --ignore-scripts pnpm@12.18.0; pnpm install --frozen-lockfile --ignore-scripts --filter "@aboutme/web..."; cd apps/web; status=0; if [ -n "$$WEB_E2E_HARNESS_SPECS" ]; then PLAYWRIGHT_SURFACE=harness pnpm exec playwright test --config e2e/playwright.config.ts $$WEB_E2E_HARNESS_SPECS || status=$$?; fi; if [ "$$status" -eq 0 ] && [ -n "$$WEB_E2E_NORMAL_SPECS" ]; then PLAYWRIGHT_SURFACE=normal pnpm exec playwright test --config e2e/playwright.config.ts $$WEB_E2E_NORMAL_SPECS || status=$$?; fi; post=0; for path in playwright-report test-results blob-report; do if [ -e "/tmp/aboutme/apps/web/$$path" ]; then echo "unexpected default Playwright output: $$path" >&2; post=1; fi; done; test "$$post" -eq 0 || exit 1; exit "$$status"'; \
 	test "$$(git rev-parse --verify 'HEAD^{commit}')" = "$$commit"; \
 	test -z "$$(git status --porcelain=v1 --untracked-files=all)"
 
@@ -317,7 +315,7 @@ web-e2e-fast: ## Iterate renderer specs in the pinned browser against the workin
 	if [[ -n "$${UPDATE_GOLDEN+x}" ]]; then echo 'UPDATE_GOLDEN must be absent' >&2; exit 64; fi; \
 	if [[ -n "$${PLAYWRIGHT_UPDATE_SNAPSHOTS+x}" ]]; then echo 'PLAYWRIGHT_UPDATE_SNAPSHOTS must be absent' >&2; exit 64; fi; \
 	test "$$(uname -m)" = x86_64 || { echo 'web-e2e-fast requires a native x86_64 host' >&2; exit 1; }; \
-	test -d apps/web/node_modules || { echo 'web-e2e-fast needs apps/web/node_modules (run npm ci first)' >&2; exit 1; }; \
+	test -d apps/web/node_modules || { echo 'web-e2e-fast needs apps/web/node_modules (run pnpm install --frozen-lockfile first)' >&2; exit 1; }; \
 	results=.dev/web-e2e-fast; \
 	rm -rf -- "$$results"; \
 	install -d -m 0700 "$$results"; \
@@ -331,7 +329,7 @@ web-e2e-fast: ## Iterate renderer specs in the pinned browser against the workin
 	  -e PLAYWRIGHT_WORKERS="$${PLAYWRIGHT_WORKERS-4}" \
 	  -e PLAYWRIGHT_SKIP_BUILD="$${PLAYWRIGHT_SKIP_BUILD-0}" \
 	  -w /repo/apps/web '$(WEB_E2E_IMAGE)' \
-	  npx --no-install playwright test --config e2e/playwright.config.ts $(ARGS)
+	  node_modules/.bin/playwright test --config e2e/playwright.config.ts $(ARGS)
 
 dev: ## HTTP image/network smoke and self-hosting stack; not for daily development
 	@if ! running_containers="$$(podman ps --format '{{.Names}}')"; then \

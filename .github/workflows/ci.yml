@@ -138,12 +138,8 @@ jobs:
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24.22.2
-          cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            apps/web/package-lock.json
-            packages/schema/package-lock.json
-            deploy/dev-https-browser/package-lock.json
+      - if: ${{ !cancelled() }}
+        uses: ./.github/actions/setup-pnpm
       - if: ${{ !cancelled() }}
         id: go
         uses: ./.github/actions/setup-go
@@ -153,9 +149,9 @@ jobs:
         timeout-minutes: 7
         run: |
           for attempt in 1 2; do
-            timeout 180 npm ci && exit 0
-            echo "npm ci attempt $attempt did not finish" >&2
-            rm -rf node_modules
+            timeout 180 pnpm install --frozen-lockfile --ignore-scripts && exit 0
+            echo "pnpm install attempt $attempt did not finish" >&2
+            rm -rf node_modules apps/web/node_modules packages/schema/node_modules
           done
           exit 1
       - if: ${{ !cancelled() }}
@@ -174,16 +170,6 @@ jobs:
       - if: ${{ !cancelled() }}
         run: go build ./... && go vet ./... && go test ./...
         working-directory: packages/schema/gen/go
-      - if: ${{ !cancelled() }}
-        timeout-minutes: 7
-        run: |
-          for attempt in 1 2; do
-            timeout 180 npm ci --ignore-scripts && exit 0
-            echo "npm ci attempt $attempt did not finish" >&2
-            rm -rf node_modules
-          done
-          exit 1
-        working-directory: apps/web
       - if: ${{ !cancelled() }}
         run: make api-check
       - if: ${{ !cancelled() }}
@@ -228,16 +214,16 @@ jobs:
             tofu -chdir="$root" validate
           done
       - if: ${{ !cancelled() }}
-        name: npm audit (repository root)
+        name: pnpm audit (repository root)
         run: bash scripts/npm-audit.sh .
       - if: ${{ !cancelled() }}
-        name: npm audit (apps/web)
+        name: pnpm audit (apps/web)
         run: bash scripts/npm-audit.sh apps/web
       - if: ${{ !cancelled() }}
-        name: npm audit (packages/schema)
+        name: pnpm audit (packages/schema)
         run: bash scripts/npm-audit.sh packages/schema
       - if: ${{ !cancelled() }}
-        name: npm audit (deploy/dev-https-browser)
+        name: pnpm audit (deploy/dev-https-browser)
         run: bash scripts/npm-audit.sh deploy/dev-https-browser
       - uses: ./.github/actions/save-go-cache
         with:
@@ -257,10 +243,7 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24.22.2
-          cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            deploy/dev-https-browser/package-lock.json
+      - uses: ./.github/actions/setup-pnpm
       - if: ${{ !cancelled() }}
         name: Start the deploy-script static tests
         run: bash scripts/ci-background.sh start deploy-tests make operational-test-deploy
@@ -270,11 +253,11 @@ jobs:
         with:
           light: "true"
       - if: ${{ !cancelled() }}
-        run: npm ci
+        run: pnpm install --frozen-lockfile --ignore-scripts
       - if: ${{ !cancelled() }}
         run: make operational-test-fast
       - if: ${{ !cancelled() }}
-        run: npm ci
+        run: pnpm install --frozen-lockfile --ignore-scripts
         working-directory: deploy/dev-https-browser
       - if: ${{ !cancelled() }}
         run: make operational-test-browser
@@ -564,12 +547,10 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24.22.2
-          cache: npm
-          cache-dependency-path: apps/web/package-lock.json
+      - uses: ./.github/actions/setup-pnpm
       - run: make web-source-manifest-check
       - if: ${{ !cancelled() }}
-        run: npm ci
-        working-directory: apps/web
+        run: pnpm install --frozen-lockfile
       - if: ${{ !cancelled() }}
         run: make web-lint
       - if: ${{ !cancelled() }}

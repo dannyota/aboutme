@@ -53,7 +53,7 @@ markdownlint cover Markdown that people read. Agent instruction files
 
 ```sh
 node_modules/.bin/prettier --write path/to/document.md
-npx markdownlint-cli2 path/to/document.md
+pnpm exec markdownlint-cli2 path/to/document.md
 ```
 
 Run `make docs-lint` to check the documentation tree. Avoid `make docs-fmt` in a

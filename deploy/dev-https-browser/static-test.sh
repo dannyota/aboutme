@@ -47,11 +47,54 @@ readonly -a SPEC_FILES
 for file in "${SPEC_FILES[@]}"; do
   [[ $file =~ ^[a-z0-9][a-z0-9.-]*\.(ts|mjs)$ ]] || fail 'invalid spec source name'
 done
-for file in Dockerfile base.Containerfile package.json package-lock.json run.sh \
-  verify-evidence.mjs spec-sources.txt \
+for file in Dockerfile base.Containerfile package.json pnpm-workspace.yaml pnpm-lock.yaml \
+  run.sh verify-evidence.mjs spec-sources.txt \
   "${SPEC_FILES[@]}"; do
   [ -f "$SOURCE/$file" ] || fail "missing $file"
 done
+[ ! -e "$SOURCE/package-lock.json" ] || fail 'the harness still has an npm lockfile'
+node - "$ROOT" <<'NODE' || fail 'the harness pnpm pin or install settings differ from the root'
+const fs = require('node:fs');
+const root = process.argv[2];
+const pin = fs.readFileSync(`${root}/.tool-versions`, 'utf8').match(/^pnpm (\S+)$/m)?.[1];
+if (!pin) throw new Error('.tool-versions has no pnpm pin');
+for (const project of ['', 'deploy/dev-https-browser/']) {
+  const manifest = JSON.parse(fs.readFileSync(`${root}/${project}package.json`, 'utf8'));
+  if (manifest.packageManager !== `pnpm@${pin}`) throw new Error(`${project}package.json pins ${manifest.packageManager}`);
+}
+const dockerPins = fs.readFileSync(`${root}/deploy/dev-https-browser/Dockerfile`, 'utf8').match(/pnpm@\S+/g) ?? [];
+if (dockerPins.length !== 1 || dockerPins[0] !== `pnpm@${pin}`) throw new Error(`Dockerfile installs ${dockerPins}`);
+const settings = (file) => {
+  const found = {};
+  for (const line of fs.readFileSync(file, 'utf8').split('\n')) {
+    const match = /^([A-Za-z][A-Za-z0-9]*):(?: (.*))?$/.exec(line);
+    if (match) found[match[1]] = match[2] ?? '<block>';
+  }
+  return found;
+};
+const workspace = settings(`${root}/pnpm-workspace.yaml`);
+const harness = settings(`${root}/deploy/dev-https-browser/pnpm-workspace.yaml`);
+const shared = (found) => Object.fromEntries(Object.entries(found)
+  .filter(([key]) => !['packages', 'overrides', 'allowBuilds'].includes(key)).sort());
+if (JSON.stringify(shared(workspace)) !== JSON.stringify(shared(harness))) {
+  throw new Error(`settings differ: ${JSON.stringify(shared(workspace))} ${JSON.stringify(shared(harness))}`);
+}
+const required = {
+  pmOnFail: 'error', minimumReleaseAge: '10080', minimumReleaseAgeStrict: 'true',
+  strictDepBuilds: 'true', verifyDepsBeforeRun: 'error', packageImportMethod: 'clone-or-copy',
+  nodeLinker: 'isolated', virtualStoreType: 'project', virtualStoreDir: 'node_modules/.pnpm',
+};
+for (const [key, value] of Object.entries(required)) {
+  if (harness[key] !== value) throw new Error(`${key} is ${harness[key]}, want ${value}`);
+}
+for (const found of [workspace, harness]) {
+  if (!('allowBuilds' in found)) throw new Error('allowBuilds is missing');
+  for (const key of ['hoist', 'hoistPattern', 'publicHoistPattern', 'shamefullyHoist',
+    'enableGlobalVirtualStore', 'globalVirtualStoreDir', 'dangerouslyAllowAllBuilds']) {
+    if (key in found) throw new Error(`${key} must not be set`);
+  }
+}
+NODE
 node --input-type=module - "$SOURCE" <<'NODE' || fail 'publish console diagnostic drifted'
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -356,7 +399,8 @@ digest_output=$(node "$ROOT/scripts/generate-public-roots.mjs" --check) ||
 for file in \
   deploy/dev-https-browser/Dockerfile \
   deploy/dev-https-browser/package.json \
-  deploy/dev-https-browser/package-lock.json \
+  deploy/dev-https-browser/pnpm-lock.yaml \
+  deploy/dev-https-browser/pnpm-workspace.yaml \
   deploy/dev-https-browser/run.sh \
   deploy/dev-https-browser/spec-sources.txt; do
   grep -Eq "^[[:blank:]]*${file//./\\.}[[:blank:]]+\\\\$" "$ROOT/Makefile" ||
@@ -387,8 +431,8 @@ readonly INPUT=$WORK/path-alias/input
 readonly MCP_INPUT=$WORK/mcp-input
 readonly EVIDENCE=$WORK/evidence
 install -d -m 0700 "$CONTEXT" "$FAKE_BIN" "$INPUT" "$MCP_INPUT" "$EVIDENCE"
-for file in Dockerfile package.json package-lock.json run.sh verify-evidence.mjs spec-sources.txt \
-  "${SPEC_FILES[@]}"; do
+for file in Dockerfile package.json pnpm-workspace.yaml pnpm-lock.yaml run.sh verify-evidence.mjs \
+  spec-sources.txt "${SPEC_FILES[@]}"; do
   cp -- "$SOURCE/$file" "$CONTEXT/$file"
 done
 readonly SPEC_INPUT=$WORK/spec-input
@@ -436,9 +480,10 @@ build)
   grep -Fq 'io.aboutme.dev-https-browser.libnss3-tools="2:3.98-1ubuntu0.3"' \
     "$context/Dockerfile"
   grep -Fq '"@playwright/test": "1.64.0"' "$context/package.json"
-  grep -Fq '"@playwright/test": "1.64.0"' "$context/package-lock.json"
+  grep -Fqx "  '@playwright/test@1.64.0':" "$context/pnpm-lock.yaml"
   grep -Fq '"@axe-core/playwright": "4.13.0"' "$context/package.json"
-  grep -Fq '"@axe-core/playwright": "4.13.0"' "$context/package-lock.json"
+  grep -Fqx "  '@axe-core/playwright@4.13.0':" "$context/pnpm-lock.yaml"
+  grep -Fq 'pnpm install --frozen-lockfile --offline --ignore-scripts' "$context/Dockerfile"
   while IFS= read -r file; do
     if grep -Fq "$file" "$context/Dockerfile"; then
       exit 1
@@ -2635,7 +2680,8 @@ install -d -m 0700 "$HOST_REPO/scripts/lib" "$HOST_REPO/apps/server" \
 cp -- "$ROOT/scripts/dev-https-check.sh" "$HOST_REPO/scripts/dev-https-check.sh"
 cp -- "$ROOT/scripts/lib/platform.sh" "$HOST_REPO/scripts/lib/platform.sh"
 cp -- "$ROOT/scripts/lib/dev-https-browser-stage.sh" "$HOST_REPO/scripts/lib/dev-https-browser-stage.sh"
-for file in Dockerfile package.json package-lock.json run.sh verify-evidence.mjs spec-sources.txt "${SPEC_FILES[@]}"; do
+for file in Dockerfile package.json pnpm-workspace.yaml pnpm-lock.yaml run.sh verify-evidence.mjs \
+  spec-sources.txt "${SPEC_FILES[@]}"; do
   cp -- "$SOURCE/$file" "$HOST_REPO/deploy/dev-https-browser/$file"
 done
 cat >"$HOST_BIN/go" <<'FAKE_HOST_GO'
@@ -2733,7 +2779,8 @@ run_host_fixture_case() {
   chmod 0600 "$state/input/caddy-root.crt" "$state/secrets/auth-email-capture-bearer" "$state/run/server.env"
   source_hash=$(
     cd "$HOST_REPO"
-    for file in Dockerfile package.json package-lock.json run.sh spec-sources.txt verify-evidence.mjs; do
+    for file in Dockerfile package.json pnpm-lock.yaml pnpm-workspace.yaml run.sh spec-sources.txt \
+      verify-evidence.mjs; do
       path=deploy/dev-https-browser/$file
       printf '%s\0' "$path"
       platform_sha256sum "$path"

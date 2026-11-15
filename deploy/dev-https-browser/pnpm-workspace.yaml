@@ -1,0 +1,10 @@
+pmOnFail: error
+minimumReleaseAge: 10080
+minimumReleaseAgeStrict: true
+strictDepBuilds: true
+allowBuilds: {}
+verifyDepsBeforeRun: error
+packageImportMethod: clone-or-copy
+nodeLinker: isolated
+virtualStoreType: project
+virtualStoreDir: node_modules/.pnpm

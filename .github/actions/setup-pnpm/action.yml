@@ -1,0 +1,21 @@
+name: Set up pnpm
+description: >-
+  Installs the pnpm version .tool-versions pins with npm, without install
+  scripts, and restores this job's pnpm store keyed on both pnpm lockfiles.
+  Run it after actions/setup-node.
+runs:
+  using: composite
+  steps:
+    - name: Install the pinned pnpm
+      id: pnpm
+      shell: bash
+      run: |
+        npm install --global --ignore-scripts pnpm@12.18.0
+        test "$(pnpm --version)" = "$(awk '$1 == "pnpm" { print $2 }' .tool-versions)"
+        echo "store=$(pnpm store path)" >>"$GITHUB_OUTPUT"
+    - name: Cache the pnpm store
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ steps.pnpm.outputs.store }}
+        key: pnpm-store-${{ runner.os }}-${{ github.job }}-${{ hashFiles('pnpm-lock.yaml', 'deploy/dev-https-browser/pnpm-lock.yaml') }}
+        restore-keys: pnpm-store-${{ runner.os }}-${{ github.job }}-

@@ -367,7 +367,7 @@ generate_caddyfile() {
 
 require_tools() {
   local t
-  for t in podman go npm node caddy curl python3 realpath sha256sum awk base64 tr head stat; do
+  for t in podman go pnpm node caddy curl python3 realpath sha256sum awk base64 tr head stat; do
     command -v "$t" >/dev/null 2>&1 || die "$t is not on PATH"
   done
   command -v ss >/dev/null || command -v lsof >/dev/null || die "ss or lsof is required"
@@ -495,10 +495,10 @@ start_web() {
     return 0
   fi
   ! port_blocked_by_stranger web || die "port $WEB_PORT is already in use by a process this script did not start"
-  [ -d "$ROOT/apps/web/node_modules" ] || die "apps/web/node_modules is missing; run 'npm ci' in apps/web first"
+  [ -d "$ROOT/apps/web/node_modules" ] || die "apps/web/node_modules is missing; run 'pnpm install --frozen-lockfile' at the repository root first"
   info "--- web (:$WEB_PORT)"
   start_service web "$ROOT/apps/web" \
-    env NUXT_PRINT_ORIGIN="http://$PRINT_LISTEN_ADDR" npm run dev -- --port "$WEB_PORT" --host 127.0.0.1
+    env NUXT_PRINT_ORIGIN="http://$PRINT_LISTEN_ADDR" pnpm run dev --port "$WEB_PORT" --host 127.0.0.1
   wait_http web "http://127.0.0.1:$WEB_PORT/" 240
   info "web ready on http://127.0.0.1:$WEB_PORT"
 }

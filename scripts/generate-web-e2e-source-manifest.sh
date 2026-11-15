@@ -32,7 +32,6 @@ source_roots=(
   apps/web/app
   apps/web/e2e
   apps/web/nuxt.config.ts
-  apps/web/package-lock.json
   apps/web/package.json
   apps/web/public
   apps/web/scripts/generate-template-pages.mts
@@ -49,11 +48,13 @@ source_roots=(
   packages/schema/resume.schema.json
   packages/schema/samples
   packages/schema/validation/store.ts
+  package.json
+  pnpm-lock.yaml
+  pnpm-workspace.yaml
 )
 
 required_files=(
   apps/web/nuxt.config.ts
-  apps/web/package-lock.json
   apps/web/package.json
   apps/web/scripts/generate-template-pages.mts
   apps/web/scripts/validate-template-pages.mts
@@ -65,6 +66,9 @@ required_files=(
   packages/schema/package.json
   packages/schema/resume.schema.json
   packages/schema/validation/store.ts
+  package.json
+  pnpm-lock.yaml
+  pnpm-workspace.yaml
 )
 
 git ls-files --cached --others --exclude-standard -z -- \

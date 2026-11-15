@@ -109,7 +109,7 @@ PY
     mock-oauth) launch_service "$name" "$ROOT/apps/server" "$BIN_DIR/mock-oauth" ;;
     mail-capture) launch_service "$name" "$ROOT/apps/server" "$BIN_DIR/mail-capture" --secret-file "$SECRETS_DIR/auth-email-capture-bearer" --addr 127.0.0.1:20444 ;;
     server) launch_service "$name" "$ROOT/apps/server" "$BIN_DIR/server" ;;
-    web) launch_service "$name" "$ROOT/apps/web" npm run dev -- --port 20440 --host 127.0.0.1 ;;
+    web) launch_service "$name" "$ROOT/apps/web" pnpm run dev --port 20440 --host 127.0.0.1 ;;
     caddy) launch_service "$name" "$ROOT" caddy run --config "$CADDYFILE_GEN" --adapter caddyfile ;;
     esac
     pid=$LAUNCHED_PID

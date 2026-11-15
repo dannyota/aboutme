@@ -41,28 +41,60 @@ if [[ -n ${STUB_SHELLCHECK_WARNING:-} && " $* " == *" -S warning "* ]]; then
 fi
 ! fails shellcheck'
 
-node_tool() {
-  local modules=$1 name=$2 package=$3 version=$4
-  mkdir -p "$modules/.bin" "$modules/$package"
-  printf '{"version":"%s"}\n' "$version" >"$modules/$package/package.json"
-  [[ -n $name ]] || return 0
-  printf '#!/usr/bin/env bash\n%s\nlog "%s $* (in ${PWD##*/}, modules $(readlink node_modules || echo real))"\n! fails %s\n' \
-    "$stub_lib" "$name" "$name" >"$modules/.bin/$name"
-  chmod +x "$modules/.bin/$name"
+rel_link() {
+  local target=$1 link=$2
+  mkdir -p "$(dirname "$link")"
+  ln -s "$(python3 -c 'import os, sys; print(os.path.relpath(sys.argv[1], sys.argv[2]))' \
+    "$target" "$(dirname "$link")")" "$link"
 }
 
-web_packages=(eslint @nuxt/eslint @nuxt/eslint-config @typescript-eslint/parser
-  eslint-plugin-vue vue-eslint-parser @stylistic/eslint-plugin)
-root_packages=(prettier markdownlint-cli2 markdownlint)
+node_tool() {
+  local repo=$1 project=$2 name=$3 package=$4 version=$5 store
+  store=$repo/node_modules/.pnpm/${package//\//+}@$version/node_modules/$package
+  mkdir -p "$store" "$repo/$project/node_modules/.bin"
+  printf '{"version":"%s"}\n' "$version" >"$store/package.json"
+  rm -rf "$repo/$project/node_modules/$package"
+  rel_link "$store" "$repo/$project/node_modules/$package"
+  [[ -n $name ]] || return 0
+  printf '#!/usr/bin/env bash\n%s\nlog "%s $* (in ${PWD##*/}, modules $(readlink node_modules || echo real))"\n! fails %s\n' \
+    "$stub_lib" "$name" "$name" >"$repo/$project/node_modules/.bin/$name"
+  chmod +x "$repo/$project/node_modules/.bin/$name"
+}
+
+web_packages=(eslint @nuxt/eslint)
+root_packages=(prettier markdownlint-cli2)
 
 lockfile() {
   local file=$1 package
-  shift
   {
-    printf '{"packages":{"":{}'
-    for package in "$@"; do printf ',"node_modules/%s":{"version":"1.0.0"}' "$package"; done
-    printf '}}\n'
+    printf -- "---\nlockfileVersion: '9.0'\n\nimporters:\n\n  .:\n    packageManagerDependencies:\n      pnpm:\n        specifier: 12.18.0\n        version: 12.18.0\n"
+    printf -- "---\nlockfileVersion: '9.0'\n\nimporters:\n\n  .:\n    devDependencies:\n"
+    for package in "${root_packages[@]}"; do
+      printf "      '%s':\n        specifier: 1.0.0\n        version: 1.0.0\n" "$package"
+    done
+    printf "\n  apps/web:\n    dependencies:\n      '@aboutme/schema':\n        specifier: workspace:*\n        version: link:../../packages/schema\n    devDependencies:\n"
+    for package in "${web_packages[@]}"; do
+      printf "      '%s':\n        specifier: 1.0.0\n        version: 1.0.0(peer@2.0.0)\n" "$package"
+    done
+    printf "\n  packages/schema: {}\n\npackages:\n\n  eslint@1.0.0:\n    resolution: {integrity: sha512-test}\n"
   } >"$file"
+}
+
+pnpm_layout() {
+  local repo=$1 package
+  for package in "${root_packages[@]}"; do
+    node_tool "$repo" . "$package" "$package" 1.0.0
+  done
+  for package in "${web_packages[@]}"; do
+    node_tool "$repo" apps/web "$([[ $package == eslint ]] && echo eslint)" "$package" 1.0.0
+  done
+  rel_link "$repo/node_modules/.pnpm/eslint@1.0.0/node_modules/eslint" \
+    "$repo/node_modules/.pnpm/@nuxt+eslint@1.0.0/node_modules/eslint"
+  rel_link "$repo/packages/schema" "$repo/apps/web/node_modules/@aboutme/schema"
+  rel_link "$repo/apps/web" "$repo/node_modules/.pnpm/node_modules/@aboutme/web"
+  rel_link "$repo/packages/schema" "$repo/node_modules/.pnpm/node_modules/@aboutme/schema"
+  rel_link "$repo/node_modules/.pnpm/eslint@1.0.0/node_modules/eslint/package.json" \
+    "$repo/apps/web/node_modules/.bin/eslint-manifest"
 }
 
 new_repo() {
@@ -83,18 +115,11 @@ exec "$@"
 STUB
 
   printf 'golangci-lint 2.15.0\n' >"$repo/.tool-versions"
-  printf '{}\n' >"$repo/package.json"
-  printf '{"dependencies":{"@aboutme/schema":"file:../../packages/schema"}}\n' >"$repo/apps/web/package.json"
+  printf '{"name":"aboutme"}\n' >"$repo/package.json"
+  printf 'packages:\n  - apps/web\n  - packages/schema\n\nverifyDepsBeforeRun: error\n' >"$repo/pnpm-workspace.yaml"
+  printf '{"name":"@aboutme/web","dependencies":{"@aboutme/schema":"workspace:*"}}\n' >"$repo/apps/web/package.json"
   printf '{"name":"@aboutme/schema"}\n' >"$repo/packages/schema/package.json"
-  lockfile "$repo/package-lock.json" "${root_packages[@]}"
-  lockfile "$repo/apps/web/package-lock.json" "${web_packages[@]}"
-  node - "$repo/apps/web/package-lock.json" <<'LOCK'
-const fs = require('node:fs');
-const file = process.argv[2];
-const lock = JSON.parse(fs.readFileSync(file, 'utf8'));
-lock.packages['node_modules/@aboutme/schema'] = {link: true, resolved: '../../packages/schema'};
-fs.writeFileSync(file, JSON.stringify(lock));
-LOCK
+  lockfile "$repo/pnpm-lock.yaml"
   printf 'export const a = 1;\n' >"$repo/apps/web/app/a.ts"
   printf 'package foo\n' >"$repo/apps/server/internal/foo/foo.go"
   printf 'package gone\n' >"$repo/apps/server/internal/gone/gone.go"
@@ -111,15 +136,7 @@ LOCK
   git -C "$repo" add -A
   git -C "$repo" commit -qm "test: base"
   git -C "$repo" update-ref refs/remotes/origin/main HEAD
-  for package in "${root_packages[@]}"; do
-    node_tool "$repo/node_modules" "$package" "$package" 1.0.0
-  done
-  for package in "${web_packages[@]}"; do
-    node_tool "$repo/apps/web/node_modules" \
-      "$([[ $package == eslint ]] && echo eslint)" "$package" 1.0.0
-  done
-  mkdir -p "$repo/apps/web/node_modules/@aboutme"
-  ln -s "$repo/packages/schema" "$repo/apps/web/node_modules/@aboutme/schema"
+  pnpm_layout "$repo"
   mkdir -p "$repo/apps/web/.nuxt"
   printf 'export default [];\n' >"$repo/apps/web/.nuxt/eslint.config.mjs"
 }
@@ -192,18 +209,21 @@ has_line 'eslint +pass +3 file'
 check "$REPO" 1 STUB_FAIL=eslint
 has_line 'eslint +FAIL'
 
-node_tool "$REPO/apps/web/node_modules" eslint eslint 0.9.0
+node_tool "$REPO" apps/web eslint eslint 0.9.0
 check "$REPO" 2
 has_line 'eslint installed 0.9.0, lockfile 1.0.0'
 has_line 'eslint +REFUSED +stale'
 no_call "eslint --no-warn-ignored"
-node_tool "$REPO/apps/web/node_modules" eslint eslint 1.0.0
+node_tool "$REPO" apps/web eslint eslint 1.0.0
+rm -rf "$REPO/node_modules/.pnpm/eslint@0.9.0"
 
-printf '{"private":true}\n' >"$REPO/apps/web/package.json"
-check "$REPO" 2
-has_line 'eslint +REFUSED +the branch changed apps/web/package.json'
-no_call "eslint --no-warn-ignored"
-git -C "$REPO" checkout -q -- apps/web/package.json
+for manifest in apps/web/package.json package.json pnpm-workspace.yaml pnpm-lock.yaml; do
+  printf '\n' >>"$REPO/$manifest"
+  check "$REPO" 2
+  has_line "eslint +REFUSED +the branch changed $manifest"
+  no_call "eslint --no-warn-ignored"
+  git -C "$REPO" checkout -q -- "$manifest"
+done
 rm -f "$REPO/apps/web/app/b.vue" "$REPO/apps/web/app/c.mjs" "$REPO/apps/web/app/notes.txt"
 
 mkdir -p "$REPO/instructions"
@@ -327,24 +347,76 @@ for target in apps/web/node_modules apps/web/.nuxt; do
 done
 mkdir -p "$TREE/apps/web/.nuxt"
 printf 'keep\n' >"$TREE/apps/web/.nuxt/.pre-push-copy"
-for package in "${web_packages[@]}"; do
-  node_tool "$TREE/apps/web/node_modules" "$([[ $package == eslint ]] && echo eslint)" "$package" 1.0.0
-done
-mkdir -p "$TREE/apps/web/node_modules/@aboutme"
-ln -s "$TREE/packages/schema" "$TREE/apps/web/node_modules/@aboutme/schema"
+pnpm_layout "$TREE"
 check "$TREE" 2
 has_line 'eslint +REFUSED +no generated checkout-local'
 [[ $(cat "$TREE/apps/web/.nuxt/.pre-push-copy") == keep ]] || fail 'local marker was reclaimed'
 printf 'export default [];\n' >"$TREE/apps/web/.nuxt/eslint.config.mjs"
 check "$TREE" 0
 has_call 'eslint --no-warn-ignored -- app/a.ts (in web, modules real)'
+
+refused_link() {
+  local label=$1 link=$2 target=$3
+  ln -s "$target" "$TREE/$link"
+  check "$TREE" 2
+  has_line "symlink at $link"
+  no_call eslint
+  [[ -L $TREE/$link ]] || fail "$label: the guard removed the link"
+  rm "$TREE/$link"
+}
 rm "$TREE/apps/web/node_modules/@aboutme/schema"
-ln -s "$REPO/packages/schema" "$TREE/apps/web/node_modules/@aboutme/schema"
+refused_link 'another checkout member' apps/web/node_modules/@aboutme/schema "$REPO/packages/schema"
+rel_link "$TREE/packages/schema" "$TREE/apps/web/node_modules/@aboutme/schema"
+rm "$TREE/apps/web/node_modules/eslint"
+refused_link 'another checkout store' apps/web/node_modules/eslint \
+  "$REPO/node_modules/.pnpm/eslint@1.0.0/node_modules/eslint"
+rel_link "$TREE/node_modules/.pnpm/eslint@1.0.0/node_modules/eslint" "$TREE/apps/web/node_modules/eslint"
+refused_link 'checkout directory outside the store' apps/web/node_modules/server ../../server
+refused_link 'undeclared workspace member' apps/web/node_modules/@aboutme/web ../../../web
+refused_link 'store root' apps/web/node_modules/store ../../../node_modules/.pnpm
+refused_link '.bin file outside node_modules' apps/web/node_modules/.bin/outside ../../package.json
+refused_link 'directory in a hoisted store entry' node_modules/.pnpm/node_modules/server ../../../apps/server
+ln -s node_modules/.pnpm "$TREE/store-alias"
+rm "$TREE/apps/web/node_modules/eslint"
+refused_link 'store reached through a linked ancestor' apps/web/node_modules/eslint \
+  ../../../store-alias/eslint@1.0.0/node_modules/eslint
+rel_link "$TREE/node_modules/.pnpm/eslint@1.0.0/node_modules/eslint" "$TREE/apps/web/node_modules/eslint"
+rm "$TREE/store-alias"
+check "$TREE" 0
+mv "$TREE/apps/web/node_modules/@nuxt" "$WORK/nuxt-packages"
+ln -s "$WORK/nuxt-packages" "$TREE/apps/web/node_modules/@nuxt"
 check "$TREE" 2
+has_line 'symlink at apps/web/node_modules/@nuxt'
 no_call eslint
-[[ -L $TREE/apps/web/node_modules/@aboutme/schema ]] || fail 'schema link was removed'
-rm "$TREE/apps/web/node_modules/@aboutme/schema"
-ln -s "$TREE/packages/schema" "$TREE/apps/web/node_modules/@aboutme/schema"
+rm "$TREE/apps/web/node_modules/@nuxt"
+mv "$WORK/nuxt-packages" "$TREE/apps/web/node_modules/@nuxt"
+mv "$TREE/node_modules" "$WORK/root-modules"
+ln -s "$WORK/root-modules" "$TREE/node_modules"
+check "$TREE" 2
+has_line 'symlink at node_modules'
+no_call eslint
+rm "$TREE/node_modules"
+mv "$WORK/root-modules" "$TREE/node_modules"
+mv "$TREE/apps" "$WORK/apps-real"
+ln -s "$WORK/apps-real" "$TREE/apps"
+check "$TREE" 2
+has_line 'eslint +REFUSED'
+no_call eslint
+status=0
+(cd "$TREE" && bash scripts/pre-push.sh --check-dependencies apps/web/node_modules) >"$WORK/out" 2>&1 ||
+  status=$?
+((status == 2)) || fail "linked ancestor guard: exit $status, want 2"
+has_line 'symlink at apps;'
+rm "$TREE/apps"
+mv "$WORK/apps-real" "$TREE/apps"
+mv "$TREE/packages/schema" "$WORK/schema-real"
+ln -s "$WORK/schema-real" "$TREE/packages/schema"
+check "$TREE" 2
+has_line 'symlink at packages/schema'
+no_call eslint
+rm "$TREE/packages/schema"
+mv "$WORK/schema-real" "$TREE/packages/schema"
+check "$TREE" 0
 ln -s "$REPO/apps/web/.nuxt" "$TREE/apps/web/.nuxt-linked"
 mv "$TREE/apps/web/.nuxt" "$WORK/local-nuxt"
 mv "$TREE/apps/web/.nuxt-linked" "$TREE/apps/web/.nuxt"
@@ -353,12 +425,6 @@ no_call eslint
 [[ $(cat "$REPO/apps/web/.nuxt/.pre-push-copy") == sentinel ]] || fail 'main sentinel changed'
 rm "$TREE/apps/web/.nuxt"
 mv "$WORK/local-nuxt" "$TREE/apps/web/.nuxt"
-mv "$TREE/apps/web/node_modules/@nuxt" "$WORK/nuxt-packages"
-ln -s "$WORK/nuxt-packages" "$TREE/apps/web/node_modules/@nuxt"
-check "$TREE" 2
-no_call eslint
-rm "$TREE/apps/web/node_modules/@nuxt"
-mv "$WORK/nuxt-packages" "$TREE/apps/web/node_modules/@nuxt"
 mkdir -p "$TREE/.dev"
 printf '%s' "$$" >"$TREE/.dev/server.pid"
 check "$TREE" 2
@@ -366,9 +432,9 @@ has_line 'active development stack'
 no_call eslint
 rm "$TREE/.dev/server.pid"
 
-node -e 'const fs=require("fs"); const p=process.argv[1]; fs.writeFileSync(p,fs.readFileSync(p,"utf8").replace("1.0.0", "1.1.0"));' "$TREE/apps/web/package-lock.json"
+sed -i 's/version: 1.0.0(peer@2.0.0)/version: 1.1.0(peer@2.0.0)/' "$TREE/pnpm-lock.yaml"
 check "$TREE" 2
-has_line 'eslint +REFUSED +the branch changed apps/web/package.json or its lockfile'
+has_line 'eslint +REFUSED +the branch changed pnpm-lock.yaml'
 
 REAL=$WORK/real
 new_repo "$REAL"

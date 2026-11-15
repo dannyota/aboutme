@@ -264,7 +264,7 @@ test("selector classifies real Git paths and every event conservatively", () => 
     ["docs/plans/line\nbreak.md", "full"], ["docs/plans/tab\tname.md", "full"],
     ["Docs/plans/entry.md", "no-web"], ["docs/plans/entry.MD", "no-web"],
     [".github/workflows/ci.yml", "full"], ["scripts/entry.py", "no-web"],
-    ["Makefile", "full"], [".tool-versions", "full"], [".gitignore", "full"], ["package-lock.json", "full"],
+    ["Makefile", "full"], [".tool-versions", "full"], [".gitignore", "full"], ["pnpm-lock.yaml", "full"],
     ["apps/web/generated.ts", "full"], ["unknown", "no-web"],
   ]) {
     withRepository(({ directory, git, put, commit }) => {
@@ -1533,7 +1533,7 @@ test("action pin checks accept local references and quoted SHA pins", () => {
   checkActionPins(`jobs:\n  check:\n    uses: owner/repo/.github/workflows/check.yml@${sha} # v1.2.3\n`, "fixture");
 });
 
-test("Dependabot covers weekly Actions, Go modules, and npm lockfile roots", () => {
+test("Dependabot covers weekly Actions, Go modules, and both pnpm projects", () => {
   checkDependabot(parseYaml(read(".github/dependabot.yml"), ".github/dependabot.yml").toJS());
 });
 
@@ -1568,15 +1568,9 @@ test("Dependabot contract rejects missing grouping and changed scope or cadence"
       },
       {
         "package-ecosystem": "npm",
-        directories: ["/", "/packages/schema"],
+        directories: ["/"],
         schedule: { interval: "weekly" },
-        "open-pull-requests-limit": 2,
-        groups: { npm: { patterns: ["*"], "update-types": ["minor", "patch"] } },
-      },
-      {
-        "package-ecosystem": "npm",
-        directories: ["/apps/web"],
-        schedule: { interval: "weekly" },
+        cooldown: { "default-days": 7 },
         "open-pull-requests-limit": 2,
         groups: { npm: { patterns: ["*"], "update-types": ["minor", "patch"] } },
         ignore: [
@@ -1592,6 +1586,7 @@ test("Dependabot contract rejects missing grouping and changed scope or cadence"
         "package-ecosystem": "npm",
         directories: ["/deploy/dev-https-browser"],
         schedule: { interval: "weekly" },
+        cooldown: { "default-days": 7 },
         "open-pull-requests-limit": 2,
         groups: { npm: { patterns: ["*"], "update-types": ["minor", "patch"] } },
         ignore: [
@@ -1624,6 +1619,8 @@ test("Dependabot contract rejects missing grouping and changed scope or cadence"
       ...(index === 0 ? [] : [(entry) => { delete Object.values(entry.groups)[0]["update-types"]; }]),
       (entry) => { entry.schedule.interval = "daily"; },
       (entry) => { entry.schedule.day = "monday"; },
+      (entry) => { if (entry.cooldown) entry.cooldown["default-days"] = 1; else entry.cooldown = { "default-days": 7 }; },
+      ...(update.cooldown ? [(entry) => { delete entry.cooldown; }] : []),
       (entry) => { entry["package-ecosystem"] = "docker"; },
       (entry) => { entry["open-pull-requests-limit"] = 10; },
       (entry) => { delete entry["open-pull-requests-limit"]; },
@@ -1668,6 +1665,7 @@ test("one conflicting mirror fails even when another mirror matches", () => {
     ["sqlc", (v) => `run: go install github.com/sqlc-dev/sqlc/cmd/sqlc@v${v}`],
     ["gitleaks", (v) => `run: go install github.com/zricethezav/gitleaks/v8@v${v}`],
     ["caddy", (v) => `run: curl https://github.com/caddyserver/caddy/releases/download/v${v}/caddy_${v}_linux_amd64.tar.gz`],
+    ["pnpm", (v) => `run: npm install --global --ignore-scripts pnpm@${v}`],
     ["golang", (v) => `with: {key: 'go-toolchain-${v}-linux'}`],
     ["golang", (v) => `with: {path: '\${{ runner.tool_cache }}/go/${v}'}`],
   ];
@@ -1717,8 +1715,7 @@ function checkDependabot(config) {
     ["gomod", ["/deploy/caddy/production/build"], [
       { "dependency-name": "github.com/caddyserver/caddy/v2" },
     ]],
-    ["npm", ["/", "/packages/schema"], []],
-    ["npm", ["/apps/web"], [
+    ["npm", ["/"], [
       ...browserPackages,
       { "dependency-name": "typescript" },
       { "dependency-name": "pdfjs-dist" },
@@ -1730,6 +1727,7 @@ function checkDependabot(config) {
     "package-ecosystem": ecosystem,
     ...(ecosystem === "github-actions" ? { directory: "/" } : { directories }),
     schedule: { interval: "weekly" },
+    ...(ecosystem === "npm" ? { cooldown: { "default-days": 7 } } : {}),
     "open-pull-requests-limit": 2,
     groups: {
       [ecosystem]: {
@@ -1754,6 +1752,7 @@ function checkToolMirrors(source, path, expected, seen = new Set()) {
     ["caddy", /caddyserver\/caddy\/releases\/download\/v([^/\s]+)/g],
     ["caddy", /caddy_([^_\s/]+)_linux_/g],
     ["golangci-lint", /golangci-lint-([^-\s/]+)-linux-amd64\.tar\.gz/g],
+    ["pnpm", /\bpnpm@([0-9][^\s"';]*)/g],
     ["golang", /^go-toolchain-([^-\s]+)/g],
     ["golang", /\$\{\{\s*runner\.tool_cache\s*\}\}\/go\/([^/\s]+)/g],
   ];
