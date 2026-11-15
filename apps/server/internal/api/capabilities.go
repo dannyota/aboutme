@@ -13,6 +13,7 @@ type Capabilities struct {
 	PasskeyEnrollment    bool     `json:"passkeyEnrollment"`
 	TotpEnrollment       bool     `json:"totpEnrollment"`
 	SignInToView         bool     `json:"signInToView"`
+	GitHubEvidence       bool     `json:"githubEvidence"`
 }
 
 func CapabilitiesHandler(c Capabilities) http.Handler {

@@ -32,6 +32,7 @@ func (s *Service) handleLogout(w http.ResponseWriter, r *http.Request) {
 		s.writeSessionAPIInternalError(w, r, "revoke_session", err)
 		return
 	}
+	s.sessionMgr.AccountSessionsEnded(sess.UserID)
 
 	ClearSessionCookie(w)
 	w.Header().Set("Clear-Site-Data", clearSiteDataHeaderValue)

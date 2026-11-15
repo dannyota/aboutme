@@ -22,3 +22,8 @@ LIMIT 4;
 
 -- name: ListAccountExportProjects :many
 SELECT * FROM projects WHERE user_id = $1 ORDER BY created_at, id;
+
+-- name: GetAccountExportGitHubConnection :one
+SELECT github_user_id, login, connected_at
+FROM github_connections
+WHERE user_id = $1 AND github_user_id IS NOT NULL;

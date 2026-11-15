@@ -38,6 +38,7 @@ type Querier interface {
 	// Sent/terminal jobs are retained for seven days of audit, then removed in a
 	// bounded page, oldest outcome first.
 	CleanupFinishedAuthEmailJobs(ctx context.Context, arg CleanupFinishedAuthEmailJobsParams) (int64, error)
+	ClearGitHubConnection(ctx context.Context, userID uuid.UUID) (int64, error)
 	CompleteClaimedMediaDeletion(ctx context.Context, arg CompleteClaimedMediaDeletionParams) (bool, error)
 	CompletePrivacyNoticeAbort(ctx context.Context, arg CompletePrivacyNoticeAbortParams) (int64, error)
 	CompletePrivacyNoticePurge(ctx context.Context, contentSha256 []byte) (int64, error)
@@ -142,12 +143,15 @@ type Querier interface {
 	FindLiveSuccessorSession(ctx context.Context, rotatedFrom *uuid.UUID) (Session, error)
 	GetAccountDeletedAuditEvent(ctx context.Context, id uuid.UUID) (LifecycleAuditEvent, error)
 	GetAccountDeletionSessionForUpdate(ctx context.Context, arg GetAccountDeletionSessionForUpdateParams) (Session, error)
+	GetAccountExportGitHubConnection(ctx context.Context, userID uuid.UUID) (GetAccountExportGitHubConnectionRow, error)
 	GetAccountExportProfile(ctx context.Context, id uuid.UUID) (GetAccountExportProfileRow, error)
 	GetAuthenticationSecurityEventsBacklog(ctx context.Context, arg GetAuthenticationSecurityEventsBacklogParams) (GetAuthenticationSecurityEventsBacklogRow, error)
 	GetCompletedMediaJobsBacklog(ctx context.Context, arg GetCompletedMediaJobsBacklogParams) (GetCompletedMediaJobsBacklogRow, error)
 	GetDCRClient(ctx context.Context, id uuid.UUID) (OAuthClient, error)
 	GetExpiredSessionsBacklog(ctx context.Context, arg GetExpiredSessionsBacklogParams) (GetExpiredSessionsBacklogRow, error)
 	GetExpiredSlugTombstonesBacklog(ctx context.Context, arg GetExpiredSlugTombstonesBacklogParams) (GetExpiredSlugTombstonesBacklogRow, error)
+	GetGitHubConnection(ctx context.Context, userID uuid.UUID) (GithubConnection, error)
+	GetGitHubConnectionForUpdate(ctx context.Context, userID uuid.UUID) (GithubConnection, error)
 	GetIdempotencyCapacityRetryAfter(ctx context.Context, arg GetIdempotencyCapacityRetryAfterParams) (GetIdempotencyCapacityRetryAfterRow, error)
 	GetIdempotencyExpiryBacklog(ctx context.Context, cutoff time.Time) (GetIdempotencyExpiryBacklogRow, error)
 	GetIdempotencyRecord(ctx context.Context, arg GetIdempotencyRecordParams) (IdempotencyRecord, error)
@@ -242,6 +246,7 @@ type Querier interface {
 	InsertResumeShowcase(ctx context.Context, arg InsertResumeShowcaseParams) error
 	InsertRotatedOAuthToken(ctx context.Context, arg InsertRotatedOAuthTokenParams) (OAuthToken, error)
 	InsertSlugTombstone(ctx context.Context, arg InsertSlugTombstoneParams) (SlugTombstone, error)
+	InstallGitHubConnection(ctx context.Context, arg InstallGitHubConnectionParams) (GithubConnection, error)
 	InstallTOTPCredential(ctx context.Context, arg InstallTOTPCredentialParams) (TotpCredential, error)
 	LatchPrivacyNoticeAbort(ctx context.Context, contentSha256 []byte) (int64, error)
 	ListAccountDeletionResumeSetForUpdate(ctx context.Context, userID uuid.UUID) ([]ListAccountDeletionResumeSetForUpdateRow, error)

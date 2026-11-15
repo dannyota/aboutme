@@ -180,5 +180,6 @@ func (s *PasswordService) reset(ctx context.Context, rawToken, rawPassword, clie
 		}
 		return errPasswordUnavailable
 	}
+	s.sessions.AccountSessionsEnded(rt.UserID)
 	return nil
 }

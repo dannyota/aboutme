@@ -44,6 +44,7 @@ func (s *Service) handleRevokeAllSessions(w http.ResponseWriter, r *http.Request
 		}
 		return
 	}
+	s.sessionMgr.AccountSessionsEnded(sess.UserID)
 
 	ClearSessionCookie(w)
 	w.Header().Set("Clear-Site-Data", clearSiteDataHeaderValue)
@@ -111,6 +112,7 @@ func (s *Service) handleRevokeSession(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+	s.sessionMgr.AccountSessionsEnded(sess.UserID)
 
 	if targetID == sess.ID || slices.Contains(revokedIDs, sess.ID) {
 		ClearSessionCookie(w)

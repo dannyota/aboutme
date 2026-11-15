@@ -31,6 +31,8 @@ const (
 	PurposeLink   Purpose = "link"
 	PurposeReauth Purpose = "reauth"
 	PurposeView   Purpose = "view"
+
+	PurposeEvidence Purpose = "evidence"
 )
 
 const oauthTxTTL = 10 * time.Minute
@@ -49,6 +51,8 @@ type Transaction struct {
 	RedirectURI   string
 	ReturnPath    string
 	ResumeID      uuid.UUID
+
+	EvidenceGeneration int64
 }
 
 var ErrTransactionInvalid = errors.New("auth: oauth transaction invalid")
@@ -130,11 +134,70 @@ func (s *TransactionStore) Consume(ctx context.Context, handle string, expectedP
 		return Transaction{}, fmt.Errorf("auth: consume oauth transaction: %w", err)
 	}
 
-	if row.Provider != string(expectedProvider) {
+	if row.Provider != string(expectedProvider) || row.Purpose == string(PurposeEvidence) {
 		return Transaction{}, ErrTransactionInvalid
 	}
 
 	return transactionFromRow(row), nil
+}
+
+func (s *TransactionStore) BeginEvidence(ctx context.Context, userID uuid.UUID, generation int64, redirectURI string) (string, Transaction, error) {
+	if userID == uuid.Nil || generation < 0 {
+		return "", Transaction{}, errors.New("auth: begin evidence transaction: invalid binding")
+	}
+	handle, err := randomToken()
+	if err != nil {
+		return "", Transaction{}, fmt.Errorf("auth: begin evidence transaction: generate handle: %w", err)
+	}
+	state, err := randomToken()
+	if err != nil {
+		return "", Transaction{}, fmt.Errorf("auth: begin evidence transaction: generate state: %w", err)
+	}
+	row, err := s.q.CreateOAuthTransaction(ctx, store.CreateOAuthTransactionParams{
+		HandleHash:         hashHandle(handle),
+		Provider:           string(ProviderGitHub),
+		Purpose:            string(PurposeEvidence),
+		LinkingUserID:      &userID,
+		State:              state,
+		PKCEVerifier:       oauth2.GenerateVerifier(),
+		RedirectURI:        redirectURI,
+		ReturnPath:         settingsSessionsPath,
+		ExpiresAt:          s.now().Add(oauthTxTTL),
+		EvidenceGeneration: &generation,
+	})
+	if err != nil {
+		return "", Transaction{}, fmt.Errorf("auth: begin evidence transaction: %w", err)
+	}
+	return handle, transactionFromRow(row), nil
+}
+
+func (s *TransactionStore) ConsumeEvidence(ctx context.Context, handle string) (Transaction, error) {
+	now := s.now()
+	row, err := s.q.ConsumeOAuthTransaction(ctx, store.ConsumeOAuthTransactionParams{
+		HandleHash: hashHandle(handle),
+		ConsumedAt: &now,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return Transaction{}, ErrTransactionInvalid
+		}
+		return Transaction{}, fmt.Errorf("auth: consume evidence transaction: %w", err)
+	}
+	if row.Provider != string(ProviderGitHub) || row.Purpose != string(PurposeEvidence) ||
+		row.LinkingUserID == nil || row.EvidenceGeneration == nil {
+		return Transaction{}, ErrTransactionInvalid
+	}
+	return transactionFromRow(row), nil
+}
+
+func (s *TransactionStore) ReapExpired(ctx context.Context) error {
+	if _, err := s.q.DeleteExpiredOAuthTransactions(ctx, store.DeleteExpiredOAuthTransactionsParams{
+		Cutoff:  s.now(),
+		MaxRows: startReapBatch,
+	}); err != nil {
+		return fmt.Errorf("auth: reap oauth transactions: %w", err)
+	}
+	return nil
 }
 
 func transactionFromRow(row store.OAuthTransaction) Transaction {
@@ -154,6 +217,9 @@ func transactionFromRow(row store.OAuthTransaction) Transaction {
 	}
 	if row.ResumeID != nil {
 		tx.ResumeID = *row.ResumeID
+	}
+	if row.EvidenceGeneration != nil {
+		tx.EvidenceGeneration = *row.EvidenceGeneration
 	}
 	return tx
 }

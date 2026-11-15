@@ -34,8 +34,24 @@ type SessionManager struct {
 	pool *store.Pool
 	now  func() time.Time
 
+	endListener SessionEndListener
+
 	lockProbe     func()
 	rotationProbe func()
+}
+
+type SessionEndListener interface {
+	AccountSessionsEnded(userID uuid.UUID)
+}
+
+func (m *SessionManager) SetEndListener(listener SessionEndListener) {
+	m.endListener = listener
+}
+
+func (m *SessionManager) AccountSessionsEnded(userID uuid.UUID) {
+	if m.endListener != nil {
+		m.endListener.AccountSessionsEnded(userID)
+	}
 }
 
 func NewSessionManager(q *store.Queries) *SessionManager {

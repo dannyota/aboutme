@@ -129,6 +129,10 @@ func Load(getenv func(string) string) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	githubEvidence, err := loadGitHubEvidenceConfig(getenv)
+	if err != nil {
+		return Config{}, err
+	}
 
 	cfg := Config{
 		PrintListenAddr:              printListenAddr,
@@ -173,6 +177,7 @@ func Load(getenv func(string) string) (Config, error) {
 		TOTPPreviousKey:              totpPreviousKey,
 		SignInToViewEnabled:          signInToViewEnabled,
 		ViewPassKey:                  viewPassKey,
+		GitHubEvidence:               githubEvidence,
 	}
 	if err := cfg.ValidateAgentAccess(); err != nil {
 		return Config{}, err

@@ -80,6 +80,7 @@ func (s *Service) handleDelete(w http.ResponseWriter, r *http.Request) {
 		writeDeleteError(w, err)
 		return
 	}
+	s.sessions.AccountSessionsEnded(sess.UserID)
 
 	auth.ClearSessionCookie(w)
 	auth.ClearOAuthTxCookie(w)

@@ -592,7 +592,7 @@ const consumeOAuthTransaction = `-- name: ConsumeOAuthTransaction :one
 UPDATE oauth_transactions
 SET consumed_at = $2
 WHERE handle_hash = $1 AND consumed_at IS NULL AND expires_at > $2
-RETURNING id, handle_hash, provider, purpose, linking_user_id, state, pkce_verifier, nonce, redirect_uri, created_at, expires_at, consumed_at, return_path, resume_id
+RETURNING id, handle_hash, provider, purpose, linking_user_id, state, pkce_verifier, nonce, redirect_uri, created_at, expires_at, consumed_at, return_path, resume_id, evidence_generation
 `
 
 type ConsumeOAuthTransactionParams struct {
@@ -618,6 +618,7 @@ func (q *Queries) ConsumeOAuthTransaction(ctx context.Context, arg ConsumeOAuthT
 		&i.ConsumedAt,
 		&i.ReturnPath,
 		&i.ResumeID,
+		&i.EvidenceGeneration,
 	)
 	return i, err
 }
@@ -1049,24 +1050,25 @@ func (q *Queries) CreateOAuthToken(ctx context.Context, arg CreateOAuthTokenPara
 
 const createOAuthTransaction = `-- name: CreateOAuthTransaction :one
 INSERT INTO oauth_transactions (
-    handle_hash, provider, purpose, linking_user_id, state, pkce_verifier, nonce, redirect_uri, return_path, expires_at, resume_id
+    handle_hash, provider, purpose, linking_user_id, state, pkce_verifier, nonce, redirect_uri, return_path, expires_at, resume_id, evidence_generation
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
-) RETURNING id, handle_hash, provider, purpose, linking_user_id, state, pkce_verifier, nonce, redirect_uri, created_at, expires_at, consumed_at, return_path, resume_id
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
+) RETURNING id, handle_hash, provider, purpose, linking_user_id, state, pkce_verifier, nonce, redirect_uri, created_at, expires_at, consumed_at, return_path, resume_id, evidence_generation
 `
 
 type CreateOAuthTransactionParams struct {
-	HandleHash    []byte
-	Provider      string
-	Purpose       string
-	LinkingUserID *uuid.UUID
-	State         string
-	PKCEVerifier  string
-	Nonce         *string
-	RedirectURI   string
-	ReturnPath    string
-	ExpiresAt     time.Time
-	ResumeID      *uuid.UUID
+	HandleHash         []byte
+	Provider           string
+	Purpose            string
+	LinkingUserID      *uuid.UUID
+	State              string
+	PKCEVerifier       string
+	Nonce              *string
+	RedirectURI        string
+	ReturnPath         string
+	ExpiresAt          time.Time
+	ResumeID           *uuid.UUID
+	EvidenceGeneration *int64
 }
 
 func (q *Queries) CreateOAuthTransaction(ctx context.Context, arg CreateOAuthTransactionParams) (OAuthTransaction, error) {
@@ -1082,6 +1084,7 @@ func (q *Queries) CreateOAuthTransaction(ctx context.Context, arg CreateOAuthTra
 		arg.ReturnPath,
 		arg.ExpiresAt,
 		arg.ResumeID,
+		arg.EvidenceGeneration,
 	)
 	var i OAuthTransaction
 	err := row.Scan(
@@ -1099,6 +1102,7 @@ func (q *Queries) CreateOAuthTransaction(ctx context.Context, arg CreateOAuthTra
 		&i.ConsumedAt,
 		&i.ReturnPath,
 		&i.ResumeID,
+		&i.EvidenceGeneration,
 	)
 	return i, err
 }

@@ -90,6 +90,17 @@ tags:
       The raw OAuth protocol endpoints and `/mcp` are agent-facing protocol
       surfaces and deliberately remain outside this OpenAPI REST contract;
       only these four browser/session operations are described here.
+  - name: githubEvidence
+    description: >-
+      Connect one GitHub account to the caller's aboutme account for
+      evidence, and manage the short in-memory evidence session. Registered
+      only when both `GITHUB_EVIDENCE_CLIENT_ID` and
+      `GITHUB_EVIDENCE_CLIENT_SECRET` are set; otherwise every
+      `/github-evidence` path answers `404 evidence_unavailable`. Cookie
+      routes only: no bearer token or MCP tool reaches them. Mutations need
+      the session and CSRF credentials. The GitHub token never appears in a
+      response, the database, a log or the export. See
+      `docs/design/github-evidence.md`.
   - name: resumes
     description: >-
       The owner's resume surface: list, create, read, whole-resume metadata,
@@ -1434,8 +1445,11 @@ paths:
         renders a sign-in or settings page: `providerLogin` and `providers`
         (`PROVIDER_LOGIN_ENABLED`), `agentAccess` (`MCP_ENABLED`),
         `passwordRegistration` (`PASSWORD_REGISTRATION_ENABLED`),
-        `passkeyEnrollment` (`PASSKEY_ENROLLMENT_ENABLED`), and
-        `totpEnrollment` (`TOTP_ENROLLMENT_ENABLED`). The response
+        `passkeyEnrollment` (`PASSKEY_ENROLLMENT_ENABLED`),
+        `totpEnrollment` (`TOTP_ENROLLMENT_ENABLED`), `signInToView`
+        (`SIGN_IN_TO_VIEW_ENABLED`), and `githubEvidence`
+        (`GITHUB_EVIDENCE_CLIENT_ID` and `GITHUB_EVIDENCE_CLIENT_SECRET`
+        both set). The response
         is `Cache-Control: no-store` so a configuration change is visible on the
         next request. It reveals no other configuration.
       responses:
@@ -1459,6 +1473,7 @@ paths:
                   passkeyEnrollment: false
                   totpEnrollment: false
                   signInToView: false
+                  githubEvidence: false
   /auth/logout:
     post:
       operationId: postAuthLogout
@@ -1663,6 +1678,231 @@ paths:
                   code: not_found
                   message: no such session
   # ---- Session-authenticated OAuth consent and grant management ----------
+  /github-evidence:
+    get:
+      operationId: getGitHubEvidence
+      tags: [githubEvidence]
+      security:
+        - sessionCookie: []
+      summary: The GitHub connection and whether an evidence session is live
+      description: >-
+        Returns the caller's GitHub connection (`null` when none) and the
+        live evidence session's expiry (`null` when none is live). A session
+        whose recorded authentication epoch or connection generation no
+        longer matches is ended here and reported as `null`. Takes no query
+        or body.
+      responses:
+        "200":
+          description: Connection and session state.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/GitHubEvidenceStatus"
+              example:
+                data:
+                  connection:
+                    githubUserId: 583231
+                    login: octocat
+                    connectedAt: "2026-11-15T08:30:00Z"
+                  session:
+                    expiresAt: "2026-11-15T09:00:00Z"
+        "400":
+          $ref: "#/components/responses/GitHubEvidenceRequestInvalid"
+        "401":
+          $ref: "#/components/responses/GitHubEvidenceSessionMissing"
+        "404":
+          $ref: "#/components/responses/GitHubEvidenceUnavailable"
+        "405":
+          $ref: "#/components/responses/GitHubEvidenceMethodNotAllowed"
+    delete:
+      operationId: deleteGitHubEvidence
+      tags: [githubEvidence]
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      summary: Disconnect GitHub
+      description: >-
+        Under the owner lock, advances the connection generation and clears
+        the GitHub user id, login and connected time; the row and its
+        generation stay. Then ends the evidence session and asks GitHub to
+        revoke its token. Advances the generation even when nothing is
+        connected, so a callback begun earlier fails. `keepLinks` is
+        required; no evidence is stored in this release, so its value
+        changes nothing else yet. Takes no body.
+      parameters:
+        - name: keepLinks
+          in: query
+          required: true
+          description: >-
+            `true` keeps attached evidence as plain links, `false` removes
+            it. Given exactly once; any other value, a missing value or any
+            other query parameter is `400 request_invalid`.
+          schema:
+            type: string
+            enum: ["true", "false"]
+      responses:
+        "204":
+          description: Disconnected. No body.
+        "400":
+          $ref: "#/components/responses/GitHubEvidenceRequestInvalid"
+        "401":
+          $ref: "#/components/responses/GitHubEvidenceSessionMissing"
+        "403":
+          $ref: "#/components/responses/GitHubEvidenceCsrfRejected"
+        "404":
+          $ref: "#/components/responses/GitHubEvidenceUnavailable"
+        "405":
+          $ref: "#/components/responses/GitHubEvidenceMethodNotAllowed"
+  /github-evidence/start:
+    post:
+      operationId: postGitHubEvidenceStart
+      tags: [githubEvidence]
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      summary: Begin connecting GitHub, or continue with it
+      description: >-
+        Creates a one-use OAuth transaction with purpose `evidence`, a
+        fresh `state`, PKCE S256 and the callback URL `PUBLIC_ORIGIN` +
+        `/api/v1/github-evidence/callback`, bound to the caller and the
+        connection generation at this moment. It expires after ten minutes.
+        Sets the `__Host-oauth-tx` cookie and returns GitHub's authorize
+        URL for a top-level navigation; the URL asks for no scope. Never
+        redirects. `GET` answers `405`. At most 10 starts per account per
+        hour. Takes no query or body.
+      responses:
+        "200":
+          description: The authorize URL to navigate the browser to.
+          headers:
+            Set-Cookie:
+              description: The `__Host-oauth-tx` transaction handle (`Secure;
+                HttpOnly; SameSite=Lax; Path=/`, 10 minutes).
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthStartResponse"
+              example:
+                data:
+                  authorizeUrl: https://github.com/login/oauth/authorize?client_id=...&redirect_uri=...&state=...&code_challenge=...&code_challenge_method=S256
+        "400":
+          $ref: "#/components/responses/GitHubEvidenceRequestInvalid"
+        "401":
+          $ref: "#/components/responses/GitHubEvidenceSessionMissing"
+        "403":
+          $ref: "#/components/responses/GitHubEvidenceCsrfRejected"
+        "404":
+          $ref: "#/components/responses/GitHubEvidenceUnavailable"
+        "405":
+          $ref: "#/components/responses/GitHubEvidenceMethodNotAllowed"
+        "429":
+          $ref: "#/components/responses/GitHubEvidenceLimited"
+        "503":
+          description: >-
+            The server is shutting down and starts no evidence session.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: evidence_unavailable
+                  message: GitHub evidence is not available
+  /github-evidence/callback:
+    get:
+      operationId: getGitHubEvidenceCallback
+      tags: [githubEvidence]
+      security: []
+      summary: Complete connecting GitHub
+      description: >-
+        GitHub's redirect target. Consumes the `__Host-oauth-tx`
+        transaction once and clears the cookie on every outcome. Requires
+        the transaction's `state`, its callback URL, and a live
+        `__Host-session` of the user who started it. Then exchanges the
+        code, refuses a token response whose `scope` is missing or not
+        empty, and fetches the GitHub profile. One owner-locked transaction
+        compares the generation recorded at start with the stored one and,
+        only when equal, installs the connection, advances the generation
+        and starts a 30-minute in-memory evidence session that replaces any
+        earlier one. Any failure after the exchange asks GitHub to revoke
+        the token. The refresh token is dropped unread. It never signs in,
+        links an identity or updates reauthentication proof.
+      parameters:
+        - name: code
+          in: query
+          required: false
+          schema:
+            type: string
+          description: GitHub's authorization code.
+        - name: state
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Must equal the transaction's own `state`.
+        - name: error
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Set by GitHub when the owner declines; always fails.
+      responses:
+        "302":
+          description: >-
+            Always redirects to `PUBLIC_ORIGIN` +
+            `/app/settings/sessions?evidence=connected` or
+            `?evidence=failed`. No other value is produced and a failure
+            carries no reason.
+          headers:
+            Location:
+              schema:
+                type: string
+                format: uri
+              example: https://aboutme.vn/app/settings/sessions?evidence=connected
+        "404":
+          $ref: "#/components/responses/GitHubEvidenceUnavailable"
+        "405":
+          $ref: "#/components/responses/GitHubEvidenceMethodNotAllowed"
+  /github-evidence/session/end:
+    post:
+      operationId: postGitHubEvidenceSessionEnd
+      tags: [githubEvidence]
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      summary: Done with GitHub
+      description: >-
+        Ends the caller's live evidence session and asks GitHub to revoke
+        its token, once. Takes no query or body.
+      responses:
+        "204":
+          description: The session ended. No body.
+        "400":
+          $ref: "#/components/responses/GitHubEvidenceRequestInvalid"
+        "401":
+          $ref: "#/components/responses/GitHubEvidenceSessionMissing"
+        "403":
+          $ref: "#/components/responses/GitHubEvidenceCsrfRejected"
+        "404":
+          $ref: "#/components/responses/GitHubEvidenceUnavailable"
+        "405":
+          $ref: "#/components/responses/GitHubEvidenceMethodNotAllowed"
+        "409":
+          description: No evidence session is live.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: evidence_session_required
+                  message: no GitHub evidence session is live
   /oauth/consent:
     get:
       operationId: getOAuthConsent
@@ -5186,6 +5426,84 @@ components:
             error:
               code: rate_limited
               message: too many requests; retry later
+    GitHubEvidenceUnavailable:
+      description: >-
+        `evidence_unavailable`: GitHub evidence is off because
+        `GITHUB_EVIDENCE_CLIENT_ID` and `GITHUB_EVIDENCE_CLIENT_SECRET` are
+        not both set. Every `/github-evidence` path and method answers this.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: evidence_unavailable
+              message: GitHub evidence is not available
+    GitHubEvidenceRequestInvalid:
+      description: "`request_invalid`: an unexpected query, body or `keepLinks` value."
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: request_invalid
+              message: keepLinks must be given once as true or false
+    GitHubEvidenceSessionMissing:
+      description: "`session_required`: no valid `__Host-session` cookie. Clears the cookie."
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: session_required
+              message: a valid session is required
+    GitHubEvidenceCsrfRejected:
+      description: "`csrf_rejected`: the Origin or CSRF token check failed."
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: csrf_rejected
+              message: CSRF validation failed
+    GitHubEvidenceMethodNotAllowed:
+      description: "`method_not_allowed`; `Allow` names the served methods."
+      headers:
+        Allow:
+          description: Methods this path serves.
+          schema:
+            type: string
+          example: POST
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: method_not_allowed
+              message: method not allowed; use POST
+    GitHubEvidenceLimited:
+      description: >-
+        `evidence_upstream`: a GitHub evidence limit is reached. For starts
+        this is 10 per account per hour. Carries `Retry-After` in whole
+        seconds.
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+            minimum: 1
+          description: Whole seconds to wait before retrying.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: evidence_upstream
+              message: the GitHub evidence limit is reached; try again later
     ProjectBadRequest:
       description: >-
         `request_invalid`, `idempotency_key_required`,
@@ -7495,6 +7813,61 @@ components:
         name: Ada Lovelace
         avatarKey: null
         hasPassword: false
+    GitHubConnection:
+      type: object
+      additionalProperties: false
+      required: [githubUserId, login, connectedAt]
+      description: >-
+        The connected GitHub account. `githubUserId` is the only matching
+        key; `login` is as last seen and for display only. Holds no token.
+      properties:
+        githubUserId:
+          type: integer
+          format: int64
+          minimum: 1
+        login:
+          type: string
+          minLength: 1
+          maxLength: 100
+        connectedAt:
+          type: string
+          format: date-time
+    GitHubEvidenceStatus:
+      type: object
+      additionalProperties: false
+      required: [connection, session]
+      properties:
+        connection:
+          description: The connection, or `null` when none is connected.
+          anyOf:
+            - $ref: "#/components/schemas/GitHubConnection"
+            - type: "null"
+        session:
+          description: The live evidence session, or `null` when none is live.
+          anyOf:
+            - type: object
+              additionalProperties: false
+              required: [expiresAt]
+              properties:
+                expiresAt:
+                  type: string
+                  format: date-time
+                  description: At most 30 minutes after the session started.
+            - type: "null"
+    GitHubEvidenceErrorCode:
+      type: string
+      description: >-
+        Error codes of the GitHub evidence routes beside the existing
+        `request_invalid`, `session_required`, `csrf_rejected` and
+        `method_not_allowed`. `evidence_unavailable`: the feature is off
+        (`404`) or the server is shutting down (`503`).
+        `evidence_session_required`: no evidence session is live (`409`).
+        `evidence_upstream`: a GitHub error, timeout or limit (`429` for a
+        limit, with `Retry-After`).
+      enum:
+        - evidence_unavailable
+        - evidence_session_required
+        - evidence_upstream
     Capabilities:
       type: object
       additionalProperties: false
@@ -7507,6 +7880,7 @@ components:
           passkeyEnrollment,
           totpEnrollment,
           signInToView,
+          githubEvidence,
         ]
       properties:
         providerLogin:
@@ -7556,6 +7930,12 @@ components:
             (`SIGN_IN_TO_VIEW_ENABLED`). Never derived from any account's
             own state, and never lifts a gate already set on a resume. See
             `docs/design/viewer-analytics/sign-in-to-view.md`.
+        githubEvidence:
+          type: boolean
+          description: >-
+            The `/github-evidence` routes are registered: both
+            `GITHUB_EVIDENCE_CLIENT_ID` and `GITHUB_EVIDENCE_CLIENT_SECRET`
+            are set. Independent of `providers` and `PROVIDER_LOGIN_ENABLED`.
     Identity:
       type: object
       description: One linked OAuth provider identity. `GET /me` exposes the
@@ -8794,6 +9174,12 @@ components:
               maxItems: 30
               items:
                 $ref: "#/components/schemas/ProjectRecord"
+            githubConnection:
+              description: >-
+                Present only when a GitHub account is connected for
+                evidence: its GitHub user id, login and connected time. Never
+                holds a token.
+              $ref: "#/components/schemas/GitHubConnection"
     AccountExportProfile:
       type: object
       additionalProperties: false

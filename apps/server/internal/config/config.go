@@ -45,6 +45,7 @@ type Config struct {
 	TOTPPreviousKey              string
 	SignInToViewEnabled          bool
 	ViewPassKey                  string
+	GitHubEvidence               GitHubEvidenceConfig
 }
 
 const (

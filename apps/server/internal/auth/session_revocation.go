@@ -78,6 +78,7 @@ func (m *SessionManager) ReplaceAfterEpochChangeTx(ctx context.Context, qtx *sto
 	if _, err = qtx.RevokeAllSessions(ctx, store.RevokeAllSessionsParams{UserID: user.ID, RevokedAt: &now}); err != nil {
 		return SessionIssue{}, fmt.Errorf("auth: replace session: revoke sessions: %w", err)
 	}
+	m.AccountSessionsEnded(user.ID)
 	raw, err := randomSessionToken()
 	if err != nil {
 		return SessionIssue{}, fmt.Errorf("auth: replace session: %w", err)

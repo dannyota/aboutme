@@ -43,7 +43,7 @@ func TestNewSecondFactorRoutes_RegistersEveryContractRoute(t *testing.T) {
 	t.Parallel()
 	cfg := validSecondFactorConfig("https://aboutme.example", true)
 	cfg.TOTPEnrollment = true
-	runtime, err := NewSecondFactor(discardLogger(), cfg, &store.Pool{})
+	runtime, err := NewSecondFactor(discardLogger(), cfg, &store.Pool{}, nil)
 	if err != nil {
 		t.Fatalf("NewSecondFactor() error = %v", err)
 	}
@@ -84,7 +84,7 @@ func TestNewSecondFactorRoutes_RegistrationOptionsIgnoresEnrollmentFlagOnlyAtRou
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			runtime, err := NewSecondFactor(discardLogger(), validSecondFactorConfig("https://aboutme.example", tc.enrollment), &store.Pool{})
+			runtime, err := NewSecondFactor(discardLogger(), validSecondFactorConfig("https://aboutme.example", tc.enrollment), &store.Pool{}, nil)
 			if err != nil {
 				t.Fatalf("NewSecondFactor() error = %v", err)
 			}
@@ -115,7 +115,7 @@ func TestNewSecondFactorRoutes_TOTPEnrollmentIgnoresFlagOnlyAtRoute(t *testing.T
 			t.Parallel()
 			c := cfg
 			c.TOTPEnrollment = tc.enrollment
-			runtime, err := NewSecondFactor(discardLogger(), c, &store.Pool{})
+			runtime, err := NewSecondFactor(discardLogger(), c, &store.Pool{}, nil)
 			if err != nil {
 				t.Fatalf("NewSecondFactor() error = %v", err)
 			}
@@ -133,7 +133,7 @@ func TestNewSecondFactorRoutes_TOTPEnrollmentIgnoresFlagOnlyAtRoute(t *testing.T
 func TestNewSecondFactorRoutes_RejectsRelyingPartyOrigin(t *testing.T) {
 	t.Parallel()
 	for _, enrollment := range []bool{false, true} {
-		_, err := NewSecondFactor(discardLogger(), validSecondFactorConfig("https://203.0.113.10", enrollment), &store.Pool{})
+		_, err := NewSecondFactor(discardLogger(), validSecondFactorConfig("https://203.0.113.10", enrollment), &store.Pool{}, nil)
 		if err == nil {
 			t.Fatalf("NewSecondFactor(enrollment=%t) error = nil, want a relying-party rejection for an IP-literal origin", enrollment)
 		}
@@ -145,7 +145,7 @@ func TestNewSecondFactorRoutes_RejectsMalformedTOTPKeyRing(t *testing.T) {
 	for _, enrollment := range []bool{false, true} {
 		cfg := config.Config{PublicOrigin: "https://aboutme.example", TOTPEnrollment: enrollment, TOTPActiveKey: "not-a-valid-key"}
 		cfg.AuthEmail.ActiveKeyID = "k1"
-		_, err := NewSecondFactor(discardLogger(), cfg, &store.Pool{})
+		_, err := NewSecondFactor(discardLogger(), cfg, &store.Pool{}, nil)
 		if err == nil {
 			t.Fatalf("NewSecondFactor(enrollment=%t) error = nil, want a malformed totp key ring rejection", enrollment)
 		}
@@ -159,7 +159,7 @@ func TestNewSecondFactorRoutes_TOTPIssuerDerivedFromValidOriginStartsCleanly(t *
 	for _, enrollment := range []bool{false, true} {
 		c := cfg
 		c.TOTPEnrollment = enrollment
-		_, err := NewSecondFactor(discardLogger(), c, &store.Pool{})
+		_, err := NewSecondFactor(discardLogger(), c, &store.Pool{}, nil)
 		if err != nil {
 			t.Fatalf("NewSecondFactor(enrollment=%t) error = %v, want a valid two-label host to start cleanly either way", enrollment, err)
 		}
@@ -168,7 +168,7 @@ func TestNewSecondFactorRoutes_TOTPIssuerDerivedFromValidOriginStartsCleanly(t *
 
 func TestSecondFactorTOTPRoutes_KeepTheRouterExactCacheControl(t *testing.T) {
 	t.Parallel()
-	runtime, err := NewSecondFactor(discardLogger(), validSecondFactorConfig("https://aboutme.example", true), &store.Pool{})
+	runtime, err := NewSecondFactor(discardLogger(), validSecondFactorConfig("https://aboutme.example", true), &store.Pool{}, nil)
 	if err != nil {
 		t.Fatalf("NewSecondFactor() error = %v", err)
 	}
@@ -231,7 +231,7 @@ func TestReadyzStaysReadyWhileTOTPVerificationFailsClosedOnAnUnknownKeyID(t *tes
 	q := store.New(pool)
 
 	cfg := validSecondFactorConfig("https://aboutme.example", false)
-	runtime, err := NewSecondFactor(discardLogger(), cfg, pool)
+	runtime, err := NewSecondFactor(discardLogger(), cfg, pool, nil)
 	if err != nil {
 		t.Fatalf("NewSecondFactor() error = %v", err)
 	}

@@ -185,6 +185,7 @@ func (s *PasswordService) change(ctx context.Context, sess store.Session, rawPas
 		}
 		return "", errPasswordUnavailable
 	}
+	s.sessions.AccountSessionsEnded(sess.UserID)
 	return newRaw, nil
 }
 
