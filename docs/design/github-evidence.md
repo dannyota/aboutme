@@ -103,7 +103,17 @@ months, which is why it is dropped at once.
   epoch change ends the session inside the transaction that changes the epoch,
   under the user lock.
 - On shutdown, sessions end when the signal arrives, and the server waits up to
-  6 seconds for the revocations in flight.
+  11 seconds for the code exchanges and revocations in flight.
+- One account boundary orders every change: the account's user row lock in a
+  database transaction. Inside it the caller's session is revalidated (live,
+  same user, current epoch, same CSRF secret), then the connection and the
+  in-memory session change together, and any ending is decided there. The
+  callback's install, status, disconnect, Done, sign-out and epoch change all
+  run inside it; only expiry and shutdown end a session outside it.
+- A token is held for cleanup as soon as the token response yields one
+  unambiguous access token, before any other validation. A response that carries
+  two different access tokens is logged as a fixed category, and neither is
+  revoked.
 - Token cleanup is one path for every issued token that is discarded: a callback
   that fails after the code exchange (generation mismatch, rejected scope,
   failed profile fetch) and every session ending above, including process
