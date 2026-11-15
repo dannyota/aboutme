@@ -113,8 +113,13 @@ third-party server.
 `SOURCE-OFFER.txt` adds a written offer, valid for three years from the image's
 release, to provide the corresponding source of every GPL or LGPL component on
 request to `danny@aboutme.vn` (owner, 2026-11-15). It covers GPLv2 components
-such as BusyBox and any archive that later drops a version; the owner mirrors
-the source when asked.
+such as BusyBox.
+
+Source access must last as long as an image is downloadable. A weekly scheduled
+job checks every source URL in the `BASE-IMAGES.txt` of every published release.
+A missing URL opens an issue, and within seven days the owner either uploads
+that source version to the affected releases as an asset and updates the
+directions, or makes the affected images unavailable from the registry.
 
 A base package whose installed files lack its required notice, such as musl,
 whose package ships only its libraries, gets the notice from
