@@ -55,8 +55,7 @@ Production runs on one GreenNode host in Vietnam with Caddy, Go, Nuxt,
 PostgreSQL 18, private vStorage media, and pgBackRest backups in vStorage
 ([ADR 0026](../adr/0026-vietnam-hosted-production.md)). Cloudflare provides
 DNS-only records. The [Vietnam production design](vietnam-production.md) owns
-the topology. The AWS deployment was removed on 2026-10-11; `deploy/aws/`
-remains undeployed for a possible AWS ECS or Kubernetes path.
+the topology.
 
 One serving replica runs under [ADR 0025](../adr/0025-replica-scaling.md). Grow
 the host first. Raising the replica count alone is unsafe: publication fences,

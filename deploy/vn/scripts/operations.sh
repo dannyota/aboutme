@@ -9,8 +9,8 @@ umask 077
 source "$here/../host/operation-state.sh"
 # shellcheck source=ssh-lib.sh
 source "$here/ssh-lib.sh"
-# shellcheck source=../../aws/scripts/provenance.sh
-source "$here/../../aws/scripts/provenance.sh"
+# shellcheck source=provenance.sh
+source "$here/provenance.sh"
 say() { printf '%s\n' refused >&2; }
 fail() { printf '%s\n' "$1" >&2; exit "${2:-1}"; }
 valid_id() { [[ $1 =~ ^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$ ]]; }

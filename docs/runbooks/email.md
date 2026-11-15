@@ -63,8 +63,8 @@ Bizfly product and rejects these credentials.
   characters. The loader preserves every byte, including leading and trailing
   spaces. The password comes from the host secret store, never from a tracked
   file.
-- `SES_CONFIGURATION_SET` and the capture fields must be absent; `AWS_REGION` is
-  ignored. The `SMTP_*` names must be absent in SES and capture mode.
+- The capture fields must be absent. The `SMTP_*` names must be absent in
+  capture mode.
 
 A startup failure names the variable, never its value.
 

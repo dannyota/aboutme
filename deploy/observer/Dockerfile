@@ -30,4 +30,4 @@ COPY --from=build /out/observer /observer
 USER 65532:65532
 
 ENTRYPOINT ["/observer"]
-CMD ["lambda"]
+CMD ["run", "--interval", "60s"]

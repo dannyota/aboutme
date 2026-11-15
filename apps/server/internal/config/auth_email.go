@@ -15,13 +15,11 @@ import (
 )
 
 const (
-	authEmailModeSES     = "ses"
 	authEmailModeCapture = "capture"
 	authEmailModeSMTP    = "smtp"
 	smtpTLSImplicit      = "implicit"
 	smtpTLSStartTLS      = "starttls"
 	maxSMTPValueBytes    = 256
-	requiredSESRegion    = "ap-southeast-1"
 )
 
 type AuthEmailConfig struct {
@@ -36,8 +34,6 @@ type AuthEmailConfig struct {
 	CaptureBearer [32]byte
 	SESFrom       string
 	SESFromName   string
-	SESConfigSet  string
-	SESRegion     string
 	SMTPHost      string
 	SMTPPort      int
 	SMTPTLS       string
@@ -88,18 +84,16 @@ func loadAuthEmailConfig(getenv func(string) string, environment string) (AuthEm
 
 	mode := strings.ToLower(strings.TrimSpace(getenv("AUTH_EMAIL_MODE")))
 	switch mode {
-	case authEmailModeSES, authEmailModeCapture, authEmailModeSMTP:
+	case authEmailModeCapture, authEmailModeSMTP:
 		cfg.Mode = mode
 	default:
-		return cfg, errors.New("config: AUTH_EMAIL_MODE must be ses, smtp, or capture")
+		return cfg, errors.New("config: AUTH_EMAIL_MODE must be smtp or capture")
 	}
 
 	captureURL := strings.TrimSpace(getenv("AUTH_EMAIL_CAPTURE_URL"))
 	captureBearerRaw := strings.TrimSpace(getenv("AUTH_EMAIL_CAPTURE_BEARER"))
 	sesFrom := strings.TrimSpace(getenv("SES_FROM_ADDRESS"))
 	sesFromName := strings.TrimSpace(getenv("SES_FROM_NAME"))
-	sesConfigSet := strings.TrimSpace(getenv("SES_CONFIGURATION_SET"))
-	sesRegion := strings.TrimSpace(getenv("AWS_REGION"))
 	smtpFields := []struct{ name, value string }{
 		{"SMTP_HOST", strings.TrimSpace(getenv("SMTP_HOST"))},
 		{"SMTP_PORT", strings.TrimSpace(getenv("SMTP_PORT"))},
@@ -134,8 +128,6 @@ func loadAuthEmailConfig(getenv func(string) string, environment string) (AuthEm
 		for _, field := range []struct{ name, value string }{
 			{"SES_FROM_ADDRESS", sesFrom},
 			{"SES_FROM_NAME", sesFromName},
-			{"SES_CONFIGURATION_SET", sesConfigSet},
-			{"AWS_REGION", sesRegion},
 		} {
 			if field.value != "" {
 				return cfg, fmt.Errorf("config: %s must be absent when AUTH_EMAIL_MODE=capture", field.name)
@@ -160,21 +152,7 @@ func loadAuthEmailConfig(getenv func(string) string, environment string) (AuthEm
 	}
 	cfg.SESFrom = sesFrom
 	cfg.SESFromName = sesFromName
-	if mode == authEmailModeSMTP {
-		if sesConfigSet != "" {
-			return cfg, errors.New("config: SES_CONFIGURATION_SET must be absent when AUTH_EMAIL_MODE=smtp")
-		}
-		return loadSMTPConfig(cfg, smtpFields[0].value, smtpFields[1].value, smtpFields[2].value, smtpFields[3].value, smtpFields[4].value)
-	}
-	if sesRegion != requiredSESRegion {
-		return cfg, errors.New("config: AWS_REGION must be ap-southeast-1 when AUTH_EMAIL_MODE=ses")
-	}
-	if !isAWSSafeASCII(sesConfigSet) {
-		return cfg, errors.New("config: SES_CONFIGURATION_SET must be 1-64 ASCII letters, digits, hyphens, or underscores")
-	}
-	cfg.SESConfigSet = sesConfigSet
-	cfg.SESRegion = sesRegion
-	return cfg, nil
+	return loadSMTPConfig(cfg, smtpFields[0].value, smtpFields[1].value, smtpFields[2].value, smtpFields[3].value, smtpFields[4].value)
 }
 
 func loadSMTPConfig(cfg AuthEmailConfig, host, port, tlsMode, username, password string) (AuthEmailConfig, error) {
@@ -253,21 +231,6 @@ func isPrintableASCII(s string) bool {
 	}
 	for i := 0; i < len(s); i++ {
 		if s[i] < 0x20 || s[i] > 0x7e {
-			return false
-		}
-	}
-	return true
-}
-
-func isAWSSafeASCII(s string) bool {
-	if len(s) < 1 || len(s) > 64 {
-		return false
-	}
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		switch {
-		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9', c == '-', c == '_':
-		default:
 			return false
 		}
 	}

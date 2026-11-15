@@ -526,12 +526,12 @@ function checkOpenTofuGate(job, label) {
     assert.deepEqual(reached, [], `${label}: a failed ${failing === loader ? "ci-tools load" : "mirror setup"} must stop every OpenTofu step`);
   }
 }
-for (const file of ["ci", "vn-infra"]) {
+for (const file of ["vn-infra"]) {
   const doc = load(`.github/workflows/${file}.yml`);
   const list = steps(doc);
   assert.equal(list.filter((step) => step.uses === "./.github/actions/install-opentofu").length, 1, `${file}: verified OpenTofu installer`);
   assert.ok(!list.some((step) => step.uses?.startsWith("opentofu/setup-opentofu@")), `${file}: no separate unprotected OpenTofu download`);
-  const job = doc.jobs[file === "ci" ? "contracts" : "check"];
+  const job = doc.jobs.check;
   const mirror = job.steps.find((s) => s.name === "Configure the provider mirror");
   assert.ok(mirror, `${file}: provider mirror configuration`);
   assert.ok(mirror.if.includes("steps.ci-tools.outcome == 'success'"), `${file}: mirror requires a verified package`);

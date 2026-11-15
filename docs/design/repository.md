@@ -6,27 +6,26 @@ describes the running system. The component source maps live in the
 [server](../../apps/server/README.md), [web](../../apps/web/README.md), and
 [schema](../../packages/schema/README.md) READMEs.
 
-| Path                          | Responsibility and authority                                                                                              |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `apps/server/`                | Go API, domain logic, and authorized render jobs                                                                          |
-| `apps/web/`                   | Nuxt SSR, authenticated UI, editor, and the shared Vue renderer                                                           |
-| `apps/mobile/`                | Deferred Flutter client                                                                                                   |
-| `packages/schema/`            | Resume JSON Schema, released snapshots, generators, fixtures, and preset JSON                                             |
-| `apps/server/migrations/`     | Sole relational schema source; goose SQL frozen by the application v1 baseline marker                                     |
-| `apps/server/sql/queries.sql` | sqlc query source                                                                                                         |
-| `docs/api/openapi.yaml`       | Implemented HTTP contract                                                                                                 |
-| `docs/design/`                | Intended product and architecture                                                                                         |
-| `docs/adr/`                   | Proposed and accepted decision rationale                                                                                  |
-| `docs/plans/`                 | Execution order, task ownership, gates, and acceptance traceability                                                       |
-| `deploy/`                     | Application images, local/self-host tools, Vietnam host and OpenTofu sources, Caddy, observer, and retained AWS reference |
+| Path                          | Responsibility and authority                                                                      |
+| ----------------------------- | ------------------------------------------------------------------------------------------------- |
+| `apps/server/`                | Go API, domain logic, and authorized render jobs                                                  |
+| `apps/web/`                   | Nuxt SSR, authenticated UI, editor, and the shared Vue renderer                                   |
+| `apps/mobile/`                | Deferred Flutter client                                                                           |
+| `packages/schema/`            | Resume JSON Schema, released snapshots, generators, fixtures, and preset JSON                     |
+| `apps/server/migrations/`     | Sole relational schema source; goose SQL frozen by the application v1 baseline marker             |
+| `apps/server/sql/queries.sql` | sqlc query source                                                                                 |
+| `docs/api/openapi.yaml`       | Implemented HTTP contract                                                                         |
+| `docs/design/`                | Intended product and architecture                                                                 |
+| `docs/adr/`                   | Proposed and accepted decision rationale                                                          |
+| `docs/plans/`                 | Execution order, task ownership, gates, and acceptance traceability                               |
+| `deploy/`                     | Application images, local/self-host tools, Vietnam host and OpenTofu sources, Caddy, and observer |
 
 Production infrastructure lives in `deploy/vn/` under
 [ADR 0026](../adr/0026-vietnam-hosted-production.md). `deploy/caddy/` owns edge
-configuration, and `deploy/observer/` owns operational observation.
-`deploy/aws/` keeps the AWS reference. State, account identifiers, and
-environment values stay out of Git. Public infrastructure checks need no cloud
-access. GitHub workflows build and check artifacts; they hold no cloud
-credentials and do not deploy.
+configuration, and `deploy/observer/` owns operational observation. State,
+account identifiers, and environment values stay out of Git. Public
+infrastructure checks need no cloud access. GitHub workflows build and check
+artifacts; they hold no cloud credentials and do not deploy.
 
 Generated files are committed but never hand-edited. Document types derive from
 JSON Schema. Store types derive from migrations and sqlc queries. Web API types

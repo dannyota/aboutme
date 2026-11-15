@@ -70,20 +70,10 @@ pages and every new route pass through without an edge cache. The gate is
 `no-store`. Caddy strips every `x-amzn-*` header, so layers 2 and 3 are off; the
 other counting layers apply.
 
-The undeployed **AWS reference** keeps these requirements:
-
-- **Caching:** public pages and every new route must use the default CloudFront
-  behavior, `CachingDisabled`, all methods
-  ([CloudFront edge](../cloudfront-delivery.md#cache-and-forwarding)). Nothing
-  new is cached at the edge. The gate is `no-store`.
-- **Origin request policy:** unchanged. No geography header is forwarded.
-- **WAF:** the two managed groups and two label rules in
-  [counting](counting.md#layers-2-and-3-edge-labels), all Count, scoped to
-  `POST` on the collect path. WAF logging and sampled requests stay off.
-- **Caddy CloudFront listener:** passes `x-amzn-waf-aboutme-bot` and
-  `x-amzn-waf-aboutme-dc` to Go and removes every other `x-amzn-waf-*` header;
-  every other listener strips both. Go reads them only from its trusted proxy
-  and only as exactly one value `1`.
+The Caddy CloudFront listener passes `x-amzn-waf-aboutme-bot` and
+`x-amzn-waf-aboutme-dc` to Go and removes every other `x-amzn-waf-*` header;
+every other listener strips both. Go reads them only from its trusted proxy and
+only as exactly one value `1`.
 
 ## Rate limits
 

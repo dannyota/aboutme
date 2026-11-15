@@ -46,7 +46,6 @@ Direct user instructions and platform safety rules come first.
 |Vietnam production|[Vietnam host](deploy/vn/AGENTS.md)|
 |Edge routing|[Caddy](deploy/caddy/AGENTS.md)|
 |Deployment transparency|[observer](deploy/observer/AGENTS.md)|
-|Undeployed AWS reference|[AWS](deploy/aws/AGENTS.md)|
 |HTTPS browser proofs|[browser harness](deploy/dev-https-browser/AGENTS.md)|
 |Repository tooling|[scripts](scripts/AGENTS.md)|
 
@@ -90,7 +89,7 @@ The primary assigns a lane and exact owned paths to each implementer brief. Desi
 |-|-|-|
 |backend|`apps/server/`, `packages/schema/` sources and Go output, `docs/api/`, migrations, MCP|Edits web UI files or production infrastructure|
 |frontend|`apps/web/`: pages, editor, renderer, i18n, render workers, web tests and display fixtures|Edits Go, migrations, or production infrastructure|
-|devops|`deploy/` (`vn/` host, `caddy/`, `observer/`, and the kept `aws/` reference), `.github/workflows/`, OpenTofu, Cloudflare, release scripts|Reads secret values or applies infrastructure unreviewed|
+|devops|`deploy/` (`vn/` host, `caddy/`, `observer/`), `.github/workflows/`, OpenTofu, Cloudflare, release scripts|Reads secret values or applies infrastructure unreviewed|
 
 A path outside these lanes belongs to the primary, which assigns it in a brief. Renderer ownership details live in [web rules](instructions/web.md).
 

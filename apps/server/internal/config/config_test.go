@@ -36,13 +36,19 @@ func env(vars map[string]string) func(string) string {
 		case "AUTH_EMAIL_ACTIVE_KEY":
 			return testBase64URL32
 		case "AUTH_EMAIL_MODE":
-			return "ses"
+			return "smtp"
 		case "SES_FROM_ADDRESS":
 			return "noreply@example.com"
-		case "SES_CONFIGURATION_SET":
-			return "aboutme"
-		case "AWS_REGION":
-			return "ap-southeast-1"
+		case "SMTP_HOST":
+			return "smtp.example.com"
+		case "SMTP_PORT":
+			return "2465"
+		case "SMTP_TLS":
+			return "implicit"
+		case "SMTP_USERNAME":
+			return "smtp-user"
+		case "SMTP_PASSWORD":
+			return "smtp-password-value"
 		case "TOTP_ACTIVE_KEY":
 			return testBase64URL32
 		case "VIEW_PASS_KEY":

@@ -1197,17 +1197,10 @@ function checkOperationalJobs(ci) {
     .filter((run) => run.split(/\s+/).includes(target)).map(() => name));
   assert.deepEqual(runs("operational-test-fast"), ["operational"], "operational-test-fast runs once");
   assert.deepEqual(runs("operational-test-browser"), ["operational"], "operational-test-browser runs once");
-  assert.deepEqual(runs("operational-test-deploy"), ["operational"], "operational-test-deploy runs once");
   assert.deepEqual(runs("operational-test-dev-https"), ["dev-https-static"], "operational-test-dev-https runs in its shards");
   const operational = ci.jobs.operational.steps;
-  const start = operational.findIndex((step) => step.run === "bash scripts/ci-background.sh start deploy-tests make operational-test-deploy");
-  const wait = operational.findIndex((step) => step.run === "bash scripts/ci-background.sh wait deploy-tests");
-  assert.ok(start >= 0 && wait > start, "operational waits for the deploy-script tests it starts");
-  assert.equal(operational[wait].if, "${{ !cancelled() }}", "deploy-script result survives an earlier failure");
   for (const target of ["operational-test-fast", "operational-test-browser"]) {
-    const step = operational.find((entry) => entry.run === `make ${target}`);
-    assert.ok(step, `${target}: exact make command`);
-    assert.ok(operational.indexOf(step) < wait, `${target}: runs before the job ends`);
+    assert.ok(operational.find((entry) => entry.run === `make ${target}`), `${target}: exact make command`);
   }
   const job = ci.jobs["dev-https-static"];
   assert.equal(job.strategy["fail-fast"], false, "every shard finishes");
@@ -1230,7 +1223,6 @@ test("operational suite checks reject lost, duplicated, and partial work", () =>
   const fixtures = [
     ["dropped fast suite", (ci) => { ci.jobs.operational.steps = ci.jobs.operational.steps.filter((step) => step.run !== "make operational-test-fast"); }],
     ["duplicated browser suite", (ci) => { ci.jobs.contracts.steps.push({ run: "make operational-test-browser" }); }],
-    ["no deploy wait", (ci) => { ci.jobs.operational.steps = ci.jobs.operational.steps.filter((step) => !step.run?.includes("wait deploy-tests")); }],
     ["missing shard", (ci) => { ci.jobs["dev-https-static"].strategy.matrix.shard = [0, 1, 2]; }],
     ["duplicated shard", (ci) => { ci.jobs["dev-https-static"].strategy.matrix.shard = [0, 1, 2, 2]; }],
     ["shard count drift", (ci) => {

@@ -1,6 +1,6 @@
 # SHELL is bash because dash has no /dev/tcp, which test-db-up's port probe uses (dash(1)).
 SHELL := $(shell command -v bash)
-.PHONY: help ci ci-local check pre-push scan tools-check operational-test operational-test-fast operational-test-dev-https operational-test-deploy operational-test-browser hooks-install docs-lint lengths-check docs-fmt generate schema-gen schema-check api-gen api-check server-build server-vet server-test server-test-db server-test-media-s3 server-test-resumeapi server-test-resumeapi-s3 observer-test web-build web-lint web-typecheck web-test web-source-manifest-check web-source-manifest-update web-source-build web-no-eval-check web-e2e dev dev-down test-db-up test-db-down test-media-s3-up test-media-s3-down server-test-integration sqlc-gen sqlc-check migrate migrate-check server-migration-test public-roots-check route-table-test dev-native dev-seed dev-native-down dev-native-status dev-native-logs dev-https dev-https-down dev-https-status dev-https-logs mail-capture-static-check dev-https-browser-image dev-https-auth-check dev-https-transport-check dev-https-editor-check dev-https-public-check dev-https-password-check dev-https-mcp-check dev-https-entry-check dev-https-publish-check dev-https-exports-check native-http-check
+.PHONY: help ci ci-local check pre-push scan tools-check operational-test operational-test-fast operational-test-dev-https operational-test-browser hooks-install docs-lint lengths-check docs-fmt generate schema-gen schema-check api-gen api-check server-build server-vet server-test server-test-db server-test-media-s3 server-test-resumeapi server-test-resumeapi-s3 observer-test web-build web-lint web-typecheck web-test web-source-manifest-check web-source-manifest-update web-source-build web-no-eval-check web-e2e dev dev-down test-db-up test-db-down test-media-s3-up test-media-s3-down server-test-integration sqlc-gen sqlc-check migrate migrate-check server-migration-test public-roots-check route-table-test dev-native dev-seed dev-native-down dev-native-status dev-native-logs dev-https dev-https-down dev-https-status dev-https-logs mail-capture-static-check dev-https-browser-image dev-https-auth-check dev-https-transport-check dev-https-editor-check dev-https-public-check dev-https-password-check dev-https-mcp-check dev-https-entry-check dev-https-publish-check dev-https-exports-check native-http-check
 
 WEB_E2E_COMMIT := $(shell git rev-parse --verify 'HEAD^{commit}')
 WEB_E2E_IMAGE := mcr.microsoft.com/playwright:v1.64.0-noble@sha256:bc72a8df40831ded821e3cbc79c318c21b44d6e51dff9fd89ace7a8249c5b462
@@ -51,7 +51,7 @@ codex-agents: ## Render Codex roles from the shared preamble and role fragments
 codex-agents-check: ## Check committed Codex roles match their sources
 	bash scripts/generate-codex-agents.sh --check
 
-operational-test: operational-test-fast operational-test-dev-https operational-test-deploy operational-test-browser ## Test local CI, scan, toolchain, Compose guard, and native-status contracts without real services
+operational-test: operational-test-fast operational-test-dev-https operational-test-browser ## Test local CI, scan, toolchain, Compose guard, and native-status contracts without real services
 
 operational-test-fast: ## operational-test's sub-second-to-low-single-digit-second scripts
 	python3 -I -c 'from pathlib import Path; paths = ("scripts/collect-browser-diagnostics.py", "scripts/ci-path-selection.py"); [compile(Path(path).read_bytes(), path, "exec") for path in paths]'
@@ -107,10 +107,6 @@ operational-test-fast: ## operational-test's sub-second-to-low-single-digit-seco
 
 operational-test-dev-https: ## operational-test's dev-https static safety-test suite (DEV_HTTPS_TEST_SHARD=i/n runs one shard; unset runs all)
 	DEV_HTTPS_TEST_SHARD=$(DEV_HTTPS_TEST_SHARD) bash scripts/dev-https-test.sh --static
-
-operational-test-deploy: ## operational-test's deploy-script static safety-test suite
-	bash deploy/aws/scripts/deploy_test.sh
-	bash deploy/aws/scripts/observer_test.sh
 
 operational-test-browser: ## operational-test's browser-image and MCP owner-workflow static safety tests
 	bash deploy/dev-https-browser/static-test.sh
@@ -179,11 +175,6 @@ idempotency-expiry-sweep media-deletion-sweep media-orphan-sweep privacy-retenti
 
 media-orphan-sweep-dry-run: ## Report orphan candidates without changing media or sweep state
 	cd apps/server && go run ./cmd/server media-orphan-sweep --dry-run
-
-.PHONY: deploy-script-test
-deploy-script-test: ## Test deploy.sh and observer.sh step order and failure recovery with stubbed AWS and GitHub calls
-	bash deploy/aws/scripts/deploy_test.sh
-	bash deploy/aws/scripts/observer_test.sh
 
 .PHONY: caddy-prod-test
 caddy-prod-test: ## Build the production Caddy image and test routing, origin mTLS, and client-IP trust

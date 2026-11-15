@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
-here=$(cd "$(dirname "$0")" && pwd)
+
+repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
@@ -15,8 +16,8 @@ chmod +x "$work/bin/gh"
 
 repo=dannyota/aboutme
 say() { printf '%s\n' "$*" >>"$work/said"; }
-# shellcheck source=provenance.sh
-source "$here/provenance.sh"
+# shellcheck source=deploy/vn/scripts/provenance.sh
+source "$repo_root/deploy/vn/scripts/provenance.sh"
 PATH="$work/bin:$PATH"
 export CALLS=$work/calls
 

@@ -10,8 +10,6 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
-
-	"github.com/aws/aws-lambda-go/lambda"
 )
 
 var (
@@ -32,36 +30,17 @@ func main() {
 
 func dispatch(args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: observer <lambda|run|version>")
+		return errors.New("usage: observer <run|version>")
 	}
 	switch args[0] {
 	case "version":
 		fmt.Println(versionString())
 		return nil
-	case "lambda":
-		return runLambda()
 	case "run":
 		return runLoop(args[1:])
 	default:
-		return fmt.Errorf("unknown command %q: usage: observer <lambda|run|version>", args[0])
+		return fmt.Errorf("unknown command %q: usage: observer <run|version>", args[0])
 	}
-}
-
-func runLambda() error {
-	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stderr, nil)))
-	ctx := context.Background()
-	cfg, err := loadConfig()
-	if err != nil {
-		return fmt.Errorf("load configuration: %w", err)
-	}
-	obs, err := wire(ctx, cfg)
-	if err != nil {
-		return fmt.Errorf("build observer: %w", err)
-	}
-	lambda.StartWithOptions(func(ctx context.Context) error {
-		return obs.run(ctx, time.Now)
-	}, lambda.WithContext(ctx))
-	return nil
 }
 
 func runLoop(args []string) error {
@@ -90,8 +69,6 @@ func runLoop(args []string) error {
 	ticker := time.NewTicker(*interval)
 	defer ticker.Stop()
 	for {
-		// Each run ends within one interval, as a Lambda run ends within
-		// its timeout.
 		runCtx, cancel := context.WithTimeout(ctx, *interval)
 		if err := obs.run(runCtx, time.Now); err != nil {
 			slog.Error("run failed", "error", err)
