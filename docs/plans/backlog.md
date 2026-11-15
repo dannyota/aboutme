@@ -36,6 +36,7 @@ Open items that outlived their shipped plans. One line each, with the evidence t
 - While an editor page and the resume list are both mounted on the same resume, both queues can resend the same held write until the list unmounts; the shared Idempotency-Key makes the server apply it once, and an ordinary route change unmounts the list first (`apps/web/app/composables/useResumeList.ts`, the handover to the open editor). Make the list stop its queue for a resume as soon as an editor opens it.
 - The photo panel's Retry button stays enabled while its resend is in flight; the queue ignores the repeat, so nothing is sent twice, but the control should be disabled like the held-write alert's (`apps/web/app/components/editor/photo/PhotoPanel.vue`).
 - A scheduled preview-card build for a resume deleted a second earlier logs `previewcard: scheduled build` with `reason=build_failed` (seen in the publish proof's server log on 2026-11-13). Confirm it cannot raise a host alert, then skip builds for deleted resumes instead of failing them.
+- GHCR answered `unknown blob` to the `Release observer (arm64)` push in release-images run 43696513361 (v0.9.10), and Publish release published the release without that image. The arm64 observer image exists only for the undeployed AWS Lambda path: remove that release job in its own change after the AWS removal ships. Publish release runs `gh release create`, so a failed-job rerun cannot repair a release; make it safe to rerun.
 
 ## Production acceptance
 
