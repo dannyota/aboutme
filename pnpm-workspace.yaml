@@ -16,7 +16,7 @@ virtualStoreType: project
 virtualStoreDir: node_modules/.pnpm
 
 overrides:
-  zod: 4.6.6
+  zod: ^4.6.6
   markdownlint>re2js: 2.8.7
   micromark-extension-math>katex: 0.18.2
   openapi-typescript>typescript: 6.0.3
