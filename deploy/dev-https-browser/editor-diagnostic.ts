@@ -27,6 +27,8 @@ const URL_CATEGORIES = [
 const READY_STATES = ['loading', 'interactive', 'complete', UNAVAILABLE] as const;
 const STATUS_CLASSES = ['2xx', '3xx', '4xx', '5xx', 'none', UNAVAILABLE] as const;
 const EVENT_CATEGORIES = ['chunk-load', 'hydration', 'network', 'other'] as const;
+const HTML_LANGS = ['vi', 'en', 'other', 'missing', UNAVAILABLE] as const;
+const LOCALE_COOKIES = ['en', 'vi', 'absent', 'other', UNAVAILABLE] as const;
 
 export type FailureCategory = typeof FAILURE_CATEGORIES[number];
 export type URLCategory = typeof URL_CATEGORIES[number];
@@ -241,7 +243,7 @@ export function serializeEditorDiagnostic(input: unknown): string {
   const reauth = field(input, 'reauthPage');
   const elapsed = field(input, 'elapsedMs');
   const diagnostic = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     stage: closedStage(field(input, 'stage')),
     failureCategory: oneOf(field(input, 'failureCategory'), FAILURE_CATEGORIES, 'other'),
     elapsedMs: {
@@ -251,6 +253,14 @@ export function serializeEditorDiagnostic(input: unknown): string {
     mainPage: closedPage(field(input, 'mainPage')),
     reauthPage: {
       ...closedPage(reauth),
+      htmlLang: oneOf(field(reauth, 'htmlLang'), HTML_LANGS, UNAVAILABLE),
+      localeCookie: oneOf(field(reauth, 'localeCookie'), LOCALE_COOKIES, UNAVAILABLE),
+      signInHeadingCountVi: closedCount(field(reauth, 'signInHeadingCountVi')),
+      loginFormPresent: closedVisible(field(reauth, 'loginFormPresent')),
+      navigationSequence: Array.isArray(field(reauth, 'navigationSequence'))
+        ? (field(reauth, 'navigationSequence') as unknown[]).slice(0, 8)
+          .map((category) => oneOf(category, URL_CATEGORIES, UNAVAILABLE))
+        : [],
       mainFrameNavigations: closedCount(field(reauth, 'mainFrameNavigations')),
       lastNavigationStatusClass: oneOf(
         field(reauth, 'lastNavigationStatusClass'),
@@ -259,7 +269,10 @@ export function serializeEditorDiagnostic(input: unknown): string {
       ),
     },
     pageErrors: closedCounts(field(input, 'pageErrors')),
-    requestFailures: closedCounts(field(input, 'requestFailures')),
+    requestFailures: Object.fromEntries(['main', 'reauth'].map((name) => {
+      const page = field(field(input, 'requestFailures'), name);
+      return [name, { before: closedCounts(field(page, 'before')), after: closedCounts(field(page, 'after')) }];
+    })),
   };
   const serialized = `${JSON.stringify(diagnostic, null, 2)}\n`;
   if (Buffer.byteLength(serialized) > MAX_BYTES) {
@@ -322,6 +335,31 @@ async function collectPage(
   };
 }
 
+async function collectReauthPage(
+  target: Page | undefined,
+  origin: string,
+  deadline: Promise<typeof UNAVAILABLE>,
+): Promise<Record<string, unknown>> {
+  if (target === undefined || safely(() => target.isClosed(), true)) return {};
+  const probe = <T>(work: () => Promise<T>): Promise<T | typeof UNAVAILABLE> => Promise.race([
+    Promise.resolve().then(work).catch(() => UNAVAILABLE),
+    deadline,
+  ]);
+  const [htmlLang, localeCookie, signInHeadingCountVi, loginFormPresent] = await Promise.all([
+    probe(async () => {
+      const lang = await target.evaluate(() => document.documentElement.getAttribute('lang'));
+      return lang === null || lang === '' ? 'missing' : oneOf(lang, ['en', 'vi'] as const, 'other');
+    }),
+    probe(async () => {
+      const cookie = (await target.context().cookies(origin)).find((item) => item.name === 'aboutme-locale');
+      return cookie === undefined ? 'absent' : oneOf(cookie.value, ['en', 'vi'] as const, 'other');
+    }),
+    probe(() => target.getByRole('heading', { name: 'Đăng nhập', exact: true }).count()),
+    probe(async () => (await target.getByRole('button', { name: /^(Sign in|Đăng nhập)$/, exact: true }).count()) > 0),
+  ]);
+  return { htmlLang, localeCookie, signInHeadingCountVi, loginFormPresent };
+}
+
 export function installEditorFailureDiagnostic(
   state: { editorDiagnosticStage: string },
   page: Page,
@@ -333,27 +371,32 @@ export function installEditorFailureDiagnostic(
   const startedAt = now();
   const stageChangedAt = trackStageChanges(state, now);
   const pageErrors = newEventCounts();
-  const requestFailures = newEventCounts();
+  const requestFailures = {
+    main: { before: newEventCounts(), after: newEventCounts() },
+    reauth: { before: newEventCounts(), after: newEventCounts() },
+  };
+  const navigationSequence: URLCategory[] = [];
   let reauthPage: Page | undefined;
   let countNavigations = false;
+  let loginNavigationStarted = false;
   let navigations = 0;
   let lastStatus: StatusClass = 'none';
   let failure: { readonly at: number; readonly stageChangedAt: number } | undefined;
   let written = false;
 
-  const countErrors = (target: Page): void => {
+  const countErrors = (target: Page, name: 'main' | 'reauth'): void => {
     target.on('pageerror', (error: Error) => {
       pageErrors[classifyPageError(error)] += 1;
     });
     target.on('requestfailed', (request: Request) => {
-      requestFailures[safely(() => classifyRequestFailure({
+      requestFailures[name][countNavigations ? 'after' : 'before'][safely(() => classifyRequestFailure({
         resourceType: request.resourceType(),
         errorText: request.failure()?.errorText ?? '',
         url: request.url(),
       }, options.origin), 'other')] += 1;
     });
   };
-  countErrors(page);
+  countErrors(page, 'main');
 
   return {
     markFailure: (): void => {
@@ -363,13 +406,27 @@ export function installEditorFailureDiagnostic(
       countNavigations = true;
       navigations = 0;
       lastStatus = 'none';
+      navigationSequence.length = 0;
+      loginNavigationStarted = false;
     },
     trackReauthPage: (target: Page): void => {
       if (reauthPage !== undefined) return;
       reauthPage = target;
-      countErrors(target);
+      countErrors(target, 'reauth');
+      target.on('request', (request: Request) => {
+        if (countNavigations && safely(() => request.isNavigationRequest()
+          && request.frame() === target.mainFrame()
+          && classifyURL(request.url(), options.origin) === 'login', false)) {
+          loginNavigationStarted = true;
+        }
+      });
       target.on('framenavigated', (frame) => {
-        if (countNavigations && safely(() => frame === target.mainFrame(), false)) navigations += 1;
+        if (countNavigations && safely(() => frame === target.mainFrame(), false)) {
+          navigations += 1;
+          if (loginNavigationStarted && navigationSequence.length < 8) {
+            navigationSequence.push(safely(() => classifyURL(frame.url(), options.origin), UNAVAILABLE));
+          }
+        }
       });
       target.on('response', (response: Response) => {
         if (!countNavigations) return;
@@ -396,6 +453,7 @@ export function installEditorFailureDiagnostic(
           pages = await Promise.all([
             collectPage(page, options.origin, deadline),
             collectPage(reauthPage, options.origin, deadline),
+            collectReauthPage(reauthPage, options.origin, deadline),
           ]);
         } finally {
           clearTimeout(timer);
@@ -410,6 +468,8 @@ export function installEditorFailureDiagnostic(
           mainPage: pages[0],
           reauthPage: {
             ...pages[1],
+            ...pages[2],
+            navigationSequence,
             mainFrameNavigations: navigations,
             lastNavigationStatusClass: lastStatus,
           },
