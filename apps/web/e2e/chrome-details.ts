@@ -24,27 +24,48 @@ async function expectDeclaration(
 }
 
 export async function expectChromeDecoration(
-  page: Page, theme: 'light' | 'dark', kind?: 'shadow' | 'gradient',
+  page: Page, theme: 'light' | 'dark', kind?: 'shadow' | 'panels',
 ): Promise<void> {
-  if (kind !== 'gradient') {
+  if (kind !== 'panels') {
     await expectDeclaration(page.getByTestId('landing-sheet'), 'box-shadow',
-      theme === 'light'
-        ? '0 1px 2px rgba(23,26,24,0.06), 0 12px 32px rgba(23,26,24,0.1)'
-        : '0 1px 2px rgba(0,0,0,0.4), 0 12px 32px rgba(0,0,0,0.5)',
+      '0 36px 56px -28px rgba(0,0,0,0.5), 0 2px 6px rgba(0,0,0,0.16)',
       'Chrome paper shadow.');
   }
   if (kind !== 'shadow') {
-    const colors = theme === 'light'
-      ? ['15 124 110 / 0.16', '38 64 156 / 0.18', '143 111 13 / 0.16']
-      : ['95 207 187 / 0.14', '143 166 240 / 0.22', '230 195 95 / 0.12'];
-    await expectDeclaration(page.getByTestId('landing-glow'),
-      'background-image',
-      `radial-gradient(55% 40% at 22% 28%, rgb(${colors[0]}), `
-      + 'transparent 70%), '
-      + `radial-gradient(55% 42% at 78% 36%, rgb(${colors[1]}), `
-      + 'transparent 70%), radial-gradient(60% 40% at 50% 82%, '
-      + `rgb(${colors[2]}), transparent 70%)`, 'Chrome hero gradient.');
+    const panels = theme === 'light'
+      ? [['landing-hero', '#de1b5a'], ['landing-editor', '#f1effa'],
+          ['landing-publish', '#1a1650'], ['landing-ai', '#f1effa'],
+          ['landing-data', '#fff2c2'], ['landing-maker', '#ffe4ec'],
+          ['landing-footer', '#1a1650']]
+      : [['landing-hero', '#de1b5a'], ['landing-editor', '#191640'],
+          ['landing-publish', '#322c8f'], ['landing-ai', '#191640'],
+          ['landing-data', '#332a0e'], ['landing-maker', '#3b1431'],
+          ['landing-footer', '#191640']];
+    for (const [id, color] of panels) {
+      await expectDeclaration(page.getByTestId(id!), 'background-color',
+        color!, 'Chrome panel colors.');
+    }
+    await expectDeclaration(page.getByTestId('landing-hero'), 'color',
+      '#ffffff', 'Chrome panel colors.');
+    await expectDeclaration(page.getByTestId('landing-template-fan'),
+      'background-color', theme === 'light' ? '#ffe4ec' : '#3b1431',
+      'Chrome panel colors.');
   }
+}
+
+export async function expectChromeFan(page: Page): Promise<void> {
+  const fan = page.getByTestId('landing-template-fan');
+  await expect.poll(() => fan.evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    return Array.from(element.querySelectorAll('img'), (image) => {
+      const matrix = new DOMMatrixReadOnly(getComputedStyle(image).transform);
+      return {
+        angle: Math.round(Math.atan2(matrix.b, matrix.a) * 180 / Math.PI),
+        width: Math.abs(image.offsetWidth - box.width * 0.4) <= 1,
+      };
+    });
+  }), 'Chrome fan geometry.').toEqual([-9, -3, 3, 9].map((angle) =>
+    ({ angle, width: true })));
 }
 
 export async function expectChromeNavigation(
@@ -80,17 +101,21 @@ export async function expectChromeNavigation(
 }
 
 export async function expectChromeList(page: Page): Promise<void> {
-  const grid = page.getByTestId('landing-template-grid');
+  const list = page.getByTestId('landing-template-list');
   const message = 'Chrome template list structure.';
-  await expect(grid, message).toMatchAriaSnapshot(
+  await expect(list, message).toMatchAriaSnapshot(
     '- list:\n' + Array.from({ length: 4 }, () =>
       '  - listitem:\n    - link').join('\n'),
   );
-  await expect(grid.getByRole('listitem'), message).toHaveCount(4);
-  await expect(grid.getByRole('link'), message).toHaveCount(4);
-  for (const [index, name] of ['ATS Plain', 'Engineer Compact',
-    'Graduate Friendly', 'Executive Band'].entries()) {
-    await expect(grid.getByRole('link').nth(index), message)
-      .toHaveAccessibleName(new RegExp(name, 'u'));
+  await expect(list.getByRole('listitem'), message).toHaveCount(4);
+  await expect(list.getByRole('link'), message).toHaveCount(4);
+  for (const [index, [id, name]] of [
+    ['ats-plain', 'ATS Plain'], ['engineer-compact', 'Engineer Compact'],
+    ['graduate-friendly', 'Graduate Friendly'],
+    ['executive-band', 'Executive Band'],
+  ].entries()) {
+    const link = list.getByRole('link').nth(index);
+    await expect(link, message).toHaveAccessibleName(new RegExp(name!, 'u'));
+    await expect(link, message).toHaveAttribute('href', `/templates/${id}`);
   }
 }
