@@ -5,6 +5,7 @@ import {
   type AcceptedResume,
   type BrowserPersistenceProbe,
 } from './editor-fixtures';
+import type { EditorFailureDiagnostic } from './editor-diagnostic';
 import { ALLOWED_ORIGIN } from './network-policy';
 
 export const ORIGIN = ALLOWED_ORIGIN;
@@ -19,6 +20,7 @@ export interface EditorProofState {
   editorDiagnosticStage: string;
   localeDiagnosticStage: string;
   readonly recordedResumeIDs: Set<string>;
+  failureDiagnostic?: EditorFailureDiagnostic;
 }
 
 export async function prepareEditor<T>(
@@ -153,6 +155,7 @@ export async function expectSavedOrDiagnose(
   try {
     await expect(page.locator('[data-state="saved"]')).toBeVisible();
   } catch (error) {
+    state.failureDiagnostic?.markFailure();
     const saveState = await page.getByTestId('save-status').getAttribute('data-state');
     const safeState = safeSaveState(saveState);
     const conflict = page.locator('[data-conflict]').first();

@@ -1282,6 +1282,9 @@ for (const required of [
 }
 ROUTING_SCOPE_TEST
 
+node --test "$SOURCE/editor-diagnostic.test.mjs" ||
+  fail 'editor failure diagnostic drifted from its closed contract'
+
 ln -s "$SOURCE/node_modules" "$CONTEXT/node_modules"
 readonly AUTH_LIST_OUTPUT=$(ABOUTME_BROWSER_MODE=auth \
   "$SOURCE/node_modules/.bin/playwright" test --list --config "$CONTEXT/playwright.config.ts")
