@@ -126,6 +126,10 @@ file that is not. A file is accounted for when it belongs to one of:
   its exact version, its paths, the sha256 of its content, its licence files or
   complete credits, and the URL of that version's source.
 
+Each component entry also goes into the image's `BASE-IMAGES.txt` with its
+version, notices, and source URL, so it reaches recipients in the image and the
+GitHub release and falls under the weekly source check below.
+
 The build compares each listed component's content hash with its entry, so a
 newer CA bundle or Chromium build at an unchanged path fails until a reviewed
 change updates the entry. The components known today are the Node.js runtime and
