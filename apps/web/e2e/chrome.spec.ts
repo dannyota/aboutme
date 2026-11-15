@@ -14,7 +14,6 @@ import {
   expectScreen,
   measureChromeGrid,
   measureChromeSheet,
-  measureChromeThumbnail,
   measureTextContainment,
   measureVerticalFlow,
 } from './display-assertions';
@@ -23,9 +22,11 @@ import {
   screenMutationTests,
 } from './style-mutation';
 import {
-  expectChromeDecoration, expectChromeList, expectChromeNavigation,
+  expectChromeDecoration, expectChromeFan, expectChromeList,
+  expectChromeNavigation, expectSampleIsolation,
 } from './chrome-details';
 
+import type { ScreenContract } from './screen-contract';
 import {
   chromeScreenContract,
   expectThumbnailRenders,
@@ -36,7 +37,7 @@ const LIVE_THUMBNAILS = TEMPLATES.length
   - new Set(SAMPLES.map(({ templateId }) => templateId)).size;
 
 const PAGES = [
-  { name: 'home', path: '/', thumbnails: 4 },
+  { name: 'home', path: '/', thumbnails: 0 },
   { name: 'login', path: '/login', thumbnails: 0 },
   { name: 'templates', path: '/templates', thumbnails: LIVE_THUMBNAILS },
 ] as const;
@@ -47,7 +48,7 @@ test('live thumbnails are checked at the requested viewport', async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 900 });
-  await page.goto('/');
+  await page.goto('/templates');
   await page.evaluate(() => document.fonts.ready);
   await page.evaluate(() => {
     const root = document.documentElement;
@@ -57,8 +58,7 @@ test('live thumbnails are checked at the requested viewport', async ({
         Number(root.dataset.maxViewportHeight)));
     });
   });
-  await expect(page.locator('[data-sheet-thumbnail-render]')).toHaveCount(0);
-  await expectThumbnailRenders(page, 4);
+  await expectThumbnailRenders(page, LIVE_THUMBNAILS);
   expect(page.viewportSize()).toEqual({ width: 390, height: 900 });
   await expect(page.locator('html'))
     .toHaveAttribute('data-max-viewport-height', '900');
@@ -95,27 +95,42 @@ async function expectChrome(
   await expect(nav.getByRole('link', {
     name: vi ? 'Cộng đồng' : 'Community', exact: true,
   })).toHaveCount(1);
+  const home = name === 'home';
+  if (home) {
+    await expect(page.locator('html')).toHaveAttribute('data-page', 'home');
+  } else {
+    await expect(page.locator('html')).not.toHaveAttribute('data-page');
+  }
   await expect(header).toHaveCSS('background-color', theme === 'light'
     ? 'rgb(255, 255, 255)'
-    : 'rgb(20, 26, 46)');
+    : home ? 'rgb(15, 13, 38)' : 'rgb(20, 26, 46)');
+  if (home) {
+    await expect(header).toHaveCSS('border-bottom-color', theme === 'light'
+      ? 'rgb(227, 224, 242)'
+      : 'rgba(243, 241, 255, 0.16)');
+    await expect(header).toHaveCSS('border-bottom-width', '1px');
+  }
   await expect(page.locator('body')).toHaveCSS('background-color',
-    theme === 'light' ? 'rgb(249, 248, 245)' : 'rgb(12, 16, 32)');
+    theme === 'light'
+      ? home ? 'rgb(255, 255, 255)' : 'rgb(249, 248, 245)'
+      : home ? 'rgb(15, 13, 38)' : 'rgb(12, 16, 32)');
+  await expect(page.locator('body')).toHaveCSS('background-image',
+    home ? 'none' : /radial-gradient/u);
   await expect(page.locator('body'), 'Chrome body font-size.')
     .toHaveCSS('font-size', '15px');
   await expect(page.locator('body')).toHaveCSS('line-height', '22.5px');
-  await expect(page.locator('body')).toHaveCSS('color', theme === 'light'
-    ? 'rgb(16, 27, 63)'
-    : 'rgb(243, 241, 236)');
-  await expect(page.locator('body')).toHaveCSS(
-    'font-family', '"Be Vietnam Pro", Inter, system-ui, sans-serif',
-  );
-  expect(await page.evaluate(() => ({
-    loaded: document.fonts.check('15px "Be Vietnam Pro"'),
+  await expect(page.locator('body')).toHaveCSS('color', bodyColor(name, theme));
+  await expect(page.locator('body')).toHaveCSS('font-family', home
+    ? '"Plus Jakarta Sans", "Be Vietnam Pro", system-ui, sans-serif'
+    : '"Be Vietnam Pro", Inter, system-ui, sans-serif');
+  expect(await page.evaluate((face) => ({
+    loaded: document.fonts.check(`15px "${face}"`),
     face: Array.from(document.fonts).some((font) =>
-      font.family === 'Be Vietnam Pro' && font.status === 'loaded'),
+      font.family === face && font.status === 'loaded'),
     overflow: document.documentElement.scrollWidth
       <= document.documentElement.clientWidth + 1,
-  }))).toEqual({ loaded: true, face: true, overflow: true });
+  }), home ? 'Plus Jakarta Sans' : 'Be Vietnam Pro'))
+    .toEqual({ loaded: true, face: true, overflow: true });
 
   if (name === 'login') {
     const form = page.getByTestId('login-form');
@@ -140,70 +155,78 @@ async function expectChrome(
   }
 
   const title = page.getByRole('heading', { level: 1 });
-  await expect(title).toHaveText(name === 'home'
-    ? (vi
-        ? 'CV của bạn. Chia sẻ theo cách của bạn.'
-        : 'Your resume. Your link. Your control.')
-    : (vi ? 'Thư viện' : 'Library'));
-  await expect(title).toMatchAriaSnapshot(name === 'home'
-    ? (vi
-        ? '- heading "CV của bạn. Chia sẻ theo cách của bạn." [level=1]'
-        : '- heading "Your resume. Your link. Your control." [level=1]')
-    : (vi
-        ? '- heading "Thư viện" [level=1]'
-        : '- heading "Library" [level=1]'));
-  await expect(title).toHaveCSS('font-weight', '700');
-  await expect(title).toHaveCSS('font-size', name === 'home'
-    ? (width < 1024 ? '48px' : '60px')
+  const titleText = home
+    ? HOME_TITLE[locale]
+    : (vi ? 'Thư viện' : 'Library');
+  await expect(title).toHaveText(titleText);
+  await expect(title).toMatchAriaSnapshot(
+    `- heading "${titleText}" [level=1]`,
+  );
+  await expect(title).toHaveCSS('font-weight', home ? '800' : '700');
+  await expect(title).toHaveCSS('font-size', home
+    ? (width < 768 ? '40px' : width < 1280 ? '48px' : '60px')
     : (width < 640 ? '40px' : '48px'));
   await expect.poll(() => title.evaluate((node) => {
     const css = getComputedStyle(node);
     const line = parseFloat(css.lineHeight) || parseFloat(css.fontSize);
     return node.getBoundingClientRect().height >= line - 1;
   }), 'Chrome heading line box.').toBe(true);
-  const titleContainer = name === 'home'
+  const titleContainer = home
     ? '[data-testid="landing-hero"]'
     : '[data-testid="gallery-header"]';
   await expect.poll(() => measureTextContainment(title, titleContainer),
     'Chrome text containment.')
     .toEqual({ visible: true, contained: true });
 
-  if (name === 'home') {
+  if (home) {
     await expectChromeDecoration(page, theme);
     await expectChromeList(page);
+    await expectChromeFan(page);
     await expect.poll(() => measureChromeSheet(
-      page.getByTestId('landing-stage'),
+      page.getByTestId('landing-art'),
     ), 'Chrome sheet alignment.').toBe(true);
-    await expect(page.getByTestId('landing-sheet'))
-      .toHaveCSS('background-color', 'rgb(255, 255, 255)');
-    await expect(page.getByTestId('landing-sheet'))
-      .toHaveCSS('border-radius', '2px');
-    await expect(page.getByTestId('landing-sheet'))
-      .not.toHaveCSS('box-shadow', 'none');
-    await expect(page.getByTestId('landing-glow'))
-      .toHaveCSS('background-image', /radial-gradient/u);
+    const sheet = page.getByTestId('landing-sheet');
+    await expect(sheet).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+    await expect(sheet).toHaveCSS('border-radius', '2px');
+    await expectSampleIsolation(page);
+    await expect(page.getByTestId('landing-chips'))
+      .toHaveAttribute('aria-hidden', 'true');
+    await expect(page.getByTestId('landing-chips').locator('[data-app-seal]'))
+      .toHaveCSS('font-family', /^"Be Vietnam Pro"/u);
     await expect(page.getByTestId('landing-templates').getByRole('heading', {
       level: 2,
-    })).toHaveText(vi ? 'Chọn phong cách cho CV' : 'Choose your style');
-    const grid = page.getByTestId('landing-template-grid');
-    await expect(grid.locator(':scope > li')).toHaveCount(4);
-    expect(await grid.locator('[data-template]').evaluateAll((cards) =>
-      cards.map((card) => card.getAttribute('data-template')))).toEqual([
+    })).toHaveText(vi
+      ? 'Chọn mẫu hợp với nghề của bạn.'
+      : 'Pick a template that fits your work.');
+    const fan = page.getByTestId('landing-template-fan');
+    expect(await fan.locator('img').evaluateAll((images) =>
+      images.map((image) => image.getAttribute('data-template')))).toEqual([
       'ats-plain', 'engineer-compact', 'graduate-friendly', 'executive-band',
     ]);
-    await expect.poll(() => measureChromeGrid(grid), 'Chrome grid geometry.')
-      .toEqual({
-        columns: width < 1024 ? 2 : 4,
-        gapX: width < 1024 ? 16 : 24,
-        gapY: 32,
-        separated: true,
-      });
-    const cards = grid.locator('[data-template]');
+    const images = fan.locator('img');
     for (let index = 0; index < 4; index += 1) {
-      const card = cards.nth(index);
-      await card.scrollIntoViewIfNeeded();
-      await expect.poll(() => measureChromeThumbnail(card)).toBe(true);
+      const image = images.nth(index);
+      await image.scrollIntoViewIfNeeded();
+      await expect.poll(() => image.evaluate(async (element, lng) => {
+        const img = element as HTMLImageElement;
+        try {
+          await img.decode();
+        } catch {
+          return false;
+        }
+        return img.naturalWidth === 1240 && img.naturalHeight === 1754
+          && img.currentSrc.endsWith(`/templates/pages/${
+            img.dataset.template}-${lng}-p1.png`);
+      }, locale)).toBe(true);
     }
+    const avatar = page.getByTestId('landing-maker-avatar');
+    await avatar.scrollIntoViewIfNeeded();
+    await expect(avatar).toHaveAttribute('alt', AVATAR_ALT[locale]);
+    await expect(avatar).toHaveCSS('object-fit', 'cover');
+    await expect.poll(() => avatar.evaluate((element) => {
+      const box = element.parentElement!.getBoundingClientRect();
+      return Math.round(box.width);
+    })).toBe(width < 768 ? 168 : width < 1024 ? 176 : 232);
   } else {
     const galleryHeader = page.getByTestId('gallery-header');
     await expect(galleryHeader).toHaveCSS('background-color', theme === 'light'
@@ -290,12 +313,8 @@ test.describe('Vietnamese chrome', () => {
           }
 
           if (page.name === 'home') {
-            const templates = browserPage.locator(
-              '[data-testid="landing-templates"]',
-            );
-            await templates.scrollIntoViewIfNeeded();
-            await expectThumbnailRenders(browserPage, 4);
-            await prepareScreen(browserPage);
+            await expect(browserPage.locator('[data-sheet-thumbnail]'))
+              .toHaveCount(0);
           }
           if (page.name === 'home' && theme === 'light' && width === 390) {
             await captureReviewImage(
@@ -376,16 +395,23 @@ for (const locale of ['vi', 'en'] as const) {
   }
 }
 
+const MUTATION_MESSAGES = {
+  'sheet alignment': 'Chrome sheet alignment.',
+  'hero overhang': 'Chrome sheet alignment.',
+  'fan rotation': 'Chrome fan geometry.',
+  'title clipping': 'Screen containment.',
+  'body color': 'Screen color.',
+  'body font size': 'font-size',
+  'navigation': 'Chrome navigation structure.',
+} as const;
+
 for (const [name, selector, styles] of [
   ['sheet alignment', '[data-testid="landing-sheet"]', { translate: '4px' }],
-  ['columns', '[data-testid="landing-template-grid"]', {
-    'grid-template-columns': ['1fr', /^\d+(?:\.\d+)?px$/u],
+  ['hero overhang', '[data-testid="landing-art"]', {
+    'margin-bottom': '0px',
   }],
-  ['card overlap', '[data-testid="landing-template-grid"] > :nth-child(2)', {
-    transform: ['translateX(-20px)', 'matrix(1, 0, 0, 1, -20, 0)'],
-  }],
-  ['row gap', '[data-testid="landing-template-grid"] > :nth-child(n+3)', {
-    transform: ['translateY(4px)', 'matrix(1, 0, 0, 1, 0, 4)'],
+  ['fan rotation', '[data-testid="landing-template-fan"] img:nth-child(2)', {
+    transform: 'none',
   }],
   ['title clipping', '[data-testid="landing-title"]', {
     'height': '20px', 'overflow': 'hidden', 'white-space': 'nowrap',
@@ -401,18 +427,7 @@ for (const [name, selector, styles] of [
     const assertClean = () => expectChrome(page, 'home', 'vi', 'light', 390);
     await assertClean();
     const restore = await applyStyleMutation(page.locator(selector), styles);
-    await expect(assertClean()).rejects.toThrow(
-      name === 'sheet alignment'
-        ? 'Chrome sheet alignment.'
-        : ['columns', 'card overlap', 'row gap'].includes(name)
-            ? 'Chrome grid geometry.'
-            : name === 'title clipping'
-              ? 'Screen containment.'
-              : name === 'body color'
-                ? 'Screen color.'
-                : name === 'navigation'
-                  ? 'Chrome navigation structure.'
-                  : 'font-size');
+    await expect(assertClean()).rejects.toThrow(MUTATION_MESSAGES[name]);
     await restore();
     await assertClean();
   });
@@ -466,16 +481,18 @@ async function expectCenteredSheet(page: Page, width: number) {
       };
     };
     return {
-      stage: box('landing-stage'),
+      art: box('landing-art'),
       sheet: box('landing-sheet'),
       overflow: document.documentElement.scrollWidth
         - document.documentElement.clientWidth,
     };
   });
   expect(boxes.overflow).toBe(0);
-  expect(Math.abs(boxes.sheet.width - boxes.stage.width)).toBeLessThan(1);
-  expect(Math.abs(boxes.sheet.height - boxes.stage.height)).toBeLessThan(1);
-  expect(Math.abs(boxes.sheet.left - boxes.stage.left)).toBeLessThan(1);
+  expect(Math.abs(boxes.art.width - 210 * 96 / 25.4 * 0.36)).toBeLessThan(1);
+  expect(Math.abs((boxes.sheet.left + boxes.sheet.right) / 2
+    - (boxes.art.left + boxes.art.right) / 2)).toBeLessThan(1);
+  expect(boxes.sheet.left).toBeGreaterThanOrEqual(0);
+  expect(boxes.sheet.right).toBeLessThanOrEqual(width);
   const leftGap = boxes.sheet.left;
   const rightGap = width - boxes.sheet.right;
   expect(Math.abs(leftGap - rightGap)).toBeLessThan(2);
@@ -522,19 +539,48 @@ for (const engine of ['chromium', 'webkit'] as const) {
   });
 }
 
-function chromeContract(name: ChromePage, locale: Locale, theme: Theme) {
+const AVATAR_ALT = {
+  vi: 'Tranh vẽ chân dung Danny, bên cạnh là vợ và con anh trong khung '
+    + 'hình trái tim',
+  en: 'Drawn portrait of Danny, with his wife and child in a heart-shaped '
+    + 'frame',
+} as const;
+
+const HOME_TITLE = {
+  vi: 'Làm CV ở đây, gửi đi bằng một đường link.',
+  en: 'Write your resume here. Send it as one link.',
+} as const;
+
+function bodyColor(name: ChromePage, theme: Theme): string {
+  if (name === 'home') {
+    return theme === 'light' ? 'rgb(26, 22, 80)' : 'rgb(243, 241, 255)';
+  }
+  return theme === 'light' ? 'rgb(16, 27, 63)' : 'rgb(243, 241, 236)';
+}
+
+function chromeContract(
+  name: ChromePage, locale: Locale, theme: Theme,
+): ScreenContract {
   const vi = locale === 'vi';
   const title = name === 'home'
-    ? vi
-      ? 'CV của bạn. Chia sẻ theo cách của bạn.'
-      : 'Your resume. Your link. Your control.'
+    ? HOME_TITLE[locale]
     : name === 'login'
       ? vi ? 'Đăng nhập' : 'Sign in'
       : vi ? 'Thư viện' : 'Library';
-  return chromeScreenContract('body',
+  const contract = chromeScreenContract('body',
     'main :is(h1,h2,p):visible:not(.sr-only):not(.resume-document *)',
     '[data-testid="app-shell"] nav a:visible', 'h1', title, theme,
     name === 'templates' ? 'img[data-page-image]:visible' : undefined);
+  return name === 'home'
+    ? {
+        ...contract,
+        type: ['body',
+          '"Plus Jakarta Sans", "Be Vietnam Pro", system-ui, sans-serif',
+          'Plus Jakarta Sans'],
+        paint: ['body', 'color', bodyColor(name, theme)],
+        faces: ['Be Vietnam Pro'],
+      }
+    : contract;
 }
 
 for (const entry of PAGES) {
@@ -545,17 +591,34 @@ for (const entry of PAGES) {
   }, chromeContract(entry.name, 'vi', 'light'));
 }
 
-for (const kind of ['shadow', 'gradient'] as const) {
+for (const kind of ['shadow', 'panels'] as const) {
   mutationTest(`chrome rejects changed ${kind} values`, async ({ page }) => {
     await page.goto('/');
     await proveMutation(() => expectChromeDecoration(page, 'light', kind),
       () => applyStyleMutation(page.getByTestId(kind === 'shadow'
         ? 'landing-sheet'
-        : 'landing-glow'), kind === 'shadow'
+        : 'landing-publish'), kind === 'shadow'
         ? { 'box-shadow': 'rgb(0, 0, 0) 1px 1px 1px 0px' }
-        : { 'background-image':
-            'radial-gradient(rgb(255, 0, 0), rgb(0, 0, 255))' }),
-      kind === 'shadow' ? 'Chrome paper shadow.' : 'Chrome hero gradient.');
+        : { 'background-color': 'rgb(1, 2, 3)' }),
+      kind === 'shadow' ? 'Chrome paper shadow.' : 'Chrome panel colors.');
+  });
+}
+
+for (const [kind, styles] of [
+  ['weight', { 'font-weight': '500' }],
+  ['focus', { 'outline-style': 'solid' }],
+] as const) {
+  mutationTest(`chrome rejects changed sample ${kind}`, async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 900 });
+    await page.goto('/');
+    await prepareScreen(page);
+    const sample = page.getByTestId('landing-sample')
+      .locator('.resume-document');
+    await proveMutation(() => expectSampleIsolation(page),
+      () => applyStyleMutation(kind === 'weight'
+        ? sample
+        : sample.locator('a[href]').first(), styles),
+      'Chrome sample isolation.');
   });
 }
 
@@ -570,7 +633,7 @@ for (const kind of ['navigation', 'template list'] as const) {
     await proveMutation(assertion, () => mutateAttribute(
       kind === 'navigation'
         ? page.getByTestId('app-shell').locator('nav')
-        : page.getByTestId('landing-template-grid'), 'role', 'group',
+        : page.getByTestId('landing-template-list'), 'role', 'group',
     ), kind === 'navigation'
       ? 'Chrome navigation structure.'
       : 'Chrome template list structure.');

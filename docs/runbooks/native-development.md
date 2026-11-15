@@ -36,8 +36,7 @@ managed lock and current wrapper in
 
 ```sh
 make tools-check ARGS=dev
-npm ci
-npm --prefix apps/web ci
+pnpm install --frozen-lockfile --offline || pnpm install --frozen-lockfile
 ```
 
 On Linux, retain the existing host Chromium setup for native server rendering:

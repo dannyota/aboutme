@@ -13,6 +13,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { deflateSync } from 'node:zlib';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { stringify } from 'yaml';
 
 import { generatePages } from '../../scripts/generate-template-pages.mts';
 import {
@@ -46,21 +47,48 @@ function save(entries: Record<string, unknown>[]): void {
   );
 }
 
-function syntheticLock(): Record<string, {
-  version: string;
-  dependencies?: Record<string, string>;
-  optionalDependencies?: Record<string, string>;
-  peerDependencies?: Record<string, string>;
-}> {
-  return Object.fromEntries(RENDER_DEPENDENCIES.map((name) => [
-    `node_modules/${name}`, { version: '1.0.0' },
-  ]));
+interface SyntheticLock {
+  importers: Record<string, {
+    dependencies?: Record<string, { specifier: string; version: string }>;
+  }>;
+  packages: Record<string, Record<string, unknown>>;
+  snapshots: Record<string, {
+    dependencies?: Record<string, string>;
+    optionalDependencies?: Record<string, string>;
+  }>;
 }
 
-function saveLock(packages: ReturnType<typeof syntheticLock>): void {
-  put(join(root, 'apps/web/package-lock.json'), JSON.stringify({
-    lockfileVersion: 3, packages,
+function syntheticLock(): SyntheticLock {
+  return {
+    importers: {
+      '.': {},
+      'apps/web': {
+        dependencies: Object.fromEntries(RENDER_DEPENDENCIES.map((name) => [
+          name, { specifier: '1.0.0', version: '1.0.0' },
+        ])),
+      },
+      'packages/schema': {},
+    },
+    packages: Object.fromEntries(RENDER_DEPENDENCIES.map((name) => [
+      `${name}@1.0.0`, { resolution: { integrity: `sha512-${name}` } },
+    ])),
+    snapshots: Object.fromEntries(RENDER_DEPENDENCIES.map((name) => [
+      `${name}@1.0.0`, {},
+    ])),
+  };
+}
+
+function saveLock(lock: SyntheticLock): void {
+  put(join(root, 'pnpm-lock.yaml'), stringify({
+    lockfileVersion: '9.0', ...lock,
   }));
+}
+
+function addPackage(lock: SyntheticLock, key: string): void {
+  lock.packages[key.replace(/\(.*$/u, '')] = {
+    resolution: { integrity: `sha512-${key}` },
+  };
+  lock.snapshots[key] = {};
 }
 
 function chunk(kind: string, data: Buffer): Buffer {
@@ -85,7 +113,8 @@ beforeEach(() => {
   for (const path of sourcePaths(repository)) {
     put(join(root, path), readFileSync(join(repository, path)));
   }
-  for (const path of ['apps/web/package.json', 'apps/web/package-lock.json']) {
+  for (const path of ['apps/web/package.json', 'pnpm-lock.yaml',
+    'pnpm-workspace.yaml']) {
     put(join(root, path), readFileSync(join(repository, path)));
   }
   put(join(root, 'Makefile'), readFileSync(join(repository, 'Makefile')));
@@ -169,13 +198,34 @@ describe('template page freshness', () => {
     expect(() => validatePages(root)).toThrow(/stale source hash/);
   });
 
+  it.each([
+    ['package.json', '"packageManager": "pnpm@', '"packageManager": "pnpm@0.'],
+    ['pnpm-workspace.yaml', 'minimumReleaseAge: 1440', 'minimumReleaseAge: 1'],
+    ['pnpm-workspace.yaml', 'pmOnFail: error', 'pmOnFail: ignore'],
+    ['pnpm-lock.yaml', '        version: 12.', '        version: 0.'],
+  ])('rejects a changed pnpm pin or policy in %s', (path, from, to) => {
+    refreshHashes(root);
+    const text = readFileSync(join(root, path), 'utf8');
+    expect(text).toContain(from);
+    put(join(root, path), text.replace(from, to));
+    expect(() => validatePages(root)).toThrow(/stale source hash/);
+  });
+
   it('ignores unrelated lockfile versions', () => {
-    const packages = syntheticLock();
-    packages['node_modules/unrelated'] = { version: '1.0.0' };
-    saveLock(packages);
+    const lock = syntheticLock();
+    lock.importers['.'] = {
+      dependencies: { unrelated: { specifier: '1.0.0', version: '1.0.0' } },
+    };
+    addPackage(lock, 'unrelated@1.0.0');
+    saveLock(lock);
     const before = sourceFingerprint(root).sha256;
-    packages['node_modules/unrelated']!.version = '2.0.0';
-    saveLock(packages);
+    delete lock.packages['unrelated@1.0.0'];
+    delete lock.snapshots['unrelated@1.0.0'];
+    lock.importers['.'] = {
+      dependencies: { unrelated: { specifier: '2.0.0', version: '2.0.0' } },
+    };
+    addPackage(lock, 'unrelated@2.0.0');
+    saveLock(lock);
     expect(sourceFingerprint(root).sha256).toBe(before);
   });
 
@@ -189,37 +239,56 @@ describe('template page freshness', () => {
   });
 
   it('detects changed render dependency versions', () => {
-    const packages = syntheticLock();
-    saveLock(packages);
+    const lock = syntheticLock();
+    saveLock(lock);
     const before = sourceFingerprint(root).sha256;
-    packages['node_modules/vue']!.version = '2.0.0';
-    saveLock(packages);
+    lock.importers['apps/web']!.dependencies!.vue = {
+      specifier: '2.0.0', version: '2.0.0',
+    };
+    addPackage(lock, 'vue@2.0.0');
+    saveLock(lock);
     expect(sourceFingerprint(root).sha256).not.toBe(before);
   });
 
   it('detects changed transitive dependency versions', () => {
-    const packages = syntheticLock();
-    packages['node_modules/vue']!.dependencies = { child: '1' };
-    packages['node_modules/child'] = {
-      version: '1.0.0',
-      optionalDependencies: { absent: '1' },
-      peerDependencies: { missing: '1' },
-    };
-    saveLock(packages);
+    const lock = syntheticLock();
+    lock.snapshots['vue@1.0.0'] = { dependencies: { child: '1.0.0' } };
+    addPackage(lock, 'child@1.0.0');
+    saveLock(lock);
     const before = sourceFingerprint(root).sha256;
-    packages['node_modules/child']!.version = '2.0.0';
-    saveLock(packages);
+    lock.snapshots['vue@1.0.0'] = { dependencies: { child: '2.0.0' } };
+    addPackage(lock, 'child@2.0.0');
+    saveLock(lock);
     expect(sourceFingerprint(root).sha256).not.toBe(before);
   });
 
-  it('resolves nested dependencies before top-level copies', () => {
-    const packages = syntheticLock();
-    packages['node_modules/vue']!.dependencies = { vite: '1' };
-    packages['node_modules/vue/node_modules/vite'] = { version: '1.0.0' };
-    saveLock(packages);
+  it('detects changed packages/schema importer entries', () => {
+    const lock = syntheticLock();
+    lock.importers['packages/schema'] = {
+      dependencies: { child: { specifier: '1.0.0', version: '1.0.0' } },
+    };
+    addPackage(lock, 'child@1.0.0');
+    saveLock(lock);
     const before = sourceFingerprint(root).sha256;
-    packages['node_modules/vue/node_modules/vite']!.version = '2.0.0';
-    saveLock(packages);
+    lock.packages['child@1.0.0'] = { resolution: { integrity: 'sha512-new' } };
+    saveLock(lock);
+    expect(sourceFingerprint(root).sha256).not.toBe(before);
+  });
+
+  it('follows the snapshot of each peer context', () => {
+    const lock = syntheticLock();
+    const vite = 'vite@1.0.0(peer@1.0.0)';
+    lock.snapshots['vue@1.0.0'] = {
+      dependencies: { vite: '1.0.0(peer@1.0.0)' },
+    };
+    addPackage(lock, vite);
+    addPackage(lock, 'peer@1.0.0');
+    lock.snapshots[vite] = { dependencies: { peer: '1.0.0' } };
+    saveLock(lock);
+    const before = sourceFingerprint(root).sha256;
+    lock.snapshots[vite] = { dependencies: { peer: '2.0.0' } };
+    addPackage(lock, 'peer@2.0.0');
+    saveLock(lock);
     expect(sourceFingerprint(root).sha256).not.toBe(before);
   });
 
@@ -227,36 +296,50 @@ describe('template page freshness', () => {
     ['optionalDependencies', true],
     ['peerDependencies', false],
   ] as const)('follows installed %s: %s', (kind, followed) => {
-    const packages = syntheticLock();
-    packages['node_modules/vue']![kind] = { child: '1' };
-    packages['node_modules/child'] = { version: '1.0.0' };
-    saveLock(packages);
+    const lock = syntheticLock();
+    if (kind === 'optionalDependencies') {
+      lock.snapshots['vue@1.0.0'] = {
+        optionalDependencies: { child: '1.0.0' },
+      };
+    } else {
+      lock.packages['vue@1.0.0']!.peerDependencies = { child: '*' };
+    }
+    addPackage(lock, 'child@1.0.0');
+    saveLock(lock);
     const before = sourceFingerprint(root).sha256;
-    packages['node_modules/child']!.version = '2.0.0';
-    saveLock(packages);
+    lock.packages['child@1.0.0'] = { resolution: { integrity: 'sha512-new' } };
+    saveLock(lock);
     expect(sourceFingerprint(root).sha256 !== before).toBe(followed);
   });
 
   it('rejects a missing render dependency root', () => {
-    const packages = syntheticLock();
-    delete packages['node_modules/vue'];
-    saveLock(packages);
+    const lock = syntheticLock();
+    delete lock.importers['apps/web']!.dependencies!.vue;
+    saveLock(lock);
     expect(() => sourceFingerprint(root)).toThrow(/vue.*root/i);
   });
 
   it('rejects an empty render dependency version', () => {
-    const packages = syntheticLock();
-    packages['node_modules/vue']!.version = '';
-    saveLock(packages);
+    const lock = syntheticLock();
+    lock.importers['apps/web']!.dependencies!.vue = {
+      specifier: '1.0.0', version: '',
+    };
+    saveLock(lock);
     expect(() => sourceFingerprint(root)).toThrow(/version.*vue/i);
   });
 
   it('rejects a missing required transitive dependency', () => {
-    const packages = syntheticLock();
-    packages['node_modules/vue']!.dependencies = { missing: '1' };
-    saveLock(packages);
+    const lock = syntheticLock();
+    lock.snapshots['vue@1.0.0'] = { dependencies: { missing: '1.0.0' } };
+    saveLock(lock);
     expect(() => sourceFingerprint(root))
-      .toThrow(/missing.*node_modules\/vue/i);
+      .toThrow(/missing@1\.0\.0 in snapshots/i);
+  });
+
+  it('follows workspace sources listed in pnpm-workspace.yaml', () => {
+    expect(sourcePaths(root)).toContain('packages/schema/gen/ts/templates.ts');
+    put(join(root, 'pnpm-workspace.yaml'), 'packages:\n  - apps/web\n');
+    expect(() => sourcePaths(root)).toThrow(/unresolvable source import/);
   });
 
   it.each([

@@ -2,7 +2,7 @@
 
 require_tools() {
   local tool
-  for tool in podman go npm node caddy curl make sha256sum readlink ps awk grep stat install sed tail chmod mv find base64 tr head python3 uname; do
+  for tool in podman go pnpm node caddy curl make sha256sum readlink ps awk grep stat install sed tail chmod mv find base64 tr head python3 uname; do
     command -v "$tool" >/dev/null 2>&1 || die "$tool is not on PATH"
   done
   require_modern_bash || die 'Bash 4+ is required'
@@ -86,7 +86,7 @@ reject_http_stack() {
 
 preflight_new_stack() {
   local name port
-  [ -d "$ROOT/apps/web/node_modules" ] || die "apps/web/node_modules is missing; run 'npm ci' in apps/web first"
+  [ -d "$ROOT/apps/web/node_modules" ] || die "apps/web/node_modules is missing; run 'pnpm install --frozen-lockfile' at the repository root first"
   node "$ROOT/scripts/chromium-path.mjs" >/dev/null || die "pinned Chromium is unavailable"
   require_port_absent 20445 "private print port is already in use"
   generate_caddyfile >/dev/null || die "the deployed Caddy route table no longer matches the exact HTTPS substitutions"

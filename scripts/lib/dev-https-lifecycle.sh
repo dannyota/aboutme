@@ -220,7 +220,7 @@ start_caddy() {
 web_source_hash() {
   local path
   {
-    for path in apps/web/package.json apps/web/package-lock.json apps/web/nuxt.config.ts; do
+    for path in apps/web/package.json pnpm-lock.yaml apps/web/nuxt.config.ts; do
       printf '%s\0' "$path"
       if [ -f "$ROOT/$path" ]; then
         sha256_file "$ROOT/$path"

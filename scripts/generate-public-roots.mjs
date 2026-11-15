@@ -64,11 +64,13 @@ export const appManifestRows = [
 export const rendererManifestRows = [
   { path: "apps/web/app", kind: "recursive" },
   { path: "apps/web/nuxt.config.ts", kind: "file" },
-  { path: "apps/web/package-lock.json", kind: "file" },
   { path: "apps/web/package.json", kind: "file" },
   { path: "apps/web/public", kind: "recursive" },
   { path: "apps/web/server", kind: "recursive" },
+  { path: "package.json", kind: "file" },
   { path: registryRelativePath, kind: "file" },
+  { path: "pnpm-lock.yaml", kind: "file" },
+  { path: "pnpm-workspace.yaml", kind: "file" },
 ];
 
 function compareBytes(left, right) {

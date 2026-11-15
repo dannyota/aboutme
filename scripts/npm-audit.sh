@@ -3,7 +3,7 @@ set -Eeuo pipefail
 
 ROOT=${NPM_AUDIT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)}
 DIR=${1:-.}
-NPM=${NPM_AUDIT_NPM:-npm}
+PNPM=${NPM_AUDIT_PNPM:-pnpm}
 EXCEPTIONS=${NPM_AUDIT_EXCEPTIONS:-$ROOT/.github/npm-audit-exceptions.json}
 TODAY=${NPM_AUDIT_TODAY:-$(date -u +%F)}
 LIMIT=${NPM_AUDIT_TIMEOUT:-60}
@@ -43,24 +43,29 @@ toolong=$(jq -r --arg limit "$limit" '
 [ -z "$toolong" ] || die "exception expires more than 90 days ahead (latest $limit): $toolong"
 
 reldir=$(realpath -m --relative-to="$ROOT" "$DIR")
+[ -f "$DIR/package.json" ] || die "$DIR has no package.json"
+name=$(jq -r '.name // empty' "$DIR/package.json")
+[ -n "$name" ] || die "$DIR/package.json has no name for the pnpm filter"
 
-# npm audit exits non-zero whenever it finds anything, so the report decides (npm-audit(1)).
+# pnpm audit exits 1 for any advisory at or above its audit level, so the report decides (pnpm.io/cli/audit).
 out=$(mktemp "${TMPDIR:-/tmp}/npm-audit.XXXXXX")
 trap 'rm -f -- "$out"' EXIT
-usable() { jq -e '.vulnerabilities and (.error | not)' <<<"$report" >/dev/null 2>&1; }
+usable() {
+  jq -e '(.advisories | type == "object") and (.metadata.vulnerabilities | type == "object") and (.error | not)' \
+    <<<"$report" >/dev/null 2>&1
+}
 for attempt in 1 2; do
-  (cd "$DIR" && timeout -k 2 "$LIMIT" "$NPM" audit --omit=dev --json) >"$out" || true
+  (cd "$DIR" && timeout -k 2 "$LIMIT" "$PNPM" audit --prod --json --filter "$name" </dev/null) >"$out" || true
   report=$(<"$out")
   usable && break
   printf 'npm-audit: attempt %s gave no usable report in %s\n' "$attempt" "$DIR" >&2
 done
-usable || die "npm audit gave no usable report in $DIR"
+usable || die "pnpm audit gave no usable report in $DIR"
 
-# In npm audit JSON, object entries of via are advisories; string entries name another vulnerable package (npm-audit(1)).
 failing=$(jq -r --arg dir "$reldir" --slurpfile ex "$EXCEPTIONS" '
-  [.vulnerabilities[].via[] | select(type == "object")
+  [.advisories[]
     | select(.severity == "high" or .severity == "critical")
-    | {id: ((.url | capture("(?<id>GHSA(-[0-9a-z]{4}){3})").id) // .url), severity, title}]
+    | {id: (.github_advisory_id // ((.url // "" | capture("(?<id>GHSA(-[0-9a-z]{4}){3})").id) // .url)), severity, title}]
   | unique_by(.id)
   | map(select(.id as $id | ($ex[0] | any(.[]; .id == $id and (.dirs | index($dir)))) | not))
   | .[] | "\(.severity) \(.id) \(.title)"

@@ -1,8 +1,9 @@
 # Nuxt web app
 
-`apps/web` is a self-contained Nuxt 4 and Vue 3 package. It is not part of an
-npm workspace. Intended UI and renderer boundaries live in the
-[web design](../../docs/design/web.md).
+`apps/web` is the Nuxt 4 and Vue 3 member of the repository's pnpm workspace.
+It depends on `packages/schema` through `workspace:*`; install from the
+repository root with `pnpm install --frozen-lockfile`. Intended UI and renderer
+boundaries live in the [web design](../../docs/design/web.md).
 
 ## Implemented surface
 
@@ -64,13 +65,13 @@ make api-check
 
 Run package commands from this directory:
 
-- `npm run dev`: start Nuxt on its default development port.
-- `npm run build`: build the production application.
-- `npm run lint`: run ESLint.
-- `npm run typecheck`: run `vue-tsc --build --noEmit`.
-- `npm run test`: run Vitest.
-- `npm run api:gen`: regenerate the committed OpenAPI types.
-- `npm run api:drift`: check generated types without changing the tree.
+- `pnpm run dev`: start Nuxt on its default development port.
+- `pnpm run build`: build the production application.
+- `pnpm run lint`: run ESLint.
+- `pnpm run typecheck`: run `vue-tsc --build --noEmit`.
+- `pnpm run test`: run Vitest.
+- `pnpm run api:gen`: regenerate the committed OpenAPI types.
+- `pnpm run api:drift`: check generated types without changing the tree.
 
 Daily full-stack development uses `make dev-native`, which runs Nuxt on port
 `20030` behind Caddy at `http://localhost:20080`. See the

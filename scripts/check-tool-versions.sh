@@ -11,7 +11,7 @@ MANIFEST=$ROOT/.tool-versions
 
 declare -A expected=()
 readonly -a known=(
-  nodejs golang sqlc gitleaks golangci-lint govulncheck caddy
+  nodejs pnpm golang sqlc gitleaks golangci-lint govulncheck caddy
 )
 
 die() {
@@ -80,6 +80,13 @@ check_nodejs() {
   require_command node
   actual=$(node --version)
   assert_version node "v${expected[nodejs]}" "$(first_line "$actual")"
+}
+
+check_pnpm() {
+  local actual
+  require_command pnpm
+  actual=$(pnpm --version </dev/null)
+  assert_version pnpm "${expected[pnpm]}" "$(first_line "$actual")"
 }
 
 check_golang() {
@@ -193,8 +200,26 @@ assert_all_image_versions() {
   done
 }
 
+assert_all_install_pins() {
+  local label=$1 path=$2 wanted=$3 actual
+  local -a values=()
+  mapfile -t values < <(grep -o 'pnpm@[0-9][0-9A-Za-z.+-]*' "$path" | sed 's/^pnpm@//')
+  [ "${#values[@]}" -gt 0 ] || die "$label: $path installs no pinned pnpm"
+  for actual in "${values[@]}"; do
+    [ "$actual" = "$wanted" ] || die "$label: $path has pnpm@$actual, want pnpm@$wanted"
+  done
+}
+
 check_repository_contract() {
   assert_file_line node apps/web/.nvmrc "${expected[nodejs]}"
+  assert_file_text pnpm package.json "\"packageManager\": \"pnpm@${expected[pnpm]}\""
+  assert_file_text pnpm deploy/dev-https-browser/package.json \
+    "\"packageManager\": \"pnpm@${expected[pnpm]}\""
+  assert_all_install_pins pnpm deploy/web.Dockerfile "${expected[pnpm]}"
+  assert_all_install_pins pnpm deploy/dev-https-browser/Dockerfile "${expected[pnpm]}"
+  assert_all_install_pins pnpm Makefile "${expected[pnpm]}"
+  assert_all_install_pins pnpm .github/workflows/security-scan.yml "${expected[pnpm]}"
+  assert_all_install_pins pnpm .github/actions/setup-pnpm/action.yml "${expected[pnpm]}"
   assert_file_line go go.mod "go ${expected[golang]}"
   assert_all_image_versions node deploy/web.Dockerfile \
     docker.io/library/node: "${expected[nodejs]}"
@@ -223,10 +248,10 @@ check_repository_contract() {
 
 select_tools() {
   case ${1:-all} in
-  all) printf '%s\n' nodejs golang sqlc gitleaks golangci-lint govulncheck caddy ;;
-  ci) printf '%s\n' nodejs golang sqlc golangci-lint govulncheck caddy ;;
+  all) printf '%s\n' nodejs pnpm golang sqlc gitleaks golangci-lint govulncheck caddy ;;
+  ci) printf '%s\n' nodejs pnpm golang sqlc golangci-lint govulncheck caddy ;;
   scan) printf '%s\n' gitleaks ;;
-  dev) printf '%s\n' nodejs golang caddy ;;
+  dev) printf '%s\n' nodejs pnpm golang caddy ;;
   *) printf '%s\n' "$@" ;;
   esac
 }

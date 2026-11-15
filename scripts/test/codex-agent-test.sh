@@ -27,11 +27,11 @@ python3 -c 'import json, os, sys; e = dict(os.environ); e["PATH"] = sys.argv[2];
 cat >"$STDIN_LOG"
 exit "${CODEX_STATUS:-0}"
 SH
-for tool in go npm; do
+for tool in go npm pnpm; do
   printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$0 $*" >>"$TOOL_LOG"\nprintf "%%s\\n" "%s"\n' \
     "$FAKE_HOME/.ssh" >"$WORK/bin/$tool"
 done
-chmod +x "$WORK/bin/codex" "$WORK/bin/go" "$WORK/bin/npm"
+chmod +x "$WORK/bin/codex" "$WORK/bin/go" "$WORK/bin/npm" "$WORK/bin/pnpm"
 printf 'cache=${HOME}/.ssh\n' | tee "$TREE/.npmrc" >"$FAKE_HOME/.npmrc"
 printf 'export GH_TOKEN=fixture-zshenv\n' >"$WORK/zdot/.zshenv"
 printf 'export GH_TOKEN=fixture-zprofile\n' >"$WORK/zdot/.zprofile"
@@ -93,7 +93,7 @@ for name in ("BASH_ENV", "ENV"):
 
 cache = home / ("Library/Caches" if sys.platform == "darwin" else ".cache")
 roots = [str(cache / "go-build"), str(home / "go/pkg/mod"), str(cache / "golangci-lint"),
-         str(home / ".npm"), str(temp), str(main / ".dev/locks")]
+         str(temp), str(main / ".dev/locks")]
 expected = (["--search"] if search == "yes" else []) + [
     "exec", "-m", model, "-c", f"model_reasoning_effort={effort}",
     "-c", None, "-c", "features.shell_snapshot=false", "-c", "allow_login_shell=false",
@@ -129,14 +129,15 @@ if writes:
     expected[index] = actual[index]
 assert actual == expected, actual
 assert (work / "stdin").read_bytes() == b"", "codex received stdin"
-assert not (work / "tools").exists(), "the launcher ran go or npm"
+assert not (work / "tools").exists(), "the launcher ran go, npm, or pnpm"
 
 for name in ("GH_TOKEN", "GITHUB_TOKEN", "GH_HOST", "AWS_PROFILE", "AWS_SECRET_ACCESS_KEY",
              "VNGCLOUD_CLIENT_ID", "REGISTRY_AUTH_FILE", "NPM_TOKEN", "NODE_AUTH_TOKEN",
              "npm_config__authToken", "ANTHROPIC_API_KEY_OWNER", "OPENAI_API_KEY",
              "SSH_AUTH_SOCK", "CLAUDE_CODE_MESSAGING_TOKEN", "OP_SERVICE_ACCOUNT_TOKEN",
              "GIT_ASKPASS", "GOOGLE_APPLICATION_CREDENTIALS", "DOCKER_CONFIG", "KUBECONFIG",
-             "DEPLOY_PASSWORD", "SESSION_SECRET", "GOAUTH"):
+             "DEPLOY_PASSWORD", "SESSION_SECRET", "GOAUTH", "npm_config_cache",
+             "NPM_CONFIG_CACHE", "PNPM_CONFIG_STORE_DIR", "pnpm_config_cache_dir"):
     assert name not in environment, name
 for name, value in (("GOFLAGS", "-mod=readonly"), ("NODE_OPTIONS", "--no-warnings"),
                     ("LANG", "C.UTF-8"), ("CODEX_HOME", str(work / "codex home")),
@@ -147,8 +148,7 @@ for name, value in (("GIT_CONFIG_COUNT", "1"), ("GIT_CONFIG_KEY_0", "credential.
                     ("GIT_CONFIG_VALUE_0", ""), ("GIT_TERMINAL_PROMPT", "0")):
     assert environment.get(name) == value, name
 if writes:
-    for name, root in zip(("GOCACHE", "GOMODCACHE", "GOLANGCI_LINT_CACHE", "npm_config_cache"),
-                          roots):
+    for name, root in zip(("GOCACHE", "GOMODCACHE", "GOLANGCI_LINT_CACHE"), roots):
         assert environment.get(name) == root, name
 PY
   remove_run_temp
@@ -166,7 +166,9 @@ run() {
     GOFLAGS=-mod=readonly NODE_OPTIONS=--no-warnings LANG=C.UTF-8
     "CODEX_HOME=$WORK/codex home" "HOME=${HOME_DIR:-$FAKE_HOME}"
     "GOCACHE=$FAKE_HOME/.ssh" "GOMODCACHE=$MAIN" "GOLANGCI_LINT_CACHE=$SCRATCH"
-    "npm_config_cache=$FAKE_HOME/.config" "ZDOTDIR=$WORK/zdot" BASH_ENV=/hostile ENV=/hostile)
+    "npm_config_cache=$FAKE_HOME/.config" "NPM_CONFIG_CACHE=$FAKE_HOME/.config"
+    "PNPM_CONFIG_STORE_DIR=$TREE/store" "pnpm_config_cache_dir=$TREE/cache"
+    "ZDOTDIR=$WORK/zdot" BASH_ENV=/hostile ENV=/hostile)
   if [[ ${TMPDIR_MODE:-} == unset ]]; then
     env -u TMPDIR "${settings[@]}" bash "$ROOT/scripts/codex-agent.sh" "$@" "$TREE" \
       "$SCRATCH/brief" "$SCRATCH/report with spaces.md" <"$WORK/caller-stdin"
@@ -280,9 +282,6 @@ refuse_root() {
   [[ ! -e $WORK/link-saved ]] || mv "$WORK/link-saved" "$link"
 }
 if [[ $(uname -s) == Darwin ]]; then cache=$FAKE_HOME/Library/Caches; else cache=$FAKE_HOME/.cache; fi
-refuse_root "$FAKE_HOME/.npm" "$FAKE_HOME/.docker" 'npm_config_cache: .*/\.npm is a symbolic link'
-refuse_root "$FAKE_HOME/.npm" "$SESSION/sandbox-probe" 'npm_config_cache: .*/\.npm is a symbolic link'
-refuse_root "$FAKE_HOME/.npm" "$FAKE_HOME/.ssh" 'npm_config_cache: .*/\.npm is a symbolic link'
 refuse_root "$FAKE_HOME/go" "$FAKE_HOME/gopath" 'GOMODCACHE: .*/go is a symbolic link'
 refuse_root "$FAKE_HOME/go" "$MAIN/.git" 'GOMODCACHE: .*/go is a symbolic link'
 refuse_root "$cache" "$FAKE_HOME/other-caches" 'GOCACHE: .*/[.]?[Cc]aches? is a symbolic link'

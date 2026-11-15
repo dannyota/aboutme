@@ -224,7 +224,7 @@ const runCli = async () => {
   const args = process.argv.slice(2);
   if (args.length !== 1) {
     throw new Error(
-      'Usage: npx --no-install tsx '
+      'Usage: pnpm exec tsx '
       + 'test/renderer/golden.generate.mts <output-dir>',
     );
   }

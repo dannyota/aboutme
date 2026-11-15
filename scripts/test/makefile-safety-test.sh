@@ -462,7 +462,9 @@ for status in [42, 0]:
     assert any(mount.endswith(":/results:rw") for mount in mounts)
     assert "TEMPLATE_PAGES_BROWSER_IMAGE=" + image in args
     command = args[-1]
-    assert "cd /tmp/aboutme/apps/web" in command
+    assert "cd /tmp/aboutme; npm install --global --ignore-scripts pnpm@" in command
+    assert 'pnpm install --frozen-lockfile --ignore-scripts --filter "@aboutme/web..."; cd apps/web;' in command
+    assert "npm ci" not in command and "npx" not in command
     assert "NUXT_HARNESS=1 node node_modules/nuxt/bin/nuxt.mjs build" in command
     assert "node scripts/generate-template-pages.mts --candidate /results/candidate" in command
     assert "playwright test" not in command and "--update-snapshots" not in command
@@ -508,7 +510,7 @@ chmod 0700 "$HTTPS_REPO/.dev/native-https" \
   "$HTTPS_REPO/.dev/native-https/input"
 cp "$ROOT/Makefile" "$HTTPS_REPO/Makefile"
 mapfile -t spec_sources <"$ROOT/deploy/dev-https-browser/spec-sources.txt"
-for file in Dockerfile package.json package-lock.json run.sh verify-evidence.mjs \
+for file in Dockerfile package.json pnpm-lock.yaml pnpm-workspace.yaml run.sh verify-evidence.mjs \
   spec-sources.txt "${spec_sources[@]}"; do
   cp "$ROOT/deploy/dev-https-browser/$file" "$HTTPS_REPO/deploy/dev-https-browser/"
 done

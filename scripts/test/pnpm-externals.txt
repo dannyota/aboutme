@@ -1,0 +1,16 @@
+@nuxt/nitro-server
+@vue/compiler-dom
+@vue/runtime-dom
+@vue/server-renderer
+@vue/shared
+cookie-es nuxt
+defu
+fnv1a-64
+hookable nuxt
+klona
+nostics
+object-identity
+ofetch
+ohash
+ufo
+unhead

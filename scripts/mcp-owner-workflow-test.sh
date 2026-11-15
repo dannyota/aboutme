@@ -418,7 +418,8 @@ refresh_image_manifest() {
   local id=${1:-$IMAGE} path hash
   hash=$({
     for path in deploy/dev-https-browser/Dockerfile deploy/dev-https-browser/package.json \
-      deploy/dev-https-browser/package-lock.json deploy/dev-https-browser/run.sh \
+      deploy/dev-https-browser/pnpm-lock.yaml deploy/dev-https-browser/pnpm-workspace.yaml \
+      deploy/dev-https-browser/run.sh \
       deploy/dev-https-browser/spec-sources.txt deploy/dev-https-browser/verify-evidence.mjs; do
       printf '%s\0' "$path"
       (cd "$REPO" && sha256sum -- "$path")
@@ -479,7 +480,7 @@ setup_tree() {
   chmod 0755 "$SCRIPT"
   local name
   cp "$ROOT/deploy/dev-https-browser/spec-sources.txt" "$BROWSER/spec-sources.txt"
-  for name in Dockerfile package.json package-lock.json verify-evidence.mjs "${SPEC_SOURCES[@]}"; do
+  for name in Dockerfile package.json pnpm-lock.yaml pnpm-workspace.yaml verify-evidence.mjs "${SPEC_SOURCES[@]}"; do
     printf '// %s fixture\n' "$name" >"$BROWSER/$name"
   done
   write_container

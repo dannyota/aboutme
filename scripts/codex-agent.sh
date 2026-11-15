@@ -19,6 +19,8 @@ CREDENTIAL_WORDS = ("AUTH", "COOKIE", "CREDENTIAL", "JWT", "KEY", "NETRC", "PASS
                     "TOKEN")
 # Shell startup hooks that would run the owner's files before sandboxed commands.
 STARTUP_NAMES = {"BASH_ENV", "ENV", "ZDOTDIR"}
+# Package manager settings that could point the sandbox at a writable store or cache.
+PACKAGE_CONFIG_PREFIXES = ("NPM_CONFIG_", "PNPM_CONFIG_")
 # Credential stores under $HOME that no writable root may reach. Roots are
 # fixed and free of symbolic links, so this list is defense in depth.
 SECRET_PATHS = (".ssh", ".config", ".codex", ".gnupg", ".aws", ".vngcloud", ".docker", ".kube",
@@ -107,7 +109,7 @@ def writable_roots(args, environment, temp_base):
             parser.error("the shared lock directory must be a real directory: " + str(path))
     cache = home / ("Library/Caches" if sys.platform == "darwin" else ".cache")
     caches = {"GOCACHE": cache / "go-build", "GOMODCACHE": home / "go/pkg/mod",
-              "GOLANGCI_LINT_CACHE": cache / "golangci-lint", "npm_config_cache": home / ".npm"}
+              "GOLANGCI_LINT_CACHE": cache / "golangci-lint"}
     for name, path in caches.items():
         link = symbolic_link(home, path)
         if link is not None:
@@ -184,7 +186,8 @@ except (OSError, ValueError, KeyError) as error:
     parser.error(str(error))
 
 environment = {name: value for name, value in os.environ.items()
-               if not credential_name(name) and name not in STARTUP_NAMES}
+               if not credential_name(name) and name not in STARTUP_NAMES
+               and not name.upper().startswith(PACKAGE_CONFIG_PREFIXES)}
 # The login keychain stays reachable from the sandbox. Clearing Git's credential
 # helpers stops an accidental push or authenticated fetch; it is no boundary.
 environment.update({"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "credential.helper",

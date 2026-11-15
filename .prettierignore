@@ -1,5 +1,5 @@
 LICENSE
-package-lock.json
+pnpm-lock.yaml
 .markdownlint.jsonc
 apps/
 packages/schema/gen/
