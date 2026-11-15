@@ -167,6 +167,7 @@ func (s *PasswordService) change(ctx context.Context, sess store.Session, rawPas
 		if _, rerr := qtx.RevokeAllSessions(ctx, store.RevokeAllSessionsParams{UserID: sess.UserID, RevokedAt: &now}); rerr != nil {
 			return rerr
 		}
+		s.sessions.AccountSessionsEndedLocked(user.ID)
 		newRaw, err = s.createFreshSessionTx(ctx, qtx, user, live, now)
 		if err != nil {
 			return err
@@ -185,7 +186,6 @@ func (s *PasswordService) change(ctx context.Context, sess store.Session, rawPas
 		}
 		return "", errPasswordUnavailable
 	}
-	s.sessions.AccountSessionsEnded(sess.UserID)
 	return newRaw, nil
 }
 

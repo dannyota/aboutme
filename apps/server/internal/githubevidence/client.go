@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"mime"
 	"net"
@@ -42,6 +43,7 @@ var (
 	errScopeRejected      = errors.New("githubevidence: token scope rejected")
 	errRequestLimit       = errors.New("githubevidence: request limit reached")
 	errTokenGone          = errors.New("githubevidence: token discarded")
+	errAmbiguousToken     = fmt.Errorf("%w: more than one access token", errMalformed)
 )
 
 type client struct {
@@ -54,6 +56,7 @@ type client struct {
 	clientSecret config.Secret
 	requests     *windowLimiter
 	now          func() time.Time
+	hold         func(value string) *heldToken
 }
 
 type githubProfile struct {
@@ -210,18 +213,24 @@ func (c *client) exchange(ctx context.Context, account uuid.UUID, code, redirect
 		return nil, err
 	}
 	defer clear(body)
+	value, ambiguous := accessTokenCandidate(body)
+	if ambiguous {
+		return nil, errAmbiguousToken
+	}
+	var token *heldToken
+	if value != "" {
+		token = c.holdToken(value)
+	}
 	if status != http.StatusOK || !jsonMediaType(header) {
-		return nil, errUpstreamRejected
+		return token, errUpstreamRejected
 	}
 	fields, err := strictObject(body)
 	if err != nil {
-		return nil, errMalformed
+		return token, errMalformed
 	}
-	value, ok := jsonString(fields["access_token"])
-	if !ok || value == "" {
+	if token == nil {
 		return nil, errUpstreamRejected
 	}
-	token := newHeldToken(value)
 	if _, failed := fields["error"]; failed {
 		return token, errUpstreamRejected
 	}
@@ -236,6 +245,44 @@ func (c *client) exchange(ctx context.Context, account uuid.UUID, code, redirect
 		return token, errScopeRejected
 	}
 	return token, nil
+}
+
+func (c *client) holdToken(value string) *heldToken {
+	if c.hold == nil {
+		return newHeldToken(value)
+	}
+	return c.hold(value)
+}
+
+func accessTokenCandidate(body []byte) (string, bool) {
+	dec := json.NewDecoder(bytes.NewReader(body))
+	if open, err := dec.Token(); err != nil || open != json.Delim('{') {
+		return "", false
+	}
+	var found string
+	for dec.More() {
+		key, err := dec.Token()
+		name, isString := key.(string)
+		if err != nil || !isString {
+			break
+		}
+		var raw json.RawMessage
+		if decodeErr := dec.Decode(&raw); decodeErr != nil {
+			break
+		}
+		if name != "access_token" {
+			continue
+		}
+		value, isValue := jsonString(raw)
+		if !isValue || value == "" {
+			continue
+		}
+		if found != "" && found != value {
+			return "", true
+		}
+		found = value
+	}
+	return found, false
 }
 
 func (c *client) profile(ctx context.Context, account uuid.UUID, token *heldToken) (githubProfile, error) {

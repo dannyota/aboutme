@@ -83,6 +83,9 @@ func (s *Service) mutateDeletion(ctx context.Context, qtx *store.Queries, plan a
 	if s.afterUserLock != nil {
 		s.afterUserLock()
 	}
+	if s.sessions != nil {
+		s.sessions.AccountSessionsEndedLocked(lockedUser.ID)
+	}
 	slugs := make([]string, 0, len(plan.resumes))
 	for _, item := range plan.resumes {
 		if item.Slug != nil {

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"danny.vn/aboutme/apps/server/internal/auth"
 	"danny.vn/aboutme/apps/server/internal/config"
@@ -28,7 +29,7 @@ const (
 	startLimit       = 10
 	requestLimit     = 120
 	limitWindow      = time.Hour
-	shutdownWait     = requestTimeout + time.Second
+	shutdownWait     = 2*requestTimeout + time.Second
 	settingsPath     = "/app/settings/sessions"
 )
 
@@ -54,6 +55,12 @@ type Service struct {
 	starts       *windowLimiter
 	logger       *slog.Logger
 	now          func() time.Time
+	hooks        serviceHooks
+}
+
+type serviceHooks struct {
+	statusRead          func(pgx.Tx)
+	connectionCommitted func()
 }
 
 func New(opts Options) (*Service, error) {
@@ -98,14 +105,32 @@ func newService(opts Options, endpoint string, transport http.RoundTripper) (*Se
 	s.client = newClient(opts.Config.ClientID, opts.Config.ClientSecret, endpoint, transport,
 		newWindowLimiter(requestLimit, limitWindow), opts.Clock)
 	s.registry = newRegistry(sessionTTL, opts.Clock, s.revokeToken)
+	s.client.hold = s.registry.hold
 	return s, nil
+}
+
+type account struct {
+	tx   pgx.Tx
+	q    *store.Queries
+	user store.User
+}
+
+func (s *Service) inAccount(ctx context.Context, sess store.Session, change func(context.Context, account) error) error {
+	return pgx.BeginFunc(ctx, s.pool, func(dbTx pgx.Tx) error {
+		qtx := s.q.WithTx(dbTx)
+		user, err := auth.LockSessionAccount(ctx, qtx, sess, s.now())
+		if err != nil {
+			return err
+		}
+		return change(ctx, account{tx: dbTx, q: qtx, user: user})
+	})
 }
 
 func (s *Service) Enabled() bool {
 	return s.enabled
 }
 
-func (s *Service) AccountSessionsEnded(userID uuid.UUID) {
+func (s *Service) AccountSessionsEndedLocked(userID uuid.UUID) {
 	if s.registry != nil {
 		s.registry.end(userID)
 	}

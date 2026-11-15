@@ -280,8 +280,11 @@ func TestClient_ExchangeRequiresAnEmptyScopeAndDropsTheRefreshToken(t *testing.T
 		{"wrong token type", `{"access_token":"` + sentinelToken + `","token_type":"mac","scope":""}`, errMalformed, true},
 		{"error beside a token", `{"access_token":"` + sentinelToken + `","token_type":"bearer","scope":"","error":"x"}`, errUpstreamRejected, true},
 		{"error only", `{"error":"bad_verification_code","error_description":"` + sentinelBody + `"}`, errUpstreamRejected, false},
-		{"duplicate scope", `{"access_token":"` + sentinelToken + `","token_type":"bearer","scope":"","scope":"repo"}`, errMalformed, false},
-		{"trailing data", `{"access_token":"` + sentinelToken + `","token_type":"bearer","scope":""} {}`, errMalformed, false},
+		{"duplicate scope", `{"access_token":"` + sentinelToken + `","token_type":"bearer","scope":"","scope":"repo"}`, errMalformed, true},
+		{"trailing data", `{"access_token":"` + sentinelToken + `","token_type":"bearer","scope":""} {}`, errMalformed, true},
+		{"the same token twice", `{"access_token":"` + sentinelToken + `","access_token":"` + sentinelToken + `","token_type":"bearer","scope":""}`, errMalformed, true},
+		{"two different tokens", `{"access_token":"` + sentinelToken + `","access_token":"other-token","token_type":"bearer","scope":""}`, errAmbiguousToken, false},
+		{"truncated after the token", `{"access_token":"` + sentinelToken + `","token_type":"bea`, errMalformed, true},
 		{"not an object", `["` + sentinelToken + `"]`, errMalformed, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -310,19 +313,22 @@ func TestClient_ExchangeRequiresAnEmptyScopeAndDropsTheRefreshToken(t *testing.T
 }
 
 func TestClient_ExchangeRejectsNonJSONAndErrorStatus(t *testing.T) {
-	for _, respond := range []func(*http.Request) (*http.Response, error){
-		func(*http.Request) (*http.Response, error) {
+	for _, tc := range []struct {
+		respond   func(*http.Request) (*http.Response, error)
+		wantToken bool
+	}{
+		{func(*http.Request) (*http.Response, error) {
 			return jsonResponse(500, `{"access_token":"`+sentinelToken+`","message":"`+sentinelBody+`"}`), nil
-		},
-		func(*http.Request) (*http.Response, error) {
+		}, true},
+		{func(*http.Request) (*http.Response, error) {
 			return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"application/x-www-form-urlencoded"}},
 				Body: io.NopCloser(strings.NewReader("access_token=" + sentinelToken + "&scope="))}, nil
-		},
+		}, false},
 	} {
-		c := newTestClient("", &countingTransport{respond: respond}, time.Now)
+		c := newTestClient("", &countingTransport{respond: tc.respond}, time.Now)
 		token, err := c.exchange(context.Background(), uuid.New(), "code", "https://aboutme.example"+CallbackPath, "verifier")
-		if !errors.Is(err, errUpstreamRejected) || token != nil {
-			t.Fatalf("exchange = %v, %v; want rejected without a token", token, err)
+		if !errors.Is(err, errUpstreamRejected) || (token != nil) != tc.wantToken {
+			t.Fatalf("exchange = %v, %v; want rejected, token held = %v", token, err, tc.wantToken)
 		}
 		requireClean(t, err)
 	}

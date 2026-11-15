@@ -21,7 +21,7 @@ type endedAccounts struct {
 	users []uuid.UUID
 }
 
-func (e *endedAccounts) AccountSessionsEnded(userID uuid.UUID) {
+func (e *endedAccounts) AccountSessionsEndedLocked(userID uuid.UUID) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.users = append(e.users, userID)

@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -47,6 +48,7 @@ type stubGitHub struct {
 	revoked      []string
 	revokeStatus int
 	beforeToken  func()
+	tokenBody    func(token string) string
 }
 
 func newStubGitHub(t *testing.T) *stubGitHub {
@@ -81,7 +83,7 @@ func (gh *stubGitHub) serveToken(w http.ResponseWriter, r *http.Request) {
 		oauth2.S256ChallengeFromVerifier(r.PostForm.Get("code_verifier")) == gh.challenge &&
 		r.PostForm.Get("client_id") == testClientID && r.PostForm.Get("client_secret") == testClientSecret
 	token := sentinelToken + "-" + uuid.NewString()
-	scope := gh.scope
+	scope, raw := gh.scope, gh.tokenBody
 	if ok {
 		gh.tokens = append(gh.tokens, token)
 	}
@@ -92,6 +94,10 @@ func (gh *stubGitHub) serveToken(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	if !ok {
 		gh.write(w, `{"error":"bad_verification_code"}`)
+		return
+	}
+	if raw != nil {
+		gh.write(w, raw(token))
 		return
 	}
 	body := map[string]any{"access_token": token, "token_type": "bearer", "expires_in": 28800,
@@ -170,6 +176,7 @@ type harness struct {
 	user     store.User
 	raw      string
 	session  store.Session
+	bodiesMu sync.Mutex
 	bodies   []string
 }
 
@@ -269,7 +276,9 @@ func (h *harness) do(c call) *httptest.ResponseRecorder {
 	}
 	rec := httptest.NewRecorder()
 	h.handler.ServeHTTP(rec, r)
+	h.bodiesMu.Lock()
 	h.bodies = append(h.bodies, rec.Body.String(), rec.Header().Get("Location"), strings.Join(rec.Header().Values("Set-Cookie"), ";"))
+	h.bodiesMu.Unlock()
 	return rec
 }
 
@@ -295,9 +304,17 @@ type started struct {
 
 func (h *harness) start(raw string, sess store.Session) started {
 	h.t.Helper()
+	s, err := h.startE(raw, sess)
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	return s
+}
+
+func (h *harness) startE(raw string, sess store.Session) (started, error) {
 	rec := h.do(call{method: http.MethodPost, path: StartPath, csrf: csrfFor(sess), cookies: []*http.Cookie{sessionCookie(raw)}})
 	if rec.Code != http.StatusOK {
-		h.t.Fatalf("start status=%d body=%s", rec.Code, rec.Body.String())
+		return started{}, fmt.Errorf("start status=%d body=%s", rec.Code, rec.Body.String())
 	}
 	var body struct {
 		Data struct {
@@ -305,11 +322,11 @@ func (h *harness) start(raw string, sess store.Session) started {
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
-		h.t.Fatal(err)
+		return started{}, err
 	}
 	link, err := url.Parse(body.Data.AuthorizeURL)
 	if err != nil {
-		h.t.Fatal(err)
+		return started{}, err
 	}
 	var tx *http.Cookie
 	for _, cookie := range rec.Result().Cookies() {
@@ -318,9 +335,9 @@ func (h *harness) start(raw string, sess store.Session) started {
 		}
 	}
 	if tx == nil || tx.Value == "" || !tx.Secure || !tx.HttpOnly || tx.SameSite != http.SameSiteLaxMode || tx.Path != "/" || tx.Domain != "" || tx.MaxAge != 600 {
-		h.t.Fatalf("start transaction cookie = %+v", tx)
+		return started{}, fmt.Errorf("start transaction cookie = %+v", tx)
 	}
-	return started{state: link.Query().Get("state"), challenge: link.Query().Get("code_challenge"), redirect: link.Query().Get("redirect_uri"), link: link, txCookie: tx}
+	return started{state: link.Query().Get("state"), challenge: link.Query().Get("code_challenge"), redirect: link.Query().Get("redirect_uri"), link: link, txCookie: tx}, nil
 }
 
 func (h *harness) callback(s started, query string, raw string) *httptest.ResponseRecorder {
@@ -337,10 +354,21 @@ func (h *harness) callback(s started, query string, raw string) *httptest.Respon
 
 func (h *harness) connect(raw string, sess store.Session) *httptest.ResponseRecorder {
 	h.t.Helper()
-	s := h.start(raw, sess)
+	rec, err := h.connectE(raw, sess)
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	return rec
+}
+
+func (h *harness) connectE(raw string, sess store.Session) (*httptest.ResponseRecorder, error) {
+	s, err := h.startE(raw, sess)
+	if err != nil {
+		return nil, err
+	}
 	code := "code-" + uuid.NewString()
 	h.gh.expect(code, s.challenge)
-	return h.callback(s, "code="+code+"&state="+url.QueryEscape(s.state), raw)
+	return h.callback(s, "code="+code+"&state="+url.QueryEscape(s.state), raw), nil
 }
 
 func requireOutcome(t *testing.T, rec *httptest.ResponseRecorder, outcome string) {
@@ -677,8 +705,18 @@ func TestEvidence_RacingEndingsSendOneRevocation(t *testing.T) {
 	live, _ := h.svc.registry.current(h.user.ID)
 	var wg sync.WaitGroup
 	for range 4 {
-		wg.Go(func() { h.svc.registry.expire(h.user.ID, live) })
-		wg.Go(func() { h.svc.AccountSessionsEnded(h.user.ID) })
+		_, other, err := h.sessions.Issue(t.Context(), h.user.ID, "evidence-test", "203.0.113.9")
+		if err != nil {
+			t.Fatal(err)
+		}
+		wg.Go(func() { h.svc.registry.endSession(h.user.ID, live) })
+		wg.Go(func() {
+			r := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, auth.SessionsPath+"/"+other.ID.String(), nil)
+			r.Header.Set("Origin", testOrigin)
+			r.Header.Set(auth.CSRFHeaderName, csrfFor(h.session))
+			r.AddCookie(sessionCookie(h.raw))
+			h.handler.ServeHTTP(httptest.NewRecorder(), r)
+		})
 		wg.Go(func() {
 			r := httptest.NewRequestWithContext(context.Background(), http.MethodPost, SessionEndPath, nil)
 			r.Header.Set("Origin", testOrigin)

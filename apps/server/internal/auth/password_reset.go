@@ -166,6 +166,7 @@ func (s *PasswordService) reset(ctx context.Context, rawToken, rawPassword, clie
 		if _, rerr := qtx.RevokeAllSessions(ctx, store.RevokeAllSessionsParams{UserID: rt.UserID, RevokedAt: &now}); rerr != nil {
 			return rerr
 		}
+		s.sessions.AccountSessionsEndedLocked(user.ID)
 		return s.outbox.EnqueueTx(ctx, qtx, authmail.EnqueueRequest{
 			JobID:     jobID,
 			Kind:      authmail.KindPasswordChanged,
@@ -180,6 +181,5 @@ func (s *PasswordService) reset(ctx context.Context, rawToken, rawPassword, clie
 		}
 		return errPasswordUnavailable
 	}
-	s.sessions.AccountSessionsEnded(rt.UserID)
 	return nil
 }

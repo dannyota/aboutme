@@ -52,15 +52,13 @@ func (r *revocations) total() int {
 	return n
 }
 
-func installed(t *testing.T, reg *registry, account uuid.UUID, token string) {
+func installed(t *testing.T, reg *registry, account uuid.UUID, token string) *liveSession {
 	t.Helper()
-	reserved, ok := reg.reserve(account)
+	session, ok := reg.install(account, reg.hold(token), 1, 1)
 	if !ok {
-		t.Fatal("reserve refused")
-	}
-	if _, ok := reg.install(reserved, newHeldToken(token), 1, 1); !ok {
 		t.Fatal("install refused")
 	}
+	return session
 }
 
 func TestRegistry_EachEndingRevokesExactlyOnce(t *testing.T) {
@@ -69,7 +67,7 @@ func TestRegistry_EachEndingRevokesExactlyOnce(t *testing.T) {
 		end  func(t *testing.T, reg *registry, account uuid.UUID)
 	}{
 		{"done, sign-out, epoch change or disconnect", func(_ *testing.T, reg *registry, account uuid.UUID) { reg.end(account) }},
-		{"stale status", func(_ *testing.T, reg *registry, account uuid.UUID) {
+		{"stale status or a failed commit", func(_ *testing.T, reg *registry, account uuid.UUID) {
 			live, _ := reg.current(account)
 			reg.endSession(account, live)
 		}},
@@ -88,11 +86,15 @@ func TestRegistry_EachEndingRevokesExactlyOnce(t *testing.T) {
 					t.Fatal("install revoked a token")
 				}
 				tc.end(t, reg, account)
+				synctest.Wait()
+				if n := revoked.count(sentinelToken); n != 1 {
+					t.Fatalf("revocations of the ended token = %d, want 1", n)
+				}
 				reg.end(account)
 				reg.close()
 				synctest.Wait()
 				if n := revoked.count(sentinelToken); n != 1 {
-					t.Fatalf("revocations of the ended token = %d, want 1", n)
+					t.Fatalf("revocations after further endings = %d, want 1", n)
 				}
 				if _, live := reg.current(account); live {
 					t.Fatal("session still live after ending")
@@ -108,8 +110,7 @@ func TestRegistry_ExpiryRevokesWithoutARequestAtThirtyMinutes(t *testing.T) {
 		reg := newRegistry(sessionTTL, time.Now, revoked.revoke)
 		account := uuid.New()
 		start := time.Now()
-		installed(t, reg, account, sentinelToken)
-		live, _ := reg.current(account)
+		live := installed(t, reg, account, sentinelToken)
 		if !live.expiresAt.Equal(start.Add(30 * time.Minute)) {
 			t.Fatalf("expiresAt = %v, want start + 30m", live.expiresAt)
 		}
@@ -131,15 +132,15 @@ func TestRegistry_RacingEndingsSendOneRevocation(t *testing.T) {
 		revoked := &revocations{}
 		reg := newRegistry(sessionTTL, time.Now, revoked.revoke)
 		account := uuid.New()
-		installed(t, reg, account, sentinelToken)
-		live, _ := reg.current(account)
+		live := installed(t, reg, account, sentinelToken)
+		pending := reg.hold("pending-token")
 		time.Sleep(sessionTTL - time.Nanosecond)
 		var wg sync.WaitGroup
 		for _, end := range []func(){
 			func() { reg.end(account) },
 			func() { reg.endSession(account, live) },
-			func() { reg.expire(account, live) },
-			func() { reg.discard(live.token) },
+			func() { reg.release(pending) },
+			func() { reg.release(pending) },
 			func() { reg.close() },
 			func() { time.Sleep(time.Nanosecond) },
 		} {
@@ -147,87 +148,101 @@ func TestRegistry_RacingEndingsSendOneRevocation(t *testing.T) {
 		}
 		wg.Wait()
 		synctest.Wait()
-		if n, all := revoked.count(sentinelToken), revoked.total(); n != 1 || all != 1 {
-			t.Fatalf("racing endings sent %d revocation requests, %d for the token; want exactly 1", all, n)
+		if n, p, all := revoked.count(sentinelToken), revoked.count("pending-token"), revoked.total(); n != 1 || p != 1 || all != 2 {
+			t.Fatalf("racing endings sent %d revocation requests, %d for the live token and %d for the pending one; want exactly 1 each", all, n, p)
 		}
 	})
 }
 
-func TestRegistry_EndingDuringACallbackRefusesTheInstall(t *testing.T) {
-	for _, tc := range []struct {
-		name string
-		end  func(reg *registry, account uuid.UUID)
-	}{
-		{"sign-out", func(reg *registry, account uuid.UUID) { reg.end(account) }},
-		{"process exit", func(reg *registry, _ uuid.UUID) { reg.close() }},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			synctest.Test(t, func(t *testing.T) {
-				revoked := &revocations{}
-				reg := newRegistry(sessionTTL, time.Now, revoked.revoke)
-				account := uuid.New()
-				reserved, ok := reg.reserve(account)
-				if !ok {
-					t.Fatal("reserve refused")
-				}
-				tc.end(reg, account)
-				if _, ok := reg.install(reserved, newHeldToken(sentinelToken), 1, 1); ok {
-					t.Fatal("install after an ending succeeded")
-				}
-				synctest.Wait()
-				if revoked.count(sentinelToken) != 1 {
-					t.Fatalf("refused install revoked %d times, want 1", revoked.count(sentinelToken))
-				}
-				if _, live := reg.current(account); live {
-					t.Fatal("refused install left a session")
-				}
-				if _, ok := reg.reserve(account); ok == reg.isClosed() {
-					t.Fatalf("reserve after %s = %v, closed = %v", tc.name, ok, reg.isClosed())
-				}
-			})
-		})
-	}
-}
-
-func TestRegistry_AbandonedCallbackRevokesItsTokenOnce(t *testing.T) {
+func TestRegistry_CloseRevokesPendingTokensAndRefusesTheirInstall(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		revoked := &revocations{}
 		reg := newRegistry(sessionTTL, time.Now, revoked.revoke)
 		account := uuid.New()
-		reserved, _ := reg.reserve(account)
-		token := newHeldToken(sentinelToken)
-		reg.abandon(reserved, token)
-		reg.discard(token)
+		pending := reg.hold(sentinelToken)
+		reg.close()
 		synctest.Wait()
-		if revoked.count(sentinelToken) != 1 || len(reg.accounts) != 0 {
-			t.Fatalf("abandoned callback revoked %d times, %d accounts left; want 1 and 0", revoked.count(sentinelToken), len(reg.accounts))
+		if revoked.count(sentinelToken) != 1 {
+			t.Fatalf("close revoked the pending token %d times, want 1", revoked.count(sentinelToken))
 		}
-		reserved, _ = reg.reserve(account)
-		reg.abandon(reserved, nil)
+		if _, ok := reg.install(account, pending, 1, 1); ok {
+			t.Fatal("install of a token claimed at close succeeded")
+		}
+		late := reg.hold("late-token")
+		if _, held := late.peek(); held {
+			t.Fatal("a token parsed after close is still held")
+		}
+		reg.release(pending)
+		reg.release(late)
 		synctest.Wait()
-		if revoked.total() != 1 {
-			t.Fatal("abandoning without a token revoked something")
+		if revoked.total() != 2 || revoked.count("late-token") != 1 {
+			t.Fatalf("revocations = %v, want each token once", revoked.tokens)
+		}
+		if reg.beginIssue() {
+			t.Fatal("an exchange began after close")
 		}
 	})
 }
 
-func TestRegistry_ShutdownWaitsForRevocations(t *testing.T) {
+func TestRegistry_ReleasedCallbackTokenRevokesOnce(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		revoked := &revocations{}
+		reg := newRegistry(sessionTTL, time.Now, revoked.revoke)
+		token := reg.hold(sentinelToken)
+		reg.release(token)
+		reg.release(token)
+		reg.release(nil)
+		synctest.Wait()
+		if revoked.count(sentinelToken) != 1 || revoked.total() != 1 || len(reg.pending) != 0 {
+			t.Fatalf("released token revoked %d times, %d pending left; want 1 and 0", revoked.count(sentinelToken), len(reg.pending))
+		}
+		if _, ok := reg.install(uuid.New(), token, 1, 1); ok {
+			t.Fatal("install of a released token succeeded")
+		}
+	})
+}
+
+func TestRegistry_ShutdownWaitsForRevocationsAndExchanges(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		revoked := &revocations{block: 4 * time.Second}
 		reg := newRegistry(sessionTTL, time.Now, revoked.revoke)
 		installed(t, reg, uuid.New(), "first")
-		installed(t, reg, uuid.New(), "second")
+		reg.hold("pending")
+		if !reg.beginIssue() {
+			t.Fatal("beginIssue refused before close")
+		}
+		go func() {
+			time.Sleep(3 * time.Second)
+			reg.hold("issued-after-close")
+			reg.endIssue()
+		}()
 		svc := &Service{registry: reg}
 		start := time.Now()
 		if err := svc.Shutdown(context.Background()); err != nil {
 			t.Fatalf("Shutdown() error = %v", err)
 		}
-		if time.Since(start) != 4*time.Second || revoked.count("first") != 1 || revoked.count("second") != 1 {
-			t.Fatalf("Shutdown returned after %v with revocations %v", time.Since(start), revoked.tokens)
+		if elapsed := time.Since(start); elapsed != 7*time.Second {
+			t.Fatalf("Shutdown returned after %v, want 7s: the exchange, then its revocation", elapsed)
 		}
-		if _, ok := reg.reserve(uuid.New()); ok {
-			t.Fatal("reserve after shutdown succeeded")
+		for _, token := range []string{"first", "pending", "issued-after-close"} {
+			if revoked.count(token) != 1 {
+				t.Fatalf("revocations of %s = %d, want 1", token, revoked.count(token))
+			}
 		}
+	})
+}
+
+func TestRegistry_ShutdownWaitIsBounded(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		revoked := &revocations{block: time.Hour}
+		reg := newRegistry(sessionTTL, time.Now, revoked.revoke)
+		installed(t, reg, uuid.New(), "stuck")
+		svc := &Service{registry: reg}
+		start := time.Now()
+		if err := svc.Shutdown(context.Background()); !errors.Is(err, context.DeadlineExceeded) || time.Since(start) != shutdownWait {
+			t.Fatalf("Shutdown() = %v after %v, want the deadline after %v", err, time.Since(start), shutdownWait)
+		}
+		time.Sleep(time.Hour)
 	})
 }
 

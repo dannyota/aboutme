@@ -1,6 +1,7 @@
 package githubevidence
 
 import (
+	"context"
 	"errors"
 	"io"
 	"math"
@@ -93,27 +94,49 @@ func (s *Service) handleStatus(w http.ResponseWriter, r *http.Request) {
 		writeRequestInvalid(w, "this request takes no query or body")
 		return
 	}
-	row, found, err := s.connection(r, sess.UserID)
-	if err != nil {
-		s.writeInternal(w, r, "read_connection", err)
+	var body statusBody
+	err := s.inAccount(r.Context(), sess, func(ctx context.Context, a account) error {
+		var snapshotErr error
+		body, snapshotErr = s.statusSnapshot(ctx, a)
+		return snapshotErr
+	})
+	if errors.Is(err, auth.ErrSessionInvalid) {
+		writeSessionRequired(w)
 		return
 	}
-	body := statusBody{}
+	if err != nil {
+		s.writeInternal(w, r, "read_status", err)
+		return
+	}
+	api.WriteData(w, http.StatusOK, body)
+}
+
+func (s *Service) statusSnapshot(ctx context.Context, a account) (statusBody, error) {
+	var body statusBody
 	var generation int64
-	if found {
+	row, err := a.q.GetGitHubConnection(ctx, a.user.ID)
+	switch {
+	case err == nil:
 		generation = row.Generation
 		if row.GithubUserID != nil && row.Login != nil && row.ConnectedAt != nil {
 			body.Connection = &connectionBody{GitHubUserID: *row.GithubUserID, Login: *row.Login, ConnectedAt: row.ConnectedAt.UTC()}
 		}
+	case !errors.Is(err, pgx.ErrNoRows):
+		return statusBody{}, err
 	}
-	if live, isLive := s.registry.current(sess.UserID); isLive {
-		if body.Connection != nil && live.generation == generation && live.epoch == sess.AuthEpoch && live.expiresAt.After(s.now()) {
-			body.Session = &sessionBody{ExpiresAt: live.expiresAt.UTC()}
-		} else {
-			s.registry.endSession(sess.UserID, live)
-		}
+	if s.hooks.statusRead != nil {
+		s.hooks.statusRead(a.tx)
 	}
-	api.WriteData(w, http.StatusOK, body)
+	live, isLive := s.registry.current(a.user.ID)
+	if !isLive {
+		return body, nil
+	}
+	if body.Connection != nil && live.generation == generation && live.epoch == a.user.AuthEpoch && live.expiresAt.After(s.now()) {
+		body.Session = &sessionBody{ExpiresAt: live.expiresAt.UTC()}
+		return body, nil
+	}
+	s.registry.endSession(a.user.ID, live)
+	return body, nil
 }
 
 func (s *Service) handleStart(w http.ResponseWriter, r *http.Request) {
@@ -165,16 +188,14 @@ func (s *Service) handleDisconnect(w http.ResponseWriter, r *http.Request) {
 		writeRequestInvalid(w, "keepLinks must be given once as true or false")
 		return
 	}
-	ctx := r.Context()
-	err := pgx.BeginFunc(ctx, s.pool, func(dbTx pgx.Tx) error {
-		qtx := s.q.WithTx(dbTx)
-		if _, lockErr := qtx.GetUserForUpdate(ctx, sess.UserID); lockErr != nil {
-			return lockErr
+	err := s.inAccount(r.Context(), sess, func(ctx context.Context, a account) error {
+		if _, clearErr := a.q.ClearGitHubConnection(ctx, a.user.ID); clearErr != nil {
+			return clearErr
 		}
-		_, clearErr := qtx.ClearGitHubConnection(ctx, sess.UserID)
-		return clearErr
+		s.registry.end(a.user.ID)
+		return nil
 	})
-	if errors.Is(err, pgx.ErrNoRows) {
+	if errors.Is(err, auth.ErrSessionInvalid) {
 		writeSessionRequired(w)
 		return
 	}
@@ -182,7 +203,6 @@ func (s *Service) handleDisconnect(w http.ResponseWriter, r *http.Request) {
 		s.writeInternal(w, r, "clear_connection", err)
 		return
 	}
-	s.registry.end(sess.UserID)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -196,7 +216,20 @@ func (s *Service) handleSessionEnd(w http.ResponseWriter, r *http.Request) {
 		writeRequestInvalid(w, "this request takes no query or body")
 		return
 	}
-	if !s.registry.end(sess.UserID) {
+	var ended bool
+	err := s.inAccount(r.Context(), sess, func(_ context.Context, a account) error {
+		ended = s.registry.end(a.user.ID)
+		return nil
+	})
+	if errors.Is(err, auth.ErrSessionInvalid) {
+		writeSessionRequired(w)
+		return
+	}
+	if err != nil {
+		s.writeInternal(w, r, "end_session", err)
+		return
+	}
+	if !ended {
 		api.WriteError(w, http.StatusConflict, sessionRequiredCode, "no GitHub evidence session is live")
 		return
 	}

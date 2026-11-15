@@ -83,7 +83,7 @@ type recordedEndings struct {
 	users []uuid.UUID
 }
 
-func (r *recordedEndings) AccountSessionsEnded(userID uuid.UUID) {
+func (r *recordedEndings) AccountSessionsEndedLocked(userID uuid.UUID) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.users = append(r.users, userID)

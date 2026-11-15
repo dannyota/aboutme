@@ -41,16 +41,16 @@ type SessionManager struct {
 }
 
 type SessionEndListener interface {
-	AccountSessionsEnded(userID uuid.UUID)
+	AccountSessionsEndedLocked(userID uuid.UUID)
 }
 
 func (m *SessionManager) SetEndListener(listener SessionEndListener) {
 	m.endListener = listener
 }
 
-func (m *SessionManager) AccountSessionsEnded(userID uuid.UUID) {
+func (m *SessionManager) AccountSessionsEndedLocked(userID uuid.UUID) {
 	if m.endListener != nil {
-		m.endListener.AccountSessionsEnded(userID)
+		m.endListener.AccountSessionsEndedLocked(userID)
 	}
 }
 

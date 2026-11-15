@@ -46,21 +46,12 @@ type liveSession struct {
 	timer      *time.Timer
 }
 
-type accountState struct {
-	session *liveSession
-	pending int
-	endings uint64
-}
-
-type ticket struct {
-	account uuid.UUID
-	endings uint64
-}
-
 type registry struct {
 	mu       sync.Mutex
 	closed   bool
-	accounts map[uuid.UUID]*accountState
+	sessions map[uuid.UUID]*liveSession
+	pending  map[*heldToken]struct{}
+	issuing  int
 	inflight int
 	idle     []chan struct{}
 	ttl      time.Duration
@@ -69,128 +60,108 @@ type registry struct {
 }
 
 func newRegistry(ttl time.Duration, now func() time.Time, revoke func(token string)) *registry {
-	return &registry{accounts: map[uuid.UUID]*accountState{}, ttl: ttl, now: now, revoke: revoke}
+	return &registry{
+		sessions: map[uuid.UUID]*liveSession{},
+		pending:  map[*heldToken]struct{}{},
+		ttl:      ttl,
+		now:      now,
+		revoke:   revoke,
+	}
 }
 
-func (r *registry) reserve(account uuid.UUID) (ticket, bool) {
+func (r *registry) beginIssue() bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.closed {
-		return ticket{}, false
+		return false
 	}
-	state := r.accounts[account]
-	if state == nil {
-		state = &accountState{}
-		r.accounts[account] = state
-	}
-	state.pending++
-	return ticket{account: account, endings: state.endings}, true
+	r.issuing++
+	return true
 }
 
-func (r *registry) abandon(t ticket, token *heldToken) {
+func (r *registry) endIssue() {
+	r.mu.Lock()
+	r.issuing--
+	r.signalIdleLocked()
+	r.mu.Unlock()
+}
+
+func (r *registry) hold(value string) *heldToken {
+	token := newHeldToken(value)
 	r.mu.Lock()
 	var claimed []string
-	if state := r.accounts[t.account]; state != nil {
-		state.pending--
-		r.pruneLocked(t.account, state)
+	if r.closed {
+		claimed = r.claimLocked(token, claimed)
+	} else {
+		r.pending[token] = struct{}{}
 	}
-	claimed = r.claimLocked(token, claimed)
+	r.mu.Unlock()
+	r.spawn(claimed)
+	return token
+}
+
+func (r *registry) release(token *heldToken) {
+	if token == nil {
+		return
+	}
+	r.mu.Lock()
+	delete(r.pending, token)
+	claimed := r.claimLocked(token, nil)
 	r.mu.Unlock()
 	r.spawn(claimed)
 }
 
-func (r *registry) install(t ticket, token *heldToken, epoch, generation int64) (time.Time, bool) {
+func (r *registry) install(account uuid.UUID, token *heldToken, epoch, generation int64) (*liveSession, bool) {
 	r.mu.Lock()
-	state := r.accounts[t.account]
-	if state == nil || r.closed || state.endings != t.endings {
-		if state != nil {
-			state.pending--
-			r.pruneLocked(t.account, state)
-		}
-		claimed := r.claimLocked(token, nil)
+	if _, pending := r.pending[token]; r.closed || !pending {
 		r.mu.Unlock()
-		r.spawn(claimed)
-		return time.Time{}, false
+		return nil, false
 	}
-	state.pending--
+	delete(r.pending, token)
 	var claimed []string
-	if previous := state.session; previous != nil {
+	if previous := r.sessions[account]; previous != nil {
 		previous.timer.Stop()
 		claimed = r.claimLocked(previous.token, claimed)
 	}
 	session := &liveSession{token: token, epoch: epoch, generation: generation, expiresAt: r.now().Add(r.ttl)}
-	account := t.account
-	session.timer = time.AfterFunc(r.ttl, func() { r.expire(account, session) })
-	state.session = session
+	session.timer = time.AfterFunc(r.ttl, func() { r.endSession(account, session) })
+	r.sessions[account] = session
 	r.mu.Unlock()
 	r.spawn(claimed)
-	return session.expiresAt, true
+	return session, true
 }
 
 func (r *registry) current(account uuid.UUID) (*liveSession, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	state := r.accounts[account]
-	if state == nil || state.session == nil {
-		return nil, false
-	}
-	return state.session, true
+	session := r.sessions[account]
+	return session, session != nil
 }
 
 func (r *registry) end(account uuid.UUID) bool {
 	r.mu.Lock()
-	state := r.accounts[account]
-	if state == nil {
+	session := r.sessions[account]
+	if session == nil {
 		r.mu.Unlock()
 		return false
 	}
-	state.endings++
-	session := state.session
-	state.session = nil
-	var claimed []string
-	if session != nil {
-		session.timer.Stop()
-		claimed = r.claimLocked(session.token, claimed)
-	}
-	r.pruneLocked(account, state)
+	delete(r.sessions, account)
+	session.timer.Stop()
+	claimed := r.claimLocked(session.token, nil)
 	r.mu.Unlock()
 	r.spawn(claimed)
-	return session != nil
+	return true
 }
 
 func (r *registry) endSession(account uuid.UUID, session *liveSession) {
 	r.mu.Lock()
-	state := r.accounts[account]
-	if state == nil || state.session != session {
+	if r.sessions[account] != session {
 		r.mu.Unlock()
 		return
 	}
-	state.endings++
-	state.session = nil
+	delete(r.sessions, account)
 	session.timer.Stop()
 	claimed := r.claimLocked(session.token, nil)
-	r.pruneLocked(account, state)
-	r.mu.Unlock()
-	r.spawn(claimed)
-}
-
-func (r *registry) expire(account uuid.UUID, session *liveSession) {
-	r.mu.Lock()
-	state := r.accounts[account]
-	if state == nil || state.session != session {
-		r.mu.Unlock()
-		return
-	}
-	state.session = nil
-	claimed := r.claimLocked(session.token, nil)
-	r.pruneLocked(account, state)
-	r.mu.Unlock()
-	r.spawn(claimed)
-}
-
-func (r *registry) discard(token *heldToken) {
-	r.mu.Lock()
-	claimed := r.claimLocked(token, nil)
 	r.mu.Unlock()
 	r.spawn(claimed)
 }
@@ -203,14 +174,14 @@ func (r *registry) close() {
 	}
 	r.closed = true
 	var claimed []string
-	for account, state := range r.accounts {
-		state.endings++
-		if session := state.session; session != nil {
-			session.timer.Stop()
-			claimed = r.claimLocked(session.token, claimed)
-			state.session = nil
-		}
-		r.pruneLocked(account, state)
+	for account, session := range r.sessions {
+		session.timer.Stop()
+		claimed = r.claimLocked(session.token, claimed)
+		delete(r.sessions, account)
+	}
+	for token := range r.pending {
+		claimed = r.claimLocked(token, claimed)
+		delete(r.pending, token)
 	}
 	r.mu.Unlock()
 	r.spawn(claimed)
@@ -224,7 +195,7 @@ func (r *registry) isClosed() bool {
 
 func (r *registry) wait(ctx context.Context) error {
 	r.mu.Lock()
-	if r.inflight == 0 {
+	if r.inflight == 0 && r.issuing == 0 {
 		r.mu.Unlock()
 		return nil
 	}
@@ -240,9 +211,6 @@ func (r *registry) wait(ctx context.Context) error {
 }
 
 func (r *registry) claimLocked(token *heldToken, claimed []string) []string {
-	if token == nil {
-		return claimed
-	}
 	value, ok := token.claim()
 	if !ok {
 		return claimed
@@ -251,10 +219,14 @@ func (r *registry) claimLocked(token *heldToken, claimed []string) []string {
 	return append(claimed, value)
 }
 
-func (r *registry) pruneLocked(account uuid.UUID, state *accountState) {
-	if state.session == nil && state.pending <= 0 {
-		delete(r.accounts, account)
+func (r *registry) signalIdleLocked() {
+	if r.inflight != 0 || r.issuing != 0 {
+		return
 	}
+	for _, idle := range r.idle {
+		close(idle)
+	}
+	r.idle = nil
 }
 
 func (r *registry) spawn(claimed []string) {
@@ -263,12 +235,7 @@ func (r *registry) spawn(claimed []string) {
 			r.revoke(value)
 			r.mu.Lock()
 			r.inflight--
-			if r.inflight == 0 {
-				for _, idle := range r.idle {
-					close(idle)
-				}
-				r.idle = nil
-			}
+			r.signalIdleLocked()
 			r.mu.Unlock()
 		}()
 	}

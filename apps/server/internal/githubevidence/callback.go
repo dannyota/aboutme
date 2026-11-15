@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"danny.vn/aboutme/apps/server/internal/api"
@@ -14,8 +13,8 @@ import (
 )
 
 var (
-	errSessionEnded       = errors.New("githubevidence: session ended")
 	errGenerationMismatch = errors.New("githubevidence: generation mismatch")
+	errRegistryClosed     = errors.New("githubevidence: evidence sessions closed")
 )
 
 const (
@@ -61,96 +60,85 @@ func (s *Service) handleCallback(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, "session_mismatch")
 		return
 	}
-	reserved, ok := s.registry.reserve(sess.UserID)
-	if !ok {
+	if !s.registry.beginIssue() {
 		s.fail(w, r, "unavailable")
 		return
 	}
 	token, err := s.client.exchange(r.Context(), sess.UserID, code, s.callbackURL, tx.PKCEVerifier)
+	s.registry.endIssue()
 	if err != nil {
-		s.registry.abandon(reserved, token)
+		s.registry.release(token)
 		s.fail(w, r, exchangeReason(err))
 		return
 	}
 	profile, err := s.client.profile(r.Context(), sess.UserID, token)
 	if err != nil {
-		s.registry.abandon(reserved, token)
+		s.registry.release(token)
 		s.fail(w, r, profileReason(err))
 		return
 	}
-	epoch, generation, err := s.installConnection(r.Context(), sess.ID, sess.UserID, tx.EvidenceGeneration, profile)
+	var installed *liveSession
+	err = s.inAccount(r.Context(), sess, func(ctx context.Context, a account) error {
+		var installErr error
+		installed, installErr = s.installConnection(ctx, a, tx.EvidenceGeneration, profile, token)
+		return installErr
+	})
 	if err != nil {
-		s.registry.abandon(reserved, token)
+		if installed != nil {
+			s.registry.endSession(sess.UserID, installed)
+		}
+		s.registry.release(token)
 		switch {
 		case errors.Is(err, errGenerationMismatch):
 			s.fail(w, r, "generation_mismatch")
-		case errors.Is(err, errSessionEnded):
+		case errors.Is(err, auth.ErrSessionInvalid):
 			s.fail(w, r, "session_ended")
+		case errors.Is(err, errRegistryClosed):
+			s.fail(w, r, "unavailable")
 		default:
 			s.logInternal(r, "install_connection", err)
 			s.fail(w, r, "internal")
 		}
 		return
 	}
-	if _, installed := s.registry.install(reserved, token, epoch, generation); !installed {
-		s.fail(w, r, "session_ended")
-		return
+	if s.hooks.connectionCommitted != nil {
+		s.hooks.connectionCommitted()
 	}
 	s.redirect(w, r, outcomeConnected)
 }
 
-func (s *Service) installConnection(ctx context.Context, sessionID, userID uuid.UUID, want int64, profile githubProfile) (int64, int64, error) {
-	var epoch, generation int64
-	err := pgx.BeginFunc(ctx, s.pool, func(dbTx pgx.Tx) error {
-		qtx := s.q.WithTx(dbTx)
-		user, err := qtx.GetUserForUpdate(ctx, userID)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return errSessionEnded
-		}
-		if err != nil {
-			return err
-		}
-		current, err := qtx.GetSessionByIDForUpdate(ctx, sessionID)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return errSessionEnded
-		}
-		if err != nil {
-			return err
-		}
-		if current.UserID != user.ID || current.AuthEpoch != user.AuthEpoch || auth.RequireLiveSession(current, s.now()) != nil {
-			return errSessionEnded
-		}
-		var stored int64
-		row, err := qtx.GetGitHubConnectionForUpdate(ctx, user.ID)
-		switch {
-		case err == nil:
-			stored = row.Generation
-		case !errors.Is(err, pgx.ErrNoRows):
-			return err
-		}
-		if stored != want {
-			return errGenerationMismatch
-		}
-		installed, err := qtx.InstallGitHubConnection(ctx, store.InstallGitHubConnectionParams{
-			UserID:       user.ID,
-			GithubUserID: profile.ID,
-			Login:        profile.Login,
-			ConnectedAt:  s.now(),
-		})
-		if err != nil {
-			return err
-		}
-		epoch, generation = user.AuthEpoch, installed.Generation
-		return nil
+func (s *Service) installConnection(ctx context.Context, a account, want int64, profile githubProfile, token *heldToken) (*liveSession, error) {
+	var stored int64
+	row, err := a.q.GetGitHubConnectionForUpdate(ctx, a.user.ID)
+	switch {
+	case err == nil:
+		stored = row.Generation
+	case !errors.Is(err, pgx.ErrNoRows):
+		return nil, err
+	}
+	if stored != want {
+		return nil, errGenerationMismatch
+	}
+	connection, err := a.q.InstallGitHubConnection(ctx, store.InstallGitHubConnectionParams{
+		UserID:       a.user.ID,
+		GithubUserID: profile.ID,
+		Login:        profile.Login,
+		ConnectedAt:  s.now(),
 	})
 	if err != nil {
-		return 0, 0, err
+		return nil, err
 	}
-	return epoch, generation, nil
+	session, ok := s.registry.install(a.user.ID, token, a.user.AuthEpoch, connection.Generation)
+	if !ok {
+		return nil, errRegistryClosed
+	}
+	return session, nil
 }
 
 func exchangeReason(err error) string {
 	switch {
+	case errors.Is(err, errAmbiguousToken):
+		return "ambiguous_token"
 	case errors.Is(err, errScopeRejected):
 		return "scope_rejected"
 	case errors.Is(err, errRequestLimit):

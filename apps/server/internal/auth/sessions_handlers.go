@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/netip"
 	"time"
@@ -28,11 +29,25 @@ func (s *Service) handleLogout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.sessionMgr.Revoke(ctx, sess.ID); err != nil {
-		s.writeSessionAPIInternalError(w, r, "revoke_session", err)
+	now := s.sessionMgr.now()
+	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		qtx := s.q.WithTx(tx)
+		user, lockErr := lockAccountUser(ctx, qtx, sess.UserID)
+		if lockErr != nil {
+			return lockErr
+		}
+		if revokeErr := qtx.RevokeSession(ctx, store.RevokeSessionParams{ID: sess.ID, RevokedAt: &now}); revokeErr != nil {
+			return fmt.Errorf("revoke session: %w", revokeErr)
+		}
+		s.sessionMgr.AccountSessionsEndedLocked(user.ID)
+		return nil
+	})
+	if err != nil {
+		if !writeSensitiveGateError(w, err) {
+			s.writeSessionAPIInternalError(w, r, "revoke_session", err)
+		}
 		return
 	}
-	s.sessionMgr.AccountSessionsEnded(sess.UserID)
 
 	ClearSessionCookie(w)
 	w.Header().Set("Clear-Site-Data", clearSiteDataHeaderValue)
