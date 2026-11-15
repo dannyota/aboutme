@@ -121,6 +121,11 @@ A missing URL opens an issue, and within seven days the owner either uploads
 that source version to the affected releases as an asset and updates the
 directions, or makes the affected images unavailable from the registry.
 
+The owner accepts the residual risk that an archive drops a version before it is
+mirrored, a gap of up to fourteen days (owner, 2026-11-15). Launchpad and the
+upstream archives keep old versions, and a per-release mirror would add large
+uploads to every release.
+
 A base package whose installed files lack its required notice, such as musl,
 whose package ships only its libraries, gets the notice from
 `third_party/licences/base/`, committed per base image digest. The build fails
