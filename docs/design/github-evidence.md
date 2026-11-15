@@ -68,9 +68,16 @@ collected. The notice text needs the owner's approval.
   discards the token and fails through the existing no-oracle path. It never
   resolves or links an identity, never updates reauthentication proof, and never
   starts a session of the account.
-- An ending that happens while a callback is in flight refuses the install and
-  revokes the token. An install that has already committed stays, with no live
-  session.
+- The account boundary orders the callback's install against every ending,
+  whichever takes the account lock first. The install sees an ending that
+  committed before it. A disconnect or a replacement has changed the generation,
+  and revoking the caller's own session or an epoch change has invalidated it,
+  so the install is refused and its token revoked. "Done", expiry and revoking
+  another session of the account end only the session live at that moment, so a
+  later install proceeds. Once shutdown has begun, no install proceeds. An
+  ending that comes after the install ends the new session.
+- The one exception is a commit that fails after the install. The callback then
+  ends exactly the session it installed, after the lock is released.
 - The token response must contain a `scope` field that is present and empty. Any
   other value, or a missing field, discards the token and fails the connection.
 - Connecting a different GitHub account replaces the connection and removes the
