@@ -107,16 +107,25 @@ months, which is why it is dropped at once.
   and process exit. Ending discards the token through token cleanup.
 - Sign-out means any revocation of the account's sessions: logout, revoking one
   session or all of them, a password change or reset, and account deletion. An
-  epoch change ends the session inside the transaction that changes the epoch,
-  under the user lock.
+  epoch change ends the session inside the transaction that changes the epoch.
 - On shutdown, sessions end when the signal arrives, and the server waits up to
   11 seconds for the code exchanges and revocations in flight.
 - One account boundary orders every change: the account's user row lock in a
-  database transaction. Inside it the caller's session is revalidated (live,
-  same user, current epoch, same CSRF secret), then the connection and the
-  in-memory session change together, and any ending is decided there. The
-  callback's install, status, disconnect, Done, sign-out and epoch change all
-  run inside it; only expiry and shutdown end a session outside it.
+  database transaction. Session-authenticated operations revalidate the caller's
+  session inside it (live, same user, current epoch, same CSRF secret): the
+  callback's install, status, "Done", disconnect, logout, revoking one or all
+  sessions, a password change and self-deletion. Operations that carry another
+  proof keep that proof and run under the same user lock: a password reset, an
+  operator's deletion and the epoch change inside them. Only expiry and shutdown
+  end a session outside the boundary.
+- Every path that changes the evidence connection or session, or tells the
+  server that the account's sessions ended, keeps three rules:
+  1. It checks its authority under its locks, reading the clock after they are
+     held.
+  2. It ends the evidence session only after its own authorization has succeeded
+     and all its session changes, rotation partners included, are done, as the
+     last step before commit.
+  3. Nothing after that can roll the transaction back except a failed commit.
 - A token is held for cleanup as soon as the token response yields one
   unambiguous access token, before any other validation. A response that carries
   two different access tokens is logged as a fixed category, and neither is
