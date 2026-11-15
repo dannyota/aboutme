@@ -60,19 +60,33 @@ whether evidence is available. Sign-in start methods, purposes and scopes
 - Connecting a different GitHub account replaces the connection and removes the
   confirmed mark from every item checked against the old account, as one
   owner-locked library mutation per affected project.
+- Settings (`/app/settings/sessions`) shows a GitHub evidence section only when
+  the capability is on. It shows the connected login and connected time, whether
+  a session is live and its expiry, and offers Connect (Continue once
+  connected), Done and Disconnect. It shows no other GitHub data.
+- The callback ends with a redirect to that section carrying
+  `evidence=connected` or `evidence=failed`. No other value is produced, a
+  failure gives no reason, and the page ignores any other value.
 
 ## Evidence session
 
-The token exists only in server memory.
+The token exists only in server memory. The production application has token
+expiration on, so GitHub issues the access token for eight hours together with a
+refresh token. The server never stores or uses the refresh token and drops it
+with the token response.
 
 - A session starts at the callback, lasts at most 30 minutes, and is held in the
   memory of the server process, keyed by user. It records the user's
   authentication epoch and the connection generation. One session per account; a
   new one replaces the old.
 - It ends on "Done", expiry, sign-out, an epoch change, disconnect, replacement
-  and process exit. Ending discards the token and asks GitHub to revoke it. The
-  request needs the token itself, so a crash or a failed request leaves it valid
-  at GitHub and held by no one; a failed revocation is logged without the token.
+  and process exit. Ending discards the token and makes one revocation request,
+  `DELETE https://api.github.com/applications/{client_id}/token`, under the
+  outbound bounds and never retried. Revocation is always attempted and does not
+  count toward the per-account request limit. The request needs the token
+  itself, so a crash or a failed request leaves it valid at GitHub and held by
+  no one; a failed revocation is logged as a fixed category, without the token
+  or any response text.
 - The token is never written to the database, a file, a log, a response or the
   export. A database backup contains none.
 - When no session is live, the picker asks the owner to continue with GitHub;
@@ -111,7 +125,7 @@ MCP tool reaches them.
 | ---------------------------------------------------------- | --------------------------------------------------- |
 | `GET /api/v1/github-evidence`                              | Connection, whether a session is live, its expiry   |
 | `POST /api/v1/github-evidence/start`                       | Begin connect or continue; returns an authorize URL |
-| `DELETE /api/v1/github-evidence`                           | Disconnect, with `keepLinks` true or false          |
+| `DELETE /api/v1/github-evidence?keepLinks=`                | Disconnect, with `keepLinks` `true` or `false`      |
 | `POST /api/v1/github-evidence/session/end`                 | "Done"                                              |
 | `GET /api/v1/github-evidence/candidates?kind=&page=`       | One page of repositories, pull requests or releases |
 | `POST /api/v1/projects/{id}/evidence`                      | Attach `{kind, link}` or `{kind, candidateId}`      |
@@ -155,12 +169,16 @@ MCP tool reaches them.
 | One GitHub response                 | 512 KiB, read whole, then parsed      |
 | One GitHub request                  | 5 s; no retry                         |
 
+The code exchange and the profile fetch count toward the per-account request
+limit; revocation does not.
+
 ## Outbound requests
 
 A dedicated client, not the sign-in provider client.
 
-- The only destination is `https://api.github.com`, with certificate validation,
-  no proxy from the environment and redirects refused.
+- The only destinations are `POST https://github.com/login/oauth/access_token`
+  for the code exchange and `https://api.github.com`, with certificate
+  validation, no proxy from the environment and redirects refused.
 - A pasted link is parsed into owner, repository and number or tag and never
   fetched as given. Recheck addresses the repository by its stored id, so a
   rename or transfer is followed without a redirect; if the repository id or
@@ -169,7 +187,7 @@ A dedicated client, not the sign-in provider client.
   action. Only the listed fields are kept. GitHub text is untrusted: stored as
   plain text and rendered as text.
 - The host has no egress allowlist, so this client is the boundary; a test
-  proves it refuses any other host, scheme and redirect.
+  proves it refuses any other destination, scheme and redirect.
 
 ## Staleness and rechecking
 
@@ -206,9 +224,10 @@ page's own data.
 ## Disconnecting
 
 `DELETE /api/v1/github-evidence` advances the generation, clears the connection,
-ends the session and asks GitHub to revoke its token. With `keepLinks` the items
-stay as plain links; without it they are removed. Either way each affected
-project changes through one library mutation.
+ends the session and asks GitHub to revoke its token. `keepLinks` is a required
+query boolean; a missing or other value is a validation error. With
+`keepLinks=true` the items stay as plain links; with `false` they are removed.
+Either way each affected project changes through one library mutation.
 
 ## Data
 
@@ -232,8 +251,8 @@ project changes through one library mutation.
 - A project `PUT` or agent write that carries evidence fields changes no
   evidence.
 - A disconnect that commits during an attach leaves nothing attached.
-- Requests leave only for the fixed host; another host, scheme, path shape or a
-  redirect is refused without a second request.
+- Requests leave only for the two fixed destinations; another host, scheme, path
+  shape or a redirect is refused without a second request.
 - Recheck of a renamed repository keeps the item; a different repository under
   the old name does not confirm.
 - Evidence changes reach the project page on the next request and are revoked
@@ -241,6 +260,6 @@ project changes through one library mutation.
 
 ## Owner action before release
 
-The owner creates a second GitHub OAuth application for production, for evidence
-only, and supplies its client id, secret and callback URL. Until then the
-feature stays off. The limits above were approved with this design.
+The owner created the production evidence application on 2026-11-15, with token
+expiration on and no device flow. Its client id, secret and callback URL reach
+the server as configuration; until they are set the feature stays off.

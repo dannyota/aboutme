@@ -82,8 +82,9 @@ which anyone can set
 - The project page may reveal the owner's GitHub login through the items. A
   GitHub id shared by several aboutme accounts links them for anyone holding the
   database, and confirmation does not mean exclusive authorship.
-- The server makes outbound requests to one fixed host through a dedicated
-  client, bounded in time, size and count.
+- The server makes outbound requests to two fixed GitHub destinations, the code
+  exchange and the API, through a dedicated client, bounded in time, size and
+  count.
 
 ## History
 
@@ -91,3 +92,8 @@ Proposed 2026-11-11 from the owner's roadmap decision of 2026-11-10. Revised the
 same day after design review: separate application and routes, no token on disk,
 server-owned evidence, GitHub ids for recheck, and no contributor rule. Accepted
 by the owner on 2026-11-11.
+
+2026-11-15: the production evidence application has token expiration on, so a
+token left valid at GitHub lasts at most eight hours, and the server drops the
+refresh token. The code exchange at `github.com` joins `api.github.com` as the
+dedicated client's second fixed destination.
