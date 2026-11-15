@@ -10,15 +10,18 @@ generated=(db-admin-password db-migrator-password db-app-password
   auth-email-active-key-id auth-email-active-key password-rate-hmac-key
   view-pass-key totp-key-a pgbackrest-cipher-pass)
 imported=(google-client-id google-client-secret linkedin-client-id linkedin-client-secret
+  github-evidence-client-id github-evidence-client-secret
   smtp-username smtp-password totp-key-b telegram-bot-token telegram-chat-id)
 replaceable=(auth-email-active-key-id auth-email-active-key password-rate-hmac-key
   view-pass-key totp-key-a totp-key-b google-client-id google-client-secret
   linkedin-client-id linkedin-client-secret smtp-username smtp-password
+  github-evidence-client-id github-evidence-client-secret
   telegram-bot-token telegram-chat-id)
 podman_names=(db-admin-password db-migrator-password db-app-password
   auth-email-active-key-id auth-email-active-key password-rate-hmac-key
   view-pass-key totp-key-a totp-key-b google-client-id google-client-secret
   linkedin-client-id linkedin-client-secret media-access-key-id
+  github-evidence-client-id github-evidence-client-secret
   media-secret-access-key smtp-username smtp-password crowdsec-bouncer-key)
 
 say() { printf 'secrets: %s\n' "$*" >&2; }
