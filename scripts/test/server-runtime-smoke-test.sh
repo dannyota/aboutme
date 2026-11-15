@@ -11,7 +11,10 @@ printf 'web\n' > "$tmp/artifacts/web/.output/server/index.mjs"
 
 (cd "$tmp/artifacts" && sha256sum server/server web/.output/server/index.mjs) > "$tmp/expected"
 bash "$smoke" manifest "$tmp/artifacts" > "$tmp/manifest"
-server_pin=$(awk '/^FROM / && / AS runtime$/ {print $2}' "$root/deploy/server.Dockerfile")
+server_pin=$(awk '/^FROM / && / AS chromium$/ {print $2}' "$root/deploy/server.Dockerfile")
+server_runtime_pin=$(awk '/^FROM / && / AS runtime$/ {print $2}' "$root/deploy/server.Dockerfile")
+chromium_path=$(awk '$1 == "COPY" && $2 == "--from=chromium" {print $4 "/chrome-linux64/chrome"}' "$root/deploy/server.Dockerfile")
+[[ $chromium_path == /ms-playwright/chromium-*/chrome-linux64/chrome ]]
 web_pin=$(awk '/^FROM / && / AS runtime$/ {print $2}' "$root/deploy/web.Dockerfile")
 cmp "$tmp/expected" "$tmp/manifest"
 bash "$smoke" manifest "$tmp/artifacts" > "$tmp/second"
@@ -162,6 +165,9 @@ if args[0] == 'create':
             source = pathlib.Path(mount.split('source=', 1)[1].split(',target=', 1)[0])
             directories = [source, *(path for path in source.rglob('*') if path.is_dir())]
             state.setdefault('artifact_modes', {}).update({str(path): stat.S_IMODE(path.stat().st_mode) for path in directories})
+    if service == 'server':
+        env = pathlib.Path(args[args.index('--env-file') + 1]).read_text().splitlines()
+        state['chromium_path'] = [line.split('=', 1)[1] for line in env if line.startswith('CHROMIUM_PATH=')]
     if service == 'setup' and case == 'db-socket-first':
         state['setup_tcp_ready'] = state.get('tcp_ready', False)
     finish(name)
@@ -258,7 +264,7 @@ chmod +x "$tmp/bin/uname"
 for scenario in success db-socket-first restrictive-umask \
   sigint-preparation sigterm-preparation sigint-measurement sigterm-measurement \
   remote-host remote-ssh-host remote-context remote-active-context local-host local-context \
-  base-pin-mismatch pull-fail pull-timeout network-fail volume-fail start-fail setup-fail migrate-fail \
+  base-pin-mismatch runtime-base pull-fail pull-timeout network-fail volume-fail start-fail setup-fail migrate-fail \
   setup-timeout migrate-timeout missing-cgroup wrong-memory wrong-swap wrong-cpu \
   oom-killed oom-increase oom-kill-increase oom-at-exit container-exit server-exit server-exit-zero \
   db-not-ready web-not-ready readiness-timeout sample-fail db-sample-fail \
@@ -268,6 +274,7 @@ for scenario in success db-socket-first restrictive-umask \
   printf '{"containers":{},"calls":[],"ready":0}\n' > "$case_dir/state.json"
   selected_server=$server_pin
   [[ $scenario != base-pin-mismatch ]] || selected_server=$pin
+  [[ $scenario != runtime-base ]] || selected_server=$server_runtime_pin
   status=0
   (cd "$case_dir"
     unset DOCKER_HOST DOCKER_CONTEXT
@@ -282,9 +289,9 @@ for scenario in success db-socket-first restrictive-umask \
     PATH="$tmp/bin:$PATH" SMOKE_CASE="$scenario" SMOKE_STATE="$case_dir/state.json" \
     bash "$smoke" run --artifacts "$tmp/artifacts" --manifest "$tmp/manifest" \
     --server-base "$selected_server" --web-base "$web_pin") > "$case_dir/console" 2>&1 || status=$?
-  "$real_python" - "$scenario" "$status" "$case_dir" <<'PY'
+  "$real_python" - "$scenario" "$status" "$case_dir" "$chromium_path" <<'PY'
 import hashlib, json, pathlib, signal, sys
-scenario, status, directory = sys.argv[1], int(sys.argv[2]), pathlib.Path(sys.argv[3])
+scenario, status, directory, chromium_path = sys.argv[1], int(sys.argv[2]), pathlib.Path(sys.argv[3]), sys.argv[4]
 evidence_path = directory / 'server-runtime-smoke/evidence.json'
 assert evidence_path.stat().st_size <= 16384
 evidence = json.loads(evidence_path.read_text())
@@ -294,13 +301,14 @@ assert evidence['result'] == ('passed' if passed else 'failed')
 state = json.loads((directory / 'state.json').read_text())
 if scenario in ('success', 'shutdown-timeout'):
     assert evidence['samples'] == 30 and state['ready'] == 31, (scenario, evidence)
+    assert state['chromium_path'] == [chromium_path], (scenario, state.get('chromium_path'))
     assert evidence['preparation_seconds'] < 1, (scenario, evidence)
     assert evidence['cleanup_seconds'] < 1, (scenario, evidence)
     measurement_min, measurement_max = (30, 31) if scenario == 'success' else (39, 41)
     assert measurement_min <= evidence['measurement_seconds'] < measurement_max, (scenario, evidence)
     assert measurement_min <= evidence['elapsed_seconds'] < measurement_max + 1, (scenario, evidence)
 reasons = {'pull-fail': 'command_failed', 'pull-timeout': 'command_timeout',
-           'base-pin-mismatch': 'base_pin_mismatch',
+           'base-pin-mismatch': 'base_pin_mismatch', 'runtime-base': 'base_pin_mismatch',
            'network-fail': 'command_failed', 'volume-fail': 'command_failed',
            'start-fail': 'command_failed', 'setup-fail': 'one_shot_failed', 'migrate-fail': 'one_shot_failed',
            'setup-timeout': 'deadline_exceeded', 'migrate-timeout': 'deadline_exceeded',

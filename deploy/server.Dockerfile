@@ -30,6 +30,14 @@ RUN wget -qO /out/rds-global-bundle.pem https://truststore.pki.rds.amazonaws.com
 
 FROM mcr.microsoft.com/playwright:v1.64.0-noble@sha256:06a9939e57531807f8d5fd76ce44b53165ffb7d7501d87ab10e285c20b1e971f AS chromium
 
+RUN find /ms-playwright/chromium-1248 -type d -exec chmod 0755 {} + \
+    && find /ms-playwright/chromium-1248 -type f -exec sh -c 'for file; do \
+        case "$(head -c 4 "$file" | od -An -tx1 | tr -d " \n")" in \
+            7f454c46|2321*) chmod 0755 "$file" ;; \
+            *) chmod 0644 "$file" ;; \
+        esac; \
+    done' sh {} +
+
 FROM docker.io/library/ubuntu:noble-20260917@sha256:534baea6a22c03a63003dbc8dbe78fe34bc0d7e595d9a9dc9834884ff530eb55 AS runtime
 
 ARG DEBIAN_FRONTEND=noninteractive
@@ -50,12 +58,12 @@ RUN --mount=type=bind,from=chromium,source=/etc/ssl/certs/ca-certificates.crt,ta
         libatk1.0-0t64 libatspi2.0-0t64 libcairo2 libcups2t64 libdbus-1-3 libdrm2 libfontconfig1 \
         libfreetype6 libgbm1 libglib2.0-0t64 libnspr4 libnss3 libpango-1.0-0 libx11-6 libxcb1 \
         libxcomposite1 libxdamage1 libxext6 libxfixes3 libxkbcommon0 libxrandr2 wget \
-        xfonts-cyrillic xfonts-scalable xvfb \
+        xfonts-cyrillic xfonts-scalable \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --gid 1001 pwuser \
     && useradd --uid 1001 --gid 1001 --groups users --comment ',,,' --create-home --shell /bin/bash pwuser
 
-COPY --from=chromium /ms-playwright/chromium-1248 /ms-playwright/chromium-1248
+COPY --from=chromium --chown=0:0 /ms-playwright/chromium-1248 /ms-playwright/chromium-1248
 RUN chromium=/ms-playwright/chromium-1248/chrome-linux64 \
     && { [ -d "$chromium" ] || chromium=/ms-playwright/chromium-1248/chrome-linux-arm64; } \
     && { [ -d "$chromium" ] || chromium=/ms-playwright/chromium-1248/chrome-linux; } \

@@ -517,6 +517,7 @@ const serverContentsChecks = [
   "-iname \"*ffmpeg*\"",
   "-iname \"*yarn*\"",
   "-iname \"*headless[-_]shell*\"",
+  "runuser -u pwuser -- find /ms-playwright /opt/chromium -writable -print",
   "for tool in node npm npx corepack yarn",
 ];
 const readImageCheck = () => parseYaml(read(`${imageCheck.slice(2)}/action.yml`), imageCheck).toJS();
@@ -761,8 +762,17 @@ const serverRuntimePackages = [
   "libatk1.0-0t64", "libatspi2.0-0t64", "libcairo2", "libcups2t64", "libdbus-1-3", "libdrm2", "libfontconfig1",
   "libfreetype6", "libgbm1", "libglib2.0-0t64", "libnspr4", "libnss3", "libpango-1.0-0", "libx11-6", "libxcb1",
   "libxcomposite1", "libxdamage1", "libxext6", "libxfixes3", "libxkbcommon0", "libxrandr2", "wget",
-  "xfonts-cyrillic", "xfonts-scalable", "xvfb",
+  "xfonts-cyrillic", "xfonts-scalable",
 ];
+const chromiumModes = [
+  "RUN find /ms-playwright/chromium-1248 -type d -exec chmod 0755 {} + \\",
+  "    && find /ms-playwright/chromium-1248 -type f -exec sh -c 'for file; do \\",
+  "        case \"$(head -c 4 \"$file\" | od -An -tx1 | tr -d \" \\n\")\" in \\",
+  "            7f454c46|2321*) chmod 0755 \"$file\" ;; \\",
+  "            *) chmod 0644 \"$file\" ;; \\",
+  "        esac; \\",
+  "    done' sh {} +",
+].join("\n");
 
 function checkServerDockerfile(text) {
   const stages = [...text.matchAll(/^FROM (\S+)(?: AS (\S+))?$/gm)].map((match) => ({ image: match[1], name: match[2] }));
@@ -770,6 +780,8 @@ function checkServerDockerfile(text) {
   const image = Object.fromEntries(stages.map((stage) => [stage.name, stage.image]));
   assert.match(image.chromium, /^mcr\.microsoft\.com\/playwright:v[0-9.]+-noble@sha256:[0-9a-f]{64}$/, "Chromium source is the pinned Playwright image");
   assert.match(image.runtime, /^docker\.io\/library\/ubuntu:noble(-[0-9]{8}(\.[0-9]+)?)?@sha256:[0-9a-f]{64}$/, "runtime base is digest-pinned Ubuntu noble");
+  const chromium = text.slice(text.indexOf(`FROM ${image.chromium} AS chromium`), text.indexOf(`FROM ${image.runtime} AS runtime`));
+  assert.equal(chromium.trim(), `FROM ${image.chromium} AS chromium\n\n${chromiumModes}`, "Chromium tree is not writable by group or others");
   const runtime = text.slice(text.indexOf(`FROM ${image.runtime} AS runtime`));
   assert.deepEqual(runtime.match(/^ARG UBUNTU_SNAPSHOT=.*$/gm), ["ARG UBUNTU_SNAPSHOT=20261114T000000Z"], "one fixed Ubuntu snapshot");
   assert.ok(runtime.includes("'URIs: https://snapshot.ubuntu.com/ubuntu/'\"${UBUNTU_SNAPSHOT}\"/"), "apt reads only the snapshot");
@@ -777,7 +789,7 @@ function checkServerDockerfile(text) {
     "from=chromium,source=/etc/ssl/certs/ca-certificates.crt,target=/run/bootstrap-ca.crt",
     "from=chromium",
   ], "the Playwright stage lends only its CA bundle and Chromium");
-  assert.deepEqual(runtime.match(/^COPY --from=chromium .*$/gm), ["COPY --from=chromium /ms-playwright/chromium-1248 /ms-playwright/chromium-1248"], "only the pinned Chromium build is copied");
+  assert.deepEqual(runtime.match(/^COPY --from=chromium .*$/gm), ["COPY --from=chromium --chown=0:0 /ms-playwright/chromium-1248 /ms-playwright/chromium-1248"], "only the pinned Chromium build is copied, owned by root");
   assert.deepEqual((runtime.match(/\$apt [^\\\n]*/g) ?? []).map((command) => command.trim()), ["$apt update", "$apt -y --no-install-recommends upgrade", "$apt -y --no-install-recommends install"], "apt commands");
   assert.match(runtime, /&& rm -rf \/var\/lib\/apt\/lists\/\* \\\n/, "apt lists are removed");
   const install = runtime.match(/\$apt -y --no-install-recommends install \\\n((?:\s+[^\s&\\]+(?: [^\s&\\]+)* \\\n)+)/);
@@ -797,7 +809,7 @@ test("server runtime is pinned Ubuntu noble with only Playwright's Chromium", ()
   const fixtures = [
     ["Playwright runtime", (text) => text.replace(runtimeFrom, runtimeFrom.replace(/\S+(?= AS runtime)/, text.match(/^FROM (\S+) AS chromium$/m)[1])), /Ubuntu noble/],
     ["unpinned runtime", (text) => text.replace(runtimeFrom, "FROM docker.io/library/ubuntu:noble AS runtime"), /Ubuntu noble/],
-    ["whole Playwright tree", (text) => text.replace("/ms-playwright/chromium-1248 /ms-playwright/chromium-1248", "/ms-playwright /ms-playwright"), /pinned Chromium build/],
+    ["whole Playwright tree", (text) => text.replace("--chown=0:0 /ms-playwright/chromium-1248 /ms-playwright/chromium-1248", "--chown=0:0 /ms-playwright /ms-playwright"), /pinned Chromium build/],
     ["extra Playwright copy", (text) => text.replace("\nCOPY --from=build /out/server", "\nCOPY --from=chromium /usr/bin/node /usr/bin/node\nCOPY --from=build /out/server"), /CA bundle and Chromium/],
     ["live archive", (text) => text.replace("https://snapshot.ubuntu.com/ubuntu/'\"${UBUNTU_SNAPSHOT}\"/", "http://archive.ubuntu.com/ubuntu/"), /snapshot/],
     ["moving snapshot", (text) => text.replace("ARG UBUNTU_SNAPSHOT=20261114T000000Z", "ARG UBUNTU_SNAPSHOT"), /fixed Ubuntu snapshot/],
@@ -805,6 +817,11 @@ test("server runtime is pinned Ubuntu noble with only Playwright's Chromium", ()
     ["apt lists kept", (text) => text.replace("&& rm -rf /var/lib/apt/lists/* \\\n", "\\\n"), /apt lists/],
     ["extra package", (text) => text.replace("libxrandr2 wget", "libxrandr2 wget nodejs"), /runtime packages|Node\.js/],
     ["dropped font", (text) => text.replace(" fonts-noto-color-emoji", ""), /runtime packages/],
+    ["X server", (text) => text.replace("xfonts-scalable \\\n", "xfonts-scalable xvfb \\\n"), /runtime packages/],
+    ["copied Chromium modes", (text) => text.replace(chromiumModes, ""), /not writable/],
+    ["world-writable Chromium files", (text) => text.replace("chmod 0644", "chmod 0666"), /not writable/],
+    ["group-writable Chromium directories", (text) => text.replace("-type d -exec chmod 0755", "-type d -exec chmod 0775"), /not writable/],
+    ["Chromium owner", (text) => text.replace(" --chown=0:0", ""), /owned by root/],
     ["changed user", (text) => text.replace("--uid 1001", "--uid 1000"), /pwuser identity/],
     ["root runtime", (text) => text.replace("\nUSER pwuser\n", "\n"), /runtime user/],
     ["changed environment", (text) => text.replace("TZ=UTC ", ""), /runtime environment/],
