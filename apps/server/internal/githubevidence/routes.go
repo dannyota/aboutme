@@ -20,7 +20,6 @@ import (
 const (
 	unavailableCode     = "evidence_unavailable"
 	sessionRequiredCode = "evidence_session_required"
-	upstreamCode        = "evidence_upstream"
 	requestInvalidCode  = "request_invalid"
 )
 
@@ -265,7 +264,7 @@ func writeLimited(w http.ResponseWriter, retry time.Duration) {
 		seconds = 1
 	}
 	w.Header().Set("Retry-After", strconv.Itoa(seconds))
-	api.WriteError(w, http.StatusTooManyRequests, upstreamCode, "the GitHub evidence limit is reached; try again later")
+	api.WriteError(w, http.StatusTooManyRequests, "rate_limited", "too many requests; retry later")
 }
 
 func (s *Service) writeInternal(w http.ResponseWriter, r *http.Request, op string, err error) {

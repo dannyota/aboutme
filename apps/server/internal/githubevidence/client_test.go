@@ -131,42 +131,59 @@ func TestClient_RefusesOtherDestinationsWithoutSending(t *testing.T) {
 }
 
 func TestClient_RefusesRedirectsWithoutASecondRequest(t *testing.T) {
-	var targetHits, sourceHits int
-	var mu sync.Mutex
-	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		mu.Lock()
-		targetHits++
-		mu.Unlock()
-		w.Header().Set("Content-Type", "application/json")
-		if _, err := io.WriteString(w, `{"id":1,"login":"octocat"}`); err != nil {
-			t.Error(err)
-		}
-	}))
-	t.Cleanup(target.Close)
-	source := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		mu.Lock()
-		sourceHits++
-		mu.Unlock()
-		http.Redirect(w, r, target.URL+"/user", http.StatusFound)
-	}))
-	t.Cleanup(source.Close)
-	c := newTestClient(source.URL, newTransport(), time.Now)
-	_, err := c.profile(context.Background(), uuid.New(), newHeldToken(sentinelToken))
-	if !errors.Is(err, errRedirectRefused) {
-		t.Fatalf("profile error = %v, want redirect refused", err)
-	}
-	requireClean(t, err)
-	mu.Lock()
-	defer mu.Unlock()
-	if sourceHits != 1 || targetHits != 0 {
-		t.Fatalf("source hits = %d, redirect target hits = %d; want 1 and 0", sourceHits, targetHits)
+	for _, sameDestination := range []bool{false, true} {
+		t.Run(fmt.Sprintf("same destination %v", sameDestination), func(t *testing.T) {
+			var targetHits, sourceHits int
+			var mu sync.Mutex
+			profile := func(w http.ResponseWriter) {
+				w.Header().Set("Content-Type", "application/json")
+				if _, err := io.WriteString(w, `{"id":1,"login":"octocat"}`); err != nil {
+					t.Error(err)
+				}
+			}
+			target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				mu.Lock()
+				targetHits++
+				mu.Unlock()
+				profile(w)
+			}))
+			t.Cleanup(target.Close)
+			var source *httptest.Server
+			source = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				mu.Lock()
+				sourceHits++
+				first := sourceHits == 1
+				mu.Unlock()
+				switch {
+				case !first:
+					profile(w)
+				case sameDestination:
+					http.Redirect(w, r, source.URL+"/user", http.StatusFound)
+				default:
+					http.Redirect(w, r, target.URL+"/user", http.StatusFound)
+				}
+			}))
+			t.Cleanup(source.Close)
+			c := newTestClient(source.URL, newTransport(), time.Now)
+			_, err := c.profile(context.Background(), uuid.New(), newHeldToken(sentinelToken))
+			mu.Lock()
+			defer mu.Unlock()
+			if sourceHits != 1 || targetHits != 0 {
+				t.Fatalf("requests after a redirect: source = %d, other host = %d; want 1 and 0", sourceHits, targetHits)
+			}
+			if !errors.Is(err, errRedirectRefused) {
+				t.Fatalf("profile error = %v, want redirect refused", err)
+			}
+			requireClean(t, err)
+		})
 	}
 }
 
 func TestClient_ResponseBound(t *testing.T) {
+	const bound = 512 * 1024
 	exact := `{"id":1,"login":"octocat","pad":"`
-	exact += strings.Repeat("x", maxResponseBytes-len(exact)-2) + `"}`
-	if len(exact) != maxResponseBytes {
+	exact += strings.Repeat("x", bound-len(exact)-2) + `"}`
+	if len(exact) != bound {
 		t.Fatalf("fixture length = %d", len(exact))
 	}
 	for _, tc := range []struct {
@@ -176,7 +193,7 @@ func TestClient_ResponseBound(t *testing.T) {
 	}{
 		{"exactly 512 KiB", exact, nil},
 		{"one byte over", exact + " ", errResponseTooLarge},
-		{"far over", strings.Repeat(" ", 4*maxResponseBytes), errResponseTooLarge},
+		{"far over", strings.Repeat(" ", 4*bound), errResponseTooLarge},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			base := &countingTransport{respond: func(*http.Request) (*http.Response, error) { return jsonResponse(200, tc.body), nil }}
@@ -353,6 +370,10 @@ func TestClient_RevocationRequestShape(t *testing.T) {
 	base := &countingTransport{respond: func(req *http.Request) (*http.Response, error) {
 		method, path = req.Method, req.URL.String()
 		authorization, contentType = req.Header.Get("Authorization"), req.Header.Get("Content-Type")
+		if req.Body == nil {
+			body = nil
+			return &http.Response{StatusCode: http.StatusNoContent, Header: http.Header{}, Body: http.NoBody}, nil
+		}
 		var err error
 		if body, err = io.ReadAll(req.Body); err != nil {
 			return nil, err

@@ -3,9 +3,11 @@ package githubevidence
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
+	"maps"
 	"net/http"
 	"strings"
 	"sync"
@@ -145,8 +147,8 @@ func TestRegistry_RacingEndingsSendOneRevocation(t *testing.T) {
 		}
 		wg.Wait()
 		synctest.Wait()
-		if n := revoked.count(sentinelToken); n != 1 {
-			t.Fatalf("racing endings revoked %d times, want 1", n)
+		if n, all := revoked.count(sentinelToken), revoked.total(); n != 1 || all != 1 {
+			t.Fatalf("racing endings sent %d revocation requests, %d for the token; want exactly 1", all, n)
 		}
 	})
 }
@@ -254,8 +256,14 @@ func TestService_RevocationFailureLogsOnlyItsCategory(t *testing.T) {
 				t.Fatalf("revocation attempts = %d, want exactly 1", transport.count())
 			}
 			line := logs.String()
-			if !strings.Contains(line, `"category":"`+tc.category+`"`) {
-				t.Fatalf("log = %s, want category %s", line, tc.category)
+			var record map[string]any
+			if err := json.Unmarshal(logs.Bytes(), &record); err != nil || strings.Count(line, "\n") != 1 {
+				t.Fatalf("log = %q, want exactly one JSON record: %v", line, err)
+			}
+			delete(record, "time")
+			want := map[string]any{"level": "WARN", "msg": "github evidence: token revocation failed", "category": tc.category}
+			if !maps.Equal(record, want) {
+				t.Fatalf("log record = %v, want exactly %v", record, want)
 			}
 			for _, secret := range []string{sentinelToken, testClientSecret, sentinelBody, "Basic ", "Authorization", "access_token"} {
 				if strings.Contains(line, secret) {

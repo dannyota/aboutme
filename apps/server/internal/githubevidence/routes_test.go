@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -773,8 +774,23 @@ func TestEvidence_EleventhStartInAnHourIsRefused(t *testing.T) {
 		h.start(h.raw, h.session)
 	}
 	rec := h.do(h.as(http.MethodPost, StartPath))
-	if rec.Code != http.StatusTooManyRequests || !strings.Contains(rec.Body.String(), upstreamCode) || rec.Header().Get("Retry-After") == "" {
-		t.Fatalf("11th start = %d %s Retry-After=%q", rec.Code, rec.Body.String(), rec.Header().Get("Retry-After"))
+	var body struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("11th start body %q: %v", rec.Body.String(), err)
+	}
+	retry, retryErr := strconv.Atoi(rec.Header().Get("Retry-After"))
+	if rec.Code != http.StatusTooManyRequests || body.Error.Code != "rate_limited" || body.Error.Message != "too many requests; retry later" ||
+		retryErr != nil || retry < 1 || retry > 3600 {
+		t.Fatalf("11th start = %d %s Retry-After=%q, want 429 rate_limited with whole seconds", rec.Code, rec.Body.String(), rec.Header().Get("Retry-After"))
+	}
+	var started int
+	if err := h.pool.QueryRow(t.Context(), `SELECT count(*) FROM oauth_transactions WHERE linking_user_id = $1`, h.user.ID).Scan(&started); err != nil || started != startLimit {
+		t.Fatalf("transactions after a refused start = %d, %v; want %d", started, err, startLimit)
 	}
 	_, otherRaw, otherSession := h.newAccount()
 	h.start(otherRaw, otherSession)

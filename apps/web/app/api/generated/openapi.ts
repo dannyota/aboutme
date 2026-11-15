@@ -1919,7 +1919,7 @@ export interface components {
             } | null;
         };
         /**
-         * @description Error codes of the GitHub evidence routes beside the existing `request_invalid`, `session_required`, `csrf_rejected` and `method_not_allowed`. `evidence_unavailable`: the feature is off (`404`) or the server is shutting down (`503`). `evidence_session_required`: no evidence session is live (`409`). `evidence_upstream`: a GitHub error, timeout or limit (`429` for a limit, with `Retry-After`).
+         * @description Error codes of the GitHub evidence routes beside the existing `request_invalid`, `session_required`, `csrf_rejected`, `method_not_allowed` and `rate_limited` (`429` with `Retry-After` when the start limit is spent). `evidence_unavailable`: the feature is off (`404`) or the server is shutting down (`503`). `evidence_session_required`: no evidence session is live (`409`). `evidence_upstream`: a GitHub error, a GitHub timeout, or the per-account GitHub request budget spent; reserved for routes that answer GitHub results as JSON, since the callback only redirects.
          * @enum {string}
          */
         GitHubEvidenceErrorCode: "evidence_unavailable" | "evidence_session_required" | "evidence_upstream";
@@ -3282,8 +3282,8 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description `evidence_upstream`: a GitHub evidence limit is reached. For starts this is 10 per account per hour. Carries `Retry-After` in whole seconds. */
-        GitHubEvidenceLimited: {
+        /** @description `rate_limited`: the 10 starts per account per hour are spent. This is a local limit, not an upstream failure. Carries `Retry-After` in whole seconds. */
+        GitHubEvidenceStartLimited: {
             headers: {
                 /** @description Whole seconds to wait before retrying. */
                 "Retry-After"?: number;
@@ -3293,8 +3293,8 @@ export interface components {
                 /**
                  * @example {
                  *       "error": {
-                 *         "code": "evidence_upstream",
-                 *         "message": "the GitHub evidence limit is reached; try again later"
+                 *         "code": "rate_limited",
+                 *         "message": "too many requests; retry later"
                  *       }
                  *     }
                  */
@@ -7027,7 +7027,7 @@ export interface operations {
             403: components["responses"]["GitHubEvidenceCsrfRejected"];
             404: components["responses"]["GitHubEvidenceUnavailable"];
             405: components["responses"]["GitHubEvidenceMethodNotAllowed"];
-            429: components["responses"]["GitHubEvidenceLimited"];
+            429: components["responses"]["GitHubEvidenceStartLimited"];
             /** @description The server is shutting down and starts no evidence session. */
             503: {
                 headers: {
