@@ -21,8 +21,8 @@ runtime image stays.
 
 ## Version and installation
 
-Use the latest pnpm 12 release that is at least seven days old, pinned exactly
-in `.tool-versions` and in the `packageManager` field of both project roots.
+Use the latest pnpm 12 release that is at least one day old, pinned exactly in
+`.tool-versions` and in the `packageManager` field of both project roots.
 `make tools-check` fails on drift. pnpm refuses to run when its version differs
 from `packageManager` and never downloads another pnpm; the implementer names
 the pnpm 12 settings that do this and tests both refusals.
@@ -36,10 +36,13 @@ longer bundle it.
 
 Both `pnpm-workspace.yaml` files set:
 
-- `minimumReleaseAge: 10080` (seven days) with `minimumReleaseAgeStrict: true`.
-  A security fix newer than that goes in `minimumReleaseAgeExclude` by exact
-  name, with the advisory in the commit message, and leaves once it is seven
-  days old.
+- `minimumReleaseAge: 1440` (one day, pnpm 12's default) with
+  `minimumReleaseAgeStrict: true` (owner, 2026-11-15: seven days blocked
+  ordinary updates for a week). A security fix newer than that goes in
+  `minimumReleaseAgeExclude` by exact name, with the advisory in the commit
+  message, and leaves once it is a day old. pnpm 12 applies the age to frozen
+  installs too, so a lockfile entry younger than a day fails every install until
+  it matures.
 - Dependency build scripts run only for packages listed in `allowBuilds`.
   `strictDepBuilds` stays on, so a new build script fails the install until a
   reviewed change allows it.
@@ -52,6 +55,10 @@ Both `pnpm-workspace.yaml` files set:
 - The isolated node_modules layout with an in-project virtual store, no hoisting
   settings, and no global virtual store.
 - `--frozen-lockfile` for every install outside a deliberate dependency change.
+- Dependency `overrides` live only in the root `pnpm-workspace.yaml`, the one
+  place pnpm reads them. Where an override pins a version that `apps/web`
+  declares, such as `typescript` and `h3`, a static test fails when the two
+  differ.
 
 ## Store, worktrees, and the dependency guard
 
@@ -76,15 +83,21 @@ must be one of:
 - for a `.bin` entry, a regular file inside the same project root's
   `node_modules` tree;
 - a workspace member directory listed in `pnpm-workspace.yaml` and named by a
-  `workspace:` dependency in the linking project's `package.json`.
+  `workspace:` dependency in the linking project's `package.json`;
+- the root virtual store's own `node_modules/.pnpm/node_modules/<name>` link to
+  a listed workspace member whose package name is `<name>`, which pnpm creates
+  for every member.
 
 Any other symlink, and any linked `node_modules` or ancestor, is refused as
 before.
 
 ## Images, source maps, and CI
 
-The web image fetches from the root lockfile and installs only `apps/web` and
-its workspace dependency, frozen and offline after the fetch. The harness image
+The web image fetches from the root lockfile and installs `apps/web` with its
+workspace dependency, frozen and offline after the fetch. pnpm 12's filtered
+install also brings the root and `packages/schema` development dependencies into
+that build stage; they never reach the runtime stage, which holds only
+`.output`, so the `.output` parity below is the binding check. The harness image
 installs its own project the same way, with build scripts off.
 
 The web image's closed copy map, `scripts/web-e2e-source.manifest`, and the
@@ -98,7 +111,7 @@ snapshot entry they reach, and follows `workspace:` sources the way it follows
 CI installs with the pinned pnpm and caches the pnpm store.
 
 Dependabot keeps the `npm` ecosystem, which covers pnpm, for `/` and
-`/deploy/dev-https-browser`, with a seven-day cooldown matching
+`/deploy/dev-https-browser`, with a one-day cooldown matching
 `minimumReleaseAge` and the current ignore lists.
 
 ## Migration and acceptance
