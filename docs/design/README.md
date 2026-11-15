@@ -119,6 +119,9 @@ ADR amendments are recorded; implementation and runtime acceptance remain
 pending. Existing commands and pixel gates remain until their replacements land.
 The designs own delivery order, native trust, and proof-before-deletion.
 
+The [pnpm workspace](pnpm-workspace.md) (owner, 2026-11-15) replaces npm and
+amends the local tooling install rules.
+
 ## System summary
 
 ```mermaid

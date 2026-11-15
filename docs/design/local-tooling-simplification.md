@@ -148,13 +148,13 @@ Optional `run-owned.sh --timeout <seconds> -- <command>` bounds time, not
 memory; managed deadlines stay 600 seconds for pre-push and 3600 for ci-local.
 Add no memory-warning sampler.
 
-Prepare checkout-local dependencies with `npm ci` and `npm --prefix apps/web ci`
-under the managed lock. Reject linked dependencies, generated directories and
-ancestors before install; refuse installs/builds in an active stack checkout.
-Pre-push never installs, borrows, copies, links, repairs or deletes
-dependencies. Keep REFUSED/exit 2 for missing tools, changed manifests or
-selected-tool drift, naming CI coverage. No install receipt: selected tools
-cannot certify the full graph. Local CI installs every npm root afresh after
+Prepare checkout-local dependencies with frozen [pnpm](pnpm-workspace.md)
+installs under the managed lock. Reject linked dependencies, generated
+directories and ancestors before install; refuse installs/builds in an active
+stack checkout. Pre-push never installs, borrows, copies, links, repairs or
+deletes dependencies. Keep REFUSED/exit 2 for missing tools, changed manifests
+or selected-tool drift, naming CI coverage. No install receipt: selected tools
+cannot certify the full graph. Local CI installs every pnpm project afresh after
 link checks. Keep required Bash 4/GNU tools and Mac Linux-only skips.
 
 ## Production runtime coverage
