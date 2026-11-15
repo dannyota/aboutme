@@ -153,7 +153,7 @@ proof function then:
 - otherwise sets `fenced` and releases that replica's claims atomically.
 
 Proof never acknowledges a transition, revives a timed-out mutation or changes a
-transition row. ECS `STOPPED`, load-balancer health, lost sessions, lock loss,
+transition row. A stopped task, load-balancer health, lost sessions, lock loss,
 heartbeats and elapsed time are diagnostics, not proof. A dead initiator's
 closing transition is rolled back separately
 ([fenced-initiator recovery](transitions.md#fenced-initiator-recovery)).
@@ -198,7 +198,8 @@ holds ownership.
 
 ## Connections
 
-RDS keeps `max_connections` at 100 or more, and the fleet budgets 60:
+The database must allow `max_connections` of 100 or more, and the fleet budgets
+60:
 
 | Consumer                                                                          | Connections |
 | --------------------------------------------------------------------------------- | ----------: |

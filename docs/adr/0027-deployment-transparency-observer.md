@@ -92,4 +92,8 @@ existing verifier while keeping Podman access in the root reporter.
 reflect Vietnam production under ADR 0027, preserving the observer's trust
 limits.
 
+2026-11-15: the ECS, Kubernetes and Lambda observer paths and the arm64 Lambda
+tag use were removed with the undeployed AWS code (ADR 0026); the observer runs
+only on podman.
+
 Originally proposed as ADR 0057.

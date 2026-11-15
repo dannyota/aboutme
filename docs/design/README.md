@@ -27,7 +27,7 @@ Current behavior lives in code, deployment configuration, and
 | 5f      | [TOTP key management](totp-key-management.md)                          | Sealing, key ring, rotation, and key failures                                 |
 | 6       | [Deployment](deployment.md)                                            | Environments, trust boundaries, media, mail, and migrations                   |
 | 6a      | [Vietnam production](vietnam-production.md)                            | Live host, DNS, database, secrets, deploy, and alarms                         |
-| 6b      | [Release fence](passkey-release-fence.md)                              | Minimum production release, operation lock, and IAM                           |
+| 6b      | [Release fence](passkey-release-fence.md)                              | Feature floors for the minimum production release                             |
 | Other   | [Release floors](release-floors.md)                                    | Rebuilt-host floor and schema floors for breaking migrations                  |
 | 6e      | [CrowdSec HTTP privacy](crowdsec-http-privacy.md)                      | Storage, authorization, retention, log privacy, backups, and notice           |
 | Other   | [CrowdSec request feed](crowdsec-request-feed.md)                      | Feed fields, route and probe classes, target samples, and detection           |

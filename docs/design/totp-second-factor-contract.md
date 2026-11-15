@@ -271,7 +271,6 @@ and recovery codes change only on verified completion or deliberate removal.
 
 An older server cannot count TOTP as an active factor, so production runs v0.4.7
 (numeric 4007) or later whenever TOTP enrollment can succeed. `deploy.sh` and
-`fence.sh` enforce this floor as the
-[release fence](passkey-release-fence.md#authenticator-app-key-re-encryption)
+`fence.sh` enforce this floor as the [release fence](passkey-release-fence.md)
 defines. An older browser shows a refresh prompt for the unknown `totp` method,
 calls no route for it, and grants nothing.
