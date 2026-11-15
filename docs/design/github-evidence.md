@@ -108,8 +108,12 @@ months, which is why it is dropped at once.
 - Sign-out means any revocation of the account's sessions: logout, revoking one
   session or all of them, a password change or reset, and account deletion. An
   epoch change ends the session inside the transaction that changes the epoch.
-- On shutdown, sessions end when the signal arrives, and the server waits up to
-  11 seconds for the code exchanges and revocations in flight.
+- On shutdown, evidence cleanup starts at the signal, alongside the HTTP drains.
+  In-flight code exchanges are cancelled, and every held token gets its one
+  revocation attempt in parallel. Cleanup ends within 6 seconds of the signal
+  (the 5-second request bound plus 1 second), so it fits inside Podman's
+  10-second container stop. A callback that arrives after the signal does no
+  exchange and redirects with `evidence=failed`.
 - One account boundary orders every change: the account's user row lock in a
   database transaction. Session-authenticated operations revalidate the caller's
   session inside it (live, same user, current epoch, same CSRF secret): the

@@ -10,6 +10,11 @@ behavior that contract changes must keep.
 - JSON success uses `{data: ...}`. Declared binary photo and PDF reads return
   their bytes directly. Failure uses `{error:{code,message,details?}}`;
   `details` is optional and structured per error code.
+- `PersonalDetailsPatch` keeps the server-owned photo out of the patch with
+  `not: {required: [photo]}`. That guard names a property the patch schema does
+  not define, so `docs/api/.redocly.lint-ignore.yaml` exempts it from
+  `no-required-schema-properties-undefined`. The exemption avoids restating the
+  schema-owned personal-details shape in OpenAPI.
 - Authenticated API responses use exact `Cache-Control: no-store, no-transform`.
   Public responses use `no-cache, must-revalidate` with a strong entity tag
   (ETag).
