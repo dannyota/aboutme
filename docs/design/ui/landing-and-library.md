@@ -1,50 +1,12 @@
 # aboutme landing and Library
 
-The landing page, the template Library, and the community showcase. Part of the
-[visual design](../../../DESIGN.md).
+The template Library and the community showcase; the landing page has its own
+[spec](home-page.md). Part of the [visual design](../../../DESIGN.md).
 
 ## Landing
 
-The landing page performs no data fetch. It stacks on phones and uses a
-12-column grid from 1024 px, with 80 px between sections, 112 px from 1024 px.
-
-The hero text spans five columns. The headline's last phrase, “theo cách của
-bạn.” or “Your control.”, takes the brand gradient and falls back to the text
-color under `forced-colors: active`. Signed-out visitors see Create your resume,
-Browse the library, and a Sign in text link, in that order. Signed-in visitors
-see Open your resumes and Browse the library. The first action is a 48 px
-brand-gradient button with `--shadow-cta` that shifts to
-`--gradient-brand-strong` on hover. Actions stack full width below 28 rem.
-
-The sample spans seven columns. It is Danny's own compiled-in resume, two
-columns with a sidebar and a photo, on A4 page metadata rather than a Library
-preset. It sits on a whole white sheet, 210 mm by at least 297 mm with
-`--shadow-paper`, in front of a translucent ghost sheet and a
-`--gradient-hero-glow`. From 42 rem the ghost sheet is offset and rotated 2
-degrees. The sheet zooms 0.39 on phones, 0.5 from 28 rem, 0.6 from 42 rem, and
-0.64 from 80 rem. Three decorative chips, Private by default, PDF, and the link,
-float at the sheet edges from 42 rem and wrap in a centered row under it below
-that. Screen readers skip them.
-
-Four sections follow the hero:
-
-1. Three feature cards on blue, indigo, and sand surface tints with the 20 px
-   feature radius: Private by default, One link per resume, and Bring your own
-   AI. They sit in three columns from 1024 px. The Bring your own AI card ends
-   with a text link, “Xem cách kết nối” or “See how to connect”, to the
-   [MCP guide](../mcp-guide.md) at `/guide/mcp`.
-2. Choose your style: filter chips for ATS-friendly, Technical, First job, and
-   Management, each linking to `/templates?filter=…`, and one real template card
-   per chip, in two columns and four from 1024 px. A text link opens the full
-   Library.
-3. Publishing is three choices: an example settings card with Public resume and
-   PDF download on and SEO and GEO off, and the stamp on its top edge.
-4. Free and open source: the AGPL-3.0 link and an outline button to the GitHub
-   repository.
-
-The footer shows `aboutme.vn` and links Terms and Privacy. The
-[verify page spec](../deployment-transparency/visual.md) adds Verify, and the
-[MCP guide](../mcp-guide.md) adds “Kết nối AI” or “Connect AI” right after it.
+The [home page spec](home-page.md) owns the landing page: its tokens, layout,
+and the staged change of identity.
 
 ## Library
 
