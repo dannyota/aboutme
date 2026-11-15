@@ -68,6 +68,9 @@ collected. The notice text needs the owner's approval.
   discards the token and fails through the existing no-oracle path. It never
   resolves or links an identity, never updates reauthentication proof, and never
   starts a session of the account.
+- An ending that happens while a callback is in flight refuses the install and
+  revokes the token. An install that has already committed stays, with no live
+  session.
 - The token response must contain a `scope` field that is present and empty. Any
   other value, or a missing field, discards the token and fails the connection.
 - Connecting a different GitHub account replaces the connection and removes the
@@ -95,6 +98,12 @@ months, which is why it is dropped at once.
   new one replaces the old.
 - It ends on "Done", expiry, sign-out, an epoch change, disconnect, replacement
   and process exit. Ending discards the token through token cleanup.
+- Sign-out means any revocation of the account's sessions: logout, revoking one
+  session or all of them, a password change or reset, and account deletion. An
+  epoch change ends the session inside the transaction that changes the epoch,
+  under the user lock.
+- On shutdown, sessions end when the signal arrives, and the server waits up to
+  6 seconds for the revocations in flight.
 - Token cleanup is one path for every issued token that is discarded: a callback
   that fails after the code exchange (generation mismatch, rejected scope,
   failed profile fetch) and every session ending above, including process
@@ -185,6 +194,12 @@ MCP tool reaches them.
   `evidence_not_confirmed`, `evidence_limit`, `evidence_unsupported_link`,
   `evidence_upstream` (GitHub error, limit or timeout), plus the existing
   precondition and validation errors.
+- With evidence off, every route answers 404 `evidence_unavailable`. Start
+  answers 503 `evidence_unavailable` once shutdown has begun. "Done" without a
+  live session answers 409 `evidence_session_required`. The eleventh start in an
+  hour answers the API's 429 `rate_limited` with `Retry-After`;
+  `evidence_upstream` is only for GitHub's own errors and timeouts and for the
+  spent request budget.
 
 | Limit                               | Value                                 |
 | ----------------------------------- | ------------------------------------- |
@@ -244,6 +259,9 @@ page's own data.
 - The connection and the evidence are account data: both are in the account
   export and deleted with the account. A GitHub id shared by several accounts
   links them for anyone holding the database.
+- The operator's account deletion command runs outside the server process. The
+  token of an account deleted that way is revoked at session expiry, within 30
+  minutes.
 - Confirmation states what GitHub records. It does not claim sole authorship.
 - Nothing about a viewer is stored, and no request reaches GitHub when a page is
   viewed.
@@ -255,6 +273,8 @@ ends the session and asks GitHub to revoke its token. `keepLinks` is a required
 query boolean; a missing or other value is a validation error. With
 `keepLinks=true` the items stay as plain links; with `false` they are removed.
 Either way each affected project changes through one library mutation.
+Disconnecting advances the generation even when nothing is connected, so a
+callback started earlier fails.
 
 ## Data
 
