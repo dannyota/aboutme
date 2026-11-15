@@ -26,10 +26,11 @@ new_repo() {
   git -C "$REPO" config user.name 'Source Boundary Test'
   printf '/.dev/\n' >>"$REPO/.git/info/exclude"
   printf '{"private":true}\n' >"$REPO/package.json"
-  printf '{"lockfileVersion":3}\n' >"$REPO/package-lock.json"
+  printf "lockfileVersion: '9.0'\n" >"$REPO/pnpm-lock.yaml"
+  printf 'packages:\n  - apps/web\n' >"$REPO/pnpm-workspace.yaml"
   printf 'console.log("fixture")\n' >"$REPO/apps/web/app.ts"
   printf '{"type":"object"}\n' >"$REPO/packages/schema/resume.json"
-  git -C "$REPO" add -- package.json package-lock.json apps/web/app.ts \
+  git -C "$REPO" add -- package.json pnpm-lock.yaml pnpm-workspace.yaml apps/web/app.ts \
     packages/schema/resume.json
   git -C "$REPO" commit -qm base
   COMMIT=$(git -C "$REPO" rev-parse HEAD)
@@ -104,8 +105,8 @@ assert_tar_is_deterministic() {
   local first=$1 second=$2
   local expected=$WORK/expected-members actual=$WORK/actual-members
   cmp -s "$first" "$second" || fail 'identical inputs produced different tar bytes'
-  printf '%s\n' apps/web/app.ts package-lock.json package.json \
-    packages/schema/resume.json >"$expected"
+  printf '%s\n' apps/web/app.ts package.json packages/schema/resume.json \
+    pnpm-lock.yaml pnpm-workspace.yaml >"$expected"
   tar -tf "$first" >"$actual"
   cmp -s "$expected" "$actual" || fail 'archive member list differs from manifest'
   tar --numeric-owner --full-time -tvf "$first" |
@@ -114,8 +115,8 @@ assert_tar_is_deterministic() {
 }
 
 new_repo valid
-write_manifest apps/web/app.ts package-lock.json package.json \
-  packages/schema/resume.json
+write_manifest apps/web/app.ts package.json packages/schema/resume.json \
+  pnpm-lock.yaml pnpm-workspace.yaml
 run_boundary
 [ -f "$OUTPUT" ] || fail 'valid input did not create an archive'
 mkdir -p "$WORK/extracted"
@@ -249,6 +250,14 @@ git -C "$REPO" commit -qm outside
 COMMIT=$(git -C "$REPO" rev-parse HEAD)
 write_manifest scripts/unlisted.sh
 assert_rejected outside-allowlist run_boundary
+
+new_repo npm-lockfile
+printf '{"lockfileVersion":3}\n' >"$REPO/package-lock.json"
+git -C "$REPO" add -- package-lock.json
+git -C "$REPO" commit -qm npm-lockfile
+COMMIT=$(git -C "$REPO" rev-parse HEAD)
+write_manifest package-lock.json
+assert_rejected npm-lockfile run_boundary
 
 new_repo duplicate
 printf '%s\n' apps/web/app.ts apps/web/app.ts >"$MANIFEST"

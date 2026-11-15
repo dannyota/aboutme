@@ -70,7 +70,7 @@ container running. The benchmark never reads a database or `.env`.
 Build outside the measurement cgroup:
 
 ```sh
-(cd apps/web && NUXT_BUILD_TEST=1 npm run build)
+(cd apps/web && NUXT_BUILD_TEST=1 pnpm run build)
 (cd apps/server && go build -o ../../.dev/bin/render-budget ./cmd/render-budget)
 ```
 

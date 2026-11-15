@@ -24,6 +24,8 @@ Evidence contains only the closed fields accepted by `verify-evidence.mjs`; neve
 
 The accepted [native admission contract](../../docs/design/local-tooling-simplification.md#native-admission-and-account) uses the owner account only for clean owner-written/reviewed commits, disposable builds/profiles, and explicit test-only environments. After session and native integration, Mac HTTPS uses profile-only CA trust, excludes WebKit and the exact whole server-rendering journeys, and records partial native evidence. Contributor heads use hosted CI. Preserve full Linux shard coverage and production proof custody; native partial evidence never enters the Linux aggregate. No native proof is available or authorized by this guide update.
 
+This directory is its own pnpm project with `package.json`, `pnpm-workspace.yaml`, and `pnpm-lock.yaml`, outside the root workspace; install it here with `pnpm install --frozen-lockfile --ignore-scripts`. Its `packageManager` pin and install settings must match the root's; `static-test.sh` fails on drift. The image fetches from its lockfile and installs offline with build scripts off.
+
 ## Authorities and checks
 
 Read [testing](../../instructions/testing.md), [resource rules](../../instructions/resources.md), [deployment rules](../../instructions/deploy.md), [local check runbook](../../docs/runbooks/local-uat.md), and [native development runbook](../../docs/runbooks/native-development.md). Production proofs require the exact account and scope named by the brief.

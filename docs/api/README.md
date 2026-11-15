@@ -6,9 +6,9 @@
 | `redocly.yaml` | Lint config for `openapi.yaml` (scoped rule overrides, with rationale in comments).                                                                                     |
 | `test/`        | Vitest suite that lints the contract and pins its invariants.                                                                                                           |
 
-Lint:
-`npx @redocly/cli lint docs/api/openapi.yaml --config docs/api/redocly.yaml`
-Test: `npx vitest run docs/api/test`
+Lint from the repository root:
+`pnpm exec redocly lint docs/api/openapi.yaml --config docs/api/redocly.yaml`
+Test: `pnpm exec vitest run docs/api/test`
 
 ## Generated TypeScript client
 
@@ -32,7 +32,7 @@ to a pinned generator, and the output is committed:
   `/readyz` back to the unversioned site root, so `client.ts` splits the path
   map. Asking the `/api/v1` client for `/healthz` is a type error.
 
-Regenerate: `make api-gen` (`npm run api:gen` in `apps/web`). Drift gate:
+Regenerate: `make api-gen` (`pnpm run api:gen` in `apps/web`). Drift gate:
 `bash apps/web/scripts/api-drift-check.sh`, wired into `make api-check`. It
 generates into a throwaway directory and compares. It never writes inside the
 repository, so it is safe to run in a dirty or shared worktree, and it reports

@@ -18,15 +18,19 @@ printf 'owned %s\n' "$*" >>"$CALL_LOG"
 shift 3
 exec "$@"
 STUB
-cat >"$WORK/bin/npm" <<'STUB'
+cat >"$WORK/bin/pnpm" <<'STUB'
 #!/usr/bin/env bash
-printf 'npm %s %s\n' "$PWD" "$*" >>"$CALL_LOG"
+printf 'pnpm %s %s\n' "$PWD" "$*" >>"$CALL_LOG"
 [ "${PYTHONDONTWRITEBYTECODE:-}" = 1 ] || exit 7
 [ "$PWD" != "${STUB_INSTALL_FAIL:-}" ] || exit 1
+[[ " $* " != *" --offline "* || "$PWD" != "${STUB_OFFLINE_MISS:-}" ]] || exit 1
 mkdir -p node_modules
-if [[ $PWD == */apps/web ]]; then mkdir -p .nuxt; touch .nuxt/eslint.config.mjs; fi
+if [ -d apps/web ]; then
+  mkdir -p apps/web/node_modules packages/schema/node_modules apps/web/.nuxt
+  touch apps/web/.nuxt/eslint.config.mjs
+fi
 STUB
-chmod +x "$WORK/bin/npm"
+chmod +x "$WORK/bin/pnpm"
 cat >"$repo/scripts/ci.sh" <<'STUB'
 #!/usr/bin/env bash
 printf 'ci %s\n' "$PWD" >>"$CALL_LOG"
@@ -42,7 +46,11 @@ git -C "$repo" init -q
 git -C "$repo" config user.name Test
 git -C "$repo" config user.email test@example.invalid
 printf 'node_modules/\n.nuxt/\n' >"$repo/.gitignore"
-git -C "$repo" add scripts .gitignore
+printf 'packages:\n  - apps/web\n  - packages/schema\n' >"$repo/pnpm-workspace.yaml"
+printf 'verifyDepsBeforeRun: error\n' >"$repo/deploy/dev-https-browser/pnpm-workspace.yaml"
+printf '{"name":"@aboutme/web"}\n' >"$repo/apps/web/package.json"
+printf '{"name":"@aboutme/schema"}\n' >"$repo/packages/schema/package.json"
+git -C "$repo" add scripts .gitignore pnpm-workspace.yaml deploy apps packages
 git -C "$repo" commit -qm fixture
 git -C "$repo" worktree add -q -b fixture "$WORK/tree"
 mkdir -p "$WORK/tree/apps/web" "$WORK/tree/deploy/dev-https-browser" "$WORK/tree/packages/schema"
@@ -56,36 +64,36 @@ for path in apps/web/.nuxt apps/web/.output apps/web/node_modules node_modules d
   status=0; run || status=$?; [[ $status == 2 ]] || fail "symlink $path did not exit 2"
   grep -Fq "$path" "$WORK/out" || fail 'missing symlink path'
   grep -q 'symlink' "$WORK/out" || fail 'missing symlink removal instruction'
-  if grep -q '^npm ' "$CALL_LOG"; then fail 'npm ran with a symlink'; fi
+  if grep -q '^pnpm ' "$CALL_LOG"; then fail 'pnpm ran with a symlink'; fi
   [[ -f $WORK/sentinel/keep ]] || fail 'symlink target was changed'
   rm "$WORK/tree/$path"
 done
 touch "$WORK/tree/dirty"
 status=0; run || status=$?; [[ $status == 2 ]] || fail 'dirty worktree did not exit 2'
 grep -q 'worktree and index must be clean' "$WORK/out" || fail 'missing dirty-tree refusal'
-if grep -q '^npm ' "$CALL_LOG"; then fail 'npm ran with a dirty worktree'; fi
+if grep -q '^pnpm ' "$CALL_LOG"; then fail 'pnpm ran with a dirty worktree'; fi
 rm "$WORK/tree/dirty"
 git -C "$WORK/tree" config status.showUntrackedFiles no
 touch "$WORK/tree/dirty"
 status=0; run || status=$?; [[ $status == 2 ]] || fail 'hidden untracked file did not exit 2'
 grep -q 'worktree and index must be clean' "$WORK/out" || fail 'missing hidden untracked file refusal'
-if grep -qE '^(npm|ci) ' "$CALL_LOG"; then fail 'work ran with a hidden untracked file'; fi
+if grep -qE '^(pnpm|ci) ' "$CALL_LOG"; then fail 'work ran with a hidden untracked file'; fi
 rm "$WORK/tree/dirty"
 git -C "$WORK/tree" config --unset status.showUntrackedFiles
 mkdir -p "$WORK/tree/.dev/native-https/run"
 printf '%s' "$$" >"$WORK/tree/.dev/native-https/run/server.pid"
 status=0; run || status=$?; [[ $status == 2 ]] || fail 'active checkout did not exit 2'
-if grep -qE '^(npm|ci) ' "$CALL_LOG"; then fail 'work ran in an active checkout'; fi
+if grep -qE '^(pnpm|ci) ' "$CALL_LOG"; then fail 'work ran in an active checkout'; fi
 rm "$WORK/tree/.dev/native-https/run/server.pid"
 printf '{"version":1}\n' >"$WORK/tree/.dev/native-https/run/session"
 status=0; run || status=$?; [[ $status == 2 ]] || fail 'session checkout did not exit 2'
 grep -q 'development session state exists' "$WORK/out" || fail 'missing session refusal'
-if grep -qE '^(npm|ci) ' "$CALL_LOG"; then fail 'work ran with development session state'; fi
+if grep -qE '^(pnpm|ci) ' "$CALL_LOG"; then fail 'work ran with development session state'; fi
 rm "$WORK/tree/.dev/native-https/run/session"
 mv "$WORK/tree/apps" "$WORK/apps-real"
 ln -s "$WORK/apps-real" "$WORK/tree/apps"
 status=0; run || status=$?; [[ $status == 2 ]] || fail 'linked ancestor did not exit 2'
-if grep -q '^npm ' "$CALL_LOG"; then fail 'npm ran through a linked ancestor'; fi
+if grep -q '^pnpm ' "$CALL_LOG"; then fail 'pnpm ran through a linked ancestor'; fi
 rm "$WORK/tree/apps"
 mv "$WORK/apps-real" "$WORK/tree/apps"
 : >"$repo/.git/info/exclude"
@@ -94,8 +102,8 @@ touch "$WORK/tree/.dev/locks/local-check.lock"
 run || fail 'local lock caused clean-tree refusal'
 grep -q '^ci ' "$CALL_LOG" || fail 'CI did not run with local lock present'
 grep -q -- '--timeout 3600 -- bash .* --capped' "$CALL_LOG" || fail 'missing watchdog arguments'
-printf 'npm %s ci --prefer-offline --no-audit --no-fund\n' "$WORK/tree" "$WORK/tree/apps/web" "$WORK/tree/packages/schema" "$WORK/tree/deploy/dev-https-browser" >"$WORK/expected"
-grep '^npm ' "$CALL_LOG" >"$WORK/actual"
+printf 'pnpm %s install --frozen-lockfile --offline\n' "$WORK/tree" "$WORK/tree/deploy/dev-https-browser" >"$WORK/expected"
+grep '^pnpm ' "$CALL_LOG" >"$WORK/actual"
 cmp -s "$WORK/expected" "$WORK/actual" || fail 'incorrect dependency installs'
 [[ -z $(find "$WORK/tree" -type l -print -quit) ]] || fail 'worktree contains a symlink'
 grep -q 'PASS.*docs-lint' "$WORK/out" || fail 'missing passed summary'
@@ -104,15 +112,23 @@ grep -q 'PASS: local CI' "$WORK/out" || fail 'missing final pass'
 STUB_FAIL=1 run && fail 'failure was accepted'
 grep -q 'FAIL.*web' "$WORK/out" || fail 'missing failure summary'
 grep -q 'FAIL: local CI exited 1' "$WORK/out" || fail 'missing final failure'
-for dir in "$WORK/tree" "$WORK/tree/apps/web" "$WORK/tree/deploy/dev-https-browser" "$WORK/tree/packages/schema"; do
+touch "$WORK/tree/apps/web/node_modules/stale"
+STUB_OFFLINE_MISS=$WORK/tree/deploy/dev-https-browser run || fail 'offline store miss did not fall back'
+[[ ! -e $WORK/tree/apps/web/node_modules/stale ]] || fail 'member node_modules was not installed afresh'
+printf 'pnpm %s install --frozen-lockfile --offline\n' "$WORK/tree" "$WORK/tree/deploy/dev-https-browser" >"$WORK/expected"
+printf 'pnpm %s install --frozen-lockfile\n' "$WORK/tree/deploy/dev-https-browser" >>"$WORK/expected"
+grep '^pnpm ' "$CALL_LOG" >"$WORK/actual"
+cmp -s "$WORK/expected" "$WORK/actual" || fail 'offline miss did not run one frozen install'
+grep -q 'offline install missed the pnpm store' "$WORK/out" || fail 'missing offline fallback notice'
+for dir in "$WORK/tree" "$WORK/tree/deploy/dev-https-browser"; do
   status=0; STUB_INSTALL_FAIL=$dir run || status=$?; [[ $status == 2 ]] || fail 'install failure did not exit 2'
   grep -q 'refused: dependency installation failed' "$WORK/out" || fail 'missing install refusal'
   if grep -q '^ci ' "$CALL_LOG"; then fail 'CI ran after install failure'; fi
-  [[ $(tail -n 1 "$CALL_LOG") == "npm $dir ci --prefer-offline --no-audit --no-fund" ]] || fail 'install continued after failure'
+  [[ $(tail -n 1 "$CALL_LOG") == "pnpm $dir install --frozen-lockfile" ]] || fail 'install continued after failure'
 done
 status=0; STUB_OWNED_STATUS=125 run || status=$?; [[ $status == 2 ]] || fail 'watchdog refusal did not exit 2'
 grep -q 'watchdog could not start' "$WORK/out" || fail 'missing watchdog refusal'
-if grep -qE '^(npm|ci) ' "$CALL_LOG"; then fail 'work ran after watchdog refusal'; fi
+if grep -qE '^(pnpm|ci) ' "$CALL_LOG"; then fail 'work ran after watchdog refusal'; fi
 mkdir -p "$repo/.dev/locks"
 old_lock=$repo/.git/aboutme-local-check.lock new_lock=$repo/.dev/locks/local-check.lock
 for held in "$new_lock" "$old_lock"; do

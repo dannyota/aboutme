@@ -20,7 +20,7 @@ and nightly schedule select `full`. Keep workflow triggers unfiltered.
 manifest itself, `scripts/web-e2e-source.sh`,
 `scripts/generate-web-e2e-source-manifest.sh`,
 `scripts/collect-browser-diagnostics.py`, `Makefile`, `.tool-versions`,
-`.gitignore`, `package.json`, and `package-lock.json` are also web inputs. Check
+`.gitignore`, `package.json`, and `pnpm-lock.yaml` are also web inputs. Check
 both sides of renames. `prose` takes precedence. Preflight also publishes
 `mutations=1` for changes under `apps/web/e2e/`, schedules, dispatches, or
 errors; otherwise it publishes `0`.

@@ -152,11 +152,22 @@ INNER
 printf 'go-build:%s:%s\n' "${out##*/}" "$package" >>"$FAKE_MUTATIONS"
 EOF
 
-  cat >"$fakebin/npm" <<'EOF'
+  # pnpm 12 runs `run` and `exec` commands in a process group of their own (pnpm CHANGELOG 12.20.0).
+  cat >"$fakebin/pnpm" <<'EOF'
 #!/usr/bin/env bash
 set -Eeuo pipefail
-printf 'npm:%s\n' "$*" >>"$FAKE_EFFECTS"
-exec fake-service web
+printf 'pnpm:%s\n' "$*" >>"$FAKE_EFFECTS"
+mode=$1
+shift
+case $mode in
+exec) command=("$@") ;;
+run) command=(fake-service web) ;;
+*) exit 2 ;;
+esac
+python3 -I -c 'import os, sys; os.setpgid(0, 0); os.execvp(sys.argv[1], sys.argv[1:])' "${command[@]}" &
+child=$!
+[ "$mode" != run ] || printf '%s\n' "$child" >"${FAKE_FOREIGN_PORTS%/*}/listener-child"
+wait "$child"
 EOF
 
   cat >"$fakebin/node" <<'EOF'
@@ -323,6 +334,14 @@ new_fixture() {
   mkdir -p "$fixture/repo/scripts/lib" "$fixture/repo/deploy/caddy" \
     "$fixture/repo/packages/publicroots" \
     "$fixture/repo/apps/server" "$fixture/repo/apps/web/node_modules"
+  mkdir -p "$fixture/repo/apps/web/node_modules/.bin"
+  cat >"$fixture/repo/apps/web/node_modules/.bin/nuxt" <<'EOF'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+printf 'nuxt:%s\n' "$*" >>"$FAKE_EFFECTS"
+[ "${1-}" != dev ] || exec fake-service web
+EOF
+  chmod 0700 "$fixture/repo/apps/web/node_modules/.bin/nuxt"
   cp "$SOURCE_SCRIPT" "$fixture/repo/scripts/dev-https.sh"
   cp "$SOURCE_LIB_DIR"/dev-https-*.sh "$SOURCE_LIB_DIR/platform.sh" "$fixture/repo/scripts/lib/"
   cp "$SOURCE_ROOT/scripts/generate-public-roots.mjs" "$fixture/repo/scripts/generate-public-roots.mjs"
@@ -392,7 +411,9 @@ run_happy_path_and_lifecycle_checks() (
   assert_log_line "$FAKE_EFFECTS" 'migrate:operation=apply'
   assert_log_line "$FAKE_EFFECTS" 'service:mock-oauth host=127.0.0.1 port=20442 origin=https://localhost:20443 client=aboutme-local-google linkedin=aboutme-local-linkedin db='
   assert_log_line "$FAKE_EFFECTS" 'service:server host=127.0.0.1 port=20441 origin=https://localhost:20443 render=http://127.0.0.1:20440 app=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa renderer=sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb issuer=http://127.0.0.1:20442/google linkedin=http://127.0.0.1:20442/linkedin db=postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme_dev?sslmode=disable'
-  assert_log_line "$FAKE_EFFECTS" 'npm:run dev -- --port 20440 --host 127.0.0.1'
+  assert_log_line "$FAKE_EFFECTS" 'pnpm:exec true'
+  assert_log_line "$FAKE_EFFECTS" 'nuxt:prepare'
+  assert_log_line "$FAKE_EFFECTS" 'nuxt:dev --port 20440 --host 127.0.0.1'
   assert_log_line "$FAKE_EFFECTS" 'caddy-config-validated'
   assert_log_line "$FAKE_MUTATIONS" 'go-build:mail-capture:./cmd/mail-capture'
   assert_log_line "$FAKE_MUTATIONS" 'start:mail-capture'
@@ -1691,12 +1712,52 @@ select_and_run_checks() {
   done
 }
 
+web_launch_drift() {
+  python3 -I - "$1" "$2" <<'PY'
+import json, re, shlex, sys
+session, manifest = sys.argv[1:]
+line = next((text for text in open(session) if re.match(r"\s*web\) launch_service ", text)), None)
+if line is None:
+    sys.exit("no web launch line")
+words = shlex.split(line.split(") ", 1)[1].strip().rstrip(";"))
+steps = [step.strip() for step in words[words.index("-c") + 1].split("&&")]
+launch = [re.sub(r"^(exec )?node_modules/\.bin/nuxt ", "", step) for step in steps
+          if re.match(r"(exec )?node_modules/\.bin/nuxt ", step)]
+dev = [step.strip() for step in json.load(open(manifest))["scripts"]["dev"].split("&&")]
+if steps[0] != "pnpm exec true" or len(launch) != len(steps) - 1:
+    print(f"web launch must be pnpm exec true followed only by nuxt commands: {steps}")
+elif not all(step.startswith("nuxt ") for step in dev):
+    print(f"apps/web dev script runs more than nuxt: {dev}")
+else:
+    expected = [step[len("nuxt "):] for step in dev]
+    expected[-1] += " --port 20440 --host 127.0.0.1"
+    if launch != expected:
+        print(f"dev-https web runs nuxt {launch}; the apps/web dev script implies nuxt {expected}")
+PY
+}
+
+check_web_launch_matches_dev_script() {
+  local drift fixture
+  drift=$(web_launch_drift "$SOURCE_LIB_DIR/dev-https-session.sh" "$SOURCE_ROOT/apps/web/package.json") ||
+    fail 'cannot compare the web launch with the apps/web dev script'
+  [ -z "$drift" ] || fail "web launch drifted from the apps/web dev script: $drift"
+  fixture=$(mktemp -d)
+  python3 -I -c 'import json, sys
+manifest = json.load(open(sys.argv[1]))
+manifest["scripts"]["dev"] = "nuxt prepare && nuxt dev --open"
+json.dump(manifest, open(sys.argv[2], "w"))' "$SOURCE_ROOT/apps/web/package.json" "$fixture/package.json"
+  drift=$(web_launch_drift "$SOURCE_LIB_DIR/dev-https-session.sh" "$fixture/package.json") || drift=
+  rm -rf -- "$fixture"
+  [[ $drift == *'implies nuxt'* ]] || fail 'a changed apps/web dev script was not reported'
+}
+
 main() {
   [ "${1-}" = --static ] && [ "$#" -eq 1 ] || fail 'usage: scripts/dev-https-test.sh --static'
   [ -f "$SOURCE_SCRIPT" ] || fail "missing production script: $SOURCE_SCRIPT"
   compgen -G "$SOURCE_LIB_DIR/dev-https-*.sh" >/dev/null || fail "missing production library files: $SOURCE_LIB_DIR"
   bash "$SOURCE_ROOT/scripts/test/dev-https-diagnostics-test.sh"
   check_checks_array_is_complete
+  check_web_launch_matches_dev_script
   case ${DEV_HTTPS_TEST_CASE-} in
   session-anchor) run_session_anchor_checks; return ;;
   session-monitor) run_session_monitor_checks; return ;;

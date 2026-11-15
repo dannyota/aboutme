@@ -46,7 +46,7 @@ describe('built server sanitizer boundary', () => {
       const entry = join(serverOutput, 'index.mjs');
       expect(
         existsSync(entry),
-        'run npm run build before this test',
+        'run pnpm run build before this test',
       ).toBe(true);
       expect(
         statSync(entry).mtimeMs,

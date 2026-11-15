@@ -98,8 +98,8 @@ touched() {
   return 1
 }
 
-# Reject dependency links and active checkouts before linting or installation.
-# ci-local uses the same guard before npm lifecycle hooks can write outputs.
+# Reject borrowed dependencies and active checkouts before linting or installation.
+# ci-local uses the same guard before pnpm lifecycle hooks can write outputs.
 dependency_paths() {
   python3 -B - "$ROOT" "$@" <<'GUARD'
 import json
@@ -109,6 +109,7 @@ import stat
 import sys
 
 root = Path(sys.argv[1])
+real_root = Path(os.path.realpath(root))
 
 def refuse(message):
     print(f"refused: {message}; CI installs and checks dependencies", file=sys.stderr)
@@ -123,38 +124,128 @@ def ancestors(path):
         if item == root:
             break
 
-def local_schema_link(item, modules):
-    if modules != root / "apps/web/node_modules" or item != modules / "@aboutme/schema":
+def members(project):
+    lines = (project / "pnpm-workspace.yaml").read_text().splitlines()
+    found, listing = [], False
+    for line in lines:
+        if line == "packages:":
+            listing = True
+        elif listing and line.startswith("  - "):
+            member = line[4:].strip().strip("'\"")
+            if not member or any(char in member for char in "*?[]!{}") or ".." in Path(member).parts:
+                refuse(f"unsupported workspace pattern in {project.relative_to(root)}/pnpm-workspace.yaml")
+            found.append(member)
+        elif listing and line and not line.startswith(" "):
+            listing = False
+    return found
+
+def project_for(modules):
+    owner = modules.parent
+    if (owner / "pnpm-workspace.yaml").is_file():
+        return owner
+    for project in owner.parents:
+        if (project / "pnpm-workspace.yaml").is_file():
+            if any(project / member == owner for member in members(project)):
+                return project
+            break
+        if project == root:
+            break
+    refuse(f"{modules.relative_to(root)} is not in a pnpm project")
+
+def package_name(directory):
+    return json.loads((directory / "package.json").read_text()).get("name")
+
+def workspace_link(item, project, modules, name, target):
+    for member in members(project):
+        directory = project / member
+        ancestors(directory)
+        if target != real_root / directory.relative_to(root) or not directory.is_dir():
+            continue
+        if package_name(directory) != name:
+            return False
+        if modules == project / "node_modules/.pnpm/node_modules":
+            return True
+        owner = modules.parent
+        if owner != project and owner not in (project / m for m in members(project)):
+            return False
+        manifest = json.loads((owner / "package.json").read_text())
+        for field in ("dependencies", "devDependencies", "optionalDependencies"):
+            spec = manifest.get(field, {}).get(name)
+            if isinstance(spec, str) and spec.startswith("workspace:"):
+                return True
         return False
-    target = root / "packages/schema"
-    ancestors(target)
-    manifest = json.loads((modules.parent / "package.json").read_text())
-    lock = json.loads((modules.parent / "package-lock.json").read_text())
-    # The declared source link must stay in this checkout with real ancestors.
-    return (manifest.get("dependencies", {}).get("@aboutme/schema") == "file:../../packages/schema"
-            and lock.get("packages", {}).get("node_modules/@aboutme/schema") == {
-                "resolved": "../../packages/schema", "link": True}
-            and item.resolve(strict=True) == target and target.is_dir())
+    return False
+
+def allowed_link(item, project):
+    lexical = Path(os.path.normpath(item.parent / os.readlink(item)))
+    if not lexical.is_relative_to(root) or lexical == root:
+        return False
+    for part in (lexical, *lexical.parents):
+        if part == root:
+            break
+        if part.is_symlink():
+            return False
+    target = Path(os.path.realpath(item))
+    if not target.is_relative_to(real_root):
+        return False
+    store = real_root / project.relative_to(root) / "node_modules/.pnpm"
+    if target.is_dir() and target.is_relative_to(store) and target != store:
+        return True
+    enclosing = item.parent.parent if item.parent.name.startswith("@") else item.parent
+    if item.parent.name == ".bin" and target.is_file():
+        for tree in (enclosing.parent, project / "node_modules"):
+            if target.is_relative_to(real_root / tree.relative_to(root)):
+                return True
+        return False
+    if enclosing.name != "node_modules" or not target.is_dir():
+        return False
+    name = f"{item.parent.name}/{item.name}" if item.parent.name.startswith("@") else item.name
+    return workspace_link(item, project, enclosing, name, target)
+
+def walk_modules(modules, project):
+    ancestors(modules)
+    if not modules.exists():
+        return
+    if not modules.is_dir():
+        refuse(f"{modules.relative_to(root)} must be a directory")
+    for directory, dirs, files in os.walk(modules, onerror=lambda error: refuse("cannot inspect dependency paths")):
+        for entry in dirs + files:
+            item = Path(directory) / entry
+            if item.is_symlink() and not allowed_link(item, project):
+                refuse(f"symlink at {item.relative_to(root)}")
+
+def check_project(project):
+    ancestors(project)
+    trees = [project / "node_modules", *(project / member / "node_modules" for member in members(project))]
+    for modules in trees:
+        ancestors(modules)
+    for modules in trees:
+        walk_modules(modules, project)
+
+def check_generated(path):
+    ancestors(path)
+    if not path.exists():
+        return
+    if not path.is_dir():
+        refuse(f"{path.relative_to(root)} must be a directory")
+    for directory, dirs, files in os.walk(path, onerror=lambda error: refuse("cannot inspect dependency paths")):
+        for entry in dirs + files:
+            item = Path(directory) / entry
+            if item.is_symlink():
+                refuse(f"symlink at {item.relative_to(root)}")
 
 try:
+    checked = set()
     for name in sys.argv[2:]:
         path = root / name
-        ancestors(path)
-        if not path.exists():
+        if path.name != "node_modules":
+            check_generated(path)
             continue
-        if not path.is_dir():
-            refuse(f"{name} must be a directory")
-        for directory, dirs, files in os.walk(path, onerror=lambda error: refuse("cannot inspect dependency paths")):
-            for entry in dirs + files:
-                item = Path(directory) / entry
-                if item.is_symlink():
-                    # npm's executable links stay inside this real install.
-                    if (item.parent.name == ".bin" and path.name == "node_modules"
-                            and item.resolve().is_relative_to(path) and item.is_file()):
-                        continue
-                    if local_schema_link(item, path):
-                        continue
-                    refuse(f"symlink at {item.relative_to(root)}")
+        ancestors(path)
+        project = project_for(path)
+        if project not in checked:
+            checked.add(project)
+            check_project(project)
     states = [root / ".dev", root / ".dev/native-https/run"]
     if os.environ.get("ABOUTME_DEV_STATE_DIR"):
         states.append(root / os.environ["ABOUTME_DEV_STATE_DIR"])
@@ -184,14 +275,34 @@ GUARD
 }
 
 tool_drift() {
-  local dir=$1 modules=$2
+  local importer=$1 modules=$2
   shift 2
-  node - "$dir/package-lock.json" "$modules" "$@" <<'EOF'
+  node - "$ROOT/pnpm-lock.yaml" "$importer" "$modules" "$@" <<'EOF'
 const fs = require('node:fs');
-const [lockPath, modules, ...names] = process.argv.slice(2);
-const lock = JSON.parse(fs.readFileSync(lockPath, 'utf8')).packages;
+const [lockPath, importer, modules, ...names] = process.argv.slice(2);
+const unquote = (value) => value.trim().replace(/^'(.*)'$/, '$1').replace(/^"(.*)"$/, '$1');
+const documents = fs.readFileSync(lockPath, 'utf8').split(/^---$/m);
+const locked = {};
+let section = null;
+let current = null;
+let dependency = null;
+for (const line of documents[documents.length - 1].split('\n')) {
+  let match;
+  if (/^\S/.test(line)) {
+    section = line.replace(/:.*$/, '');
+    current = null;
+  } else if (section !== 'importers') {
+    continue;
+  } else if ((match = /^ {2}(\S.*):$/.exec(line))) {
+    current = unquote(match[1]);
+  } else if (current === importer && (match = /^ {6}(\S.*):$/.exec(line))) {
+    dependency = unquote(match[1]);
+  } else if (current === importer && dependency && (match = /^ {8}version: (.*)$/.exec(line))) {
+    locked[dependency] = unquote(match[1]).replace(/\(.*$/, '');
+  }
+}
 for (const name of names) {
-  const want = lock[`node_modules/${name}`]?.version ?? 'absent';
+  const want = locked[name] ?? 'absent';
   let have = 'absent';
   try {
     have = JSON.parse(
@@ -204,13 +315,15 @@ EOF
 
 MODULES=
 node_modules_for() {
-  local dir=$1 label=$2 modules drift prefix=$1/
+  local dir=$1 label=$2 modules drift prefix=$1/ path
   shift 2
   [[ $dir == . ]] && prefix=
-  if touched "${prefix}package.json" || touched "${prefix}package-lock.json"; then
-    record "$label" REFUSED "the branch changed $dir/package.json or its lockfile; CI installs and checks it"
-    return 1
-  fi
+  for path in "${prefix}package.json" package.json pnpm-workspace.yaml pnpm-lock.yaml; do
+    if touched "$path"; then
+      record "$label" REFUSED "the branch changed $path; CI installs and checks it"
+      return 1
+    fi
+  done
   modules=$ROOT/$dir/node_modules
   if ! dependency_paths "${prefix}node_modules"; then
     record "$label" REFUSED "unsafe dependency paths or active development stack; CI covers it"
@@ -224,14 +337,14 @@ node_modules_for() {
     record "$label" REFUSED "node is not installed"
     return 1
   }
-  if ! drift=$(tool_drift "$ROOT/$dir" "$modules" "$@"); then
-    record "$label" REFUSED "cannot inspect selected tools against $dir/package-lock.json; CI covers it"
+  if ! drift=$(tool_drift "$dir" "$modules" "$@"); then
+    record "$label" REFUSED "cannot inspect selected tools against pnpm-lock.yaml; CI covers it"
     return 1
   fi
   if [[ -n $drift ]]; then
-    say "$modules does not match $dir/package-lock.json:"
+    say "$modules does not match pnpm-lock.yaml:"
     sed 's/^/  /' <<<"$drift"
-    record "$label" REFUSED "stale $modules; run npm ci in $(dirname "$modules")"
+    record "$label" REFUSED "stale $modules; run pnpm install --frozen-lockfile --offline at $ROOT"
     return 1
   fi
   MODULES=$modules
@@ -246,9 +359,7 @@ check_web() {
     return
   fi
   local web=$ROOT/apps/web
-  node_modules_for apps/web eslint eslint @nuxt/eslint \
-    @nuxt/eslint-config @typescript-eslint/parser eslint-plugin-vue \
-    vue-eslint-parser @stylistic/eslint-plugin || return 0
+  node_modules_for apps/web eslint eslint @nuxt/eslint || return 0
   if ! dependency_paths apps/web/.nuxt apps/web/.output; then
     record eslint REFUSED "unsafe generated paths or active development stack; CI covers it"
     return 0
@@ -277,7 +388,7 @@ check_docs() {
     record markdownlint skip "no changed Markdown people read"
     return
   fi
-  node_modules_for . prettier prettier markdownlint-cli2 markdownlint || {
+  node_modules_for . prettier prettier markdownlint-cli2 || {
     record markdownlint REFUSED "see the prettier line"
     return 0
   }

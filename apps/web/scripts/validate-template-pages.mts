@@ -5,11 +5,12 @@ import {
 } from 'node:fs';
 import { isBuiltin } from 'node:module';
 import {
-  dirname, isAbsolute, join, posix, relative, resolve, sep,
+  dirname, isAbsolute, join, relative, resolve, sep,
 } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { inflateSync } from 'node:zlib';
 import ts from 'typescript';
+import { parseAllDocuments } from 'yaml';
 import { SAMPLES } from '../../../packages/schema/gen/ts/samples.ts';
 
 export const REPOSITORY = resolve(import.meta.dirname, '../../..');
@@ -39,7 +40,9 @@ const SOURCE_INPUTS = [
   'packages/schema/package.json', 'packages/schema/samples',
   'packages/schema/validation/store.ts', 'packages/schema/fixtures/full.json',
   'packages/schema/fixtures/vn-full.json',
+  'package.json', 'pnpm-workspace.yaml',
 ];
+const LOCKFILE_IMPORTERS = ['apps/web', 'packages/schema'] as const;
 const SHA256 = /^[0-9a-f]{64}$/u;
 const MAX_FILE_BYTES = 16 * 1024 * 1024;
 const MAX_PNG_BYTES = 8 * 1024 * 1024;
@@ -329,9 +332,10 @@ export function sourcePaths(root: string): string[] {
       .join('/');
     const version = packages[packageName];
     requireCondition(version !== undefined, IMPORT_ERROR);
-    if (!version.startsWith('file:')) return undefined;
-    const directory = sourcePath(root, resolve(root, 'apps/web',
-      version.slice(5)));
+    if (!/^(?:file|workspace):/u.test(version)) return undefined;
+    const directory = version.startsWith('workspace:')
+      ? workspaceMember(root, packageName)
+      : sourcePath(root, resolve(root, 'apps/web', version.slice(5)));
     const manifest = JSON.parse(readRegular(join(root, directory,
       'package.json')).toString('utf8'));
     const entry = manifest.exports?.[`.${name.slice(packageName.length)}`];
@@ -397,60 +401,63 @@ export function browserImage(root: string): string {
   return image;
 }
 
-function renderDependencyVersions(lock: {
-  packages?: Record<string, {
-    version?: unknown;
-    dependencies?: Record<string, string>;
-    optionalDependencies?: Record<string, string>;
-  }>;
-}): string {
-  const packages = lock.packages ?? {};
+const readYaml = (path: string) => parseAllDocuments(readRegular(path)
+  .toString('utf8')).map((document) => document.toJS() ?? {});
+function workspaceMember(root: string, name: string): string {
+  const members = readYaml(join(root, 'pnpm-workspace.yaml'))[0]?.packages;
+  const found = (Array.isArray(members) ? members : []).map((member) =>
+    sourcePath(root, String(member))).find((directory) => JSON.parse(
+    readRegular(join(root, directory, 'package.json')).toString('utf8'),
+  ).name === name);
+  requireCondition(found !== undefined, IMPORT_ERROR);
+  return found;
+}
+const canonical = (value: unknown): string => JSON.stringify(value,
+  (_key, item) => item && typeof item === 'object' && !Array.isArray(item)
+    ? Object.fromEntries(Object.entries(item).sort())
+    : item);
+type LockEntry = Record<string, Record<string, unknown> | undefined>;
+const closures = new Map<string, string>();
+function lockfileClosure(text: string): string {
+  const documents = parseAllDocuments(text).map((item) => item.toJS() ?? {});
+  const { importers = {}, packages = {}, snapshots = {} } = (documents.at(-1)
+    ?? {}) as Record<string, Record<string, LockEntry>>;
+  const lines = documents.slice(0, -1).map((boot) => `boot ${canonical(boot)}`);
   const visited = new Set<string>();
-  const versions: string[] = [];
-  const visit = (name: string, importer: string, optional: boolean): void => {
-    let path: string | undefined;
-    for (let directory = importer; ;) {
-      if (posix.basename(directory) !== 'node_modules') {
-        const candidate = directory
-          ? `${directory}/node_modules/${name}`
-          : `node_modules/${name}`;
-        if (Object.hasOwn(packages, candidate)) {
-          path = candidate;
-          break;
-        }
-      }
-      if (directory === '') {
-        break;
-      }
-      const parent = posix.dirname(directory);
-      directory = parent === '.' ? '' : parent;
-    }
-    if (path === undefined && optional) {
-      return;
-    }
-    requireCondition(path !== undefined,
-      `missing render dependency: ${name} from ${importer || 'root'}`);
-    if (visited.has(path)) {
-      return;
-    }
-    const entry = packages[path]!;
-    requireCondition(typeof entry.version === 'string'
-      && entry.version.length > 0,
-    `missing render dependency version: ${name} from ${importer || 'root'}`);
-    visited.add(path);
-    versions.push(`${path}@${entry.version}`);
-    const required = entry.dependencies ?? {};
-    const optionalDependencies = entry.optionalDependencies ?? {};
-    for (const dependency of new Set([
-      ...Object.keys(required), ...Object.keys(optionalDependencies),
-    ])) {
-      visit(dependency, path, !Object.hasOwn(required, dependency));
+  const queue: string[] = [];
+  const follow = (entry: LockEntry, from: string): void => {
+    for (const [name, version] of Object.values(entry)
+      .flatMap((field) => Object.entries(field ?? {}))) {
+      const resolved = (version as { version?: unknown })?.version ?? version;
+      requireCondition(typeof resolved === 'string' && resolved.length > 0,
+        `missing render dependency version: ${name} from ${from}`);
+      if (resolved.startsWith('link:')) continue;
+      queue.push(/^\d/u.test(resolved) ? `${name}@${resolved}` : resolved);
     }
   };
-  for (const name of RENDER_DEPENDENCIES) {
-    visit(name, '', false);
+  for (const importer of LOCKFILE_IMPORTERS) {
+    const entry = importers[importer];
+    requireCondition(entry && typeof entry === 'object',
+      `missing lockfile importer: ${importer}`);
+    lines.push(`importer ${importer} ${canonical(entry)}`);
+    follow(entry, importer);
   }
-  return versions.sort().join('\n');
+  for (let key = queue.pop(); key !== undefined; key = queue.pop()) {
+    if (visited.has(key)) continue;
+    visited.add(key);
+    const packageKey = key.split('(')[0]!;
+    const { dependencies, optionalDependencies } = snapshots[key] ?? {};
+    requireCondition(snapshots[key] && Object.hasOwn(packages, packageKey),
+      `missing render dependency: ${key} in snapshots`);
+    lines.push(`snapshot ${key} ${canonical(snapshots[key])}`,
+      `package ${packageKey} ${canonical(packages[packageKey])}`);
+    follow({ dependencies, optionalDependencies }, key);
+  }
+  const reached = [...visited].map((key) => key.slice(0, key.indexOf('@', 1)));
+  const missing = RENDER_DEPENDENCIES.find((name) => !reached.includes(name));
+  requireCondition(missing === undefined,
+    `missing render dependency: ${missing} from apps/web root`);
+  return closures.set(text, [...new Set(lines)].sort().join('\n')).get(text)!;
 }
 
 export function sourceFingerprint(root: string): {
@@ -459,9 +466,8 @@ export function sourceFingerprint(root: string): {
 } {
   const digest = browserImage(root).split('@')[1]!;
   const hash = createHash('sha256');
-  const lock = JSON.parse(readRegular(join(root,
-    'apps/web/package-lock.json')).toString('utf8'));
-  const versions = renderDependencyVersions(lock);
+  const lockfile = readRegular(join(root, 'pnpm-lock.yaml')).toString('utf8');
+  const versions = closures.get(lockfile) ?? lockfileClosure(lockfile);
   const inputs: [string, Buffer][] = [
     ['@browser-image-digest', Buffer.from(digest)],
     ['@browser-flags', Buffer.from(JSON.stringify(BROWSER_FLAGS))],

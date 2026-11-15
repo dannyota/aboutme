@@ -54,6 +54,21 @@ finish() {
   [[ -z $LOG ]] || rm -f -- "$LOG"
 }
 
+install_project() {
+  local dir=$1 modules
+  local -a installed=("$dir/node_modules")
+  [[ $dir != . ]] || installed+=(apps/web/node_modules packages/schema/node_modules)
+  for modules in "${installed[@]}"; do
+    rm -rf -- "${ROOT:?}/$modules"
+  done
+  (
+    cd "$ROOT/$dir" || exit 1
+    pnpm install --frozen-lockfile --offline && exit 0
+    say "offline install missed the pnpm store in $dir; running a frozen install"
+    pnpm install --frozen-lockfile
+  )
+}
+
 capped() {
   trap finish EXIT
   trap 'exit 130' INT
@@ -74,8 +89,8 @@ capped() {
     say 'refused: worktree and index must be clean before running local CI'
     exit 2
   fi
-  for dir in . apps/web packages/schema deploy/dev-https-browser; do
-    if ! (cd "$ROOT/$dir" && npm ci --prefer-offline --no-audit --no-fund); then
+  for dir in . deploy/dev-https-browser; do
+    if ! install_project "$dir"; then
       say "refused: dependency installation failed in $dir; CI did not run"
       exit 2
     fi

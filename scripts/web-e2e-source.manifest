@@ -618,7 +618,6 @@ apps/web/e2e/verify-details.ts
 apps/web/e2e/verify-support.ts
 apps/web/e2e/verify.spec.ts
 apps/web/nuxt.config.ts
-apps/web/package-lock.json
 apps/web/package.json
 apps/web/public/apple-touch-icon-v3.png
 apps/web/public/csp-bootstrap.js
@@ -724,6 +723,7 @@ apps/web/test/sanitizer/neutralization.ts
 apps/web/tsconfig.json
 apps/web/types/public-render-worker.d.ts
 docs/api/openapi.yaml
+package.json
 packages/schema/fixtures/full.json
 packages/schema/fixtures/vn-full.json
 packages/schema/gen/ts/released.ts
@@ -769,3 +769,5 @@ packages/schema/samples/nordic-muted.vi.json
 packages/schema/samples/one-page-tight.en.json
 packages/schema/samples/one-page-tight.vi.json
 packages/schema/validation/store.ts
+pnpm-lock.yaml
+pnpm-workspace.yaml

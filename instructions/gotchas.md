@@ -4,12 +4,15 @@ Read this file when running repository tools. Task-specific gotchas live in [Go]
 
 - `.env` is ignored and holds credentials. Never print, document, or stage values; add names with empty values to `.env.example`.
 - Run `make` at the repository root.
-- Use `npx @redocly/cli`, never `npx redocly`.
+- Use `pnpm exec redocly` from the repository root; never `npx redocly` or `pnpm dlx redocly`, which fetch an unrelated placeholder package.
+- Run pnpm from the repository root workspace or from `deploy/dev-https-browser`, its own project. `pnpm install --frozen-lockfile` fails while a locked version is younger than `minimumReleaseAge` (1 day); only a security fix goes in `minimumReleaseAgeExclude`, by exact name.
+- A pnpm installed with `--ignore-scripts` is a shell script without a shebang; Python and Node spawn it with `ENOEXEC` on macOS. Start it through Bash, for example `run-capped.sh -- bash -c 'pnpm install --frozen-lockfile --offline'`. A corepack shim starts normally and switches to the `packageManager` pin itself; check the version with `pnpm --version` from the repository root, not by which launcher `pnpm` resolves to.
+- `pnpm run` and `pnpm exec` start their command in a process group of their own. Code that checks process groups, such as the dev-https listener check, must start long-running services without them; `scripts/lib/dev-https-session.sh` runs `pnpm exec true` for the stale-dependency check and then the `nuxt` binaries directly.
 - `make docs-lint` follows `package.json` and `.prettierignore`; [agent-only files](documentation.md#agent-file-formatting) are excluded.
 
 ## macOS local tooling
 
-Install Homebrew `bash`, `coreutils`, `make`, and `shellcheck`, plus Python 3 and the repository's pinned Go, Node, Caddy, and Podman tools. Put Homebrew Bash's `bin`, coreutils' `libexec/gnubin`, and GNU make's `libexec/gnubin` before the system tools on PATH. Make recipes resolve `bash` from PATH; `make pre-push` and `make dev-https-browser-image` require Bash 4+. Native tooling checks GNU `realpath`, `stat`, `base64`, `sha256sum`, and `date` before using their options. Python 3 supplies managed locks and detach helpers; the current wrapper also supplies the RSS watchdog until its replacement lands. The accepted portable session/listener helpers remain pending; see [local tooling](../docs/design/local-tooling-simplification.md#session-contract) before assuming `lsof` can replace Linux-only probes.
+Install Homebrew `bash`, `coreutils`, `make`, and `shellcheck`, plus Python 3 and the repository's pinned Go, Node, pnpm, Caddy, and Podman tools. Put Homebrew Bash's `bin`, coreutils' `libexec/gnubin`, and GNU make's `libexec/gnubin` before the system tools on PATH. Make recipes resolve `bash` from PATH; `make pre-push` and `make dev-https-browser-image` require Bash 4+. Native tooling checks GNU `realpath`, `stat`, `base64`, `sha256sum`, and `date` before using their options. Python 3 supplies managed locks and detach helpers; the current wrapper also supplies the RSS watchdog until its replacement lands. The accepted portable session/listener helpers remain pending; see [local tooling](../docs/design/local-tooling-simplification.md#session-contract) before assuming `lsof` can replace Linux-only probes.
 
 Install Caddy 2.11.9 from its official macOS ARM64 release archive at `https://github.com/caddyserver/caddy/releases/download/v2.11.9/caddy_2.11.9_mac_arm64.tar.gz` and put its `caddy` binary on PATH; CI uses the matching pinned release binary.
 

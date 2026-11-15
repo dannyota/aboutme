@@ -52,12 +52,12 @@ font identifier compatibility.
 
 ## Commands
 
-Run from this directory:
+Install from the repository root with `pnpm install --frozen-lockfile`, then run
+from this directory:
 
 ```sh
-npm ci
-npm run generate
-npm test
+pnpm run generate
+pnpm test
 ```
 
 From the repository root, `make schema-gen` regenerates and `make schema-check`

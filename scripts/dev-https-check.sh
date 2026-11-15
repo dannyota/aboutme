@@ -19,7 +19,8 @@ NATIVE_DSN='postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme_dev?sslmode=d
 readonly -a IMAGE_SOURCES=(
   deploy/dev-https-browser/Dockerfile
   deploy/dev-https-browser/package.json
-  deploy/dev-https-browser/package-lock.json
+  deploy/dev-https-browser/pnpm-lock.yaml
+  deploy/dev-https-browser/pnpm-workspace.yaml
   deploy/dev-https-browser/run.sh
   deploy/dev-https-browser/spec-sources.txt
   deploy/dev-https-browser/verify-evidence.mjs

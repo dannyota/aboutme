@@ -80,10 +80,10 @@ CIMD
 }
 
 render_effective_config() {
-  local generated_route name environment environment_mode caddy_bin npm_bin
+  local generated_route name environment environment_mode caddy_bin pnpm_bin
   generated_route=$(generate_caddyfile) || return 1
   caddy_bin=$(command -v caddy) || return 1
-  npm_bin=$(command -v npm) || return 1
+  pnpm_bin=$(command -v pnpm) || return 1
   printf 'version=1\n'
   printf 'database_target=127.0.0.1:20432/aboutme_dev?sslmode=disable\n'
   printf 'log_level=%s\n' "$LOG_LEVEL"
@@ -114,7 +114,7 @@ render_effective_config() {
   printf 'server_binary_sha256=%s\n' "$(sha256_file "$BIN_DIR/server")"
   printf 'browser_supervisor_binary_sha256=%s\n' "$(sha256_file "$BIN_DIR/render-browser-supervisor")"
   printf 'caddy_tool_sha256=%s\n' "$(sha256_file "$caddy_bin")"
-  printf 'npm_tool_sha256=%s\n' "$(sha256_file "$npm_bin")"
+  printf 'pnpm_tool_sha256=%s\n' "$(sha256_file "$pnpm_bin")"
   validate_session_record || return 1
   printf 'session_checkout=%s\nsession_pid=%s\nsession_pgid=%s\nsession_launch_token=%s\n' "$ROOT" "$SESSION_PID" "$SESSION_PID" "$SESSION_TOKEN"
   for name in "${SERVICES[@]}"; do

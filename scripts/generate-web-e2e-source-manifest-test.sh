@@ -43,7 +43,6 @@ for path in \
   apps/web/app/assets/fonts/tools/generate.py \
   apps/web/e2e/corpus.spec.ts \
   apps/web/nuxt.config.ts \
-  apps/web/package-lock.json \
   apps/web/package.json \
   apps/web/public/theme-bootstrap.js \
   apps/web/scripts/generate-template-pages.mts \
@@ -63,18 +62,23 @@ for path in \
   packages/schema/fixtures/vn-full.json \
   packages/schema/gen/go/resume.go \
   packages/schema/gen/ts/resume.ts \
-  packages/schema/package-lock.json \
   packages/schema/package.json \
   packages/schema/resume.schema.json \
   packages/schema/validation/unused.json \
-  packages/schema/validation/store.ts; do
+  packages/schema/validation/store.ts \
+  package.json \
+  pnpm-lock.yaml \
+  pnpm-workspace.yaml \
+  deploy/dev-https-browser/pnpm-lock.yaml; do
+  mkdir -p "$(dirname "$REPO/$path")"
   printf 'fixture\n' >"$REPO/$path"
 done
 
 git -C "$REPO" init -q
 git -C "$REPO" config user.email test@example.invalid
 git -C "$REPO" config user.name 'Source Manifest Test'
-git -C "$REPO" add -- apps docs packages scripts/generate-web-e2e-source-manifest.sh
+git -C "$REPO" add -- apps deploy docs packages package.json pnpm-lock.yaml pnpm-workspace.yaml \
+  scripts/generate-web-e2e-source-manifest.sh
 git -C "$REPO" commit -qm base
 printf '%s\n' apps/web/app/components/Deleted.vue \
   >"$REPO/scripts/web-e2e-source.manifest"
@@ -88,7 +92,6 @@ cat >"$WORK/expected" <<'EOF'
 apps/web/app/app.vue
 apps/web/e2e/corpus.spec.ts
 apps/web/nuxt.config.ts
-apps/web/package-lock.json
 apps/web/package.json
 apps/web/public/theme-bootstrap.js
 apps/web/scripts/generate-template-pages.mts
@@ -98,12 +101,15 @@ apps/web/test/sanitizer/neutralization.ts
 apps/web/tsconfig.json
 apps/web/types/public-render-worker.d.ts
 docs/api/openapi.yaml
+package.json
 packages/schema/fixtures/full.json
 packages/schema/fixtures/vn-full.json
 packages/schema/gen/ts/resume.ts
 packages/schema/package.json
 packages/schema/resume.schema.json
 packages/schema/validation/store.ts
+pnpm-lock.yaml
+pnpm-workspace.yaml
 EOF
 cmp -s "$WORK/expected" "$REPO/scripts/web-e2e-source.manifest" ||
   fail 'update did not produce the closed, sorted source set'

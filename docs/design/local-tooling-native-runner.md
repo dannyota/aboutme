@@ -11,9 +11,9 @@ acceptance remain pending. Keep `make dev-https` and `dev-https-*-check`; after
 integration, Darwin selects native execution and Linux keeps containers. Never
 fall back after failure. Before startup, add `make dev-https-browser-install`
 under the managed lock: run
-`npm --prefix deploy/dev-https-browser ci --ignore-scripts`, then its local
-`node_modules/.bin/playwright install chromium webkit`. Use a private
-checkout-local `PLAYWRIGHT_BROWSERS_PATH`. Match package-lock's Playwright
+`pnpm --dir deploy/dev-https-browser install --frozen-lockfile --ignore-scripts`,
+then its local `node_modules/.bin/playwright install chromium webkit`. Use a
+private checkout-local `PLAYWRIGHT_BROWSERS_PATH`. Match pnpm-lock's Playwright
 `1.64.0`, its [revision manifest][revisions] and Node pin mirrors; refuse drift,
 missing builds, system browsers, proof-time downloads, Rosetta and amd64 images.
 Keep the separate `apps/web` renderer pin; installation cannot enable rendering.

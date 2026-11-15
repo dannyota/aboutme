@@ -48,7 +48,7 @@ It prints total vendored bytes and the selected-family plus fallback bytes for
 each document choice. Verify all output with:
 
 ```sh
-(cd apps/web && npx vitest run test/fonts.test.ts)
+(cd apps/web && pnpm exec vitest run test/fonts.test.ts)
 ```
 
 The checker independently parses final font tables with fontkit. It checks the

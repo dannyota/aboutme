@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # openapi-gen.sh — generate the TypeScript API surface from the contract.
 #
-# This is the SINGLE source of the generator invocation. `npm run api:gen`
+# This is the SINGLE source of the generator invocation. `pnpm run api:gen`
 # writes the committed artifact with it, and api-drift-check.sh runs the
 # very same script into a throwaway directory. Neither one hard-codes the
 # flags, so the gate can never be checking a different generation than the
@@ -28,7 +28,7 @@ generator="$web_root/node_modules/.bin/openapi-typescript"
 spec="$repo_root/docs/api/openapi.yaml"
 
 if [ ! -x "$generator" ]; then
-  echo "openapi-gen: $generator is missing — run 'npm ci' in apps/web" >&2
+  echo "openapi-gen: $generator is missing — run 'pnpm install --frozen-lockfile' at the repository root" >&2
   exit 1
 fi
 

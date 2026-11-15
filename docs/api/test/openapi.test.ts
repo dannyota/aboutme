@@ -8,14 +8,11 @@ const authProviders = ["google", "github", "linkedin"] as const;
 
 describe("openapi contract", () => {
   it("lints clean", () => {
-    // Invoke the scoped package name, not the bare "redocly" command: npm
-    // has an unrelated placeholder package literally named "redocly" that
-    // silently exits 0, so "npx redocly ..." can resolve to the wrong
-    // binary and mask a real lint failure.
+    // The bare "redocly" npm package is an unrelated placeholder that exits 0
+    // and would mask a lint failure (docs/api/redocly.yaml).
     execFileSync(
-      "npx",
+      "node_modules/.bin/redocly",
       [
-        "@redocly/cli",
         "lint",
         "docs/api/openapi.yaml",
         "--config",

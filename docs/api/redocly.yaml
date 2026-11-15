@@ -1,11 +1,8 @@
-# Lint config scoped to docs/api/openapi.yaml — invoke as:
-#   npx @redocly/cli lint docs/api/openapi.yaml --config docs/api/redocly.yaml
+# Lint config scoped to docs/api/openapi.yaml — invoke from the repository root as:
+#   pnpm exec redocly lint docs/api/openapi.yaml --config docs/api/redocly.yaml
 #
-# Always use the scoped package name "@redocly/cli", never the bare
-# "redocly" command: npm has an unrelated placeholder package literally
-# named "redocly" (prints a joke message and exits 0), so "npx redocly ..."
-# can silently resolve to that decoy instead of the real linter and mask a
-# lint failure. See docs/api/test/openapi.test.ts for the same guard.
+# Never fetch the bare "redocly" package with npx or pnpm dlx: that unrelated
+# npm placeholder prints a joke and exits 0, masking a lint failure.
 extends:
   - recommended
 rules:
