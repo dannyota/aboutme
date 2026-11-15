@@ -118,7 +118,7 @@ test('landing, sign-in, and the signed-in shell', async ({ browser }) => {
   try {
     await auditRouteInBothThemes(page, '/', async () => {
       await expect(page.getByTestId('landing-title')).toHaveText(
-        'CV của bạn. Chia sẻ theo cách của bạn.',
+        'Làm CV ở đây, gửi đi bằng một đường link.',
       );
       await expect(page.locator('html')).toHaveAttribute('lang', 'vi');
     });
@@ -129,24 +129,24 @@ test('landing, sign-in, and the signed-in shell', async ({ browser }) => {
     await page.goto(`${ORIGIN}/`);
     await waitForHydration(page);
     await expect(page.getByTestId('landing-title')).toHaveText(
-      'Your resume. Your link. Your control.',
+      'Write your resume here. Send it as one link.',
     );
-    const main = page.getByRole('main');
+    const hero = page.getByRole('main').getByTestId('landing-hero');
     await expect(
-      main.getByRole('link', { name: /^(Create your resume|Sign in)$/ }),
+      hero.getByRole('link', { name: /^(Create your resume|Sign in)$/ }),
     ).toHaveText(['Create your resume', 'Sign in']);
-    await expect(main.getByRole('link', { name: 'Sign in' })).toHaveAttribute(
+    await expect(hero.getByRole('link', { name: 'Sign in' })).toHaveAttribute(
       'href',
       '/login',
     );
     await expect(
-      main.getByRole('link', { name: 'Create your resume' }),
+      hero.getByRole('link', { name: 'Create your resume' }),
     ).toHaveAttribute('href', '/register');
     await expectSignedOutShell(page, 'Create your resume');
     steps.landing = true;
 
     stage('login-open');
-    await main.getByRole('link', { name: 'Sign in' }).click();
+    await hero.getByRole('link', { name: 'Sign in' }).click();
     await expect(page).toHaveURL(`${ORIGIN}/login`);
     await waitForHydration(page);
     await auditAccessibility(page, '/login', 'light');
