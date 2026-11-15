@@ -20,8 +20,8 @@ in the future. Its verification cache stays in memory; no bucket or secret is
 needed. It runs independently of application maintenance with a read-only root
 filesystem and bounded memory. Deploy verifies the native amd64 observer image's
 provenance before use. That image uses the `<tag>-amd64` tag; a release without
-it leaves the installed observer unchanged. The plain version tag remains an
-arm64 image for Lambda.
+it leaves the installed observer unchanged. Releases still publish an arm64
+image under the plain version tag; nothing deploys it.
 
 The bilingual `/verify` page, linked from the landing footer, shows the chain
 from source to running service and gives an independent verification command. It
@@ -30,19 +30,13 @@ never verified. The host reports itself, and an observer on that host cannot
 prove host or operator honesty or runtime integrity. Deploy-time checks are not
 runtime verification.
 
-ECS and Kubernetes retain an observer separate from the application with
-read-only platform access. It publishes `/.well-known/deployment.json` with
-every running digest per serving component and replica count, plus version,
-commit, signature and SBOM status, and links from signed provenance. On AWS, a
-Lambda function runs every minute with permission only to list and describe ECS
-tasks, write one S3 object, and write logs; CloudFront caches the object for 30
-seconds. On Kubernetes the image runs in its own namespace with a Role limited
-to `get` and `list` on pods. Those documents use an allowlist and a closed JSON
-Schema; a test rejects infrastructure identifiers.
+The observer publishes `/.well-known/deployment.json` with every running digest
+per serving component and replica count, plus version, commit, signature and
+SBOM status, and links from signed provenance. The document uses an allowlist
+and a closed JSON Schema; a test rejects infrastructure identifiers.
 
 `release-images.yml` publishes a signed SBOM attestation per image. No separate
-cosign signature is added. Signature policy and independent commands are shared
-across platforms.
+cosign signature is added.
 
 ## Context
 
@@ -59,13 +53,6 @@ against the signed build record.
 ## Consequences
 
 - ADR 0010 is unaffected: the deployment document holds no publication state.
-- The AWS ECS alternative uses a Lambda function, ECR repository, S3 bucket,
-  schedule, and alarm, for under USD 0.50 a month. Its deploy role can update
-  the observer; CloudFront caches the document alongside `/_nuxt/*`
-  ([historical AWS production decision](history/aws-production.md)).
-- ECS evidence stops at the platform's report. The ECS agent on the host reports
-  digests, and host-network containers can reach the instance role, so a
-  compromised host or `app` task could forge them.
 - The owner's administrator login can change the observer. The design defends
   against a compromised application and silent drift, not against the operator.
 - `verify` is a reserved slug in the public-root registry.
