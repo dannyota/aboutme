@@ -11,7 +11,7 @@
     "@playwright/mcp": "0.0.85",
     "@redocly/cli": "2.77.0",
     "markdownlint-cli2": "0.24.1",
-    "prettier": "3.10.0",
+    "prettier": "3.10.1",
     "vitest": "5.1.0",
     "yaml": "2.9.1"
   },
