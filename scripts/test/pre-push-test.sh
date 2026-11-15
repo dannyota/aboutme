@@ -432,7 +432,8 @@ has_line 'active development stack'
 no_call eslint
 rm "$TREE/.dev/server.pid"
 
-sed -i 's/version: 1.0.0(peer@2.0.0)/version: 1.1.0(peer@2.0.0)/' "$TREE/pnpm-lock.yaml"
+sed 's/version: 1.0.0(peer@2.0.0)/version: 1.1.0(peer@2.0.0)/' "$TREE/pnpm-lock.yaml" >"$WORK/lock.next"
+mv "$WORK/lock.next" "$TREE/pnpm-lock.yaml"
 check "$TREE" 2
 has_line 'eslint +REFUSED +the branch changed pnpm-lock.yaml'
 

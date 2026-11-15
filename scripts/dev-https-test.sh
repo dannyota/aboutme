@@ -152,11 +152,22 @@ INNER
 printf 'go-build:%s:%s\n' "${out##*/}" "$package" >>"$FAKE_MUTATIONS"
 EOF
 
+  # pnpm 12 runs `run` and `exec` commands in a process group of their own (pnpm CHANGELOG 12.20.0).
   cat >"$fakebin/pnpm" <<'EOF'
 #!/usr/bin/env bash
 set -Eeuo pipefail
 printf 'pnpm:%s\n' "$*" >>"$FAKE_EFFECTS"
-exec fake-service web
+mode=$1
+shift
+case $mode in
+exec) command=("$@") ;;
+run) command=(fake-service web) ;;
+*) exit 2 ;;
+esac
+python3 -I -c 'import os, sys; os.setpgid(0, 0); os.execvp(sys.argv[1], sys.argv[1:])' "${command[@]}" &
+child=$!
+[ "$mode" != run ] || printf '%s\n' "$child" >"${FAKE_FOREIGN_PORTS%/*}/listener-child"
+wait "$child"
 EOF
 
   cat >"$fakebin/node" <<'EOF'
@@ -323,6 +334,14 @@ new_fixture() {
   mkdir -p "$fixture/repo/scripts/lib" "$fixture/repo/deploy/caddy" \
     "$fixture/repo/packages/publicroots" \
     "$fixture/repo/apps/server" "$fixture/repo/apps/web/node_modules"
+  mkdir -p "$fixture/repo/apps/web/node_modules/.bin"
+  cat >"$fixture/repo/apps/web/node_modules/.bin/nuxt" <<'EOF'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+printf 'nuxt:%s\n' "$*" >>"$FAKE_EFFECTS"
+[ "${1-}" != dev ] || exec fake-service web
+EOF
+  chmod 0700 "$fixture/repo/apps/web/node_modules/.bin/nuxt"
   cp "$SOURCE_SCRIPT" "$fixture/repo/scripts/dev-https.sh"
   cp "$SOURCE_LIB_DIR"/dev-https-*.sh "$SOURCE_LIB_DIR/platform.sh" "$fixture/repo/scripts/lib/"
   cp "$SOURCE_ROOT/scripts/generate-public-roots.mjs" "$fixture/repo/scripts/generate-public-roots.mjs"
@@ -392,7 +411,9 @@ run_happy_path_and_lifecycle_checks() (
   assert_log_line "$FAKE_EFFECTS" 'migrate:operation=apply'
   assert_log_line "$FAKE_EFFECTS" 'service:mock-oauth host=127.0.0.1 port=20442 origin=https://localhost:20443 client=aboutme-local-google linkedin=aboutme-local-linkedin db='
   assert_log_line "$FAKE_EFFECTS" 'service:server host=127.0.0.1 port=20441 origin=https://localhost:20443 render=http://127.0.0.1:20440 app=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa renderer=sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb issuer=http://127.0.0.1:20442/google linkedin=http://127.0.0.1:20442/linkedin db=postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme_dev?sslmode=disable'
-  assert_log_line "$FAKE_EFFECTS" 'pnpm:run dev --port 20440 --host 127.0.0.1'
+  assert_log_line "$FAKE_EFFECTS" 'pnpm:exec true'
+  assert_log_line "$FAKE_EFFECTS" 'nuxt:prepare'
+  assert_log_line "$FAKE_EFFECTS" 'nuxt:dev --port 20440 --host 127.0.0.1'
   assert_log_line "$FAKE_EFFECTS" 'caddy-config-validated'
   assert_log_line "$FAKE_MUTATIONS" 'go-build:mail-capture:./cmd/mail-capture'
   assert_log_line "$FAKE_MUTATIONS" 'start:mail-capture'

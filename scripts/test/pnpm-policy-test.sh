@@ -16,6 +16,8 @@ pin=$(awk '$1 == "pnpm" { print $2 }' "$ROOT/.tool-versions")
 [[ $pin =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]] || fail '.tool-versions has no exact pnpm pin'
 other=${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.$((BASH_REMATCH[3] + 1))
 command -v pnpm >/dev/null || fail 'pnpm is not installed'
+[[ $(realpath "$(command -v pnpm)") != */corepack/* ]] ||
+  fail 'pnpm on PATH is the corepack shim; install pnpm with npm install --global --ignore-scripts'
 running=$(cd "$WORK" && pnpm --version </dev/null)
 [[ $running == "$pin" ]] || fail "pnpm $running is running, .tool-versions pins $pin"
 
@@ -26,9 +28,12 @@ project() {
   local dir=$1 manifest=$2 settings=$3
   mkdir -p "$WORK/$dir"
   printf '%s\n' "$manifest" >"$WORK/$dir/package.json"
-  sed '/^packages:$/,/^$/d' "$ROOT/pnpm-workspace.yaml" >"$WORK/$dir/pnpm-workspace.yaml"
-  [[ $settings == committed ]] ||
-    sed -i '/^pmOnFail:/d' "$WORK/$dir/pnpm-workspace.yaml"
+  if [[ $settings == committed ]]; then
+    sed '/^packages:$/,/^$/d' "$ROOT/pnpm-workspace.yaml" >"$WORK/$dir/pnpm-workspace.yaml"
+  else
+    sed -e '/^packages:$/,/^$/d' -e '/^pmOnFail:/d' "$ROOT/pnpm-workspace.yaml" \
+      >"$WORK/$dir/pnpm-workspace.yaml"
+  fi
 }
 
 run_pnpm() {

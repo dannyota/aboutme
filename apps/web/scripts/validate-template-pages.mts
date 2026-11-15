@@ -417,12 +417,11 @@ const canonical = (value: unknown): string => JSON.stringify(value,
     ? Object.fromEntries(Object.entries(item).sort())
     : item);
 type LockEntry = Record<string, Record<string, unknown> | undefined>;
-
-function lockfileClosure(documents: Record<string, unknown>[]): string {
-  const lock = documents.at(-1) ?? {};
-  const importers = (lock.importers ?? {}) as Record<string, LockEntry>;
-  const packages = (lock.packages ?? {}) as Record<string, unknown>;
-  const snapshots = (lock.snapshots ?? {}) as Record<string, LockEntry>;
+const closures = new Map<string, string>();
+function lockfileClosure(text: string): string {
+  const documents = parseAllDocuments(text).map((item) => item.toJS() ?? {});
+  const { importers = {}, packages = {}, snapshots = {} } = (documents.at(-1)
+    ?? {}) as Record<string, Record<string, LockEntry>>;
   const lines = documents.slice(0, -1).map((boot) => `boot ${canonical(boot)}`);
   const visited = new Set<string>();
   const queue: string[] = [];
@@ -458,7 +457,7 @@ function lockfileClosure(documents: Record<string, unknown>[]): string {
   const missing = RENDER_DEPENDENCIES.find((name) => !reached.includes(name));
   requireCondition(missing === undefined,
     `missing render dependency: ${missing} from apps/web root`);
-  return [...new Set(lines)].sort().join('\n');
+  return closures.set(text, [...new Set(lines)].sort().join('\n')).get(text)!;
 }
 
 export function sourceFingerprint(root: string): {
@@ -467,7 +466,8 @@ export function sourceFingerprint(root: string): {
 } {
   const digest = browserImage(root).split('@')[1]!;
   const hash = createHash('sha256');
-  const versions = lockfileClosure(readYaml(join(root, 'pnpm-lock.yaml')));
+  const lockfile = readRegular(join(root, 'pnpm-lock.yaml')).toString('utf8');
+  const versions = closures.get(lockfile) ?? lockfileClosure(lockfile);
   const inputs: [string, Buffer][] = [
     ['@browser-image-digest', Buffer.from(digest)],
     ['@browser-flags', Buffer.from(JSON.stringify(BROWSER_FLAGS))],
