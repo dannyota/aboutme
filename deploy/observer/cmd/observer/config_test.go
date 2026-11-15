@@ -6,14 +6,7 @@ func clearObserverEnv(t *testing.T) {
 	t.Helper()
 	for _, name := range []string{
 		"OBSERVER_PLATFORM",
-		"OBSERVER_CLUSTER",
-		"OBSERVER_APP_SERVICE",
-		"OBSERVER_WEB_SERVICE",
-		"OBSERVER_MAINTENANCE_SERVICE",
-		"OBSERVER_BUCKET",
 		"OBSERVER_REGION",
-		"OBSERVER_NAMESPACE",
-		"OBSERVER_S3_ENDPOINT",
 		"OBSERVER_TUF_CACHE",
 		"OBSERVER_OBSERVATION_FILE",
 		"OBSERVER_OUTPUT_DIR",
@@ -23,44 +16,27 @@ func clearObserverEnv(t *testing.T) {
 	}
 }
 
-func TestLoadConfigRequiresBucket(t *testing.T) {
-	clearObserverEnv(t)
-	t.Setenv("OBSERVER_PLATFORM", platformECS)
-	t.Setenv("OBSERVER_REGION", "ap-southeast-1")
-
-	if _, err := loadConfig(); err == nil {
-		t.Fatal("loadConfig: got nil error with no OBSERVER_BUCKET")
-	}
-}
-
 func TestLoadConfigRequiresRegion(t *testing.T) {
 	clearObserverEnv(t)
-	t.Setenv("OBSERVER_PLATFORM", platformECS)
-	t.Setenv("OBSERVER_BUCKET", "aboutme-prod-transparency")
+	t.Setenv("OBSERVER_PLATFORM", platformPodman)
 
 	if _, err := loadConfig(); err == nil {
-		t.Fatal("loadConfig: got nil error with no OBSERVER_REGION or AWS_REGION")
+		t.Fatal("loadConfig: got nil error with no OBSERVER_REGION")
 	}
 }
 
-func TestLoadConfigRegionFallsBackToAWSRegion(t *testing.T) {
+func TestLoadConfigIgnoresAWSRegion(t *testing.T) {
 	clearObserverEnv(t)
-	t.Setenv("OBSERVER_PLATFORM", platformKubernetes)
-	t.Setenv("OBSERVER_BUCKET", "aboutme-prod-transparency")
+	t.Setenv("OBSERVER_PLATFORM", platformPodman)
 	t.Setenv("AWS_REGION", "ap-southeast-1")
 
-	cfg, err := loadConfig()
-	if err != nil {
-		t.Fatalf("loadConfig: %v", err)
-	}
-	if cfg.Region != "ap-southeast-1" {
-		t.Errorf("loadConfig: Region = %q, want ap-southeast-1", cfg.Region)
+	if _, err := loadConfig(); err == nil {
+		t.Fatal("loadConfig: AWS_REGION stood in for OBSERVER_REGION")
 	}
 }
 
 func TestLoadConfigRequiresPlatform(t *testing.T) {
 	clearObserverEnv(t)
-	t.Setenv("OBSERVER_BUCKET", "aboutme-prod-transparency")
 	t.Setenv("OBSERVER_REGION", "ap-southeast-1")
 
 	if _, err := loadConfig(); err == nil {
@@ -71,11 +47,29 @@ func TestLoadConfigRequiresPlatform(t *testing.T) {
 func TestLoadConfigRejectsUnknownPlatform(t *testing.T) {
 	clearObserverEnv(t)
 	t.Setenv("OBSERVER_PLATFORM", "unknown")
-	t.Setenv("OBSERVER_BUCKET", "aboutme-prod-transparency")
 	t.Setenv("OBSERVER_REGION", "ap-southeast-1")
 
 	if _, err := loadConfig(); err == nil {
 		t.Fatal("loadConfig: got nil error for unknown OBSERVER_PLATFORM")
+	}
+}
+
+func TestLoadConfigRejectsRemovedPlatforms(t *testing.T) {
+	for _, name := range []string{"ecs", "kubernetes"} {
+		t.Run(name, func(t *testing.T) {
+			clearObserverEnv(t)
+			t.Setenv("OBSERVER_PLATFORM", name)
+			t.Setenv("OBSERVER_REGION", "ap-southeast-1")
+			t.Setenv("OBSERVER_BUCKET", "aboutme-prod-transparency")
+			t.Setenv("OBSERVER_CLUSTER", "aboutme-prod")
+			t.Setenv("OBSERVER_APP_SERVICE", "aboutme-prod-app")
+			t.Setenv("OBSERVER_WEB_SERVICE", "aboutme-prod-web")
+			t.Setenv("OBSERVER_MAINTENANCE_SERVICE", "aboutme-prod-maintenance")
+
+			if _, err := loadConfig(); err == nil {
+				t.Fatalf("loadConfig: accepted OBSERVER_PLATFORM=%s", name)
+			}
+		})
 	}
 }
 
@@ -87,7 +81,7 @@ func TestLoadConfigPodmanNeedsNoBucket(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Bucket != "" || cfg.ObservationFile != "/observation/observation.json" || cfg.OutputDir != "/public" {
+	if cfg.ObservationFile != "/observation/observation.json" || cfg.OutputDir != "/public" || cfg.TUFCacheDir != defaultTUFCacheDir {
 		t.Fatalf("unexpected podman configuration: %+v", cfg)
 	}
 	t.Setenv("OBSERVER_OBSERVATION_FILE", "/custom/observation.json")
@@ -98,55 +92,5 @@ func TestLoadConfigPodmanNeedsNoBucket(t *testing.T) {
 	}
 	if cfg.ObservationFile != "/custom/observation.json" || cfg.OutputDir != "/custom/public" {
 		t.Fatal("podman paths did not honor configuration")
-	}
-}
-
-func TestLoadConfigECSRequiresServices(t *testing.T) {
-	clearObserverEnv(t)
-	t.Setenv("OBSERVER_PLATFORM", platformECS)
-	t.Setenv("OBSERVER_BUCKET", "aboutme-prod-transparency")
-	t.Setenv("OBSERVER_REGION", "ap-southeast-1")
-	t.Setenv("OBSERVER_CLUSTER", "aboutme-prod")
-
-	if _, err := loadConfig(); err == nil {
-		t.Fatal("loadConfig: got nil error with no OBSERVER_APP_SERVICE")
-	}
-}
-
-func TestLoadConfigECSComplete(t *testing.T) {
-	clearObserverEnv(t)
-	t.Setenv("OBSERVER_PLATFORM", platformECS)
-	t.Setenv("OBSERVER_BUCKET", "aboutme-prod-transparency")
-	t.Setenv("OBSERVER_REGION", "ap-southeast-1")
-	t.Setenv("OBSERVER_CLUSTER", "aboutme-prod")
-	t.Setenv("OBSERVER_APP_SERVICE", "aboutme-prod-app")
-	t.Setenv("OBSERVER_WEB_SERVICE", "aboutme-prod-web")
-	t.Setenv("OBSERVER_MAINTENANCE_SERVICE", "aboutme-prod-maintenance")
-
-	cfg, err := loadConfig()
-	if err != nil {
-		t.Fatalf("loadConfig: %v", err)
-	}
-	if cfg.Namespace != defaultNamespace {
-		t.Errorf("loadConfig: Namespace = %q, want default %q", cfg.Namespace, defaultNamespace)
-	}
-	if cfg.TUFCacheDir != defaultTUFCacheDir {
-		t.Errorf("loadConfig: TUFCacheDir = %q, want default %q", cfg.TUFCacheDir, defaultTUFCacheDir)
-	}
-}
-
-func TestLoadConfigKubernetesMinimal(t *testing.T) {
-	clearObserverEnv(t)
-	t.Setenv("OBSERVER_PLATFORM", platformKubernetes)
-	t.Setenv("OBSERVER_BUCKET", "aboutme-prod-transparency")
-	t.Setenv("OBSERVER_REGION", "HCM03")
-	t.Setenv("OBSERVER_NAMESPACE", "aboutme")
-
-	cfg, err := loadConfig()
-	if err != nil {
-		t.Fatalf("loadConfig: %v", err)
-	}
-	if cfg.Namespace != "aboutme" {
-		t.Errorf("loadConfig: Namespace = %q, want aboutme", cfg.Namespace)
 	}
 }

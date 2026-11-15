@@ -8,8 +8,8 @@ here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=ssh-lib.sh
 source "$here/ssh-lib.sh"
 
-# shellcheck source=../../aws/scripts/provenance.sh
-source "$here/../../aws/scripts/provenance.sh"
+# shellcheck source=provenance.sh
+source "$here/provenance.sh"
 exec 9>&2
 say() { printf 'deploy: %s\n' "$*" >&9; }
 usage() {

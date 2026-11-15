@@ -3,8 +3,7 @@
 Production serves `https://aboutme.vn` on one GreenNode host in Vietnam under
 [ADR 0026](../adr/0026-vietnam-hosted-production.md). The
 [Vietnam production design](../design/vietnam-production.md) owns the topology.
-Cutover completed on 2026-10-11 with v0.7.3. Nothing from `deploy/aws/` is
-deployed.
+Cutover completed on 2026-10-11 with v0.7.3.
 
 ## Access and state
 
@@ -43,7 +42,6 @@ TLS-ALPN-01 on 443, Caddy's default challenges. DNS must point at the host
 before the edge starts so validation can reach it. Production uses
 `EDGES=direct`: Caddy takes the socket address, strips forwarding headers, and
 emits one `X-Real-IP` to Go on loopback. Coraza and CrowdSec run on the host.
-The [CloudFront runbook](cloudfront.md) is an AWS reference.
 
 ## Secrets
 

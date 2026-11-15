@@ -13,14 +13,15 @@ apply:
 
 Production uses the [Vietnam host fence](vietnam-production.md#release-fence)
 and the [host commands](../runbooks/production.md#passkey-release-fence). The
-sections below describe the undeployed AWS reference implementation. Its
-DynamoDB, IAM, ECS, and OpenTofu procedures do not apply to the live host.
-Reusing them requires rebuilding and reviewing the AWS path. In particular,
-`--check-public-root`, `--require-free-root`, and `--totp-key-reencrypt` are AWS
-options, not Vietnam deployer options. Host TOTP re-encryption remains open.
+sections below record the AWS fence design. Its DynamoDB, IAM, ECS, and OpenTofu
+procedures do not apply to the live host, and the repository holds no
+implementation of them ([ADR 0026](../adr/0026-vietnam-hosted-production.md)).
+In particular, `--check-public-root`, `--require-free-root`, and
+`--totp-key-reencrypt` are AWS options, not Vietnam deployer options. Host TOTP
+re-encryption remains open.
 
-The fence does not constrain privileged host administration. The AWS reference
-fence does not constrain OpenTofu or AWS administrator credentials.
+The fence does not constrain privileged host administration. The AWS fence
+design does not constrain OpenTofu or AWS administrator credentials.
 
 ## DynamoDB table and item
 
@@ -174,7 +175,8 @@ rule.
 
 The `aboutme-prod-totp-reencrypt` family uses the app execution and task roles,
 so the deploy role's pass-role scope stays the same, and scheduler and job roles
-gain nothing. The [key-management design](aws-totp-key-management.md#rotation)
+gain nothing. The
+[key-management design](https://github.com/dannyota/aboutme/blob/aa7ec9f6fff739047346f8ad2be08636dee5b8b4/docs/design/aws-totp-key-management.md#rotation)
 defines what the task does.
 
 ## Privileged bypass

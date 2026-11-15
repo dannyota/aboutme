@@ -1,6 +1,6 @@
 # Privacy and media cleanup
 
-This runbook covers the five one-shot lifecycle commands shipped in the Go
+This runbook covers the four one-shot lifecycle commands shipped in the Go
 server. They are local or scheduler entry points; they do not start HTTP,
 authentication, or Chromium components.
 
@@ -8,23 +8,19 @@ authentication, or Chromium components.
 
 Run commands from `apps/server` with the normal runtime environment. The
 database commands read `DATABASE_URL`. The two media commands also read the
-configured private media backend settings. `release-snapshot-sweep` reads no
-database; it uses the AWS credential chain for the retained AWS path and does
-not run in Vietnam production. pgBackRest expires production backups. Do not
-place secret values in command lines, logs, tickets, or evidence.
+configured private media backend settings. pgBackRest expires production
+backups. Do not place secret values in command lines, logs, tickets, or
+evidence.
 
-| Command                    | Local use                                                                 | Production cadence |
-| -------------------------- | ------------------------------------------------------------------------- | ------------------ |
-| `idempotency-expiry-sweep` | Remove expired replay records                                             | Hourly             |
-| `media-deletion-sweep`     | Drain due exact-key deletion jobs                                         | Hourly             |
-| `media-orphan-sweep`       | Reconcile old private objects; add `--dry-run` for inspection             | Weekly             |
-| `privacy-retention-sweep`  | Redact and delete sessions; clean audit, media-job, and OAuth rows        | Daily              |
-| `release-snapshot-sweep`   | Delete deploy.sh snapshots more than 27 days old, or beyond the newest 30 | Not scheduled      |
+| Command                    | Local use                                                          | Production cadence |
+| -------------------------- | ------------------------------------------------------------------ | ------------------ |
+| `idempotency-expiry-sweep` | Remove expired replay records                                      | Hourly             |
+| `media-deletion-sweep`     | Drain due exact-key deletion jobs                                  | Hourly             |
+| `media-orphan-sweep`       | Reconcile old private objects; add `--dry-run` for inspection      | Weekly             |
+| `privacy-retention-sweep`  | Redact and delete sessions; clean audit, media-job, and OAuth rows | Daily              |
 
 Each run has a 30-minute deadline. PostgreSQL advisory locks make overlap a
-successful skip. `release-snapshot-sweep` takes no lock; an overlapping run can
-only fail to delete a snapshot the other run already removed, and reports that
-as a failure. Cancellation is propagated and the worker joins its work before
+successful skip. Cancellation is propagated and the worker joins its work before
 returning. Pool shutdown has a separate five-second limit after the worker
 returns. The command emits a fixed, identifier-free result and metrics surface
 with success, failure, overlap, page or item counts, backlog, oldest age where

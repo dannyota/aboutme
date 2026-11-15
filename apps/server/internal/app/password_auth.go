@@ -58,7 +58,7 @@ func NewPasswordAuth(ctx context.Context, logger *slog.Logger, cfg config.Config
 		return nil, fmt.Errorf("create mail outbox: %w", err)
 	}
 
-	sender, err := newMailSender(ctx, cfg, logger)
+	sender, err := newMailSender(cfg, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -122,29 +122,12 @@ func newMailKeyRing(cfg config.Config) (*authmail.KeyRing, error) {
 	return ring, nil
 }
 
-func newMailSender(ctx context.Context, cfg config.Config, logger *slog.Logger) (authmail.Sender, error) {
+func newMailSender(cfg config.Config, logger *slog.Logger) (authmail.Sender, error) {
 	switch cfg.AuthEmail.Mode {
 	case authmailModeCaptureValue:
 		sender, err := mailcapture.NewClient(cfg.AuthEmail.CaptureURL, cfg.AuthEmail.CaptureBearer[:], logger)
 		if err != nil {
 			return nil, fmt.Errorf("create capture sender: %w", err)
-		}
-		return sender, nil
-	case authmailModeSESValue:
-		client, err := authmail.NewSESClient(ctx, cfg.AuthEmail.SESRegion)
-		if err != nil {
-			return nil, fmt.Errorf("create SES client: %w", err)
-		}
-		sender, err := authmail.NewSESSender(authmail.SESOptions{
-			Region:           cfg.AuthEmail.SESRegion,
-			From:             cfg.AuthEmail.SESFrom,
-			FromName:         cfg.AuthEmail.SESFromName,
-			ConfigurationSet: cfg.AuthEmail.SESConfigSet,
-			Client:           client,
-			Logger:           logger,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("create SES sender: %w", err)
 		}
 		return sender, nil
 	case authmailModeSMTPValue:
@@ -169,7 +152,6 @@ func newMailSender(ctx context.Context, cfg config.Config, logger *slog.Logger) 
 
 const (
 	authmailModeCaptureValue = "capture"
-	authmailModeSESValue     = "ses"
 	authmailModeSMTPValue    = "smtp"
 )
 

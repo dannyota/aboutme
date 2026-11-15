@@ -4,13 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"encoding/pem"
 	"fmt"
-	"io"
-	"net"
-	"net/http"
-	"net/http/httptest"
-	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -18,15 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/credentials"
-	awsecs "github.com/aws/aws-sdk-go-v2/service/ecs"
-
 	"danny.vn/aboutme/deploy/observer/internal/document"
 	"danny.vn/aboutme/deploy/observer/internal/leakscan"
 	"danny.vn/aboutme/deploy/observer/internal/platform"
-	"danny.vn/aboutme/deploy/observer/internal/platform/ecs"
-	"danny.vn/aboutme/deploy/observer/internal/platform/kubernetes"
 	"danny.vn/aboutme/deploy/observer/internal/platform/podman"
 	"danny.vn/aboutme/deploy/observer/internal/verify"
 	"danny.vn/aboutme/deploy/observer/schema"
@@ -40,142 +28,6 @@ var plainCanaries = []string{
 	"3f2a9c1e-7b4d", "0f1e2d3c-4b5a", "9d8c7b6a-5f4e", "1a2b3c4d-5e6f",
 	"0a:1b:2c:3d", "subnet-", "ReplicaSet", "ExecuteCommandAgent", "ElasticNetworkInterface",
 	"HEALTHY", "RUNNING", "ecs.cpu-architecture", "arn:", "task-definition", "role/",
-}
-
-const unknownMember = "unknownMemberCanary"
-
-func leakFixture(t *testing.T, name string) []byte {
-	t.Helper()
-	b, err := os.ReadFile(filepath.Join("..", "..", "testdata", "leak", name))
-	if err != nil {
-		t.Fatal(err)
-	}
-	return b
-}
-
-func withoutUnknownMember(t *testing.T, raw []byte) []byte {
-	t.Helper()
-	var v any
-	if err := json.Unmarshal(raw, &v); err != nil {
-		t.Fatal(err)
-	}
-	var strip func(any)
-	strip = func(v any) {
-		switch x := v.(type) {
-		case map[string]any:
-			delete(x, unknownMember)
-			for _, c := range x {
-				strip(c)
-			}
-		case []any:
-			for _, c := range x {
-				strip(c)
-			}
-		}
-	}
-	strip(v)
-	out, err := json.Marshal(v)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return out
-}
-
-func ecsImages(t *testing.T, strip bool) []platform.Image {
-	t.Helper()
-	load := func(name string) []byte {
-		b := leakFixture(t, name)
-		if strip {
-			b = withoutUnknownMember(t, b)
-		}
-		return b
-	}
-	lists := map[string][]byte{
-		"aboutme-prod-app":         load("ecs-list-app.json"),
-		"aboutme-prod-web":         load("ecs-list-web.json"),
-		"aboutme-prod-maintenance": load("ecs-list-maintenance.json"),
-	}
-	describe := load("ecs-describe-tasks.json")
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		w.Header().Set("Content-Type", "application/x-amz-json-1.1")
-		switch target := r.Header.Get("X-Amz-Target"); {
-		case strings.HasSuffix(target, ".ListTasks"):
-			var req struct {
-				ServiceName string `json:"serviceName"`
-			}
-			if err := json.Unmarshal(body, &req); err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				return
-			}
-			_, _ = w.Write(lists[req.ServiceName]) //nolint:errcheck // test server
-		case strings.HasSuffix(target, ".DescribeTasks"):
-			_, _ = w.Write(describe) //nolint:errcheck // test server
-		default:
-			http.Error(w, "unexpected target "+target, http.StatusBadRequest)
-		}
-	}))
-	t.Cleanup(srv.Close)
-	client := awsecs.New(awsecs.Options{
-		Region:       "ap-southeast-1",
-		BaseEndpoint: aws.String(srv.URL),
-		Credentials:  credentials.NewStaticCredentialsProvider("canary-key-id", "canary-secret", ""),
-		HTTPClient:   srv.Client(),
-	})
-	lister := ecs.New(client, ecs.Config{
-		Cluster:            "canary-cluster-7f3a",
-		AppService:         "aboutme-prod-app",
-		WebService:         "aboutme-prod-web",
-		MaintenanceService: "aboutme-prod-maintenance",
-	})
-	imgs, err := lister.Running(context.Background())
-	if err != nil {
-		t.Fatalf("ecs adapter: %v", err)
-	}
-	return imgs
-}
-
-func kubernetesImages(t *testing.T, strip bool) []platform.Image {
-	t.Helper()
-	body := leakFixture(t, "pod-list.json")
-	if strip {
-		body = withoutUnknownMember(t, body)
-	}
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write(body) //nolint:errcheck // test server
-	}))
-	t.Cleanup(srv.Close)
-	dir := t.TempDir()
-	ca := filepath.Join(dir, "ca.crt")
-	if err := os.WriteFile(ca, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: srv.Certificate().Raw}), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	token := filepath.Join(dir, "token")
-	if err := os.WriteFile(token, []byte("canary-token-1b2c"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	u, err := url.Parse(srv.URL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	host, port, err := net.SplitHostPort(u.Host)
-	if err != nil {
-		t.Fatal(err)
-	}
-	lister, err := kubernetes.New(kubernetes.Config{Namespace: "aboutme", Host: host, Port: port, TokenFile: token, CAFile: ca})
-	if err != nil {
-		t.Fatal(err)
-	}
-	imgs, err := lister.Running(context.Background())
-	if err != nil {
-		t.Fatalf("kubernetes adapter: %v", err)
-	}
-	return imgs
 }
 
 func podmanImages(t *testing.T, strip bool) []platform.Image {
@@ -219,7 +71,7 @@ func podmanImages(t *testing.T, strip bool) []platform.Image {
 		t.Fatal(err)
 	}
 	path := filepath.Join(t.TempDir(), "observation.json")
-	if err := os.WriteFile(path, body, 0o600); err != nil {
+	if err = os.WriteFile(path, body, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	out, err := podman.New(path).Running(context.Background())
@@ -375,9 +227,7 @@ func TestDocumentLeaksNothing(t *testing.T) {
 		images func(*testing.T, bool) []platform.Image
 		info   platform.Info
 	}{
-		"ecs":        {ecsImages, platform.Info{Provider: "aws", Orchestrator: "ecs", Region: "ap-southeast-1"}},
-		"kubernetes": {kubernetesImages, platform.Info{Provider: "greennode", Orchestrator: "kubernetes", Region: "HCM03"}},
-		"podman":     {podmanImages, platform.Info{Provider: "greennode", Orchestrator: "podman", Region: "HCM03"}},
+		"podman": {podmanImages, platform.Info{Provider: "greennode", Orchestrator: "podman", Region: "HCM03"}},
 	}
 	allowed := schemaPaths(t)
 	for name, a := range adapters {

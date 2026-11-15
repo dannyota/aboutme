@@ -9,7 +9,7 @@ import (
 func TestAuthMailFooterByMode(t *testing.T) {
 	const vi = "Email này được gửi qua máy chủ thư của Bizfly. Nếu bạn trả lời, thư sẽ đến thẳng hộp thư Google Workspace của Danny."
 	const en = "This email was sent through Bizfly's mail server. If you reply, your email goes straight to Danny's Google Workspace mailbox."
-	for _, mode := range []string{"smtp", "ses", "capture"} {
+	for _, mode := range []string{"smtp", "capture"} {
 		t.Run(mode, func(t *testing.T) {
 			for kind := range templates() {
 				t.Run(string(kind), func(t *testing.T) {

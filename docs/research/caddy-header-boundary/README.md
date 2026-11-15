@@ -4,9 +4,9 @@ Status: historical experiment for the superseded CloudFront origin-secret
 design. Production uses the
 [Vietnam host](../../design/vietnam-production.md#edge) with a direct Caddy edge
 and Cloudflare DNS-only. CloudFront origin mutual TLS and its
-[client-IP boundary](../../design/cloudfront-origin.md#client-address) remain
-requirements of the undeployed AWS reference edge. The experiment's findings
-below describe that historical design.
+[client-IP boundary](https://github.com/dannyota/aboutme/blob/aa7ec9f6fff739047346f8ad2be08636dee5b8b4/docs/design/cloudfront-origin.md#client-address)
+remain requirements of the undeployed AWS reference edge. The experiment's
+findings below describe that historical design.
 
 Pinned Caddy 2.11.4 can reject duplicate origin-secret and client-IP values
 using native expression matchers. The isolated raw-HTTP experiment passes all 21

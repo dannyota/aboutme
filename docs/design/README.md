@@ -25,16 +25,10 @@ Current behavior lives in code, deployment configuration, and
 | 5d      | [Passkey contract](passkey-second-factor-contract.md)                  | Pending, WebAuthn, recovery, mail, and passkey storage shapes                 |
 | 5e      | [Authenticator-app contract](totp-second-factor-contract.md)           | TOTP routes, failure budget, and storage                                      |
 | 5f      | [TOTP key management](totp-key-management.md)                          | Sealing, key ring, rotation, and key failures                                 |
-| Other   | [AWS TOTP key management](aws-totp-key-management.md)                  | Undeployed ECS key injection, rotation, and monitoring reference              |
 | 6       | [Deployment](deployment.md)                                            | Environments, trust boundaries, media, mail, and migrations                   |
 | 6a      | [Vietnam production](vietnam-production.md)                            | Live host, DNS, database, secrets, deploy, and alarms                         |
 | 6b      | [Release fence](passkey-release-fence.md)                              | Minimum production release, operation lock, and IAM                           |
 | Other   | [Release floors](release-floors.md)                                    | Rebuilt-host floor and schema floors for breaking migrations                  |
-| 6c      | [Single-host AWS reference](single-host-production.md)                 | Retained AWS deployment design                                                |
-| 6d      | [CloudFront edge](cloudfront-edge.md)                                  | Undeployed AWS edge reference; not live operations                            |
-| Other   | [CloudFront origin](cloudfront-origin.md)                              | AWS reference origin access, certificates, and client-address trust           |
-| Other   | [CloudFront delivery](cloudfront-delivery.md)                          | AWS reference TLS, DNS, forwarding, caching, headers, WAF, and operations     |
-| Other   | [CloudFront verification](cloudfront-verification.md)                  | AWS reference migration, parity, tests, and unresolved facts                  |
 | 6e      | [CrowdSec HTTP privacy](crowdsec-http-privacy.md)                      | Storage, authorization, retention, log privacy, backups, and notice           |
 | Other   | [CrowdSec request feed](crowdsec-request-feed.md)                      | Feed fields, route and probe classes, target samples, and detection           |
 | Other   | [CrowdSec storage migration](crowdsec-storage-migration.md)            | SQLite to PostgreSQL switch, approved loss, reset, and release order          |

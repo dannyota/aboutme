@@ -129,7 +129,7 @@ for platform in Linux Darwin; do
     'make server-test-resumeapi-s3' 'make test-media-s3-down' >"$WORK/s3-expected"
   cmp -s "$WORK/s3-expected" "$WORK/s3-calls"
   if [ "$platform" = Darwin ]; then
-    grep -Fqx 'make operational-test-fast operational-test-deploy operational-test-browser' "$CALLS"
+    grep -Fqx 'make operational-test-fast operational-test-browser' "$CALLS"
   fi
 done
 grep -Fq 'Skipping Linux-specific dev-https static contracts; CI covers them.' "$WORK/Darwin.out"

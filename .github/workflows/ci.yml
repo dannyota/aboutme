@@ -129,7 +129,6 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read
-      packages: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -196,38 +195,6 @@ jobs:
       - if: ${{ !cancelled() }}
         run: gitleaks detect --redact --no-banner
       - if: ${{ !cancelled() }}
-        id: ci-tools
-        uses: ./.github/actions/ci-tools
-      - name: Configure the provider mirror
-        id: provider-mirror
-        if: ${{ !cancelled() && steps.ci-tools.outcome == 'success' }}
-        run: |
-          cat >"$RUNNER_TEMP/ci-tools.tfrc" <<EOF
-          provider_installation {
-            filesystem_mirror {
-              path = "$RUNNER_TEMP/ci-tools/providers"
-              include = ["registry.opentofu.org/*/*"]
-            }
-            direct {
-              exclude = ["registry.opentofu.org/*/*"]
-            }
-          }
-          EOF
-          echo "TF_CLI_CONFIG_FILE=$RUNNER_TEMP/ci-tools.tfrc" >> "$GITHUB_ENV"
-      # The mirror runs only after a verified load, so OpenTofu never starts
-      # without it and never installs providers directly.
-      - if: ${{ !cancelled() && steps.provider-mirror.outcome == 'success' }}
-        uses: ./.github/actions/install-opentofu
-      - if: ${{ !cancelled() && steps.provider-mirror.outcome == 'success' }}
-        run: tofu fmt -check -recursive deploy/aws
-      - if: ${{ !cancelled() && steps.provider-mirror.outcome == 'success' }}
-        name: Validate each root
-        run: |
-          for root in deploy/aws/probe deploy/aws/bootstrap deploy/aws/prod; do
-            tofu -chdir="$root" init -backend=false -input=false >/dev/null
-            tofu -chdir="$root" validate
-          done
-      - if: ${{ !cancelled() }}
         name: npm audit (repository root)
         run: bash scripts/npm-audit.sh .
       - if: ${{ !cancelled() }}
@@ -262,9 +229,6 @@ jobs:
             package-lock.json
             deploy/dev-https-browser/package-lock.json
       - if: ${{ !cancelled() }}
-        name: Start the deploy-script static tests
-        run: bash scripts/ci-background.sh start deploy-tests make operational-test-deploy
-      - if: ${{ !cancelled() }}
         id: go
         uses: ./.github/actions/setup-go
         with:
@@ -278,9 +242,6 @@ jobs:
         working-directory: deploy/dev-https-browser
       - if: ${{ !cancelled() }}
         run: make operational-test-browser
-      - if: ${{ !cancelled() }}
-        name: Wait for the deploy-script static tests
-        run: bash scripts/ci-background.sh wait deploy-tests
       - uses: ./.github/actions/save-go-cache
         with:
           cache-hit: ${{ steps.go.outputs.cache-hit }}

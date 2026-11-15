@@ -60,9 +60,6 @@ func runPrivacyJob(ctx context.Context, command privacyCommand, getenv func(stri
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if command.name == "release-snapshot-sweep" {
-		return runReleaseSnapshotSweep(ctx, logger)
-	}
 	needsMedia := command.name == "media-deletion-sweep" || command.name == "media-orphan-sweep"
 	cfg, err := config.LoadPrivacyJob(getenv, needsMedia)
 	if err != nil {
