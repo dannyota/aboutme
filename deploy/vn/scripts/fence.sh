@@ -5,8 +5,8 @@ dir=${FENCE_DIR:-/var/lib/aboutme}
 file=$dir/fence.json
 lockfile=$dir/fence.lock
 mutation_file=$dir/cutover-mutation.json
-floor_tag=v0.9.2
-floor_release=9002
+floor_tag=v0.9.8
+floor_release=9008
 
 say() { printf 'fence: %s\n' "$*" >&2; }
 die() {

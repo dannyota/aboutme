@@ -89,6 +89,10 @@ func mapError(err error) *clientError {
 		return failure(409, "idempotency_key_reuse", "Idempotency-Key was already used with a different request")
 	case errors.Is(err, auth.ErrSessionInvalid):
 		return sessionError()
+	case errors.Is(err, resumeapi.ErrAgentScopeDenied):
+		return failure(403, "scope_denied", "the grant does not allow this change")
+	case errors.Is(err, resumeapi.ErrAgentAccessUnavailable):
+		return agentUnavailable()
 	case errors.Is(err, auth.ErrReauthRequired):
 		return failure(403, "reauth_required", "recent reauthentication is required")
 	default:

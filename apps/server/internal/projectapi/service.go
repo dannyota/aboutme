@@ -116,13 +116,17 @@ func (s *Service) read(w http.ResponseWriter, r *http.Request) {
 		writeError(w, sessionError())
 		return
 	}
-	links, err := s.links.LinkedResumeIDs(r.Context(), s.q, sess.UserID)
+	s.readFor(w, r, sess.UserID)
+}
+
+func (s *Service) readFor(w http.ResponseWriter, r *http.Request, owner uuid.UUID) {
+	links, err := s.links.LinkedResumeIDs(r.Context(), s.q, owner)
 	if err != nil {
 		writeError(w, mapError(err))
 		return
 	}
 	if r.PathValue("id") == "" {
-		projects, listErr := s.projects.ListTx(r.Context(), s.q, sess.UserID)
+		projects, listErr := s.projects.ListTx(r.Context(), s.q, owner)
 		if listErr != nil {
 			writeError(w, mapError(listErr))
 			return
@@ -141,7 +145,7 @@ func (s *Service) read(w http.ResponseWriter, r *http.Request) {
 		writeError(w, requestError())
 		return
 	}
-	p, err := s.projects.GetTx(r.Context(), s.q, sess.UserID, id)
+	p, err := s.projects.GetTx(r.Context(), s.q, owner, id)
 	if err != nil {
 		writeError(w, mapError(err))
 		return

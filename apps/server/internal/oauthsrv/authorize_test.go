@@ -315,7 +315,7 @@ func TestAuthorize_TrustedAndUntrustedValidationMatrix(t *testing.T) {
 		{"encoded slash redirect", set("redirect_uri", "https://agent.example%2F.evil/callback"), http.StatusBadRequest, "", true},
 		{"response type", set("response_type", "token"), http.StatusFound, "invalid_request", false},
 		{"invalid scope", set("scope", "resumes:admin"), http.StatusFound, "invalid_scope", false},
-		{"noncanonical scope", set("scope", "resumes:write resumes:read"), http.StatusFound, "invalid_request", false},
+		{"repeated scope", set("scope", "resumes:read resumes:read"), http.StatusFound, "invalid_scope", false},
 		{"missing challenge", set("code_challenge", ""), http.StatusFound, "invalid_request", false},
 		{"plain PKCE", set("code_challenge_method", "plain"), http.StatusFound, "invalid_request", false},
 		{"invalid challenge", set("code_challenge", strings.Repeat("*", 43)), http.StatusFound, "invalid_request", false},

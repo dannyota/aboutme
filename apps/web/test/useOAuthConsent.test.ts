@@ -7,6 +7,7 @@ import { readRawBody, setResponseStatus } from 'h3';
 import { defineComponent } from 'vue';
 import {
   OAuthConsentFailure,
+  canonicalScopeSet,
   useOAuthConsent,
 } from '../app/composables/useOAuthConsent';
 
@@ -113,6 +114,34 @@ describe('useOAuthConsent', () => {
     });
     const wrapper = await mountSuspended(Probe);
     await expect(wrapper.vm.get(query)).rejects.toMatchObject({ kind });
+  });
+
+  it('accepts a view that lists the project scopes', async () => {
+    const view = {
+      clientName: 'Resume agent', clientKind: 'dcr', clientHost: null,
+      scopes: [
+        'resumes:read', 'resumes:write', 'projects:read', 'projects:write',
+      ],
+    };
+    registerEndpoint('/api/v1/oauth/consent', {
+      method: 'GET',
+      handler: () => ({ data: view }),
+    });
+    const wrapper = await mountSuspended(Probe);
+    await expect(wrapper.vm.get({
+      ...query,
+      scope: 'resumes:read resumes:write projects:read projects:write',
+    })).resolves.toEqual(view);
+  });
+
+  it.each([
+    ['projects:write resumes:read', 'resumes:read projects:write'],
+    ['resumes:read', 'resumes:read'],
+    ['projects:read projects:read', null],
+    ['projects:admin', null],
+    ['resumes:read  projects:read', null],
+  ])('canonicalizes the scope set %j', (raw, want) => {
+    expect(canonicalScopeSet(raw)).toBe(want);
   });
 
   it('falls back to unavailable for a malformed response', async () => {

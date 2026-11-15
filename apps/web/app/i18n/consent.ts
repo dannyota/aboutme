@@ -4,8 +4,12 @@ import type { WorkspaceCopy } from './workspace';
 type ConsentCopy = {
   readonly title: string;
   readonly allowClient: (clientName: string) => string;
+  readonly allowClientProjects: (clientName: string) => string;
   readonly clientRequest: string;
+  readonly clientRequestProjects: string;
   readonly hostRequestAfter: string;
+  readonly hostRequestAfterProjects: string;
+  readonly projectsPublicAtOnce: string;
   readonly selfNamedBefore: string;
   readonly selfNamedAfter: string;
   readonly loopbackWarning: string;
@@ -36,8 +40,15 @@ export const consentCopy: WorkspaceCopy<ConsentCopy> = {
   vi: {
     title: 'Cấp quyền truy cập',
     allowClient: (clientName) => `Cho phép ${clientName} chỉnh sửa CV của bạn?`,
+    allowClientProjects: (clientName) =>
+      `Cho phép ${clientName} chỉnh sửa CV và dự án của bạn?`,
     clientRequest: 'đang yêu cầu quyền truy cập CV của bạn.',
+    clientRequestProjects: 'đang yêu cầu quyền truy cập CV và dự án của bạn.',
     hostRequestAfter: ' muốn truy cập CV của bạn.',
+    hostRequestAfterProjects: ' muốn truy cập CV và dự án của bạn.',
+    projectsPublicAtOnce:
+      'Thay đổi trên một dự án đang hiện trên CV đã xuất bản '
+      + 'sẽ công khai ngay.',
     selfNamedBefore: 'Ứng dụng tự gọi là “',
     selfNamedAfter: '”.',
     loopbackWarning:
@@ -72,6 +83,14 @@ export const consentCopy: WorkspaceCopy<ConsentCopy> = {
         name: 'Chỉnh sửa CV',
         description: 'Tạo và chỉnh sửa CV của bạn.',
       },
+      'projects:read': {
+        name: 'Đọc dự án',
+        description: 'Xem các dự án trong thư viện của bạn.',
+      },
+      'projects:write': {
+        name: 'Chỉnh sửa dự án',
+        description: 'Tạo, sửa và xóa dự án trong thư viện của bạn.',
+      },
     },
     approve: 'Cho phép',
     working: 'Đang xử lý…',
@@ -80,8 +99,14 @@ export const consentCopy: WorkspaceCopy<ConsentCopy> = {
   en: {
     title: 'Allow access',
     allowClient: (clientName) => `Allow ${clientName} to edit your resumes?`,
+    allowClientProjects: (clientName) =>
+      `Allow ${clientName} to edit your resumes and projects?`,
     clientRequest: 'is requesting access to your resumes.',
+    clientRequestProjects: 'is requesting access to your resumes and projects.',
     hostRequestAfter: ' wants access to your resumes.',
+    hostRequestAfterProjects: ' wants access to your resumes and projects.',
+    projectsPublicAtOnce:
+      'A change to a project shown on a published resume is public at once.',
     selfNamedBefore: 'The app calls itself “',
     selfNamedAfter: '”.',
     loopbackWarning:
@@ -113,6 +138,14 @@ export const consentCopy: WorkspaceCopy<ConsentCopy> = {
       'resumes:write': {
         name: 'Write resumes',
         description: 'Create and edit your resumes.',
+      },
+      'projects:read': {
+        name: 'Read projects',
+        description: 'View the projects in your library.',
+      },
+      'projects:write': {
+        name: 'Write projects',
+        description: 'Create, edit, and delete projects in your library.',
       },
     },
     approve: 'Approve',

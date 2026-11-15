@@ -96,6 +96,10 @@ func requestHash(version int32, precondition string, semanticInputs []string, pa
 	return tupleHash(idempotencyRequestDomain, fields)
 }
 
+func callerRequestHash(caller string, version int32, precondition string, semanticInputs []string, payload []byte) [32]byte {
+	return requestHash(version, precondition, append([]string{"caller", caller}, semanticInputs...), payload)
+}
+
 func tupleHash(domain string, fields [][]byte) [32]byte {
 	var encoded bytes.Buffer
 	var length [4]byte

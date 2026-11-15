@@ -144,6 +144,9 @@ export const guideCopy: WorkspaceCopy<GuideCopy> = {
         'Tải lên, cắt hoặc xóa ảnh chân dung.',
         'Xóa CV. Xóa một CV đã xuất bản cũng gỡ đường dẫn công khai của CV '
         + 'đó.',
+        'Đọc và chỉnh sửa dự án trong thư viện, và gắn dự án vào CV. Thay '
+        + 'đổi trên một dự án đang hiện trên CV đã xuất bản sẽ công khai '
+        + 'ngay.',
       ],
       cannotHeading: 'Không được phép',
       cannot: [
@@ -325,6 +328,9 @@ export const guideCopy: WorkspaceCopy<GuideCopy> = {
         'Upload, crop, or remove the photo.',
         'Delete a resume. Deleting a published resume also takes its '
         + 'public link down.',
+        'Read and edit the projects in your library and link them to your '
+        + 'resumes. A change to a project shown on a published resume is '
+        + 'public at once.',
       ],
       cannotHeading: 'Cannot',
       cannot: [

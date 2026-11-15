@@ -3,8 +3,11 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"os"
 	"reflect"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -61,5 +64,21 @@ func TestEvidenceRejectsOpenLabelsAndMixedShapes(t *testing.T) {
 	}
 	if err := writeEvidence(run, recoveryEvidence(modeProduction, revocationUnconfirmed)); err != nil {
 		t.Fatalf("recovery evidence rejected: %v", err)
+	}
+}
+
+func TestEvidenceMatchesTheOwnerWorkflowValidator(t *testing.T) {
+	script, err := os.ReadFile("../../../../scripts/mcp-owner-workflow.sh")
+	if err != nil {
+		t.Fatalf("read owner workflow script: %v", err)
+	}
+	done := regexp.MustCompile(`sdk_version: "([^"]+)",\s+transport: "([^"]+)", tool_count: (\d+), language: "([^"]+)"`).FindSubmatch(script)
+	if done == nil {
+		t.Fatal("owner workflow script has no completed-evidence shape")
+	}
+	want := workflowEvidence(modeLocal, reconcileReplayed, revocationRevoked, true)
+	got := []string{string(done[1]), string(done[2]), string(done[3]), string(done[4])}
+	if expected := []string{want.SDKVersion, want.Transport, strconv.Itoa(want.ToolCount), want.Language}; !reflect.DeepEqual(got, expected) {
+		t.Fatalf("validator expects %v, runner writes %v", got, expected)
 	}
 }

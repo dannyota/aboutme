@@ -177,17 +177,29 @@ func TestScopeErrorCarriesNoInput(t *testing.T) {
 	}
 }
 
-func TestParseScopesRefusesProjectScopes(t *testing.T) {
+func TestParseScopesAcceptsProjectScopesInAnyOrder(t *testing.T) {
 	t.Parallel()
 
-	for _, raw := range []string{
-		"projects:read",
-		"projects:write",
-		"resumes:read projects:read",
-		"resumes:read resumes:write projects:read projects:write",
+	for raw, want := range map[string]string{
+		"projects:read":              "projects:read",
+		"projects:write":             "projects:write",
+		"projects:read resumes:read": "resumes:read projects:read",
+		"projects:write projects:read resumes:write resumes:read": "resumes:read resumes:write projects:read projects:write",
 	} {
+		got, err := ParseScopes(raw)
+		if err != nil || got.String() != want {
+			t.Errorf("ParseScopes(%q) = %q, %v; want %q", raw, got.String(), err, want)
+		}
+		if canonical := canonicalScope(raw); canonical != want {
+			t.Errorf("canonicalScope(%q) = %q, want %q", raw, canonical, want)
+		}
+	}
+	for _, raw := range []string{"projects:read projects:read", "projects:admin", "resumes:read  projects:read"} {
 		if got, err := ParseScopes(raw); !errors.Is(err, ErrScopeInvalid) || got != nil {
 			t.Errorf("ParseScopes(%q) = %v, %v; want ErrScopeInvalid", raw, got, err)
+		}
+		if canonical := canonicalScope(raw); canonical != raw {
+			t.Errorf("canonicalScope(%q) = %q, want the input unchanged", raw, canonical)
 		}
 	}
 }

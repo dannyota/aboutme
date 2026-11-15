@@ -205,7 +205,7 @@ func TestPublishRenameRecoveryRequiresExactRowClaimTombstoneAndResponse(t *testi
 		t.Fatal(err)
 	}
 	operation := hexDigest(operationHash(http.MethodPost, "publishResume", []string{"resume_id", created.ID.String()}))
-	hash := requestHash(docmigrate.CurrentVersion, strconv.FormatInt(created.Revision+1, 10), nil, []byte(`{"slug":"`+newSlug+`","live":true,"downloadEnabled":false,"seoGeoEnabled":false}`))
+	hash := callerRequestHash(SessionCaller, docmigrate.CurrentVersion, strconv.FormatInt(created.Revision+1, 10), nil, []byte(`{"slug":"`+newSlug+`","live":true,"downloadEnabled":false,"seoGeoEnabled":false}`))
 	resolver := mutationRecovery{pool: h.pool, identity: mutationIdentity{UserID: h.userID, Operation: operation, Key: key, RequestHash: hash}, plan: publicstate.Plan{DiscoveryGeneration: &before.DiscoveryGeneration, Resumes: []publicstate.ResumeTarget{{ID: created.ID, ExpectedRevision: created.Revision + 1, Class: publicstate.Revoking}}}, publish: &publishRecoveryProof{ResumeID: created.ID, Effective: currentPublish{Slug: &newSlug, Live: true, Revision: created.Revision + 2}, OldSlug: &oldSlug, ReleasedAt: tombstone.ReleasedAt}}
 	if proof, err := resolver.Resolve(context.Background()); err != nil || proof.Disposition != publicstate.RecoveryCommitted {
 		t.Fatalf("rename recovery = %#v err=%v", proof, err)
@@ -247,7 +247,7 @@ func TestPublishRenameRecoveryRejectsMismatchedTombstoneReleasedAt(t *testing.T)
 		t.Fatal(err)
 	}
 	operation := hexDigest(operationHash(http.MethodPost, "publishResume", []string{"resume_id", created.ID.String()}))
-	hash := requestHash(docmigrate.CurrentVersion, strconv.FormatInt(created.Revision+1, 10), nil, []byte(`{"slug":"`+newSlug+`","live":true,"downloadEnabled":false,"seoGeoEnabled":false}`))
+	hash := callerRequestHash(SessionCaller, docmigrate.CurrentVersion, strconv.FormatInt(created.Revision+1, 10), nil, []byte(`{"slug":"`+newSlug+`","live":true,"downloadEnabled":false,"seoGeoEnabled":false}`))
 	resolver := mutationRecovery{pool: h.pool, identity: mutationIdentity{UserID: h.userID, Operation: operation, Key: key, RequestHash: hash}, plan: publicstate.Plan{DiscoveryGeneration: &before.DiscoveryGeneration, Resumes: []publicstate.ResumeTarget{{ID: created.ID, ExpectedRevision: created.Revision + 1, Class: publicstate.Revoking}}}, publish: &publishRecoveryProof{ResumeID: created.ID, Effective: currentPublish{Slug: &newSlug, Live: true, Revision: created.Revision + 2}, OldSlug: &oldSlug, ReleasedAt: tombstone.ReleasedAt.Add(time.Microsecond)}}
 	if _, err := resolver.Resolve(context.Background()); err == nil {
 		t.Fatal("rename recovery accepted a tombstone with a mismatched released_at")
@@ -340,7 +340,7 @@ func TestPublishRecoveryRejectsMismatchedSignInToView(t *testing.T) {
 
 func publishRecoveryResolver(h *resumeAPITestHarness, resumeID uuid.UUID, revision, discovery int64, key uuid.UUID, body string, effective currentPublish, global bool) mutationRecovery {
 	operation := hexDigest(operationHash(http.MethodPost, "publishResume", []string{"resume_id", resumeID.String()}))
-	hash := requestHash(docmigrate.CurrentVersion, strconv.FormatInt(revision, 10), nil, []byte(body))
+	hash := callerRequestHash(SessionCaller, docmigrate.CurrentVersion, strconv.FormatInt(revision, 10), nil, []byte(body))
 	plan := publicstate.Plan{Resumes: []publicstate.ResumeTarget{{ID: resumeID, ExpectedRevision: revision, Class: publicstate.NonDraining}}}
 	if global {
 		plan.DiscoveryGeneration = &discovery
@@ -350,14 +350,14 @@ func publishRecoveryResolver(h *resumeAPITestHarness, resumeID uuid.UUID, revisi
 
 func neverSluggedDeleteRecoveryResolver(h *resumeAPITestHarness, resumeID uuid.UUID, revision int64, key uuid.UUID, photoKey string) mutationRecovery {
 	operation := hexDigest(operationHash(http.MethodDelete, "deleteResume", []string{"resume_id", resumeID.String()}))
-	hash := requestHash(docmigrate.CurrentVersion, strconv.FormatInt(revision, 10), nil, nil)
+	hash := callerRequestHash(SessionCaller, docmigrate.CurrentVersion, strconv.FormatInt(revision, 10), nil, nil)
 	return mutationRecovery{pool: h.pool, identity: mutationIdentity{UserID: h.userID, Operation: operation, Key: key, RequestHash: hash}, plan: publicstate.Plan{Resumes: []publicstate.ResumeTarget{{ID: resumeID, ExpectedRevision: revision, Class: publicstate.NonDraining}}}, retire: true, delete: &deleteRecoveryProof{ResumeID: resumeID, PhotoKey: photoKey}}
 }
 
 func deleteRecoveryResolver(t *testing.T, h *resumeAPITestHarness, resumeID uuid.UUID, revision, discovery int64, key uuid.UUID, slug, photoKey string) mutationRecovery {
 	t.Helper()
 	operation := hexDigest(operationHash(http.MethodDelete, "deleteResume", []string{"resume_id", resumeID.String()}))
-	hash := requestHash(docmigrate.CurrentVersion, strconv.FormatInt(revision, 10), nil, nil)
+	hash := callerRequestHash(SessionCaller, docmigrate.CurrentVersion, strconv.FormatInt(revision, 10), nil, nil)
 	tombstone, err := h.queries.GetSlugTombstoneForUpdate(h.ctx, slug)
 	if err != nil {
 		t.Fatal(err)

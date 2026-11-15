@@ -66,10 +66,11 @@ Registration ignores members it does not know, as RFC 7591 section 2 requires,
 and never stores or echoes them. Three known members are checked when present:
 `grant_types` must be a non-empty subset of `authorization_code` and
 `refresh_token`; `response_types` must be exactly `["code"]`; `scope` must name
-only `resumes:read` and `resumes:write`. `scope` at registration grants nothing;
-consent still decides. The 4,096-byte body cap, duplicate-member rejection,
-required `client_name` and `redirect_uris`, the redirect grammar, and
-`token_endpoint_auth_method` `none` stay.
+only `resumes:read`, `resumes:write`, `projects:read`, and `projects:write`.
+`scope` at registration grants nothing; consent still decides. The 4,096-byte
+body cap, duplicate-member rejection, required `client_name` and
+`redirect_uris`, the redirect grammar, and `token_endpoint_auth_method` `none`
+stay.
 
 ### 3. Native loopback host and web application type
 

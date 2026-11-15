@@ -22,6 +22,7 @@ type AgentExecutor interface {
 type ServerDependencies struct {
 	Bearer              *Bearer
 	Resumes             AgentExecutor
+	Projects            ProjectExecutor
 	Rates               *RatePolicies
 	MaxRequestBodyBytes int64
 }
@@ -34,17 +35,19 @@ type requestAuthority struct {
 type requestAuthorityKey struct{}
 
 func NewServer(dependencies ServerDependencies) (http.Handler, error) {
-	if dependencies.Bearer == nil || isNil(dependencies.Resumes) || dependencies.Rates == nil || dependencies.MaxRequestBodyBytes <= 0 {
+	if dependencies.Bearer == nil || isNil(dependencies.Resumes) || isNil(dependencies.Projects) || dependencies.Rates == nil ||
+		dependencies.MaxRequestBodyBytes <= 0 {
 		return nil, errors.New("mcp server: invalid dependencies")
 	}
 	server := mcp.NewServer(serverImplementation(dependencies.Bearer.publicOrigin), &mcp.ServerOptions{
 		Instructions: serverInstructions,
 	})
-	runtime := &toolRuntime{resumes: dependencies.Resumes}
+	runtime := &toolRuntime{resumes: dependencies.Resumes, projects: dependencies.Projects}
 	registerReadTools(server, runtime)
 	registerLifecycleTools(server, runtime)
 	registerContentTools(server, runtime)
 	registerPhotoTools(server, runtime)
+	registerProjectTools(server, runtime)
 	server.AddReceivingMiddleware(closeToolErrors)
 
 	streamable := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, &mcp.StreamableHTTPOptions{
@@ -155,7 +158,7 @@ func closeToolErrors(next mcp.MethodHandler) mcp.MethodHandler {
 func closedToolCode(code string) bool {
 	switch code {
 	case "validation_failed", "revision_conflict", "not_found", "payload_too_large", "scope_denied",
-		"rate_limited", "agent_access_unavailable":
+		"rate_limited", "limit_reached", "slug_unavailable", "agent_access_unavailable":
 		return true
 	default:
 		return false

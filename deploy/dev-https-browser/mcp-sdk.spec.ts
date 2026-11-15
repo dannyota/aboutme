@@ -510,7 +510,7 @@ async function approveConsent(page: Page, guard: FlowGuard, handoff: Handoff): P
     guard.requireConsentPage();
     const clientName = page.locator('[data-testid="consent-client-name"]');
     await expect(clientName).toHaveText(CLIENT_NAME, { timeout: STEP_TIMEOUT_MS });
-    await expect(page.locator('[data-testid="consent-scopes"] dt')).toHaveCount(2);
+    await expect(page.locator('[data-testid="consent-scopes"] dt')).toHaveCount(4);
     const approve = page.locator('[data-testid="consent-form"] button[data-decision="approve"]');
     await expect(approve).toHaveCount(1);
     guard.requireConsentPage();

@@ -124,7 +124,7 @@ func TestRevocationProbeReturnsStatusAndServerDate(t *testing.T) {
 }
 
 func TestRevocationRefreshClassifiesInvalidGrantRotationAndUnknown(t *testing.T) {
-	rotation := `{"access_token":"access-b","token_type":"Bearer","expires_in":3600,"refresh_token":"refresh-b","scope":"resumes:read resumes:write"}`
+	rotation := `{"access_token":"access-b","token_type":"Bearer","expires_in":3600,"refresh_token":"refresh-b","scope":"resumes:read resumes:write projects:read projects:write"}`
 	for name, test := range map[string]struct {
 		answer scriptedAnswer
 		want   refreshOutcome

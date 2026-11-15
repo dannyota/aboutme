@@ -223,7 +223,8 @@ for the origin.
 
 Every resume mutation requires an `Idempotency-Key` UUID. A record is scoped to
 the user and the canonical operation identity: method, registered operation, and
-concrete target IDs. Its request fingerprint includes the resolved wire version,
+concrete target IDs. Its request fingerprint includes the caller (an agent's
+grant, or the owner's sessions as one caller), the resolved wire version,
 normalized precondition, other operation-declared semantic inputs, and bounded
 body or raw file-part bytes. A matching retry returns the stored response
 without executing again. A reused key with a different fingerprint returns `409`

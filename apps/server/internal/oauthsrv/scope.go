@@ -17,20 +17,26 @@ const (
 	ScopeProjectsWrite Scope = "projects:write"
 )
 
-func requestableScopes() []Scope { return []Scope{ScopeResumesRead, ScopeResumesWrite} }
-
-func storableScopes() []Scope {
+func knownScopes() []Scope {
 	return []Scope{ScopeResumesRead, ScopeResumesWrite, ScopeProjectsRead, ScopeProjectsWrite}
 }
 
 type Scopes []Scope
 
 func ParseScopes(raw string) (Scopes, error) {
-	return parseScopeSet(raw, requestableScopes())
+	return parseScopeSet(raw, knownScopes())
+}
+
+func canonicalScope(raw string) string {
+	scopes, err := ParseScopes(raw)
+	if err != nil {
+		return raw
+	}
+	return scopes.String()
 }
 
 func ParseStoredScopes(raw string) (Scopes, error) {
-	scopes, err := parseScopeSet(raw, storableScopes())
+	scopes, err := parseScopeSet(raw, knownScopes())
 	if err != nil || scopes.String() != raw {
 		return nil, ErrScopeInvalid
 	}

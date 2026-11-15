@@ -18,33 +18,58 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
+var ErrAgentScopeDenied = errors.New("resumeapi: agent grant lacks a required scope")
+
+func RequireAgentScopesTx(ctx context.Context, qtx *store.Queries, principal AgentPrincipal, now time.Time,
+	required ...oauthsrv.Scope,
+) (oauthsrv.Scopes, error) {
+	if !principal.valid() {
+		return nil, ErrAgentAccessUnavailable
+	}
+	authority, err := qtx.GetOAuthTokenAuthorityByDigest(ctx, principal.tokenDigest[:])
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrAgentAccessUnavailable
+		}
+		return nil, fmt.Errorf("resumeapi: read mutation token authority: %w", err)
+	}
+	token, grant := authority.OAuthToken, authority.OAuthGrant
+	scopes, scopeErr := oauthsrv.ParseStoredScopes(grant.Scopes)
+	if scopeErr != nil ||
+		subtle.ConstantTimeCompare(token.TokenDigest, principal.tokenDigest[:]) != 1 ||
+		token.ID != principal.tokenID || token.UserID != principal.userID || token.GrantID != principal.grantID ||
+		token.Kind != string(oauthsrv.TokenKindAccess) || token.UserID != authority.User.ID || token.UserID != grant.UserID ||
+		token.ClientID != grant.ClientID || token.GrantID != grant.ID || token.RevokedAt != nil || token.SupersededAt != nil ||
+		grant.RevokedAt != nil || !token.ExpiresAt.After(now) || !token.FamilyExpiresAt.After(now) {
+		return nil, ErrAgentAccessUnavailable
+	}
+	for _, scope := range required {
+		if !scopes.Has(scope) {
+			return nil, ErrAgentScopeDenied
+		}
+	}
+	return scopes, nil
+}
+
 func (s *Service) transactionMutation(ctx context.Context, qtx *store.Queries, mutation mutationContext) (mutationContext, error) {
 	if qtx == nil {
 		return mutationContext{}, errors.New("resumeapi: mutation transaction is unavailable")
 	}
 	if mutation.Agent != nil {
-		authority, err := qtx.GetOAuthTokenAuthorityByDigest(ctx, mutation.Agent.tokenDigest[:])
-		s.recordTransactionOrder("token")
-		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return mutationContext{}, ErrAgentAccessUnavailable
-			}
-			return mutationContext{}, fmt.Errorf("resumeapi: read mutation token authority: %w", err)
-		}
 		now := time.Now()
 		if s.clock != nil {
 			now = s.clock()
 		}
-		token, grant := authority.OAuthToken, authority.OAuthGrant
-		scopes, scopeErr := oauthsrv.ParseStoredScopes(grant.Scopes)
-		if scopeErr != nil || !scopes.Has(oauthsrv.ScopeResumesWrite) ||
-			subtle.ConstantTimeCompare(token.TokenDigest, mutation.Agent.tokenDigest[:]) != 1 ||
-			token.ID != mutation.Agent.tokenID || token.UserID != mutation.Agent.userID || token.GrantID != mutation.Agent.grantID ||
-			token.Kind != string(oauthsrv.TokenKindAccess) || token.UserID != authority.User.ID || token.UserID != grant.UserID ||
-			token.ClientID != grant.ClientID || token.GrantID != grant.ID || token.RevokedAt != nil || token.SupersededAt != nil ||
-			grant.RevokedAt != nil || !token.ExpiresAt.After(now) || !token.FamilyExpiresAt.After(now) {
-			return mutationContext{}, ErrAgentAccessUnavailable
+		required := mutation.AgentRequired
+		if len(required) == 0 {
+			required = []oauthsrv.Scope{oauthsrv.ScopeResumesWrite}
 		}
+		scopes, err := RequireAgentScopesTx(ctx, qtx, *mutation.Agent, now, required...)
+		s.recordTransactionOrder("token")
+		if err != nil {
+			return mutationContext{}, err
+		}
+		mutation.AgentScopes = scopes
 		return mutation, nil
 	}
 	session, err := qtx.GetSessionByID(ctx, mutation.SessionID)

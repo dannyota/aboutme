@@ -62,7 +62,7 @@ func TestReplace_RunsThroughTheLinkedResumePlan(t *testing.T) {
 	if w.Code != http.StatusOK || idempotency.executes != 0 || links.replacement == nil {
 		t.Fatalf("PUT = %d %s with %d direct transactions, want one planned replacement", w.Code, w.Body.String(), idempotency.executes)
 	}
-	operation, fingerprint := identity(http.MethodPut, id, 3, []byte(projectBody))
+	operation, fingerprint := identity(http.MethodPut, id, 3, resumeapi.SessionCaller, []byte(projectBody))
 	got := links.replacement
 	if got.UserID != sess.UserID || got.ProjectID != id || got.Key != key || got.Operation != operation || got.RequestHash != fingerprint {
 		t.Fatalf("replacement identity = %v %v %v %q, want the request's", got.UserID, got.ProjectID, got.Key, got.Operation)

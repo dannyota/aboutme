@@ -129,12 +129,16 @@ has a 30-day absolute lifetime. Revocation through RFC 7009 or the settings UI
 kills the grant and its token families in one transaction. Exact rate, cap, and
 body bounds live in [the numeric budgets](budgets.md).
 
-Scopes are closed to `resumes:read` and `resumes:write` and are enforced inside
-the resource server, per tool, never by the client. A token grants no publish,
-public-read, session, or account surface. Missing scope returns a closed
-`403 scope_denied` without touching resume state, and absent, malformed,
-expired, revoked, superseded, and cross-user tokens produce byte-identical
-closed 401 responses naming the protected-resource metadata URL.
+Scopes are closed to `resumes:read`, `resumes:write`, `projects:read`, and
+`projects:write` and are enforced inside the resource server, per tool, never by
+the client. A token grants no publish, public-read, session, or account surface.
+Missing scope returns a closed `403 scope_denied` without touching resume or
+project state, and absent, malformed, expired, revoked, superseded, and
+cross-user tokens produce byte-identical closed 401 responses naming the
+protected-resource metadata URL. Every agent mutation rereads the grant inside
+its transaction: a grant narrowed meanwhile answers the tool error
+`scope_denied`, and a revoked or missing grant answers
+`agent_access_unavailable`, before it reads a project or writes anything.
 
 Cookie isolation is explicit: `/mcp`, `/oauth/token`, `/oauth/register`, and
 `/oauth/revoke` never parse cookies, so no CSRF surface exists there. The

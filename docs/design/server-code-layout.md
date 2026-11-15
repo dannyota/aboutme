@@ -216,14 +216,16 @@ never does.
 consumer-owned Call/Response shapes matching `resumeapi/validate.go`. Its
 adapter reconstructs `resumeapi.NewAgentPrincipal` and calls the same kernel; it
 retains transaction-time token/grant/epoch revalidation, never trusts an
-admission snapshot to authorize a write. Move the existing fifteen tool schemas
-and instructions unchanged. Pass SDK implementation metadata from `app`, with
-aboutme's exact name, version, icons and title. Supply closed tool-error mapping
-through `mcpapi.ToolErrors.Close(*mcp.CallToolResult)`, implemented by
-`resumemcp`; transport framing and pre-tool HTTP errors stay in core. Inject
-token/user Buckets; concurrency slots remain instance-owned in MCP. Another
-application supplies its own registrar, resource executor, error mapper, bearer
-store, parser, metadata and limits.
+admission snapshot to authorize a write. Move the existing twenty-two tool
+schemas, fifteen resume and seven project tools, and instructions unchanged; the
+project tools keep `projectapi.Service.ExecuteAgent` as their executor. Pass SDK
+implementation metadata from `app`, with aboutme's exact name, version, icons
+and title. Supply closed tool-error mapping through
+`mcpapi.ToolErrors.Close(*mcp.CallToolResult)`, implemented by `resumemcp`;
+transport framing and pre-tool HTTP errors stay in core. Inject token/user
+Buckets; concurrency slots remain instance-owned in MCP. Another application
+supplies its own registrar, resource executor, error mapper, bearer store,
+parser, metadata and limits.
 
 ### Google ports
 

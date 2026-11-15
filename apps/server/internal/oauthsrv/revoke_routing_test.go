@@ -16,6 +16,7 @@ import (
 	"danny.vn/aboutme/apps/server/internal/api"
 	"danny.vn/aboutme/apps/server/internal/mcpapi"
 	"danny.vn/aboutme/apps/server/internal/oauthsrv"
+	"danny.vn/aboutme/apps/server/internal/projectapi"
 	"danny.vn/aboutme/apps/server/internal/resumeapi"
 )
 
@@ -23,6 +24,12 @@ type revokeRoutingExecutor struct{}
 
 func (revokeRoutingExecutor) ExecuteAgent(context.Context, resumeapi.AgentPrincipal, resumeapi.AgentCall) resumeapi.AgentResponse {
 	panic("revocation routing proof must not execute a resume tool")
+}
+
+type revokeRoutingProjects struct{}
+
+func (revokeRoutingProjects) ExecuteAgent(context.Context, resumeapi.AgentPrincipal, projectapi.AgentCall) resumeapi.AgentResponse {
+	panic("revocation routing proof must not execute a project tool")
 }
 
 func newRevokeRouter(t *testing.T, f oauthsrv.RevokeRoutingFixture) http.Handler {
@@ -39,7 +46,7 @@ func newRevokeRouter(t *testing.T, f oauthsrv.RevokeRoutingFixture) http.Handler
 		t.Fatal(err)
 	}
 	mcp, err := mcpapi.NewServer(mcpapi.ServerDependencies{
-		Bearer: bearer, Resumes: revokeRoutingExecutor{}, Rates: rates, MaxRequestBodyBytes: 4 << 20,
+		Bearer: bearer, Resumes: revokeRoutingExecutor{}, Projects: revokeRoutingProjects{}, Rates: rates, MaxRequestBodyBytes: 4 << 20,
 	})
 	if err != nil {
 		t.Fatal(err)

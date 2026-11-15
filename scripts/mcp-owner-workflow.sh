@@ -550,7 +550,7 @@ check_evidence() {
   secure_file "$path" && [ "$(stat -c %s -- "$path")" -le 4096 ] || return 1
   jq -er --arg mode "$MODE" '
     {version: 1, mode: $mode, stage: "owner_workflow", sdk_version: "go-sdk v1.8.0",
-      transport: "streamable-http", tool_count: 15, language: "vi", source_unchanged: true,
+      transport: "streamable-http", tool_count: 22, language: "vi", source_unchanged: true,
       target_private: true, count_delta: 1, revocation: "revoked", post_revocation_401: true} as $done
     | if $mode == "production" and . == ($done + {stage: "revocation_recovery", sdk_version: "",
         transport: "", tool_count: 0, language: "", source_unchanged: false, target_private: false,

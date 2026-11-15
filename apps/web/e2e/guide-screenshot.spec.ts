@@ -325,7 +325,7 @@ async function assertGuide(
   );
   await expect(guide.getByRole('heading', { level: 2 }))
     .toHaveText(headings);
-  await expect(page.getByTestId('guide-can').locator('li')).toHaveCount(5);
+  await expect(page.getByTestId('guide-can').locator('li')).toHaveCount(6);
   await expect(page.getByTestId('guide-cannot').locator('li'))
     .toHaveCount(5);
   await expect(page.getByTestId('guide-claude-web-disk')).toHaveCount(6);
@@ -399,6 +399,9 @@ async function assertGuide(
           'Tải lên, cắt hoặc xóa ảnh chân dung.',
           'Xóa CV. Xóa một CV đã xuất bản cũng gỡ đường dẫn công khai của '
           + 'CV đó.',
+          'Đọc và chỉnh sửa dự án trong thư viện, và gắn dự án vào CV. Thay '
+          + 'đổi trên một dự án đang hiện trên CV đã xuất bản sẽ công khai '
+          + 'ngay.',
         ]
       : [
           'List and read your resumes, including the photo.',
@@ -407,6 +410,9 @@ async function assertGuide(
           'Upload, crop, or remove the photo.',
           'Delete a resume. Deleting a published resume also takes its public '
           + 'link down.',
+          'Read and edit the projects in your library and link them to your '
+          + 'resumes. A change to a project shown on a published resume is '
+          + 'public at once.',
         ]);
   await expect(page.getByTestId('guide-cannot').locator('li')).toHaveText(
     locale === 'vi'
