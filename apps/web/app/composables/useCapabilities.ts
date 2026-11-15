@@ -25,6 +25,7 @@ export interface UseCapabilitiesReturn {
   passkeyEnrollment: ComputedRef<boolean>;
   totpEnrollment: ComputedRef<boolean>;
   signInToView: ComputedRef<boolean>;
+  githubEvidence: ComputedRef<boolean>;
   resolved: ComputedRef<boolean>;
 }
 
@@ -52,6 +53,9 @@ export function useCapabilities(): UseCapabilitiesReturn {
   const signInToView = computed(
     () => data.value?.data?.signInToView === true,
   );
+  const githubEvidence = computed(
+    () => data.value?.data?.githubEvidence === true,
+  );
   const passwordRegistration = computed(
     () => data.value?.data?.passwordRegistration !== false,
   );
@@ -69,6 +73,7 @@ export function useCapabilities(): UseCapabilitiesReturn {
     passkeyEnrollment,
     totpEnrollment,
     signInToView,
+    githubEvidence,
     resolved,
   };
 }

@@ -219,6 +219,7 @@ apps/web/app/components/resume/sections/SkillSection.vue
 apps/web/app/components/resume/sections/WorkSection.vue
 apps/web/app/components/resume/useResumeStyles.ts
 apps/web/app/components/settings/ConnectedAgents.vue
+apps/web/app/components/settings/GitHubEvidence.vue
 apps/web/app/components/settings/LinkedIdentities.vue
 apps/web/app/components/settings/PrivacySettings.vue
 apps/web/app/components/settings/ReauthPrompt.vue
@@ -428,6 +429,7 @@ apps/web/app/i18n/editor-sections.ts
 apps/web/app/i18n/editor-shell.ts
 apps/web/app/i18n/error.ts
 apps/web/app/i18n/filters.ts
+apps/web/app/i18n/github-evidence-settings.ts
 apps/web/app/i18n/guide.ts
 apps/web/app/i18n/identity-settings.ts
 apps/web/app/i18n/import.ts
