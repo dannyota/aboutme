@@ -81,8 +81,8 @@ dev-https-linkedin-import-check)
   ;;
 dev-https-auth-check)
   if [ "${AUTH_EVIDENCE:-0}" = 1 ]; then
-    mkdir -p "$evidence/auth.a"
-    : >"$evidence/auth.a/auth-proof.json"
+    mkdir -p "$evidence/google-auth.a"
+    : >"$evidence/google-auth.a/auth-proof.json"
   fi
   ;;
 esac
@@ -207,12 +207,12 @@ if compgen -G "$REPO/.dev/native-https/evidence/*" >/dev/null; then
 fi
 
 AUTH_EVIDENCE=1 run_group kept-auth auth || :
-[ -f "$REPO/.dev/native-https/evidence/auth.a/auth-proof.json" ] ||
+[ -f "$REPO/.dev/native-https/evidence/google-auth.a/auth-proof.json" ] ||
   fail "a proof outside editor, exports and linkedin-import lost its evidence from the evidence root"
-if [ -n "$(find "$staged" -name 'auth.*' -print -quit)" ]; then
+if [ -n "$(find "$staged" -name 'google-auth.*' -print -quit)" ]; then
   fail "a proof outside editor, exports and linkedin-import had its evidence staged for upload"
 fi
-rm -rf -- "$REPO/.dev/native-https/evidence/auth.a"
+rm -rf -- "$REPO/.dev/native-https/evidence/google-auth.a"
 
 for bad in '' 'totp:' 'Editor' '../x' 'totp:skew;id' 'totp:skew,' 'totp:,skew' \
   'passkey:primary-disabled,recovery-attempts' 'editor,exports'; do
