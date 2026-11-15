@@ -59,43 +59,34 @@ export async function measureChromeGrid(grid: Locator): Promise<{
   });
 }
 
-export async function measureChromeSheet(stage: Locator): Promise<boolean> {
-  return stage.evaluate((element) => {
-    const sheet = element.querySelector('[data-testid="landing-sheet"]');
-    const ghost = element.querySelector('[data-testid="landing-ghost"]');
-    if (!sheet || !ghost) {
+export async function measureChromeSheet(art: Locator): Promise<boolean> {
+  return art.evaluate((element) => {
+    const sheet = element.querySelector<HTMLElement>(
+      '[data-testid="landing-sheet"]',
+    );
+    const hero = element.closest('[data-testid="landing-hero"]');
+    if (!sheet || !hero) {
       return false;
     }
+    const [zoom, overhang] = innerWidth >= 1280
+      ? [0.54, 72]
+      : innerWidth >= 1024
+        ? [0.5, 72]
+        : innerWidth >= 768
+          ? [0.6, 64]
+          : innerWidth >= 448 ? [0.5, 48] : [0.36, 48];
+    const pageWidth = 210 * 96 / 25.4;
     const a = element.getBoundingClientRect();
     const b = sheet.getBoundingClientRect();
-    const style = getComputedStyle(ghost);
-    const offset = style.translate.split(' ').map(Number.parseFloat);
-    return a.width > 0 && a.height > 0
-      && Math.abs(a.left - b.left) <= 1
-      && Math.abs(a.top - b.top) <= 1
-      && Math.abs(a.width - b.width) <= 1
-      && Math.abs(a.height - b.height) <= 1
-      && Math.abs((offset[0] ?? 0) - (innerWidth >= 672 ? 24 : 12)) <= 1
-      && Math.abs((offset[1] ?? 0) - (innerWidth >= 672 ? -24 : -12)) <= 1;
-  });
-}
-
-export async function measureChromeThumbnail(card: Locator): Promise<boolean> {
-  return card.evaluate((element) => {
-    const frame = element.querySelector('[data-sheet-thumbnail]');
-    const sheet = element.querySelector('.scaled-sheet-content');
-    if (!frame || !sheet) {
-      return false;
-    }
-    const box = frame.getBoundingClientRect();
-    const page = sheet.getBoundingClientRect();
-    const transform = new DOMMatrixReadOnly(getComputedStyle(sheet).transform);
-    return box.width > 0 && box.height > 0
-      && Math.abs(box.width / box.height - 794 / 1123) < 0.001
-      && Math.abs(transform.a - box.width / 794) < 0.001
-      && Math.abs(page.width - box.width) <= 1
-      && getComputedStyle(frame).backgroundColor === 'rgb(255, 255, 255)'
-      && getComputedStyle(frame).overflow === 'hidden';
+    const panel = hero.getBoundingClientRect();
+    const matrix = new DOMMatrixReadOnly(getComputedStyle(sheet).transform);
+    const angle = Math.atan2(matrix.b, matrix.a) * 180 / Math.PI;
+    return Math.abs(sheet.offsetWidth - pageWidth * zoom) <= 1
+      && Math.abs(sheet.offsetHeight - pageWidth * 297 / 210 * zoom) <= 1
+      && Math.abs(angle + 3) < 0.01
+      && Math.abs((a.left + a.right) / 2 - (b.left + b.right) / 2) <= 1
+      && Math.abs((a.top + a.bottom) / 2 - (b.top + b.bottom) / 2) <= 1
+      && Math.abs(a.bottom - panel.bottom - overhang) <= 1;
   });
 }
 
