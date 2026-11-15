@@ -18,15 +18,18 @@ page" ([roadmap](../plans/roadmap.md#v09-show-the-work)). It builds on the
 
 ## Enablement
 
-| Configuration                          | Evidence routes | GitHub sign-in         |
-| -------------------------------------- | --------------- | ---------------------- |
-| Evidence application credentials unset | 404             | As ADR 0016 configures |
-| Evidence application credentials set   | On              | As ADR 0016 configures |
+| Configuration                                 | Evidence routes           | GitHub sign-in         |
+| --------------------------------------------- | ------------------------- | ---------------------- |
+| Evidence client id and secret both unset      | 404                       | As ADR 0016 configures |
+| Evidence client id and secret both set        | On                        | As ADR 0016 configures |
+| Only one of the evidence client id and secret | The server does not start | Unchanged              |
 
 The evidence application is a GitHub OAuth application of its own, with its own
-client id, secret and callback URL. The capabilities response tells the web app
-whether evidence is available. Sign-in start methods, purposes and scopes
-([ADR 0016](../adr/0016-sign-in-providers.md)) are untouched.
+client id and secret. Its callback URL is the public origin plus the fixed path
+`/api/v1/github-evidence/callback`, as for sign-in providers. The capabilities
+response tells the web app whether evidence is available. Sign-in start methods,
+purposes and scopes ([ADR 0016](../adr/0016-sign-in-providers.md)) are
+untouched.
 
 Connecting collects GitHub identity data. In production the credentials are set,
 and the feature turns on, only after two conditions hold. First, the bilingual
@@ -106,7 +109,7 @@ months, which is why it is dropped at once.
   export. A database backup contains none.
 - No log, error or diagnostic dump contains the access or refresh token, the
   client secret, an `Authorization` header, a request or response body, or a raw
-  GitHub error. The server container runs with core dumps off (`Ulimit=core:0:0`
+  GitHub error. The server container runs with core dumps off (`Ulimit=core=0:0`
   in its Quadlet). [Host hardening](host-hardening.md#database-logs-and-cores)
   proposes this limit for every Quadlet; the server's comes first, with this
   feature.
@@ -257,7 +260,8 @@ Either way each affected project changes through one library mutation.
 - `project_evidence`: project (cascade), position, the item fields above.
 - The OAuth transaction purpose and user-binding constraints gain `evidence`,
   with the connection generation recorded on the transaction.
-- Configuration: evidence client id, client secret and callback URL.
+- Configuration: evidence client id and client secret; the callback URL is the
+  public origin plus the fixed callback path, as for sign-in providers.
 
 ## Checks
 
@@ -269,7 +273,7 @@ Either way each affected project changes through one library mutation.
 - Every token discarded after the code exchange gets exactly one revocation
   attempt, also when endings race, and none of the secrets or raw responses
   above reaches a log or error.
-- The server Quadlet sets `Ulimit=core:0:0`.
+- The server Quadlet sets `Ulimit=core=0:0`.
 - No route, export, log, error or database row contains a GitHub token.
 - An item is attached only when its rule holds for the connected account id; a
   login match never confirms; a contributor is never confirmed.
@@ -286,5 +290,6 @@ Either way each affected project changes through one library mutation.
 ## Owner action before release
 
 The owner created the production evidence application on 2026-11-15, with token
-expiration on and no device flow. Its client id, secret and callback URL reach
-the server as configuration; until they are set the feature stays off.
+expiration on and no device flow. Its registered callback is
+`https://aboutme.vn/api/v1/github-evidence/callback`. Its client id and secret
+reach the server as configuration; until both are set the feature stays off.
