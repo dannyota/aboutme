@@ -66,9 +66,6 @@ release_read() {
   printf '%s' "$doc"
 }
 
-# flags.env as a JSON object. Each line is blank, a comment, or NAME=value
-# with no quotes or spaces, so Podman's env-file reader and this one read the
-# same values; anything else, or a repeated name, refuses.
 flags_json() {
   jq -Rn '
     [inputs | select(test("^[[:space:]]*(#|$)") | not)
@@ -470,7 +467,6 @@ cimd_env_mcp_flag() {
 cimd_effective_mcp_flag() {
   local unit=${1:-$templates/aboutme-server.container.in} files file value effective=absent inline
   [[ -r $unit ]] || return 1
-  # Refuse alternate environment mechanisms that this reader cannot prove.
   if grep -Eq '^(EnvironmentHost=|EnvironmentMerge=|UnsetEnvironment=)|^PodmanArgs=.*--(env|unsetenv)|^Secret=.*target=MCP_ENABLED([,[:space:]]|$)' "$unit"; then
     return 1
   fi
@@ -494,8 +490,6 @@ cimd_effective_mcp_flag() {
 }
 
 cimd_url_rows_exist() {
-  # to_jsonb also permits a database whose additive CIMD migration is absent.
-  # Only a Boolean existence result leaves PostgreSQL.
   runuser -u postgres -- psql -X -qAt -v ON_ERROR_STOP=1 -d aboutme \
     -c "SELECT EXISTS (SELECT 1 FROM public.oauth_clients AS client WHERE to_jsonb(client)->>'metadata_url' IS NOT NULL)" 2>/dev/null
 }

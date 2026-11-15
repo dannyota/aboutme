@@ -41,7 +41,6 @@ require_root_dir() {
   [[ $(stat -c '%u %a' -- "$1") == "0 $2" ]] || die "$1 must be owned by root with mode $2"
 }
 
-# Writes stdin to one secret file, so a reader never sees a partial value.
 store() {
   local name=$1 replace=$2 tmp size
   if [[ -e $dir/$name || -L $dir/$name ]] && ((!replace)); then
@@ -80,10 +79,6 @@ cmd_generate() {
   write_pgbackrest_conf
 }
 
-# pgBackRest reads its repository key and cipher pass from a file on the data
-# volume (host/etc/pgbackrest/secrets.conf.example). Its directory is owned by
-# root, group postgres, mode 0750, so postgres can read the file but cannot
-# place anything where root writes.
 write_pgbackrest_conf() {
   local f
   for f in backup-access-key-id backup-secret-access-key pgbackrest-cipher-pass; do
@@ -122,8 +117,6 @@ cmd_import() {
   ((!replace)) || cmd_podman_sync --replace "$name"
 }
 
-# Telegram uses the final host file directly under the sender's exclusive
-# lock. No temporary plaintext file or Podman copy is made during rotation.
 store_telegram() {
   local name=$1 replace=$2 value pattern exists=no
   export -n value
@@ -156,9 +149,6 @@ store_telegram() {
   say "stored $name"
 }
 
-# The key file create-s3-key writes, in the AWS shared credentials format: one
-# [default] section with exactly the two keys. One awk program is the only
-# parser, and it refuses any other shape.
 cmd_import_s3() {
   local which=$1 replace=0 parsed id secret prefix
   [[ ${2-} == --replace ]] && replace=1
@@ -213,8 +203,6 @@ cmd_podman_sync() {
   done
 }
 
-# bouncer_key_valid succeeds when the local API accepts the local key. The key
-# goes to curl on stdin (printf is a builtin), never in argv.
 bouncer_key_valid() {
   local code
   code=$(printf 'header = "X-Api-Key: %s"\n' "$(cat "$dir/crowdsec-bouncer-key")" |
@@ -223,7 +211,6 @@ bouncer_key_valid() {
   [[ $code == 200 ]]
 }
 
-# cscli generates the key directly into a private file. No value reaches argv.
 cmd_bouncer_register() {
   local tmp registrations
   /usr/local/lib/aboutme/crowdsec-db.sh preflight-ready </dev/null >/dev/null 2>&1 ||
