@@ -3,7 +3,6 @@
 Code for production at `https://aboutme.vn` on one GreenNode vServer in Ho Chi
 Minh City, under [ADR 0026](../../docs/adr/0026-vietnam-hosted-production.md)
 and the [Vietnam production design](../../docs/design/vietnam-production.md).
-`deploy/aws/` stays undeployed for a possible AWS ECS or Kubernetes path.
 
 Production serves from HCM03-1C. Cutover completed on 2026-10-11 with release
 v0.7.3, and AWS was removed. Cloudflare provides DNS-only records managed by
@@ -130,9 +129,9 @@ Installation creates the root reporter's observation directory and the
 observer-owned public directory, enables `aboutme-deployment-document.timer`,
 and installs the observer Quadlet template. A release with
 `aboutme-observer:<tag>-amd64` starts or restarts `aboutme-observer.service`
-after checking its provenance and single `linux/amd64` manifest. The plain
-observer version tag remains arm64 for Lambda. The observer stays up during
-maintenance. Deploys and rollbacks without that image keep the installed
+after checking its provenance and single `linux/amd64` manifest. No deployment
+uses the plain observer version tag, an arm64 image. The observer stays up
+during maintenance. Deploys and rollbacks without that image keep the installed
 observer unit. See the [observer runbook](../../docs/runbooks/observer.md).
 
 To rotate a media or backup key, create its new local key file, then run

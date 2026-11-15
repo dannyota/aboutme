@@ -3,7 +3,11 @@ package authmail
 import (
 	"context"
 	"errors"
+	"unicode"
+	"unicode/utf8"
 )
+
+const maxFromNameRunes = 64
 
 type Message struct {
 	Kind     Kind   `json:"kind"`
@@ -29,7 +33,29 @@ type Sender interface {
 	Send(context.Context, Message) (SendResult, error)
 }
 
-var (
-	ErrWorker = errors.New("authmail: invalid worker options")
-	ErrSES    = errors.New("authmail: invalid ses sender options")
-)
+var ErrWorker = errors.New("authmail: invalid worker options")
+
+func (o SendOutcome) String() string {
+	switch o {
+	case SendAccepted:
+		return "accepted"
+	case SendTemporaryFailure:
+		return "temporary"
+	case SendPermanentFailure:
+		return "permanent"
+	default:
+		return "unknown"
+	}
+}
+
+func validFromName(name string) bool {
+	if !utf8.ValidString(name) || utf8.RuneCountInString(name) > maxFromNameRunes {
+		return false
+	}
+	for _, r := range name {
+		if unicode.IsControl(r) {
+			return false
+		}
+	}
+	return true
+}

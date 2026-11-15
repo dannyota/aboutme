@@ -7,14 +7,10 @@ ignore node_modules
 
 require (
 	github.com/altcha-org/altcha-lib-go/v2 v2.4.1
-	github.com/aws/aws-lambda-go v1.55.1
 	github.com/aws/aws-sdk-go-v2 v1.48.0
 	github.com/aws/aws-sdk-go-v2/config v1.33.18
 	github.com/aws/aws-sdk-go-v2/credentials v1.21.0
-	github.com/aws/aws-sdk-go-v2/service/ecs v1.105.1
-	github.com/aws/aws-sdk-go-v2/service/rds v1.133.0
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.114.10
-	github.com/aws/aws-sdk-go-v2/service/sesv2 v1.79.9
 	github.com/aws/smithy-go v1.28.9
 	github.com/chromedp/cdproto v0.159.3
 	github.com/chromedp/chromedp v0.23.0

@@ -4,7 +4,8 @@ Status: Accepted (2026-09-24) for the provider choice, by the human owner's
 direction; the design choices in the
 [Vietnam production design](../design/vietnam-production.md) were approved on
 2026-10-10 and amended on 2026-10-11. The CrowdSec storage and backup amendment
-was accepted on 2026-10-18. Production runs on the Vietnam host.
+was accepted on 2026-10-18. The removal of the undeployed AWS code was accepted
+on 2026-11-15. Production runs on the Vietnam host.
 
 ## Decision
 
@@ -32,9 +33,10 @@ Vietnam:
   In-alarm, Up, and Undetermined notifications to the Telegram channel
   `aboutme-alerts`; the GitHub uptime workflow remains a slower backstop.
 
-The AWS production stack and its state bootstrap are removed. Nothing from
-`deploy/aws/` is deployed. The code stays for a possible return to AWS ECS or
-move to Kubernetes. The
+The AWS production stack, its state bootstrap, and the undeployed AWS code are
+removed: `deploy/aws/`, the SES mail mode, the RDS release snapshot job, and the
+observer's ECS, Kubernetes, and Lambda paths. Git history keeps them. vStorage
+stays reachable through the S3 API. The
 [Vietnam production design](../design/vietnam-production.md) states the running
 topology and recovery rules.
 
@@ -325,3 +327,7 @@ was deleted.
 and single-page, single-review limits after the live probe. Retained solo owner
 approval and parallel laptop deployment; implementation follows the design's
 release order.
+
+2026-11-15: the owner removed the undeployed AWS code kept since 2026-10-11 for
+a possible AWS ECS or Kubernetes path. It drew dependency updates and review for
+code nothing runs; a return would start from Git history and a new decision.

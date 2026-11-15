@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestDispatchVersion(t *testing.T) {
 	if err := dispatch([]string{"version"}); err != nil {
@@ -17,6 +20,14 @@ func TestDispatchNoArgs(t *testing.T) {
 func TestDispatchUnknownCommand(t *testing.T) {
 	if err := dispatch([]string{"launch-the-missiles"}); err == nil {
 		t.Fatal("dispatch([launch-the-missiles]): got nil error")
+	}
+}
+
+func TestDispatchRefusesLambda(t *testing.T) {
+	clearObserverEnv(t)
+	err := dispatch([]string{"lambda"})
+	if err == nil || !strings.Contains(err.Error(), "unknown command") {
+		t.Fatalf("dispatch([lambda]) = %v, want an unknown command", err)
 	}
 }
 

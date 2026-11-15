@@ -60,12 +60,11 @@ Run one-shot jobs from this directory. The
 [privacy runbook](../../docs/runbooks/privacy.md#commands-and-schedules) defines
 the required environment, command results, and failure handling. The
 [scheduled-job architecture](../../docs/architecture/resume-data.md#scheduled-jobs)
-distinguishes production timers from the retained AWS command.
+describes the production timers.
 
 ```sh
 go run ./cmd/server idempotency-expiry-sweep
 go run ./cmd/server media-deletion-sweep
 go run ./cmd/server media-orphan-sweep --dry-run
 go run ./cmd/server privacy-retention-sweep
-go run ./cmd/server release-snapshot-sweep
 ```

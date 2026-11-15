@@ -4,8 +4,7 @@ This design fixes how TOTP secrets are sealed, how the key ring is configured
 and rotated, and how a key failure stays confined to TOTP. The
 [authenticator-app contract](totp-second-factor-contract.md) owns every other
 TOTP rule, and the [TOTP key runbook](../runbooks/totp-keys.md) holds the
-Vietnam operator procedures. The [AWS reference](aws-totp-key-management.md)
-owns ECS injection, task execution, and AWS monitoring.
+Vietnam operator procedures.
 
 ## Sealing
 
@@ -38,12 +37,7 @@ and binds each stored ID to one key value. Startup fails when the active key is
 missing or malformed, the previous value is present but malformed, or both keys
 derive the same ID.
 
-See [AWS key injection](aws-totp-key-management.md#key-ring) for the ECS
-reference.
-
 ## Rotation
-
-See [AWS rotation](aws-totp-key-management.md#rotation) for the ECS reference.
 
 Vietnam key rotation remains an
 [open host procedure](../runbooks/totp-keys.md#key-rotation).
@@ -73,9 +67,6 @@ removes the blocking row. No operator deletes or rewrites a credential
 ([ADR 0003](../adr/0003-public-namespace-and-no-operator-surface.md)).
 
 ## Key failures
-
-See [AWS monitoring](aws-totp-key-management.md#key-failures) for the ECS
-reference.
 
 A stored key ID outside the ring or an AES-GCM authentication failure fails
 closed for that TOTP row only. Verification, enrollment completion, and

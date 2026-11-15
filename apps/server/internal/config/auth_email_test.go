@@ -16,20 +16,11 @@ func captureAuthEmail() map[string]string {
 		"AUTH_EMAIL_CAPTURE_BEARER": testBase64URL32,
 		"SES_FROM_ADDRESS":          "",
 		"SES_FROM_NAME":             "",
-		"SES_CONFIGURATION_SET":     "",
-		"AWS_REGION":                "",
-	}
-}
-
-func sesAuthEmail() map[string]string {
-	return map[string]string{
-		"AUTH_EMAIL_MODE":           "ses",
-		"SES_FROM_ADDRESS":          "noreply@example.com",
-		"SES_FROM_NAME":             "",
-		"SES_CONFIGURATION_SET":     "aboutme",
-		"AWS_REGION":                "ap-southeast-1",
-		"AUTH_EMAIL_CAPTURE_URL":    "",
-		"AUTH_EMAIL_CAPTURE_BEARER": "",
+		"SMTP_HOST":                 "",
+		"SMTP_PORT":                 "",
+		"SMTP_TLS":                  "",
+		"SMTP_USERNAME":             "",
+		"SMTP_PASSWORD":             "",
 	}
 }
 
@@ -38,8 +29,6 @@ func smtpAuthEmail() map[string]string {
 		"AUTH_EMAIL_MODE":           "smtp",
 		"SES_FROM_ADDRESS":          "noreply@example.com",
 		"SES_FROM_NAME":             "Danny from aboutme.vn",
-		"SES_CONFIGURATION_SET":     "",
-		"AWS_REGION":                "",
 		"AUTH_EMAIL_CAPTURE_URL":    "",
 		"AUTH_EMAIL_CAPTURE_BEARER": "",
 		"SMTP_HOST":                 "smtp.example.com",
@@ -56,8 +45,8 @@ func applySMTP(v map[string]string) {
 	}
 }
 
-func applySES(v map[string]string) {
-	for k, val := range sesAuthEmail() {
+func applyCapture(v map[string]string) {
+	for k, val := range captureAuthEmail() {
 		v[k] = val
 	}
 }
@@ -91,20 +80,29 @@ func TestLoad_AuthEmailCaptureModeDev(t *testing.T) {
 	}
 }
 
-func TestLoad_AuthEmailSESMode(t *testing.T) {
+func TestLoad_AuthEmailRejectsSESMode(t *testing.T) {
 	t.Parallel()
 
 	vars := validDevEnv()
-	for k, v := range sesAuthEmail() {
+	for k, v := range map[string]string{
+		"AUTH_EMAIL_MODE":           "ses",
+		"SES_FROM_ADDRESS":          "noreply@example.com",
+		"SES_FROM_NAME":             "",
+		"SES_CONFIGURATION_SET":     "aboutme",
+		"AWS_REGION":                "ap-southeast-1",
+		"AUTH_EMAIL_CAPTURE_URL":    "",
+		"AUTH_EMAIL_CAPTURE_BEARER": "",
+		"SMTP_HOST":                 "",
+		"SMTP_PORT":                 "",
+		"SMTP_TLS":                  "",
+		"SMTP_USERNAME":             "",
+		"SMTP_PASSWORD":             "",
+	} {
 		vars[k] = v
 	}
-	got, err := config.Load(env(vars))
-	if err != nil {
-		t.Fatal(err)
-	}
-	a := got.AuthEmail
-	if a.Mode != "ses" || a.SESFrom != "noreply@example.com" || a.SESConfigSet != "aboutme" || a.SESRegion != "ap-southeast-1" {
-		t.Errorf("SES config = %+v", a)
+	_, err := config.Load(env(vars))
+	if err == nil || !strings.Contains(err.Error(), "AUTH_EMAIL_MODE") {
+		t.Fatalf("Load() error = %v, want an unknown AUTH_EMAIL_MODE", err)
 	}
 }
 
@@ -112,9 +110,7 @@ func TestLoad_AuthEmailSESFromName(t *testing.T) {
 	t.Parallel()
 
 	vars := validDevEnv()
-	for k, v := range sesAuthEmail() {
-		vars[k] = v
-	}
+	applySMTP(vars)
 	vars["SES_FROM_NAME"] = "  Danny from aboutme "
 	got, err := config.Load(env(vars))
 	if err != nil {
@@ -133,7 +129,6 @@ func TestLoad_AuthEmailSMTPMode(t *testing.T) {
 		applySMTP(vars)
 		vars["SMTP_PORT"], vars["SMTP_TLS"] = tc.port, tc.tls
 		vars["SMTP_HOST"] = "SMTP.Example.com"
-		vars["AWS_REGION"] = "ap-southeast-1"
 		got, err := config.Load(env(vars))
 		if err != nil {
 			t.Fatalf("%s/%s: %v", tc.port, tc.tls, err)
@@ -213,7 +208,6 @@ func TestLoad_AuthEmailSMTPErrorsNameVariableNotValue(t *testing.T) {
 		{"password with leading newline", "SMTP_PASSWORD", "\npassword", "SMTP_PASSWORD"},
 		{"overlong password", "SMTP_PASSWORD", strings.Repeat("p", 257), "SMTP_PASSWORD"},
 		{"missing from", "SES_FROM_ADDRESS", "", "SES_FROM_ADDRESS"},
-		{"configuration set", "SES_CONFIGURATION_SET", "aboutme-auth", "SES_CONFIGURATION_SET"},
 		{"capture url", "AUTH_EMAIL_CAPTURE_URL", "http://127.0.0.1:20091", "AUTH_EMAIL_CAPTURE_URL"},
 	}
 	for _, tt := range tests {
@@ -244,18 +238,12 @@ func TestLoad_AuthEmailSMTPErrorsNameVariableNotValue(t *testing.T) {
 func TestLoad_AuthEmailSMTPFieldsRejectedInOtherModes(t *testing.T) {
 	t.Parallel()
 
-	for _, mode := range []func(map[string]string){applySES, func(v map[string]string) {
-		for k, val := range captureAuthEmail() {
-			v[k] = val
-		}
-	}} {
-		for _, key := range []string{"SMTP_HOST", "SMTP_PORT", "SMTP_TLS", "SMTP_USERNAME", "SMTP_PASSWORD"} {
-			vars := validDevEnv()
-			mode(vars)
-			vars[key] = "x"
-			if _, err := config.Load(env(vars)); err == nil || !strings.Contains(err.Error(), key) {
-				t.Errorf("%s set in %s mode: err = %v", key, vars["AUTH_EMAIL_MODE"], err)
-			}
+	for _, key := range []string{"SMTP_HOST", "SMTP_PORT", "SMTP_TLS", "SMTP_USERNAME", "SMTP_PASSWORD"} {
+		vars := validDevEnv()
+		applyCapture(vars)
+		vars[key] = "x"
+		if _, err := config.Load(env(vars)); err == nil || !strings.Contains(err.Error(), key) {
+			t.Errorf("%s set in %s mode: err = %v", key, vars["AUTH_EMAIL_MODE"], err)
 		}
 	}
 }
@@ -263,18 +251,12 @@ func TestLoad_AuthEmailSMTPFieldsRejectedInOtherModes(t *testing.T) {
 func TestLoad_AuthEmailWhitespaceCredentialsRejectedInOtherModes(t *testing.T) {
 	t.Parallel()
 
-	for _, mode := range []func(map[string]string){applySES, func(v map[string]string) {
-		for k, val := range captureAuthEmail() {
-			v[k] = val
-		}
-	}} {
-		for _, key := range []string{"SMTP_USERNAME", "SMTP_PASSWORD"} {
-			vars := validDevEnv()
-			mode(vars)
-			vars[key] = " "
-			if _, err := config.Load(env(vars)); err == nil || !strings.Contains(err.Error(), key) {
-				t.Errorf("%s set to whitespace in %s mode: err = %v", key, vars["AUTH_EMAIL_MODE"], err)
-			}
+	for _, key := range []string{"SMTP_USERNAME", "SMTP_PASSWORD"} {
+		vars := validDevEnv()
+		applyCapture(vars)
+		vars[key] = " "
+		if _, err := config.Load(env(vars)); err == nil || !strings.Contains(err.Error(), key) {
+			t.Errorf("%s set to whitespace in %s mode: err = %v", key, vars["AUTH_EMAIL_MODE"], err)
 		}
 	}
 }
@@ -326,25 +308,13 @@ func TestLoad_AuthEmailRejects(t *testing.T) {
 		{"capture missing bearer", func(v map[string]string) { v["AUTH_EMAIL_CAPTURE_BEARER"] = "" }},
 		{"capture with ses field", func(v map[string]string) { v["SES_FROM_ADDRESS"] = "noreply@example.com" }},
 		{"capture with ses from name", func(v map[string]string) { v["SES_FROM_NAME"] = "Danny" }},
-		{"ses with capture url", func(v map[string]string) {
-			applySES(v)
-			v["AUTH_EMAIL_CAPTURE_URL"] = "http://127.0.0.1:20091"
-		}},
-		{"ses wrong region", func(v map[string]string) {
-			applySES(v)
-			v["AWS_REGION"] = "us-east-1"
-		}},
-		{"ses noncanonical from", func(v map[string]string) {
-			applySES(v)
+		{"smtp noncanonical from", func(v map[string]string) {
+			applySMTP(v)
 			v["SES_FROM_ADDRESS"] = "not an email"
 		}},
-		{"ses from name with control character", func(v map[string]string) {
-			applySES(v)
+		{"smtp from name with control character", func(v map[string]string) {
+			applySMTP(v)
 			v["SES_FROM_NAME"] = "Danny\x07"
-		}},
-		{"ses bad config set", func(v map[string]string) {
-			applySES(v)
-			v["SES_CONFIGURATION_SET"] = "bad set!"
 		}},
 	}
 
@@ -370,15 +340,7 @@ func TestLoad_AuthEmailCaptureRejectedOutsideDev(t *testing.T) {
 	for _, environment := range []string{"staging", "prod"} {
 		vars := validDevEnv()
 		vars["ENV"] = environment
-		for k, v := range sesAuthEmail() {
-			vars[k] = v
-		}
-		vars["AUTH_EMAIL_MODE"] = "capture"
-		vars["AUTH_EMAIL_CAPTURE_URL"] = "http://127.0.0.1:20091"
-		vars["AUTH_EMAIL_CAPTURE_BEARER"] = testBase64URL32
-		vars["SES_FROM_ADDRESS"] = ""
-		vars["SES_CONFIGURATION_SET"] = ""
-		vars["AWS_REGION"] = ""
+		applyCapture(vars)
 
 		if _, err := config.Load(env(vars)); err == nil {
 			t.Errorf("ENV=%s capture mode Load() error = nil, want rejection", environment)

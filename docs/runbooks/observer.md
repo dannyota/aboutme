@@ -4,7 +4,7 @@ The reporter publishes `https://aboutme.vn/.well-known/deployment.json`: the
 running image digests and their signature check statuses. The
 [design](../design/deployment-transparency/README.md) explains the evidence.
 Production on the Vietnam host uses the root reporter and observer container
-below. The [AWS observer](aws-observer.md) is an undeployed ECS reference.
+below.
 
 ## Vietnam host
 
@@ -155,23 +155,3 @@ HTTP 401 from the registry. Every listed TCP connection must fail, and DNS to
 forward drop counters increased. The app connection must fail and increase the
 destination drop counter. A failed connection alone does not prove a firewall
 drop. Repeat after a host reboot.
-
-## AWS ECS setup
-
-See [the AWS reference](aws-observer.md#aws-ecs-setup).
-
-## AWS ECS update
-
-See [the AWS reference](aws-observer.md#aws-ecs-update).
-
-## AWS ECS production check
-
-See [the AWS reference](aws-observer.md#aws-ecs-production-check).
-
-## AWS ECS failures
-
-See [the AWS reference](aws-observer.md#aws-ecs-failures).
-
-## AWS ECS stop publishing
-
-See [the AWS reference](aws-observer.md#aws-ecs-stop-publishing).

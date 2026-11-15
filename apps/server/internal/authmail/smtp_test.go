@@ -12,6 +12,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/base64"
 	"io"
+	"log/slog"
 	"math/big"
 	"net"
 	"strings"
@@ -436,4 +437,26 @@ func TestNewSMTPSenderRejectsInvalidOptions(t *testing.T) {
 			t.Errorf("%s: NewSMTPSender error = nil", name)
 		}
 	}
+}
+
+type logBuffer struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (l *logBuffer) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.b.Write(p)
+}
+
+func (l *logBuffer) String() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.b.String()
+}
+
+func testLogger() (*slog.Logger, *logBuffer) {
+	buf := &logBuffer{}
+	return slog.New(slog.NewTextHandler(buf, &slog.HandlerOptions{Level: slog.LevelDebug})), buf
 }

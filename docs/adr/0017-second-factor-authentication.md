@@ -184,3 +184,6 @@ later, or a forward fix.
   secrets and a derived-ID key ring, shared recovery, and floor v0.4.7.
 - 2026-11-01: Corrected the production fence and secret custody to match the
   Vietnam host under ADR 0027, while retaining the accepted factor safeguards.
+- 2026-11-15: the serialized operation lock and failure order moved from
+  passkey-release-fence.md to the Vietnam production design's release fence
+  section with the removal of the AWS code (ADR 0026); the floors table stays.

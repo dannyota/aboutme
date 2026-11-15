@@ -137,16 +137,11 @@ The notice ships in the release, before the flag turns on.
 
 ### Production
 
-- `deploy/aws/modules/tasks`: `provider_login_enabled` accepts `""`, `"google"`,
-  or `"google,linkedin"`. LinkedIn's two secrets are referenced only when the
-  value includes `linkedin`, from `/aboutme/prod/oauth/linkedin-client-id` and
-  `/aboutme/prod/oauth/linkedin-client-secret`. The server gets the value as
-  given, or `"false"` for `""`.
-- `deploy/aws/modules/identity`: the app execution role's parameter list adds
-  the two LinkedIn parameters and nothing else.
-- `prod.tfvars.example` and the variable description list the new value. The
-  runbook gains a "LinkedIn sign-in" section with the app setup below.
-- `deploy.sh` already refuses a deploy while any task secret is missing.
+- `/etc/aboutme/flags.env` sets `PROVIDER_LOGIN_ENABLED` to `false`, `google`,
+  or `google,linkedin` ([secrets runbook](../runbooks/secrets.md)).
+- `deploy/vn/scripts/deploy-host.sh` gives the server the Podman secrets
+  `linkedin-client-id` and `linkedin-client-secret` only when the value includes
+  `linkedin`.
 
 ### Security
 

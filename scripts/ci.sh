@@ -40,7 +40,7 @@ operational_contracts() {
     make operational-test
   else
     echo 'Skipping Linux-specific dev-https static contracts; CI covers them.'
-    make operational-test-fast operational-test-deploy operational-test-browser
+    make operational-test-fast operational-test-browser
   fi
 }
 schema() {

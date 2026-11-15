@@ -213,10 +213,10 @@ otherwise `/login`. The link carries no tracking parameter.
 The release ships with `SIGN_IN_TO_VIEW_ENABLED` false, so no resume can be
 gated yet and a rollback is still safe. After the first production proof, the
 operator raises the production release fence to the release's own number
-([release fence](../passkey-release-fence.md#serialized-production-operation)),
-then turns the flag on and redeploys the same tag. The deployer refuses an app
-revision with the flag on while the fence is below that number (**Owner
-approval** V11, approved 2026-09-27).
+([release fence](../vietnam-production.md#release-fence)), then turns the flag
+on and redeploys the same tag. The deployer refuses an app revision with the
+flag on while the fence is below that number (**Owner approval** V11, approved
+2026-09-27).
 
 Once the fence is raised, `deploy.sh --rollback` below the release is refused,
 because an older image would serve `sign_in` resumes publicly. Going lower is a

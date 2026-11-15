@@ -297,8 +297,7 @@ systemd timers start `aboutme-job@<name>` with the server image:
 `idempotency-expiry-sweep` and `media-deletion-sweep` hourly,
 `privacy-retention-sweep` daily, and `media-orphan-sweep` weekly. `Persistent=`
 runs a missed job after a reboot, and `OnFailure=` sends mail through the host
-alert unit. `release-snapshot-sweep` does not run, because pgBackRest retention
-expires release backups; the command stays for the AWS path.
+alert unit.
 
 ## Logs, metrics, and alarms
 
@@ -385,13 +384,12 @@ with HTTP 200 after its CrowdSec test ban is removed; an unreadable ticker or
 continued denial fails the deploy. Backend settings, provider variables, and
 state stay ignored.
 
-## AWS reference and recovery
+## Other platforms and recovery
 
-Nothing from `deploy/aws/` is deployed.
-[ADR 0026](../adr/0026-vietnam-hosted-production.md#history) records the stack
-and SES teardown on 2026-10-11. Production data lives only on the Vietnam host
-and its pgBackRest backups. Returning to AWS ECS or moving to Kubernetes needs a
-reviewed infrastructure and data-transfer decision.
+[ADR 0026](../adr/0026-vietnam-hosted-production.md#history) records the AWS
+stack and SES teardown on 2026-10-11 and the removal of the AWS code. Production
+data lives only on the Vietnam host and its pgBackRest backups. Moving to AWS or
+another platform needs a new reviewed infrastructure and data-transfer decision.
 
 ## Provider facts to confirm
 
