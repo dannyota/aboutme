@@ -25,7 +25,7 @@ const URL_PLANT = `${ORIGIN}/app/resumes/${RESUME_ID}?token=planted-secret#frag`
 const ERROR_PLANT = 'TimeoutError: locator.press: Timeout 5000ms exceeded. developer@example.invalid planted-secret';
 const COUNT_KEYS = ['chunk-load', 'hydration', 'network', 'other'];
 const PAGE_KEYS = ['readyState', 'signInHeadingCount', 'signInHeadingVisible', 'urlCategory'];
-const REAUTH_KEYS = [...PAGE_KEYS, 'lastNavigationStatusClass', 'mainFrameNavigations'].sort();
+const REAUTH_KEYS = [...PAGE_KEYS, 'htmlLang', 'localeCookie', 'signInHeadingCountVi', 'loginFormPresent', 'navigationSequence', 'lastNavigationStatusClass', 'mainFrameNavigations'].sort();
 const TOP_KEYS = [
   'elapsedMs', 'failureCategory', 'mainPage', 'pageErrors', 'reauthPage',
   'requestFailures', 'schemaVersion', 'stage',
@@ -60,7 +60,7 @@ function isCount(value) {
 
 function assertClosed(output) {
   assert.deepEqual(keys(output), TOP_KEYS);
-  assert.equal(output.schemaVersion, 1);
+  assert.equal(output.schemaVersion, 2);
   assert.equal(typeof output.stage, 'string');
   if (output.stage !== 'unavailable') {
     for (const word of output.stage.split('-')) {
@@ -82,9 +82,15 @@ function assertClosed(output) {
   assert.ok(isCount(output.reauthPage.mainFrameNavigations));
   assert.ok(['2xx', '3xx', '4xx', '5xx', 'none', 'unavailable']
     .includes(output.reauthPage.lastNavigationStatusClass));
-  for (const name of ['pageErrors', 'requestFailures']) {
-    assert.deepEqual(keys(output[name]), [...COUNT_KEYS].sort());
-    for (const key of COUNT_KEYS) assert.ok(isCount(output[name][key]));
+  const checkCounts = (counts) => {
+    assert.deepEqual(keys(counts), [...COUNT_KEYS].sort());
+    for (const key of COUNT_KEYS) assert.ok(isCount(counts[key]));
+  };
+  checkCounts(output.pageErrors);
+  assert.deepEqual(keys(output.requestFailures), ['main', 'reauth']);
+  for (const page of ['main', 'reauth']) {
+    assert.deepEqual(keys(output.requestFailures[page]), ['after', 'before']);
+    for (const phase of ['before', 'after']) checkCounts(output.requestFailures[page][phase]);
   }
 }
 
@@ -95,7 +101,7 @@ function assertNoPlant(serialized) {
 }
 
 const validInput = () => ({
-  schemaVersion: 1,
+  schemaVersion: 2,
   stage: 'session-reauth-signin-login-page-loaded-reads401-0-streams-1-loads-0-line-252-reloads-0',
   failureCategory: 'assertion-timeout',
   elapsedMs: { sinceTestStart: 81234, sinceStageChange: 5003 },
@@ -112,9 +118,14 @@ const validInput = () => ({
     signInHeadingVisible: false,
     mainFrameNavigations: 2,
     lastNavigationStatusClass: '2xx',
+    htmlLang: 'vi', localeCookie: 'en', signInHeadingCountVi: 1,
+    loginFormPresent: true, navigationSequence: ['login', 'app-other'],
   },
   pageErrors: { 'chunk-load': 1, hydration: 0, network: 0, other: 2 },
-  requestFailures: { 'chunk-load': 0, hydration: 0, network: 3, other: 0 },
+  requestFailures: {
+    main: { before: { 'chunk-load': 0, hydration: 0, network: 3, other: 0 }, after: { 'chunk-load': 0, hydration: 0, network: 0, other: 0 } },
+    reauth: { before: { 'chunk-load': 0, hydration: 0, network: 0, other: 0 }, after: { 'chunk-load': 0, hydration: 0, network: 0, other: 0 } },
+  },
 });
 
 test('failure errors map to closed categories', () => {
@@ -248,9 +259,72 @@ test('the serializer drops a planted URL or error message anywhere in its input'
   }
 });
 
+test('reauth diagnostic fields are required, closed, and bounded', () => {
+  const checkReauth = (page) => {
+    assert.ok(['vi', 'en', 'other', 'missing', 'unavailable'].includes(page.htmlLang));
+    assert.ok(['en', 'vi', 'absent', 'other', 'unavailable'].includes(page.localeCookie));
+    assert.ok(isCount(page.signInHeadingCountVi));
+    assert.ok([true, false, 'unavailable'].includes(page.loginFormPresent));
+    assert.ok(Array.isArray(page.navigationSequence));
+    assert.ok(page.navigationSequence.length <= 8);
+    assert.ok(page.navigationSequence.every((category) => URL_CATEGORIES.includes(category)));
+  };
+  const input = validInput();
+  input.reauthPage = {
+    ...input.reauthPage,
+    htmlLang: 'vi',
+    localeCookie: 'en',
+    signInHeadingCountVi: 1,
+    loginFormPresent: true,
+    navigationSequence: ['login', 'app-other'],
+  };
+  const output = JSON.parse(serializeEditorDiagnostic(input));
+  assert.equal(output.schemaVersion, 2);
+  checkReauth(output.reauthPage);
+  for (const [key, value] of Object.entries({
+    htmlLang: 'vi',
+    localeCookie: 'en',
+    signInHeadingCountVi: 1,
+    loginFormPresent: true,
+    navigationSequence: ['login', 'app-other'],
+  })) assert.deepEqual(output.reauthPage[key], value);
+  for (const invalid of [
+    { ...output.reauthPage, localeCookie: 'planted-secret' },
+    { ...output.reauthPage, navigationSequence: [URL_PLANT] },
+    { ...output.reauthPage, navigationSequence: Array(9).fill('login') },
+  ]) assert.throws(() => checkReauth(invalid));
+  const planted = JSON.parse(serializeEditorDiagnostic({
+    ...input,
+    reauthPage: {
+      ...input.reauthPage,
+      localeCookie: 'planted-secret',
+      navigationSequence: [URL_PLANT, ...Array(9).fill('login')],
+    },
+  }));
+  checkReauth(planted.reauthPage);
+  assertNoPlant(JSON.stringify(planted));
+  for (const key of ['htmlLang', 'localeCookie', 'signInHeadingCountVi', 'loginFormPresent', 'navigationSequence']) {
+    const missing = { ...output.reauthPage };
+    delete missing[key];
+    assert.throws(() => checkReauth(missing));
+  }
+});
+
+test('request failures are separated by page and sign-in phase', () => {
+  const counts = { 'chunk-load': 1, hydration: 2, network: 3, other: 4 };
+  const input = {
+    ...validInput(),
+    requestFailures: {
+      main: { before: counts, after: counts },
+      reauth: { before: counts, after: counts },
+    },
+  };
+  assert.deepEqual(JSON.parse(serializeEditorDiagnostic(input)).requestFailures, input.requestFailures);
+});
+
 function fakePage({ url, readyState, count, visible, closed = false }) {
   const listeners = new Map();
-  const mainFrame = { name: 'main' };
+  const mainFrame = { name: 'main', url: () => url };
   return {
     mainFrame: () => mainFrame,
     on(event, listener) {
@@ -262,11 +336,22 @@ function fakePage({ url, readyState, count, visible, closed = false }) {
     },
     isClosed: () => closed,
     url: () => url,
-    evaluate: async () => readyState(),
-    getByRole: () => ({
-      count: async () => count(),
-      first: () => ({ isVisible: async () => visible() }),
-    }),
+    evaluate: async (fn) => fn.toString().includes('readyState') ? readyState() : 'vi',
+    context: () => ({ cookies: async (origin) => {
+      assert.equal(origin, ORIGIN);
+      return [{ name: 'aboutme-locale', value: 'en' }];
+    } }),
+    getByRole: (role, options) => {
+      if (role === 'button') {
+        assert.equal(options.exact, true);
+        assert.ok(options.name.test('Sign in') && options.name.test('Đăng nhập'));
+        return { count: async () => 1 };
+      }
+      return {
+        count: async () => options.name === 'Đăng nhập' ? 2 : count(),
+        first: () => ({ isVisible: async () => visible() }),
+      };
+    },
   };
 }
 
@@ -313,8 +398,17 @@ test('the writer records a bounded closed diagnostic once', async () => {
     });
     reauth.emit('framenavigated', reauth.mainFrame());
     reauth.emit('response', navigationResponse(reauth, 500));
+    reauth.emit('requestfailed', { failure: () => ({ errorText: 'net::ERR_ABORTED' }), resourceType: () => 'script', url: () => URL_PLANT });
     recorder.markReauthSignIn();
+    main.emit('requestfailed', { failure: () => ({ errorText: 'net::ERR_ABORTED' }), resourceType: () => 'fetch', url: () => URL_PLANT });
+    reauth.emit('requestfailed', { failure: () => ({ errorText: 'net::ERR_CONNECTION_RESET' }), resourceType: () => 'fetch', url: () => URL_PLANT });
+    reauth.mainFrame().url = () => `${ORIGIN}/app/resumes`;
     reauth.emit('framenavigated', reauth.mainFrame());
+    reauth.emit('request', { isNavigationRequest: () => true, frame: () => reauth.mainFrame(), url: () => `${ORIGIN}/login` });
+    reauth.mainFrame().url = () => `${ORIGIN}/login`;
+    reauth.emit('framenavigated', reauth.mainFrame());
+    reauth.mainFrame().url = () => `${ORIGIN}/app/resumes`;
+    for (let i = 0; i < 8; i += 1) reauth.emit('framenavigated', reauth.mainFrame());
     reauth.emit('framenavigated', { name: 'child' });
     reauth.emit('response', navigationResponse(reauth, 302));
     reauth.emit('response', navigationResponse(reauth, 200));
@@ -336,7 +430,7 @@ test('the writer records a bounded closed diagnostic once', async () => {
     const output = JSON.parse(serialized);
     assertClosed(output);
     assert.deepEqual(output, {
-      schemaVersion: 1,
+      schemaVersion: 2,
       stage: 'session-reauth-signin-login-page-loaded-line-252',
       failureCategory: 'assertion-timeout',
       elapsedMs: { sinceTestStart: 10_000, sinceStageChange: 5_000 },
@@ -351,11 +445,16 @@ test('the writer records a bounded closed diagnostic once', async () => {
         readyState: 'complete',
         signInHeadingCount: 1,
         signInHeadingVisible: false,
-        mainFrameNavigations: 1,
+        mainFrameNavigations: 10,
         lastNavigationStatusClass: '2xx',
+        htmlLang: 'vi', localeCookie: 'en', signInHeadingCountVi: 2,
+        loginFormPresent: true, navigationSequence: ['login', ...Array(7).fill('app-other')],
       },
       pageErrors: { 'chunk-load': 1, hydration: 0, network: 0, other: 1 },
-      requestFailures: { 'chunk-load': 0, hydration: 0, network: 1, other: 0 },
+      requestFailures: {
+        main: { before: { 'chunk-load': 0, hydration: 0, network: 1, other: 0 }, after: { 'chunk-load': 0, hydration: 0, network: 0, other: 1 } },
+        reauth: { before: { 'chunk-load': 1, hydration: 0, network: 0, other: 0 }, after: { 'chunk-load': 0, hydration: 0, network: 1, other: 0 } },
+      },
     });
     await recorder.write([new Error('second failure')]);
     assert.equal(await readFile(path, 'utf8'), serialized);
@@ -401,7 +500,48 @@ test('the writer records a bounded closed diagnostic once', async () => {
       signInHeadingVisible: 'unavailable',
       mainFrameNavigations: 0,
       lastNavigationStatusClass: 'none',
+      htmlLang: 'unavailable', localeCookie: 'unavailable', signInHeadingCountVi: 'unavailable',
+      loginFormPresent: 'unavailable', navigationSequence: [],
     });
+  } finally {
+    await rm(work, { force: true, recursive: true });
+  }
+});
+
+test('reauth probes categorize missing, unexpected, and failed values', async () => {
+  const work = await mkdtemp(join(tmpdir(), 'editor-probes-'));
+  try {
+    const cases = [
+      { lang: null, cookies: [], expected: ['missing', 'absent', 0, false] },
+      { lang: 'fr', cookies: [{ name: 'aboutme-locale', value: 'planted-secret' }], expected: ['other', 'other', 0, false] },
+      { lang: 'en', cookies: [{ name: 'aboutme-locale', value: 'vi' }], expected: ['en', 'vi', 0, false] },
+      { fails: true, expected: ['unavailable', 'unavailable', 'unavailable', 'unavailable'] },
+    ];
+    for (const [index, item] of cases.entries()) {
+      const page = fakePage({ url: `${ORIGIN}/login`, readyState: () => 'complete', count: () => 0, visible: () => false });
+      page.evaluate = async (fn) => {
+        if (fn.toString().includes('readyState')) return 'complete';
+        if (item.fails) throw new Error(ERROR_PLANT);
+        return item.lang;
+      };
+      page.context = () => ({ cookies: async (origin) => {
+        assert.equal(origin, ORIGIN);
+        if (item.fails) throw new Error(ERROR_PLANT);
+        return item.cookies;
+      } });
+      page.getByRole = () => ({
+        count: async () => { if (item.fails) throw new Error(ERROR_PLANT); return 0; },
+        first: () => ({ isVisible: async () => false }),
+      });
+      const path = join(work, `${index}.json`);
+      const recorder = installEditorFailureDiagnostic({ editorDiagnosticStage: 'setup' }, page, { origin: ORIGIN, path });
+      recorder.trackReauthPage(page);
+      await recorder.write([]);
+      const serialized = await readFile(path, 'utf8');
+      assertNoPlant(serialized);
+      const result = JSON.parse(serialized).reauthPage;
+      assert.deepEqual([result.htmlLang, result.localeCookie, result.signInHeadingCountVi, result.loginFormPresent], item.expected);
+    }
   } finally {
     await rm(work, { force: true, recursive: true });
   }
