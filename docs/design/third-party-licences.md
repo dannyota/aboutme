@@ -97,10 +97,15 @@ first-party AGPL entry and the base layers below sit outside this list.
 ## Base layers and the corresponding source
 
 The runtime images build on unmodified upstream images pulled by digest: the
-official Node.js Alpine image for web, Alpine for caddy, the Playwright Ubuntu
-image for the server, and none for the observer. Those layers include GPL and
-LGPL software, such as BusyBox on Alpine and GNU packages on Ubuntu, some under
-GPLv3.
+official Node.js Alpine image for web, Alpine for caddy, Ubuntu for the server,
+and none for the observer. Those layers include GPL and LGPL software, such as
+BusyBox on Alpine and GNU packages on Ubuntu, some under GPLv3.
+
+Images carry only what they run. The server's runtime stage moves from the
+Playwright image, which also carries Firefox, WebKit, FFmpeg, a headless shell,
+and Yarn, to Ubuntu noble with the system packages Chromium needs and the same
+pinned Chromium build Playwright installs, so rendering does not change. That
+move is its own change and lands before this one.
 
 For each runtime image, the generator reads the package database of the final
 filesystem (`apk` or `dpkg`) and writes `BASE-IMAGES.txt`: every base image by
@@ -111,12 +116,24 @@ This file sits in the image and beside it in the GitHub release, and it is the
 clear direction to the corresponding source that GPLv3 section 6(d) allows on a
 third-party server.
 
-Some base components are not in a package database, and `BASE-IMAGES.txt` lists
-them by hand with their licence files and source: the Node.js runtime the
-official image installs under `/usr/local` in the web image, the Chromium build
-Playwright installs under `/ms-playwright` in the server image, and the CA
-bundle the observer copies from Alpine's `ca-certificates` package. The build
-fails when one of these paths changes without its entry.
+Every file in a runtime image must be accounted for, and the build fails on any
+file that is not. A file is accounted for when it belongs to one of:
+
+- an installed package in the image's `apk` or `dpkg` database;
+- the image's own build output, covered by the sections above;
+- an entry in `third_party/licences/components/<image>.json`, committed for each
+  component installed outside a package manager. An entry names the component,
+  its exact version, its paths, the sha256 of its content, its licence files or
+  complete credits, and the URL of that version's source.
+
+The build compares each listed component's content hash with its entry, so a
+newer CA bundle or Chromium build at an unchanged path fails until a reviewed
+change updates the entry. The components known today are the Node.js runtime and
+the image's entrypoint script under `/usr/local` in the web image, whose
+versioned `LICENSE` covers Node's bundled notices; the Chromium build in the
+server image, which keeps that build's complete third-party credits; and the CA
+bundle the observer copies from Alpine's `ca-certificates`, whose apk version is
+pinned in the observer build.
 
 `SOURCE-OFFER.txt` adds a written offer, valid for three years from the image's
 release, to provide the corresponding source of every GPL or LGPL component on
