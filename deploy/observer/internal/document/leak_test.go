@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"encoding/pem"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -26,6 +27,7 @@ import (
 	"danny.vn/aboutme/deploy/observer/internal/platform"
 	"danny.vn/aboutme/deploy/observer/internal/platform/ecs"
 	"danny.vn/aboutme/deploy/observer/internal/platform/kubernetes"
+	"danny.vn/aboutme/deploy/observer/internal/platform/podman"
 	"danny.vn/aboutme/deploy/observer/internal/verify"
 	"danny.vn/aboutme/deploy/observer/schema"
 )
@@ -176,6 +178,57 @@ func kubernetesImages(t *testing.T, strip bool) []platform.Image {
 	return imgs
 }
 
+func podmanImages(t *testing.T, strip bool) []platform.Image {
+	t.Helper()
+	info := platform.Info{Provider: "greennode", Orchestrator: "podman", Region: "HCM03"}
+	running := time.Date(2026, 10, 2, 3, 0, 0, 0, time.UTC)
+	var imgs []platform.Image
+	for i, component := range platform.Components {
+		imgs = append(imgs, platform.Image{
+			Component: component, Digest: "sha256:" + strings.Repeat(fmt.Sprintf("%02x", 0xa1+i), 32),
+			Replicas: 1, RunningSince: running,
+		})
+	}
+	claims := map[string]verify.Evidence{}
+	if !strip {
+		for _, img := range imgs {
+			repo := platform.ImageRepository(img.Component)
+			claims[img.Digest] = verify.Evidence{
+				Digest: img.Digest,
+				Provenance: verify.Provenance{
+					Status: verify.Verified, CheckedAt: running, Subjects: []string{repo},
+					Version: "v9.9.9", Commit: "c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00",
+					SignerWorkflow: "https://github.com/dannyota/aboutme/.github/workflows/release-images.yml@refs/tags/v9.9.9",
+					LogIndex:       123456789012,
+					BuildURL:       "https://github.com/dannyota/aboutme/actions/runs/123456789012/attempts/1",
+				},
+				SBOM: verify.SBOM{Status: verify.Verified, CheckedAt: running, Subjects: []string{repo}},
+			}
+		}
+	}
+	reported, err := document.Build(document.Input{
+		Environment: "production", Site: "https://aboutme.vn", Platform: info,
+		ObservedAt: time.Now(), Images: imgs, Evidence: claims,
+		Observer: document.BuildInfo{Version: "v9.9.9", Commit: "c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := json.Marshal(reported)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "observation.json")
+	if err := os.WriteFile(path, body, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out, err := podman.New(path).Running(context.Background())
+	if err != nil {
+		t.Fatalf("podman adapter: %v", err)
+	}
+	return out
+}
+
 func build(t *testing.T, imgs []platform.Image, info platform.Info) []byte {
 	t.Helper()
 	ev := map[string]verify.Evidence{}
@@ -324,6 +377,7 @@ func TestDocumentLeaksNothing(t *testing.T) {
 	}{
 		"ecs":        {ecsImages, platform.Info{Provider: "aws", Orchestrator: "ecs", Region: "ap-southeast-1"}},
 		"kubernetes": {kubernetesImages, platform.Info{Provider: "greennode", Orchestrator: "kubernetes", Region: "HCM03"}},
+		"podman":     {podmanImages, platform.Info{Provider: "greennode", Orchestrator: "podman", Region: "HCM03"}},
 	}
 	allowed := schemaPaths(t)
 	for name, a := range adapters {
