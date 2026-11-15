@@ -16,7 +16,8 @@ record inventory. The root SPF authorizes both Bizfly and Google Workspace.
 Bizfly uses `dkim._domainkey` for its domain check and signs with
 `etrans._domainkey`; both records hold the same key. Google Workspace uses
 `google._domainkey`. The root MX is `smtp.google.com`, and DMARC uses
-`p=quarantine` with no report address (owner decisions, 2026-10-15).
+`p=quarantine` (owner decision, 2026-10-15), with aggregate reports sent to
+Cloudflare DMARC Management.
 
 ## Feedback
 

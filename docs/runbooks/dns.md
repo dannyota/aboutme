@@ -9,17 +9,17 @@ managed records in the dashboard.
 
 ## Records
 
-| Name                           | Type  | Value or purpose                                                  |
-| ------------------------------ | ----- | ----------------------------------------------------------------- |
-| `aboutme.vn`, `www.aboutme.vn` | A     | Host floating IP, TTL 300                                         |
-| `aboutme.vn`                   | CAA   | `0 issue "letsencrypt.org"`                                       |
-| `aboutme.vn`                   | MX    | `smtp.google.com`, Google Workspace mailbox                       |
-| `aboutme.vn`                   | TXT   | `v=spf1 include:_spf.bizflycloud.vn include:_spf.google.com ~all` |
-| `_dmarc.aboutme.vn`            | TXT   | `v=DMARC1; p=quarantine`                                          |
-| `dkim._domainkey.aboutme.vn`   | TXT   | Bizfly domain verification key                                    |
-| `etrans._domainkey.aboutme.vn` | TXT   | Bizfly mail-signing key                                           |
-| `google._domainkey.aboutme.vn` | TXT   | Google Workspace DKIM key                                         |
-| Google site-verification name  | CNAME | Google site verification                                          |
+| Name                           | Type  | Value or purpose                                                                                    |
+| ------------------------------ | ----- | --------------------------------------------------------------------------------------------------- |
+| `aboutme.vn`, `www.aboutme.vn` | A     | Host floating IP, TTL 300                                                                           |
+| `aboutme.vn`                   | CAA   | `0 issue "letsencrypt.org"`                                                                         |
+| `aboutme.vn`                   | MX    | `smtp.google.com`, Google Workspace mailbox                                                         |
+| `aboutme.vn`                   | TXT   | `v=spf1 include:_spf.bizflycloud.vn include:_spf.google.com ~all`                                   |
+| `_dmarc.aboutme.vn`            | TXT   | `v=DMARC1; p=quarantine; rua=mailto:8172c9efb41749f19fcced423b5a1ae7@dmarc-reports.cloudflare.net;` |
+| `dkim._domainkey.aboutme.vn`   | TXT   | Bizfly domain verification key                                                                      |
+| `etrans._domainkey.aboutme.vn` | TXT   | Bizfly mail-signing key                                                                             |
+| `google._domainkey.aboutme.vn` | TXT   | Google Workspace DKIM key                                                                           |
+| Google site-verification name  | CNAME | Google site verification                                                                            |
 
 Cloudflare also publishes CAA entries for its own certificate authorities
 automatically. Keep the Let's Encrypt CAA entry. The [email runbook](email.md)
