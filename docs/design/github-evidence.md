@@ -24,6 +24,9 @@ page" ([roadmap](../plans/roadmap.md#v09-show-the-work)). It builds on the
 | Evidence client id and secret both set        | On                        | As ADR 0016 configures |
 | Only one of the evidence client id and secret | The server does not start | Unchanged              |
 
+On the production host, the deploy's secrets check rejects a half-set pair
+before any service changes.
+
 The evidence application is a GitHub OAuth application of its own, with its own
 client id and secret. Its callback URL is the public origin plus the fixed path
 `/api/v1/github-evidence/callback`, as for sign-in providers. The capabilities
@@ -274,6 +277,7 @@ Either way each affected project changes through one library mutation.
   attempt, also when endings race, and none of the secrets or raw responses
   above reaches a log or error.
 - The server Quadlet sets `Ulimit=core=0:0`.
+- The host secrets check fails on one secret of the pair before app-down.
 - No route, export, log, error or database row contains a GitHub token.
 - An item is attached only when its rule holds for the connected account id; a
   login match never confirms; a contributor is never confirmed.
