@@ -18,7 +18,8 @@ the image ships:
   `COPYING*`, and `NOTICE*` file it ships, copied byte for byte.
 - The aboutme AGPL-3.0 licence as the first-party entry
   ([ADR 0001](../adr/0001-agpl-3.0-license.md)).
-- `BASE-IMAGES.txt` and the written source offer, described below.
+- `BASE-IMAGES.txt`, `SOURCE-OFFER.txt`, and base-layer notices, described
+  below.
 
 ### Go images
 
@@ -38,12 +39,14 @@ directives, and collects:
 ### Web image
 
 The web image ships the Nitro server, the client bundles, and the separately
-built render workers. For every Vite or Rolldown build that feeds the image, the
-generator takes the packages of the modules in the emitted chunks from the
-bundler's own output: Vite's `build.license` report where the build supports it,
-otherwise Rolldown's per-chunk module list. It adds every package Nitro copies
-to `.output/server/node_modules`. Licence files come from the installed packages
-in the pnpm store, read before the image is assembled.
+built render workers. For every bundler run that feeds the image, the generator
+takes the packages of the modules in the emitted chunks from that bundler's own
+output: each Vite or Rolldown build (client, SSR, and every render worker)
+through Vite's `build.license` report or Rolldown's per-chunk module list, and
+Nitro's final Rollup build through the chunk module lists its Rollup output
+reports. It adds every package Nitro copies to `.output/server/node_modules`.
+Licence files come from the installed packages in the pnpm store, read before
+the image is assembled.
 
 ### Vendored assets
 
@@ -91,21 +94,33 @@ GPL, LGPL, AGPL, SSPL, BUSL, and non-commercial licences never enter as
 third-party application code without an owner decision recorded here. The
 first-party AGPL entry and the base layers below sit outside this list.
 
-## Base layers and the source offer
+## Base layers and the corresponding source
 
 The runtime images build on unmodified upstream images pulled by digest: Alpine
 for web and caddy, the Playwright Ubuntu image with Chromium for the server, and
-none for the observer. Those layers include GPL software, such as BusyBox on
-Alpine and GNU packages on Ubuntu, and keep the licence files their
-distributions install.
+none for the observer. Those layers include GPL and LGPL software, such as
+BusyBox on Alpine and GNU packages on Ubuntu, some under GPLv3.
 
-`BASE-IMAGES.txt` names each base image by digest with its upstream source
-location (the Alpine aports release branch, the Ubuntu source archive for the
-image's release, and the Playwright image's source). Beside it,
-`SOURCE-OFFER.txt` offers the corresponding source of every GPL or LGPL
-component in those layers, for three years from the image's release, on request
-to `danny@aboutme.vn` (owner, 2026-11-15). The owner mirrors the requested
-source when asked.
+For each runtime image, the generator reads the package database of the final
+filesystem (`apk` or `dpkg`) and writes `BASE-IMAGES.txt`: every base image by
+digest, then every installed package with its exact version, SPDX licence, and
+the URL of that version's source in the distribution's public archive (the
+Ubuntu source package on Launchpad, the Alpine aports commit and source files).
+This file sits in the image and beside it in the GitHub release, and it is the
+clear direction to the corresponding source that GPLv3 section 6(d) allows on a
+third-party server.
+
+`SOURCE-OFFER.txt` adds a written offer, valid for three years from the image's
+release, to provide the corresponding source of every GPL or LGPL component on
+request to `danny@aboutme.vn` (owner, 2026-11-15). It covers GPLv2 components
+such as BusyBox and any archive that later drops a version; the owner mirrors
+the source when asked.
+
+A base package whose installed files lack its required notice, such as musl,
+whose package ships only its libraries, gets the notice from
+`third_party/licences/base/`, committed per base image digest. The build fails
+when the package list of a pinned base image no longer matches its committed
+inventory, so a digest change brings a reviewed notice update.
 
 ## Checks
 
