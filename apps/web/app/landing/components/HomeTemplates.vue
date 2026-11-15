@@ -45,6 +45,7 @@ const rows = computed(() => SHOWCASE.map((entry) => {
     <div
       aria-hidden="true"
       class="fan"
+      data-crop="fan"
       data-testid="landing-template-fan"
     >
       <template

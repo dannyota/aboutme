@@ -347,7 +347,7 @@ describe('index.vue structure', () => {
     expect(chips.get('[data-chip="coin"]').text()).toBe('0đ');
     expect(wrapper.get('[data-testid="landing-rings"]')
       .attributes('aria-hidden')).toBe('true');
-    const data = wrapper.get('[data-testid="landing-data"] .home-coin');
+    const data = wrapper.get('[data-testid="landing-data"] .coin-crop');
     expect(data.attributes('aria-hidden')).toBe('true');
     for (const glyph of wrapper.findAll('[data-glyph]')) {
       expect(glyph.attributes('aria-hidden')).toBe('true');
@@ -601,6 +601,38 @@ describe('index.vue sources', () => {
       expect(selector, selector).toContain(RENDERER_GUARD);
     }
   });
+
+  it('crops corner decorations in text-free layers, never a text ancestor',
+    async () => {
+      const wrapper = await mountLanding('en');
+      const crops = wrapper.findAll('[data-crop]');
+      expect(crops.map((crop) => crop.attributes('data-crop')))
+        .toEqual(['rings', 'fan', 'coin']);
+      for (const crop of crops) {
+        expect(crop.attributes('aria-hidden')).toBe('true');
+        expect(crop.text().trim()).toBe('');
+      }
+      for (const [file, selector] of [
+        ['app/landing/components/HomeHero.vue', '.rings'],
+        ['app/landing/components/HomeCards.vue', '.coin-crop'],
+      ] as const) {
+        const block = cssBlock(file, selector);
+        expect(block, selector).toContain('position: absolute;');
+        expect(block, selector).toContain('inset: 0;');
+        expect(block, selector).toContain('overflow: hidden;');
+      }
+      expect(wrapper.get('.data-coin').element.parentElement!
+        .getAttribute('data-crop')).toBe('coin');
+      for (const [file, selector] of [
+        ['app/landing/components/HomeCards.vue', '.card'],
+        ['app/landing/components/HomeHero.vue', '.hero'],
+        ['app/landing/components/HomePublish.vue', '.publish'],
+        ['app/landing/components/HomePublish.vue', '.switches'],
+        ['app/landing/components/HomeTemplates.vue', '.tpls'],
+      ] as const) {
+        expect(cssBlock(file, selector), selector).not.toMatch(/overflow/u);
+      }
+    });
 });
 
 function cssBlock(file: string, selector: string): string {

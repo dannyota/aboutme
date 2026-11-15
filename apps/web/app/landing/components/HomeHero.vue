@@ -20,6 +20,7 @@ defineProps<{
     <div
       aria-hidden="true"
       class="rings"
+      data-crop="rings"
       data-testid="landing-rings"
     >
       <svg viewBox="0 0 400 400">

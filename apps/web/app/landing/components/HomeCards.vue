@@ -43,8 +43,11 @@ defineProps<{ readonly copy: LandingCopy }>();
     >
       <span
         aria-hidden="true"
-        class="home-coin data-coin"
-      ><HomeGlyph name="mark" /></span>
+        class="coin-crop"
+        data-crop="coin"
+      >
+        <span class="home-coin data-coin"><HomeGlyph name="mark" /></span>
+      </span>
       <h2
         id="landing-data-title"
         class="home-h2-card"
@@ -82,7 +85,6 @@ defineProps<{ readonly copy: LandingCopy }>();
   flex-direction: column;
   align-items: flex-start;
   justify-content: center;
-  overflow: hidden;
   background: var(--surface-mist);
 }
 
@@ -90,8 +92,16 @@ defineProps<{ readonly copy: LandingCopy }>();
   background: var(--surface-sun);
 }
 
-.card > :not(.data-coin) {
+.card > :not(.coin-crop) {
   position: relative;
+}
+
+.coin-crop {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
 }
 
 .card p {
