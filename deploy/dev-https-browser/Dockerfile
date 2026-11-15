@@ -10,7 +10,7 @@ USER root
 WORKDIR /opt/aboutme-auth
 
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
-RUN npm install --global --ignore-scripts pnpm@12.18.0 \
+RUN npm install --global --ignore-scripts pnpm@12.21.0 \
     && pnpm fetch \
     && pnpm install --frozen-lockfile --offline --ignore-scripts \
     && rm -rf "$(pnpm store path)" "$(pnpm cache path)" \

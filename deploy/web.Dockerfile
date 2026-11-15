@@ -3,7 +3,7 @@ FROM docker.io/library/node:24.22.2-alpine3.24@sha256:8a32c8cf649a49915a66e81e7a
 WORKDIR /src
 
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
-RUN npm install --global --ignore-scripts pnpm@12.18.0 \
+RUN npm install --global --ignore-scripts pnpm@12.21.0 \
     && pnpm fetch
 
 COPY apps/web/package.json apps/web/nuxt.config.ts apps/web/tsconfig.json ./apps/web/

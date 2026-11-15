@@ -10,7 +10,7 @@ runs:
       id: pnpm
       shell: bash
       run: |
-        npm install --global --ignore-scripts pnpm@12.18.0
+        npm install --global --ignore-scripts pnpm@12.21.0
         test "$(pnpm --version)" = "$(awk '$1 == "pnpm" { print $2 }' .tool-versions)"
         echo "store=$(pnpm store path)" >>"$GITHUB_OUTPUT"
     - name: Cache the pnpm store

@@ -67,7 +67,7 @@ root_packages=(prettier markdownlint-cli2)
 lockfile() {
   local file=$1 package
   {
-    printf -- "---\nlockfileVersion: '9.0'\n\nimporters:\n\n  .:\n    packageManagerDependencies:\n      pnpm:\n        specifier: 12.18.0\n        version: 12.18.0\n"
+    printf -- "---\nlockfileVersion: '9.0'\n\nimporters:\n\n  .:\n    packageManagerDependencies:\n      pnpm:\n        specifier: 12.21.0\n        version: 12.21.0\n"
     printf -- "---\nlockfileVersion: '9.0'\n\nimporters:\n\n  .:\n    devDependencies:\n"
     for package in "${root_packages[@]}"; do
       printf "      '%s':\n        specifier: 1.0.0\n        version: 1.0.0\n" "$package"

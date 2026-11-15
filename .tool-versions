@@ -1,5 +1,5 @@
 nodejs 24.22.2
-pnpm 12.18.0
+pnpm 12.21.0
 golang 1.27.4
 sqlc 1.31.1
 gitleaks 8.30.1

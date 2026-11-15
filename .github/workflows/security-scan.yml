@@ -98,7 +98,7 @@ jobs:
           node-version: 24.22.2
       - name: Install the pinned pnpm
         run: |
-          npm install --global --ignore-scripts pnpm@12.18.0
+          npm install --global --ignore-scripts pnpm@12.21.0
           test "$(pnpm --version)" = "$(awk '$1 == "pnpm" { print $2 }' .tool-versions)"
       - name: repository root
         run: bash scripts/npm-audit.sh .
