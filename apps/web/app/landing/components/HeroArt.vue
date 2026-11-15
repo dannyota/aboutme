@@ -85,6 +85,13 @@ defineProps<{
   border-radius: 2px;
   background: var(--paper);
   box-shadow: var(--shadow-paper);
+  color: var(--paper-ink);
+  font: 400 15px/1.5 var(--font-paper);
+  font-feature-settings: normal;
+  letter-spacing: normal;
+  text-align: start;
+  text-transform: none;
+  text-wrap: wrap;
   transform: rotate(-3deg);
 }
 

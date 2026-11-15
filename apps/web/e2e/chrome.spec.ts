@@ -23,7 +23,7 @@ import {
 } from './style-mutation';
 import {
   expectChromeDecoration, expectChromeFan, expectChromeList,
-  expectChromeNavigation,
+  expectChromeNavigation, expectSampleIsolation,
 } from './chrome-details';
 
 import type { ScreenContract } from './screen-contract';
@@ -188,6 +188,7 @@ async function expectChrome(
     const sheet = page.getByTestId('landing-sheet');
     await expect(sheet).toHaveCSS('background-color', 'rgb(255, 255, 255)');
     await expect(sheet).toHaveCSS('border-radius', '2px');
+    await expectSampleIsolation(page);
     await expect(page.getByTestId('landing-chips'))
       .toHaveAttribute('aria-hidden', 'true');
     await expect(page.getByTestId('landing-chips').locator('[data-app-seal]'))
@@ -600,6 +601,24 @@ for (const kind of ['shadow', 'panels'] as const) {
         ? { 'box-shadow': 'rgb(0, 0, 0) 1px 1px 1px 0px' }
         : { 'background-color': 'rgb(1, 2, 3)' }),
       kind === 'shadow' ? 'Chrome paper shadow.' : 'Chrome panel colors.');
+  });
+}
+
+for (const [kind, styles] of [
+  ['weight', { 'font-weight': '500' }],
+  ['focus', { 'outline-style': 'solid' }],
+] as const) {
+  mutationTest(`chrome rejects changed sample ${kind}`, async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 900 });
+    await page.goto('/');
+    await prepareScreen(page);
+    const sample = page.getByTestId('landing-sample')
+      .locator('.resume-document');
+    await proveMutation(() => expectSampleIsolation(page),
+      () => applyStyleMutation(kind === 'weight'
+        ? sample
+        : sample.locator('a[href]').first(), styles),
+      'Chrome sample isolation.');
   });
 }
 

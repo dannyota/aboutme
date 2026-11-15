@@ -166,6 +166,8 @@ const LANDING_SOURCES = [
   'app/landing/styles/home.css',
 ];
 
+const RENDERER_GUARD = ':not(:where(.resume-document, .resume-document *))';
+
 const SHOWCASE_IDS = [
   'ats-plain', 'engineer-compact', 'graduate-friendly', 'executive-band',
 ];
@@ -536,14 +538,14 @@ describe('index.vue sources', () => {
       css.indexOf('@media (prefers-reduced-motion: reduce)'),
     );
     expect(reduced).toMatch(/^@media/u);
-    expect(reduced).toMatch(/\.home \* \{\s*transition: none !important;/u);
+    expect(reduced).toContain('.home *' + RENDERER_GUARD + ' {\n'
+      + '    transition: none !important;');
   });
 
   it('draws a visible focus ring, white on brand, panel and footer', () => {
     const css = readFileSync('app/landing/styles/home.css', 'utf8');
-    expect(css).toMatch(
-      /\.home :focus-visible \{\s*outline: 3px solid var\(--ring\);/u,
-    );
+    expect(css).toContain('.home :focus-visible' + RENDERER_GUARD + ' {\n'
+      + '  outline: 3px solid var(--ring);');
     expect(css).toMatch(
       /\.home \.home-inverse \{\s*--ring: var\(--ring-inverse\);/u,
     );
@@ -558,4 +560,53 @@ describe('index.vue sources', () => {
       expect(readFileSync(file, 'utf8'), file).toContain(marker);
     }
   });
+
+  it('stops the hero margin collapsing so the sheet hangs below', () => {
+    const hero = cssBlock('app/landing/components/HomeHero.vue', '.hero');
+    expect(hero).toContain('display: flow-root;');
+    const art = cssBlock('app/landing/components/HeroArt.vue', '.art');
+    expect(art).toContain(
+      'margin: 48px 0 -48px calc((100% - 210mm * var(--sheet-zoom)) / 2);',
+    );
+  });
+
+  it('resets every inherited chrome type property on the sheet', () => {
+    const sheet = cssBlock('app/landing/components/HeroArt.vue', '.sheet');
+    for (const declaration of [
+      'color: var(--paper-ink);',
+      'font: 400 15px/1.5 var(--font-paper);',
+      'font-feature-settings: normal;',
+      'letter-spacing: normal;',
+      'text-align: start;',
+      'text-transform: none;',
+      'text-wrap: wrap;',
+    ]) {
+      expect(sheet, declaration).toContain(declaration);
+    }
+  });
+
+  it('wraps the shared renderer in the reset sheet', async () => {
+    const wrapper = await mountLanding('en');
+    const sheet = wrapper.get('[data-testid="landing-sheet"]');
+    expect(sheet.classes()).toContain('sheet');
+    expect(sheet.find('.resume-document').exists()).toBe(true);
+  });
+
+  it('keeps chrome focus styling off the renderer subtree', () => {
+    const css = readFileSync('app/landing/styles/home.css', 'utf8');
+    const rules = [...css.matchAll(/([^{}]*:focus-visible[^{}]*)\{/gu)]
+      .map((match) => match[1]!.trim());
+    expect(rules.length).toBeGreaterThan(0);
+    for (const selector of rules) {
+      expect(selector, selector).toContain(RENDERER_GUARD);
+    }
+  });
 });
+
+function cssBlock(file: string, selector: string): string {
+  const source = readFileSync(file, 'utf8');
+  const start = source.indexOf(`\n${selector} {`);
+  expect(start, `${file} ${selector}`).toBeGreaterThanOrEqual(0);
+  return source.slice(source.indexOf('{', start) + 1,
+    source.indexOf('}', start)).replace(/\s+/gu, ' ');
+}

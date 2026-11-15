@@ -119,3 +119,30 @@ export async function expectChromeList(page: Page): Promise<void> {
     await expect(link, message).toHaveAttribute('href', `/templates/${id}`);
   }
 }
+
+export async function expectSampleIsolation(page: Page): Promise<void> {
+  const sample = page.getByTestId('landing-sample').locator('.resume-document');
+  const message = 'Chrome sample isolation.';
+  await expect.poll(() => sample.evaluate((root) => {
+    const item = root.querySelector('li');
+    return [root, item].map((node) => {
+      const css = getComputedStyle(node!);
+      return [css.fontWeight, css.letterSpacing, css.textTransform];
+    });
+  }), message).toEqual([
+    ['400', 'normal', 'none'], ['400', 'normal', 'none'],
+  ]);
+  const link = sample.locator('a[href]').first();
+  const before = await link.evaluate((node) =>
+    getComputedStyle(node).borderRadius);
+  await link.focus();
+  await expect.poll(() => link.evaluate((node) => {
+    const css = getComputedStyle(node);
+    return {
+      visible: node.matches(':focus-visible'),
+      style: css.outlineStyle,
+      radius: css.borderRadius,
+    };
+  }), message).toEqual({ visible: true, style: 'auto', radius: before });
+  await link.blur();
+}

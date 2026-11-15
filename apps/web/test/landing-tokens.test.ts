@@ -257,7 +257,7 @@ function selectors(source: string): string[] {
     if (source[index] === '{') {
       const prelude = source.slice(boundary, index).trim();
       if (prelude !== '' && !prelude.startsWith('@')) {
-        found.push(...prelude.split(',').map((part) => part.trim()));
+        found.push(...splitSelectors(prelude));
       }
       boundary = index + 1;
     } else if (source[index] === '}') {
@@ -265,6 +265,23 @@ function selectors(source: string): string[] {
     }
   }
   return found;
+}
+
+function splitSelectors(prelude: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let index = 0; index < prelude.length; index += 1) {
+    const char = prelude[index];
+    if (char === '(') depth += 1;
+    else if (char === ')') depth -= 1;
+    else if (char === ',' && depth === 0) {
+      parts.push(prelude.slice(start, index).trim());
+      start = index + 1;
+    }
+  }
+  parts.push(prelude.slice(start).trim());
+  return parts;
 }
 
 function declarations(css: string, selector: string): Record<string, string> {

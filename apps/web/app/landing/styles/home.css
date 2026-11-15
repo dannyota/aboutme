@@ -4,7 +4,7 @@
   font: 500 16px/1.6 var(--font-chrome);
 }
 
-.home :focus-visible {
+.home :focus-visible:not(:where(.resume-document, .resume-document *)) {
   outline: 3px solid var(--ring);
   outline-offset: 3px;
   border-radius: 6px;
@@ -124,7 +124,7 @@
   color: var(--brand-hover);
 }
 
-.home .home-pill:focus-visible {
+.home .home-pill:focus-visible:not(:where(.resume-document, .resume-document *)) {
   border-radius: 999px;
 }
 
@@ -210,7 +210,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .home,
-  .home * {
+  .home *:not(:where(.resume-document, .resume-document *)) {
     transition: none !important;
   }
 }

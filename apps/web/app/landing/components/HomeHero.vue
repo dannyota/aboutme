@@ -102,6 +102,7 @@ defineProps<{
 <style scoped>
 .hero {
   position: relative;
+  display: flow-root;
   margin-bottom: 112px;
   padding-bottom: 0;
   background: var(--brand);
