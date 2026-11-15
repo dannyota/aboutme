@@ -497,8 +497,10 @@ start_web() {
   ! port_blocked_by_stranger web || die "port $WEB_PORT is already in use by a process this script did not start"
   [ -d "$ROOT/apps/web/node_modules" ] || die "apps/web/node_modules is missing; run 'pnpm install --frozen-lockfile' at the repository root first"
   info "--- web (:$WEB_PORT)"
+  # pnpm's npm-installed launcher has no shebang, so run-owned.py's exec fails with ENOEXEC (pnpm package file `pnpm`).
   start_service web "$ROOT/apps/web" \
-    env NUXT_PRINT_ORIGIN="http://$PRINT_LISTEN_ADDR" pnpm run dev --port "$WEB_PORT" --host 127.0.0.1
+    env NUXT_PRINT_ORIGIN="http://$PRINT_LISTEN_ADDR" \
+    bash -c 'exec pnpm run dev --port "$1" --host 127.0.0.1' dev-native-web "$WEB_PORT"
   wait_http web "http://127.0.0.1:$WEB_PORT/" 240
   info "web ready on http://127.0.0.1:$WEB_PORT"
 }

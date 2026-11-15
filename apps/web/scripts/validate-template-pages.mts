@@ -40,6 +40,7 @@ const SOURCE_INPUTS = [
   'packages/schema/package.json', 'packages/schema/samples',
   'packages/schema/validation/store.ts', 'packages/schema/fixtures/full.json',
   'packages/schema/fixtures/vn-full.json',
+  'package.json', 'pnpm-workspace.yaml',
 ];
 const LOCKFILE_IMPORTERS = ['apps/web', 'packages/schema'] as const;
 const SHA256 = /^[0-9a-f]{64}$/u;
@@ -400,11 +401,10 @@ export function browserImage(root: string): string {
   return image;
 }
 
-const readYaml = (path: string): Record<string, unknown> => parseAllDocuments(
-  readRegular(path).toString('utf8')).at(-1)?.toJS() ?? {};
-
+const readYaml = (path: string) => parseAllDocuments(readRegular(path)
+  .toString('utf8')).map((document) => document.toJS() ?? {});
 function workspaceMember(root: string, name: string): string {
-  const members = readYaml(join(root, 'pnpm-workspace.yaml')).packages;
+  const members = readYaml(join(root, 'pnpm-workspace.yaml'))[0]?.packages;
   const found = (Array.isArray(members) ? members : []).map((member) =>
     sourcePath(root, String(member))).find((directory) => JSON.parse(
     readRegular(join(root, directory, 'package.json')).toString('utf8'),
@@ -412,18 +412,18 @@ function workspaceMember(root: string, name: string): string {
   requireCondition(found !== undefined, IMPORT_ERROR);
   return found;
 }
-
 const canonical = (value: unknown): string => JSON.stringify(value,
   (_key, item) => item && typeof item === 'object' && !Array.isArray(item)
     ? Object.fromEntries(Object.entries(item).sort())
     : item);
 type LockEntry = Record<string, Record<string, unknown> | undefined>;
 
-function lockfileClosure(lock: Record<string, unknown>): string {
+function lockfileClosure(documents: Record<string, unknown>[]): string {
+  const lock = documents.at(-1) ?? {};
   const importers = (lock.importers ?? {}) as Record<string, LockEntry>;
   const packages = (lock.packages ?? {}) as Record<string, unknown>;
   const snapshots = (lock.snapshots ?? {}) as Record<string, LockEntry>;
-  const lines: string[] = [];
+  const lines = documents.slice(0, -1).map((boot) => `boot ${canonical(boot)}`);
   const visited = new Set<string>();
   const queue: string[] = [];
   const follow = (entry: LockEntry, from: string): void => {

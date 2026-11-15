@@ -198,6 +198,19 @@ describe('template page freshness', () => {
     expect(() => validatePages(root)).toThrow(/stale source hash/);
   });
 
+  it.each([
+    ['package.json', '"packageManager": "pnpm@', '"packageManager": "pnpm@0.'],
+    ['pnpm-workspace.yaml', 'minimumReleaseAge: 10080', 'minimumReleaseAge: 1'],
+    ['pnpm-workspace.yaml', 'pmOnFail: error', 'pmOnFail: ignore'],
+    ['pnpm-lock.yaml', '        version: 12.', '        version: 0.'],
+  ])('rejects a changed pnpm pin or policy in %s', (path, from, to) => {
+    refreshHashes(root);
+    const text = readFileSync(join(root, path), 'utf8');
+    expect(text).toContain(from);
+    put(join(root, path), text.replace(from, to));
+    expect(() => validatePages(root)).toThrow(/stale source hash/);
+  });
+
   it('ignores unrelated lockfile versions', () => {
     const lock = syntheticLock();
     lock.importers['.'] = {
