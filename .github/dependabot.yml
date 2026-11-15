@@ -74,6 +74,9 @@ updates:
       - dependency-name: playwright-core
       - dependency-name: typescript
       - dependency-name: pdfjs-dist
+      - dependency-name: vue-router
+        versions:
+          - ">=5.5.0"
   - package-ecosystem: npm
     directories:
       - /deploy/dev-https-browser

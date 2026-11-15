@@ -1585,6 +1585,7 @@ test("Dependabot contract rejects missing grouping and changed scope or cadence"
           { "dependency-name": "playwright-core" },
           { "dependency-name": "typescript" },
           { "dependency-name": "pdfjs-dist" },
+          { "dependency-name": "vue-router", versions: [">=5.5.0"] },
         ],
       },
       {
@@ -1717,7 +1718,12 @@ function checkDependabot(config) {
       { "dependency-name": "github.com/caddyserver/caddy/v2" },
     ]],
     ["npm", ["/", "/packages/schema"], []],
-    ["npm", ["/apps/web"], [...browserPackages, { "dependency-name": "typescript" }, { "dependency-name": "pdfjs-dist" }]],
+    ["npm", ["/apps/web"], [
+      ...browserPackages,
+      { "dependency-name": "typescript" },
+      { "dependency-name": "pdfjs-dist" },
+      { "dependency-name": "vue-router", versions: [">=5.5.0"] },
+    ]],
     ["npm", ["/deploy/dev-https-browser"], [...browserPackages, { "dependency-name": "@axe-core/playwright" }]],
   ];
   const updates = scopes.map(([ecosystem, directories, ignores]) => ({
