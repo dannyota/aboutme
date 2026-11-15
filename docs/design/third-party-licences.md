@@ -96,10 +96,11 @@ first-party AGPL entry and the base layers below sit outside this list.
 
 ## Base layers and the corresponding source
 
-The runtime images build on unmodified upstream images pulled by digest: Alpine
-for web and caddy, the Playwright Ubuntu image with Chromium for the server, and
-none for the observer. Those layers include GPL and LGPL software, such as
-BusyBox on Alpine and GNU packages on Ubuntu, some under GPLv3.
+The runtime images build on unmodified upstream images pulled by digest: the
+official Node.js Alpine image for web, Alpine for caddy, the Playwright Ubuntu
+image for the server, and none for the observer. Those layers include GPL and
+LGPL software, such as BusyBox on Alpine and GNU packages on Ubuntu, some under
+GPLv3.
 
 For each runtime image, the generator reads the package database of the final
 filesystem (`apk` or `dpkg`) and writes `BASE-IMAGES.txt`: every base image by
@@ -109,6 +110,13 @@ Ubuntu source package on Launchpad, the Alpine aports commit and source files).
 This file sits in the image and beside it in the GitHub release, and it is the
 clear direction to the corresponding source that GPLv3 section 6(d) allows on a
 third-party server.
+
+Some base components are not in a package database, and `BASE-IMAGES.txt` lists
+them by hand with their licence files and source: the Node.js runtime the
+official image installs under `/usr/local` in the web image, the Chromium build
+Playwright installs under `/ms-playwright` in the server image, and the CA
+bundle the observer copies from Alpine's `ca-certificates` package. The build
+fails when one of these paths changes without its entry.
 
 `SOURCE-OFFER.txt` adds a written offer, valid for three years from the image's
 release, to provide the corresponding source of every GPL or LGPL component on
