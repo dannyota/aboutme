@@ -64,16 +64,19 @@ cache: the dispatching session installs a worktree before it dispatches a
 worker, and `scripts/codex-agent.sh` drops the npm cache root once nothing uses
 it.
 
-The pre-push and ci-local guard keeps refusing borrowed dependencies. It walks
-the root `node_modules`, including `.pnpm` as a real directory, and every
-member's `node_modules`. For each symlink it resolves the full target, and the
-target and all its ancestors must be real directories inside the same checkout,
-in one of these places:
+The pre-push and ci-local guard keeps refusing borrowed dependencies. It checks
+each pnpm project root, the workspace root and `deploy/dev-https-browser`, on
+its own. For a project root it walks that root's `node_modules`, including
+`.pnpm` as a real directory, and for the workspace every member's
+`node_modules`. For each symlink it resolves the full target. Every ancestor of
+the target must be a real directory inside the same checkout, and the target
+must be one of:
 
-- the root `node_modules/.pnpm`;
-- a `.bin` entry whose target stays in the same `node_modules` tree;
-- a workspace member listed in `pnpm-workspace.yaml` and named by a `workspace:`
-  dependency in the linking project's `package.json`.
+- a directory inside the same project root's `node_modules/.pnpm`;
+- for a `.bin` entry, a regular file inside the same project root's
+  `node_modules` tree;
+- a workspace member directory listed in `pnpm-workspace.yaml` and named by a
+  `workspace:` dependency in the linking project's `package.json`.
 
 Any other symlink, and any linked `node_modules` or ancestor, is refused as
 before.
