@@ -1,77 +1,128 @@
 # Third-party licences in release images
 
 The owner approved this on 2026-11-15. aboutme publishes four images (server,
-web, caddy, observer) and serves JavaScript bundles to every visitor. Each
-carries code under MIT, BSD, ISC, Apache-2.0, and similar licences that require
-the copyright and licence text in every copy, binaries included. This page owns
-how releases carry those texts. Vendored assets keep their notices in
-`THIRD_PARTY_NOTICES.md` and the generated font notices.
+web, caddy, observer) and serves JavaScript bundles to every visitor. They carry
+code under MIT, BSD, ISC, Apache-2.0, and similar licences that require the
+copyright and licence text in every copy, binaries included, and base layers
+that carry GPL software. This page owns how releases meet those terms.
 
 ## What each image carries
 
 Every image holds `/licenses/`, generated at build time from the exact inputs
-the image compiles:
+the image ships:
 
-- `INDEX.txt`: one line per component with name, version, SPDX identifier, and
-  the path of its licence files.
-- One directory per component with every `LICENSE*`, `LICENCE*`, `COPYING*`, and
-  `NOTICE*` file it ships, copied byte for byte.
+- `INDEX.txt`: one line per component with its kind (first-party, third-party,
+  vendored asset, or base layer), name, version, SPDX identifier, and the paths
+  of its licence files.
+- One directory per third-party component with every `LICENSE*`, `LICENCE*`,
+  `COPYING*`, and `NOTICE*` file it ships, copied byte for byte.
+- The aboutme AGPL-3.0 licence as the first-party entry
+  ([ADR 0001](../adr/0001-agpl-3.0-license.md)).
+- `BASE-IMAGES.txt` and the written source offer, described below.
 
-Components per image:
+### Go images
 
-- **Go images** (server, caddy, observer): every module that `go list -deps`
-  reports for the image's main packages under the release build tags and target
-  platform, from the module cache that built the binary.
-- **Web image**: every package in `.output/server/node_modules`, plus every
-  package whose code the bundler placed in `.output/public/_nuxt`, taken from
-  the bundler's module graph rather than the whole dependency tree.
-- Base-image packages (Alpine, the Playwright image's Ubuntu and Chromium) keep
-  the licence files their distributions install. This page adds none for them.
+The server image ships `server`, `render-browser-supervisor`, `migrate`, and
+`db-setup`; the caddy image ships Caddy with its plugins; the observer image
+ships `observer`. For each command the generator runs `go list -deps` with the
+same `CGO_ENABLED`, `GOOS`, `GOARCH`, and build tags as the release build. It
+resolves each package to its real source directory, following `replace`
+directives, and collects:
+
+- the licence files at the module root, and any licence file in a linked
+  package's own directory or its parents inside the module, which covers code
+  vendored inside a module;
+- the Go licence and patents files of the exact toolchain version, for the
+  linked runtime and standard library.
+
+### Web image
+
+The web image ships the Nitro server, the client bundles, and the separately
+built render workers. For every Vite or Rolldown build that feeds the image, the
+generator takes the packages of the modules in the emitted chunks from the
+bundler's own output: Vite's `build.license` report where the build supports it,
+otherwise Rolldown's per-chunk module list. It adds every package Nitro copies
+to `.output/server/node_modules`. Licence files come from the installed packages
+in the pnpm store, read before the image is assembled.
+
+### Vendored assets
+
+The icon marks and Unicode data recorded in `THIRD_PARTY_NOTICES.md`, and the
+font notices, are copied into `/licenses/` with their creator, source, licence,
+and modification notes, so the notices travel with the image.
 
 ## The public notice
 
-The JavaScript bundles reach browsers, not only the image. The web build writes
-the client-bundle part of the index and licence texts to one public file,
-`/licenses/THIRD_PARTY_NOTICES.txt`, served as plain text like the font notices.
-`licenses` joins the public roots as a Nuxt root through
-`scripts/generate-public-roots.mjs`, so no resume slug can claim it. The privacy
-and terms pages need no change; the repository's `THIRD_PARTY_NOTICES.md` links
-the file.
+The client bundles reach browsers, not only the image. The web build writes one
+public file, `/licenses/THIRD_PARTY_NOTICES.txt`, with the client-side and
+vendored entries and their licence texts, and a reference to the font notices.
+It is served as plain text like the font notices.
+
+`licenses` joins the public roots through `scripts/generate-public-roots.mjs`,
+together with the existing public directories `font-licenses` and `landing`,
+which are valid resume slugs today and not yet reserved. Before the release that
+adds them, a read-only production query confirms that no resume holds any of the
+three slugs. If one does, the release stops for an owner decision.
 
 ## Licence policy
 
-The generator fails the build when a component's licence is not on this list, or
-when it finds no licence file:
+The generator fails the build when a third-party component has no licence file
+or a licence outside this list:
 
 `MIT`, `MIT-0`, `ISC`, `0BSD`, `BSD-2-Clause`, `BSD-3-Clause`, `Apache-2.0`,
-`BlueOak-1.0.0`, `MPL-2.0`, `CC0-1.0`, `CC-BY-4.0`, `OFL-1.1`, `Unicode-3.0`,
-`Python-2.0`.
+`BlueOak-1.0.0`, `CC0-1.0`, `CC-BY-4.0`, `OFL-1.1`, `Unicode-3.0`.
 
-An `OR` expression passes when one choice is on the list, and the index records
-that choice. Apache-2.0 components ship their `NOTICE` file when they have one.
+- An `OR` expression passes when one choice is on the list, and the index
+  records that choice. `dompurify` therefore ships under Apache-2.0.
+- MPL-2.0 alone is refused: shipping an MPL file needs a source location for
+  that version, which this design does not provide.
+- Apache-2.0 components ship their `NOTICE` file when they have one.
+- CC-BY-4.0 entries carry the creator, source, licence, and any modification.
 
 A component whose published package lacks its licence file is listed in
 `third_party/licences/overrides.json` with its SPDX identifier, the upstream URL
 of the file, and a committed copy under `third_party/licences/`. For example,
 `github.com/altcha-org/altcha-lib-go/v2` keeps its MIT licence at the repository
-root, outside the `v2` module. A reviewed change adds each override. A version
-change of an overridden component fails until the override is checked again.
+root, outside the `v2` module. A reviewed change adds each override, and a
+version change of an overridden component fails until the override is checked
+again.
 
-No component under GPL, LGPL, AGPL, SSPL, BUSL, or a non-commercial licence
-enters an image without an owner decision recorded here.
+GPL, LGPL, AGPL, SSPL, BUSL, and non-commercial licences never enter as
+third-party application code without an owner decision recorded here. The
+first-party AGPL entry and the base layers below sit outside this list.
+
+## Base layers and the source offer
+
+The runtime images build on unmodified upstream images pulled by digest: Alpine
+for web and caddy, the Playwright Ubuntu image with Chromium for the server, and
+none for the observer. Those layers include GPL software, such as BusyBox on
+Alpine and GNU packages on Ubuntu, and keep the licence files their
+distributions install.
+
+`BASE-IMAGES.txt` names each base image by digest with its upstream source
+location (the Alpine aports release branch, the Ubuntu source archive for the
+image's release, and the Playwright image's source). Beside it,
+`SOURCE-OFFER.txt` offers the corresponding source of every GPL or LGPL
+component in those layers, for three years from the image's release, on request
+to `danny@aboutme.vn` (owner, 2026-11-15). The owner mirrors the requested
+source when asked.
 
 ## Checks
 
 - The generator runs in each image build and in `release-check` on the exact
   commit. A failure names the component and the reason.
-- `release-image-check` asserts that `/licenses/INDEX.txt` exists in every
-  published image and lists the image's own main module or package.
-- A unit test feeds the generator fixtures for a missing licence file, a licence
-  outside the list, an `OR` expression, a `NOTICE` file, and an override whose
-  version no longer matches.
+- `release-image-check` extracts each published image's filesystem on the
+  runner, so the shell-free observer is checked too, and asserts that every path
+  in `INDEX.txt` exists, the first-party entry, `BASE-IMAGES.txt`, and
+  `SOURCE-OFFER.txt` are present, and every package in the web build's client
+  chunk report appears in the public notice.
+- Unit tests feed the generator fixtures for a missing licence file, a licence
+  outside the list, an `OR` expression, MPL-2.0 alone, a `NOTICE` file, a
+  `replace` directive, a licence file in a package subdirectory, and an override
+  whose version no longer matches.
 
 ## Order
 
-This change follows the pnpm workspace, which gives one lockfile and
-`pnpm licenses list` for the package metadata, and the removal of the undeployed
-AWS code, which drops modules the images no longer need.
+This change follows the pnpm workspace, which gives one lockfile and the store
+the web generator reads, and the removal of the undeployed AWS code, which drops
+modules the images no longer need.
