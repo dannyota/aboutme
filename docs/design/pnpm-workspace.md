@@ -27,10 +27,12 @@ Use the latest pnpm 12 release that is at least one day old, pinned exactly in
 from `packageManager` and never downloads another pnpm; the implementer names
 the pnpm 12 settings that do this and tests both refusals.
 
-Every environment installs that exact version with
-`npm install --global --ignore-scripts pnpm@<pin>`: CI, image build stages, the
-Mac, and the Ubuntu host. Corepack is not used, because Node.js 25 and later no
-longer bundle it.
+CI, image build stages, and the Ubuntu host install that exact version with
+`npm install --global --ignore-scripts pnpm@<pin>`. They do not use Corepack,
+because Node.js 25 and later no longer bundle it. A developer machine may reach
+pnpm through a Corepack shim that another project enabled; the tooling there
+checks only that `pnpm --version` inside the checkout equals the pin, and the
+no-download refusal test runs where pnpm is the npm-installed one.
 
 ## Install settings
 
@@ -129,7 +131,12 @@ The change is accepted when:
   merge;
 - the linux/amd64 web image built from the head has the same `.output` path list
   and file hashes as the one built from the migration's base commit. The report
-  names every differing file and its cause, and only build metadata may differ;
+  names every differing file and its cause. Build metadata may differ. Code that
+  npm resolved from `.output/server/node_modules` at run time may be bundled
+  into the server and worker chunks, because the isolated layout hides
+  transitive packages from the bundler, when the report shows each such package
+  at the same version in both images and the same public pages answer with the
+  same status and size;
 - no `package-lock.json` and no npm install or run call remains, outside docs
   that record history and the pnpm bootstrap line;
 - [resources](../../instructions/resources.md),
