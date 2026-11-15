@@ -1,14 +1,11 @@
 package auth
 
 import (
-	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/netip"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"danny.vn/aboutme/apps/server/internal/api"
@@ -29,15 +26,21 @@ func (s *Service) handleLogout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	now := s.sessionMgr.now()
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		qtx := s.q.WithTx(tx)
 		user, lockErr := lockAccountUser(ctx, qtx, sess.UserID)
 		if lockErr != nil {
 			return lockErr
 		}
-		if revokeErr := qtx.RevokeSession(ctx, store.RevokeSessionParams{ID: sess.ID, RevokedAt: &now}); revokeErr != nil {
+		current, now, gateErr := lockCallerSessionAt(ctx, qtx, user, sess.ID, s.sessionMgr.now)
+		if gateErr != nil {
+			return gateErr
+		}
+		if revokeErr := qtx.RevokeSession(ctx, store.RevokeSessionParams{ID: current.ID, RevokedAt: &now}); revokeErr != nil {
 			return fmt.Errorf("revoke session: %w", revokeErr)
+		}
+		if _, sweepErr := revokeLineagePartnersTx(ctx, qtx, current, now); sweepErr != nil {
+			return sweepErr
 		}
 		s.sessionMgr.AccountSessionsEndedLocked(user.ID)
 		return nil
@@ -51,38 +54,7 @@ func (s *Service) handleLogout(w http.ResponseWriter, r *http.Request) {
 
 	ClearSessionCookie(w)
 	w.Header().Set("Clear-Site-Data", clearSiteDataHeaderValue)
-
-	if _, ok := s.revokeLineagePartners(ctx, sess, w, r); !ok {
-		return
-	}
-
 	writeNoContent(w)
-}
-
-func (s *Service) revokeLineagePartners(ctx context.Context, row store.Session, w http.ResponseWriter, r *http.Request) (revokedIDs []uuid.UUID, ok bool) {
-	if row.RotatedFrom != nil {
-		if err := s.sessionMgr.Revoke(ctx, *row.RotatedFrom); err != nil {
-			s.writeSessionAPIInternalError(w, r, "revoke_predecessor_session", err)
-			return nil, false
-		}
-		revokedIDs = append(revokedIDs, *row.RotatedFrom)
-	}
-
-	succRow, err := s.q.FindLiveSuccessorSession(ctx, &row.ID)
-	switch {
-	case err == nil:
-		if revokeErr := s.sessionMgr.Revoke(ctx, succRow.ID); revokeErr != nil {
-			s.writeSessionAPIInternalError(w, r, "revoke_successor_session", revokeErr)
-			return nil, false
-		}
-		revokedIDs = append(revokedIDs, succRow.ID)
-	case errors.Is(err, pgx.ErrNoRows):
-	default:
-		s.writeSessionAPIInternalError(w, r, "find_successor_session", err)
-		return nil, false
-	}
-
-	return revokedIDs, true
 }
 
 type sessionDeviceEntry struct {

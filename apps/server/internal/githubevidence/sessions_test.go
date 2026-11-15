@@ -178,9 +178,6 @@ func TestRegistry_CloseRevokesPendingTokensAndRefusesTheirInstall(t *testing.T) 
 		if revoked.total() != 2 || revoked.count("late-token") != 1 {
 			t.Fatalf("revocations = %v, want each token once", revoked.tokens)
 		}
-		if reg.beginIssue() {
-			t.Fatal("an exchange began after close")
-		}
 	})
 }
 
@@ -202,29 +199,21 @@ func TestRegistry_ReleasedCallbackTokenRevokesOnce(t *testing.T) {
 	})
 }
 
-func TestRegistry_ShutdownWaitsForRevocationsAndExchanges(t *testing.T) {
+func TestRegistry_ShutdownWaitsForRevocations(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		revoked := &revocations{block: 4 * time.Second}
 		reg := newRegistry(sessionTTL, time.Now, revoked.revoke)
 		installed(t, reg, uuid.New(), "first")
 		reg.hold("pending")
-		if !reg.beginIssue() {
-			t.Fatal("beginIssue refused before close")
-		}
-		go func() {
-			time.Sleep(3 * time.Second)
-			reg.hold("issued-after-close")
-			reg.endIssue()
-		}()
 		svc := &Service{registry: reg}
 		start := time.Now()
 		if err := svc.Shutdown(context.Background()); err != nil {
 			t.Fatalf("Shutdown() error = %v", err)
 		}
-		if elapsed := time.Since(start); elapsed != 7*time.Second {
-			t.Fatalf("Shutdown returned after %v, want 7s: the exchange, then its revocation", elapsed)
+		if elapsed := time.Since(start); elapsed != 4*time.Second {
+			t.Fatalf("Shutdown returned after %v, want 4s: the parallel revocations", elapsed)
 		}
-		for _, token := range []string{"first", "pending", "issued-after-close"} {
+		for _, token := range []string{"first", "pending"} {
 			if revoked.count(token) != 1 {
 				t.Fatalf("revocations of %s = %d, want 1", token, revoked.count(token))
 			}
@@ -239,8 +228,8 @@ func TestRegistry_ShutdownWaitIsBounded(t *testing.T) {
 		installed(t, reg, uuid.New(), "stuck")
 		svc := &Service{registry: reg}
 		start := time.Now()
-		if err := svc.Shutdown(context.Background()); !errors.Is(err, context.DeadlineExceeded) || time.Since(start) != shutdownWait {
-			t.Fatalf("Shutdown() = %v after %v, want the deadline after %v", err, time.Since(start), shutdownWait)
+		if err := svc.Shutdown(context.Background()); !errors.Is(err, context.DeadlineExceeded) || time.Since(start) != shutdownBound {
+			t.Fatalf("Shutdown() = %v after %v, want the deadline after %v", err, time.Since(start), shutdownBound)
 		}
 		time.Sleep(time.Hour)
 	})

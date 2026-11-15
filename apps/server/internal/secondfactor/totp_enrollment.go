@@ -49,8 +49,7 @@ func (s *Service) StartTOTPEnrollment(ctx context.Context, current store.Session
 	var result auth.TOTPEnrollmentStart
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		qtx := s.q.WithTx(tx)
-		now := s.now()
-		user, sess, policy, lockErr := lockAccount(ctx, qtx, current, now)
+		user, sess, policy, now, lockErr := lockAccount(ctx, qtx, current, s.now)
 		if lockErr != nil {
 			return lockErr
 		}
@@ -103,8 +102,7 @@ func (s *Service) CompleteTOTPEnrollment(ctx context.Context, current store.Sess
 	)
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		qtx := s.q.WithTx(tx)
-		now := s.now()
-		user, sess, policy, lockErr := lockAccount(ctx, qtx, current, now)
+		user, sess, policy, now, lockErr := lockAccount(ctx, qtx, current, s.now)
 		if lockErr != nil {
 			return lockErr
 		}
@@ -203,6 +201,7 @@ func (s *Service) CompleteTOTPEnrollment(ctx context.Context, current store.Sess
 			return commitErr
 		}
 		result = auth.TOTPEnrollmentComplete{RecoveryCodes: codes, Session: issue}
+		s.sessions.AccountSessionsEndedLocked(user.ID)
 		return nil
 	})
 	if err != nil {

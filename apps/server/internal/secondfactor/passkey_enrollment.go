@@ -24,8 +24,7 @@ func (s *Service) StartPasskeyRegistration(ctx context.Context, current store.Se
 	var options auth.SecondFactorOptions
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		qtx := s.q.WithTx(tx)
-		now := s.now()
-		user, sess, policy, err := lockAccount(ctx, qtx, current, now)
+		user, sess, policy, now, err := lockAccount(ctx, qtx, current, s.now)
 		if err != nil {
 			return err
 		}
@@ -80,8 +79,7 @@ func (s *Service) CompletePasskeyRegistration(ctx context.Context, current store
 	)
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		qtx := s.q.WithTx(tx)
-		now := s.now()
-		user, sess, policy, lockErr := lockAccount(ctx, qtx, current, now)
+		user, sess, policy, now, lockErr := lockAccount(ctx, qtx, current, s.now)
 		if lockErr != nil {
 			return lockErr
 		}
@@ -127,7 +125,11 @@ func (s *Service) CompletePasskeyRegistration(ctx context.Context, current store
 			outcome = auth.ErrSecondFactorVerificationFailed
 			return nil
 		}
-		return writeErr
+		if writeErr != nil {
+			return writeErr
+		}
+		s.sessions.AccountSessionsEndedLocked(user.ID)
+		return nil
 	})
 	if err != nil {
 		return auth.SecondFactorRegistration{}, err

@@ -113,9 +113,9 @@ func (s *PasswordService) reauthWithSecondFactor(ctx context.Context, sess store
 }
 
 func (s *PasswordService) change(ctx context.Context, sess store.Session, rawPassword, clientIP string) (string, error) {
-	now := s.clock()
+	admittedAt := s.clock()
 
-	if d := s.limits.AdmitAccountMutation(now, sess.UserID, clientAddrFromString(clientIP)); !d.Allowed {
+	if d := s.limits.AdmitAccountMutation(admittedAt, sess.UserID, clientAddrFromString(clientIP)); !d.Allowed {
 		return "", &passwordRateLimitedError{retryAfterSeconds: d.RetryAfterSeconds}
 	}
 	check, err := s.policy.CheckNew(ctx, rawPassword)
@@ -144,7 +144,7 @@ func (s *PasswordService) change(ctx context.Context, sess store.Session, rawPas
 		if s.userLockProbe != nil {
 			s.userLockProbe()
 		}
-		live, gateErr := lockSensitiveSession(ctx, qtx, user, sess.ID, now)
+		live, now, gateErr := lockSensitiveSessionAt(ctx, qtx, user, sess.ID, s.clock)
 		if gateErr != nil {
 			return gateErr
 		}
@@ -167,18 +167,21 @@ func (s *PasswordService) change(ctx context.Context, sess store.Session, rawPas
 		if _, rerr := qtx.RevokeAllSessions(ctx, store.RevokeAllSessionsParams{UserID: sess.UserID, RevokedAt: &now}); rerr != nil {
 			return rerr
 		}
-		s.sessions.AccountSessionsEndedLocked(user.ID)
 		newRaw, err = s.createFreshSessionTx(ctx, qtx, user, live, now)
 		if err != nil {
 			return err
 		}
-		return s.outbox.EnqueueTx(ctx, qtx, authmail.EnqueueRequest{
+		if enqueueErr := s.outbox.EnqueueTx(ctx, qtx, authmail.EnqueueRequest{
 			JobID:     jobID,
 			Kind:      authmail.KindPasswordChanged,
 			UserID:    &sess.UserID,
 			Payload:   newEmailPayload(user.Email, ""),
 			ExpiresAt: now.Add(passwordNotificationTTL),
-		})
+		}); enqueueErr != nil {
+			return enqueueErr
+		}
+		s.sessions.AccountSessionsEndedLocked(user.ID)
+		return nil
 	})
 	if err != nil {
 		if errors.Is(err, errPasswordReauthRequired) || errors.Is(err, ErrSessionInvalid) || errors.Is(err, ErrReauthRequired) {

@@ -60,12 +60,11 @@ func (s *Service) handleCallback(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, "session_mismatch")
 		return
 	}
-	if !s.registry.beginIssue() {
+	token, issued, err := s.issueToken(r.Context(), sess.UserID, code, tx.PKCEVerifier)
+	if !issued {
 		s.fail(w, r, "unavailable")
 		return
 	}
-	token, err := s.client.exchange(r.Context(), sess.UserID, code, s.callbackURL, tx.PKCEVerifier)
-	s.registry.endIssue()
 	if err != nil {
 		s.registry.release(token)
 		s.fail(w, r, exchangeReason(err))
@@ -123,7 +122,7 @@ func (s *Service) installConnection(ctx context.Context, a account, want int64, 
 		UserID:       a.user.ID,
 		GithubUserID: profile.ID,
 		Login:        profile.Login,
-		ConnectedAt:  s.now(),
+		ConnectedAt:  a.now,
 	})
 	if err != nil {
 		return nil, err

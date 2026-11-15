@@ -19,8 +19,7 @@ func (s *Service) RemovePasskey(ctx context.Context, current store.Session, pass
 	var issue auth.SessionIssue
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		qtx := s.q.WithTx(tx)
-		now := s.now()
-		user, sess, policy, err := lockAccount(ctx, qtx, current, now)
+		user, sess, policy, now, err := lockAccount(ctx, qtx, current, s.now)
 		if err != nil {
 			return err
 		}
@@ -54,7 +53,11 @@ func (s *Service) RemovePasskey(ctx context.Context, current store.Session, pass
 			kind, proof = authmail.KindSecondFactorDisabled, nil
 		}
 		issue, err = s.commitFactorChange(ctx, qtx, user, sess, proof, kind, now)
-		return err
+		if err != nil {
+			return err
+		}
+		s.sessions.AccountSessionsEndedLocked(user.ID)
+		return nil
 	})
 	if err != nil {
 		return auth.SessionIssue{}, err

@@ -93,7 +93,7 @@ func TestSessionEndListener_RefusedSignOutEndsNothing(t *testing.T) {
 	endings.requireExactly(t)
 }
 
-func TestSessionEndListener_EpochChange(t *testing.T) {
+func TestSessionEndListener_EpochChangeLeavesTheNotificationToItsCaller(t *testing.T) {
 	pool := newTestPool(t)
 	q := store.New(pool)
 	userID := createTestUser(t, q)
@@ -112,7 +112,7 @@ func TestSessionEndListener_EpochChange(t *testing.T) {
 	if err != nil {
 		t.Fatalf("epoch change error = %v", err)
 	}
-	endings.requireExactly(t, userID)
+	endings.requireExactly(t)
 }
 
 func TestSessionEndListener_PasswordChange(t *testing.T) {

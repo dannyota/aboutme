@@ -122,12 +122,14 @@ func TestBoundary_RevokingAnotherBrowserSessionDuringTheExchange(t *testing.T) {
 
 func TestBoundary_ShutdownDuringTheExchangeCommitsNothing(t *testing.T) {
 	h := newHarness(t)
-	h.onceBeforeToken(h.svc.registry.close)
+	h.onceBeforeToken(func() { h.svc.registry.close() })
 	requireOutcome(t, h.connect(h.raw, h.session), outcomeFailed)
 	h.drain()
-	tokens, revoked, _, _ := h.gh.snapshot()
-	if len(tokens) != 1 || !slices.Equal(revoked, tokens) {
-		t.Fatalf("issued %d tokens, revoked %d; want the one issued token revoked once", len(tokens), len(revoked))
+	if _, revoked, _, profiles := h.gh.snapshot(); len(revoked) != 0 || profiles != 0 {
+		t.Fatalf("the exchange canceled at shutdown yielded a token: %d revocations, %d profile fetches", len(revoked), profiles)
+	}
+	if len(h.svc.registry.pending) != 0 || len(h.svc.registry.sessions) != 0 {
+		t.Fatal("a token is still held after shutdown")
 	}
 	if row := h.connection(h.user.ID); row.found {
 		t.Fatalf("a callback that failed at shutdown committed a connection: %+v", row)
@@ -260,7 +262,7 @@ func TestBoundary_ShutdownRevokesTheTokenOfABlockedCallback(t *testing.T) {
 	if !h.waitBlockedBy(pid, done) {
 		t.Fatal("the callback did not block on the account lock")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), shutdownWait)
+	ctx, cancel := context.WithTimeout(context.Background(), shutdownBound)
 	defer cancel()
 	if err = h.svc.Shutdown(ctx); err != nil {
 		t.Fatalf("Shutdown() with a blocked callback = %v", err)

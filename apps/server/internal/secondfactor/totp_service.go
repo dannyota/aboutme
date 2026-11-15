@@ -139,8 +139,7 @@ func (s *Service) RemoveTOTP(ctx context.Context, current store.Session) (auth.S
 	var issue auth.SessionIssue
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		qtx := s.q.WithTx(tx)
-		now := s.now()
-		user, sess, policy, lockErr := lockAccount(ctx, qtx, current, now)
+		user, sess, policy, now, lockErr := lockAccount(ctx, qtx, current, s.now)
 		if lockErr != nil {
 			return lockErr
 		}
@@ -179,7 +178,11 @@ func (s *Service) RemoveTOTP(ctx context.Context, current store.Session) (auth.S
 		}
 		var changeErr error
 		issue, changeErr = s.commitFactorChange(ctx, qtx, user, sess, proof, kind, now)
-		return changeErr
+		if changeErr != nil {
+			return changeErr
+		}
+		s.sessions.AccountSessionsEndedLocked(user.ID)
+		return nil
 	})
 	if err != nil {
 		return auth.SessionIssue{}, err

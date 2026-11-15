@@ -46,42 +46,52 @@ type liveSession struct {
 	timer      *time.Timer
 }
 
+type issue struct {
+	cancel context.CancelFunc
+}
+
 type registry struct {
 	mu       sync.Mutex
 	closed   bool
+	closedAt time.Time
 	sessions map[uuid.UUID]*liveSession
 	pending  map[*heldToken]struct{}
-	issuing  int
+	issuing  map[*issue]struct{}
 	inflight int
 	idle     []chan struct{}
 	ttl      time.Duration
 	now      func() time.Time
 	revoke   func(token string)
+	observe  func()
 }
 
 func newRegistry(ttl time.Duration, now func() time.Time, revoke func(token string)) *registry {
 	return &registry{
 		sessions: map[uuid.UUID]*liveSession{},
 		pending:  map[*heldToken]struct{}{},
+		issuing:  map[*issue]struct{}{},
 		ttl:      ttl,
 		now:      now,
 		revoke:   revoke,
 	}
 }
 
-func (r *registry) beginIssue() bool {
+func (r *registry) beginIssue(ctx context.Context) (context.Context, func(), bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.closed {
-		return false
+		return nil, nil, false
 	}
-	r.issuing++
-	return true
+	issueCtx, cancel := context.WithCancel(ctx)
+	entry := &issue{cancel: cancel}
+	r.issuing[entry] = struct{}{}
+	return issueCtx, func() { r.endIssue(entry) }, true
 }
 
-func (r *registry) endIssue() {
+func (r *registry) endIssue(entry *issue) {
 	r.mu.Lock()
-	r.issuing--
+	delete(r.issuing, entry)
+	entry.cancel()
 	r.signalIdleLocked()
 	r.mu.Unlock()
 }
@@ -112,6 +122,7 @@ func (r *registry) release(token *heldToken) {
 }
 
 func (r *registry) install(account uuid.UUID, token *heldToken, epoch, generation int64) (*liveSession, bool) {
+	r.observed()
 	r.mu.Lock()
 	if _, pending := r.pending[token]; r.closed || !pending {
 		r.mu.Unlock()
@@ -139,6 +150,7 @@ func (r *registry) current(account uuid.UUID) (*liveSession, bool) {
 }
 
 func (r *registry) end(account uuid.UUID) bool {
+	r.observed()
 	r.mu.Lock()
 	session := r.sessions[account]
 	if session == nil {
@@ -154,6 +166,7 @@ func (r *registry) end(account uuid.UUID) bool {
 }
 
 func (r *registry) endSession(account uuid.UUID, session *liveSession) {
+	r.observed()
 	r.mu.Lock()
 	if r.sessions[account] != session {
 		r.mu.Unlock()
@@ -166,13 +179,24 @@ func (r *registry) endSession(account uuid.UUID, session *liveSession) {
 	r.spawn(claimed)
 }
 
-func (r *registry) close() {
+func (r *registry) observed() {
+	if r.observe != nil {
+		r.observe()
+	}
+}
+
+func (r *registry) close() time.Time {
 	r.mu.Lock()
 	if r.closed {
+		closedAt := r.closedAt
 		r.mu.Unlock()
-		return
+		return closedAt
 	}
-	r.closed = true
+	r.closed, r.closedAt = true, time.Now()
+	for entry := range r.issuing {
+		entry.cancel()
+	}
+	closedAt := r.closedAt
 	var claimed []string
 	for account, session := range r.sessions {
 		session.timer.Stop()
@@ -185,6 +209,7 @@ func (r *registry) close() {
 	}
 	r.mu.Unlock()
 	r.spawn(claimed)
+	return closedAt
 }
 
 func (r *registry) isClosed() bool {
@@ -195,7 +220,7 @@ func (r *registry) isClosed() bool {
 
 func (r *registry) wait(ctx context.Context) error {
 	r.mu.Lock()
-	if r.inflight == 0 && r.issuing == 0 {
+	if r.inflight == 0 && len(r.issuing) == 0 {
 		r.mu.Unlock()
 		return nil
 	}
@@ -220,7 +245,7 @@ func (r *registry) claimLocked(token *heldToken, claimed []string) []string {
 }
 
 func (r *registry) signalIdleLocked() {
-	if r.inflight != 0 || r.issuing != 0 {
+	if r.inflight != 0 || len(r.issuing) != 0 {
 		return
 	}
 	for _, idle := range r.idle {

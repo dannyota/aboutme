@@ -131,7 +131,7 @@ func (s *Service) statusSnapshot(ctx context.Context, a account) (statusBody, er
 	if !isLive {
 		return body, nil
 	}
-	if body.Connection != nil && live.generation == generation && live.epoch == a.user.AuthEpoch && live.expiresAt.After(s.now()) {
+	if body.Connection != nil && live.generation == generation && live.epoch == a.user.AuthEpoch && live.expiresAt.After(a.now) {
 		body.Session = &sessionBody{ExpiresAt: live.expiresAt.UTC()}
 		return body, nil
 	}

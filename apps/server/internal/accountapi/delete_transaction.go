@@ -83,9 +83,6 @@ func (s *Service) mutateDeletion(ctx context.Context, qtx *store.Queries, plan a
 	if s.afterUserLock != nil {
 		s.afterUserLock()
 	}
-	if s.sessions != nil {
-		s.sessions.AccountSessionsEndedLocked(lockedUser.ID)
-	}
 	slugs := make([]string, 0, len(plan.resumes))
 	for _, item := range plan.resumes {
 		if item.Slug != nil {
@@ -127,7 +124,7 @@ func (s *Service) mutateDeletion(ctx context.Context, qtx *store.Queries, plan a
 		return errAccountChanged
 	}
 	if plan.operatorSlug == "" {
-		if err := requireSelfDeleteProof(ctx, qtx, plan, lockedUser, s.now()); err != nil {
+		if err := requireSelfDeleteProof(ctx, qtx, plan, lockedUser, s.now); err != nil {
 			return err
 		}
 	}
@@ -180,10 +177,13 @@ func (s *Service) mutateDeletion(ctx context.Context, qtx *store.Queries, plan a
 	} else if deleted != 1 {
 		return errAccountChanged
 	}
+	if s.sessions != nil {
+		s.sessions.AccountSessionsEndedLocked(lockedUser.ID)
+	}
 	return nil
 }
 
-func requireSelfDeleteProof(ctx context.Context, qtx *store.Queries, plan accountDeletionPlan, lockedUser store.User, now time.Time) error {
+func requireSelfDeleteProof(ctx context.Context, qtx *store.Queries, plan accountDeletionPlan, lockedUser store.User, clock func() time.Time) error {
 	liveSession, err := qtx.GetAccountDeletionSessionForUpdate(ctx, store.GetAccountDeletionSessionForUpdateParams{
 		ID: plan.sessionID, UserID: plan.user.ID,
 	})
@@ -202,7 +202,7 @@ func requireSelfDeleteProof(ctx context.Context, qtx *store.Queries, plan accoun
 	default:
 		return fmt.Errorf("accountapi: lock factor policy: %w", err)
 	}
-	if err := auth.RequireRecentSecondFactorReauth(lockedUser, policyPtr, liveSession, now); err != nil {
+	if err := auth.RequireRecentSecondFactorReauth(lockedUser, policyPtr, liveSession, clock()); err != nil {
 		return err
 	}
 	return nil

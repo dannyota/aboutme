@@ -29,7 +29,7 @@ const (
 	startLimit       = 10
 	requestLimit     = 120
 	limitWindow      = time.Hour
-	shutdownWait     = 2*requestTimeout + time.Second
+	shutdownBound    = requestTimeout + time.Second
 	settingsPath     = "/app/settings/sessions"
 )
 
@@ -113,17 +113,28 @@ type account struct {
 	tx   pgx.Tx
 	q    *store.Queries
 	user store.User
+	now  time.Time
 }
 
 func (s *Service) inAccount(ctx context.Context, sess store.Session, change func(context.Context, account) error) error {
 	return pgx.BeginFunc(ctx, s.pool, func(dbTx pgx.Tx) error {
 		qtx := s.q.WithTx(dbTx)
-		user, err := auth.LockSessionAccount(ctx, qtx, sess, s.now())
+		user, now, err := auth.LockSessionAccount(ctx, qtx, sess, s.now)
 		if err != nil {
 			return err
 		}
-		return change(ctx, account{tx: dbTx, q: qtx, user: user})
+		return change(ctx, account{tx: dbTx, q: qtx, user: user, now: now})
 	})
+}
+
+func (s *Service) issueToken(ctx context.Context, account uuid.UUID, code, verifier string) (*heldToken, bool, error) {
+	issueCtx, done, ok := s.registry.beginIssue(ctx)
+	if !ok {
+		return nil, false, nil
+	}
+	defer done()
+	token, err := s.client.exchange(issueCtx, account, code, s.callbackURL, verifier)
+	return token, true, err
 }
 
 func (s *Service) Enabled() bool {
@@ -152,9 +163,8 @@ func (s *Service) Shutdown(ctx context.Context) error {
 	if s.registry == nil {
 		return nil
 	}
-	ctx, cancel := context.WithTimeout(ctx, shutdownWait)
+	ctx, cancel := context.WithDeadline(ctx, s.registry.close().Add(shutdownBound))
 	defer cancel()
-	s.registry.close()
 	return s.registry.wait(ctx)
 }
 

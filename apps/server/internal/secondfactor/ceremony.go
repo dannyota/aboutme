@@ -15,29 +15,30 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-func lockAccount(ctx context.Context, qtx *store.Queries, current store.Session, now time.Time) (store.User, store.Session, *store.SecondFactorPolicy, error) {
+func lockAccount(ctx context.Context, qtx *store.Queries, current store.Session, clock func() time.Time) (store.User, store.Session, *store.SecondFactorPolicy, time.Time, error) {
 	user, err := qtx.GetUserForUpdate(ctx, current.UserID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return store.User{}, store.Session{}, nil, auth.ErrSessionInvalid
+			return store.User{}, store.Session{}, nil, time.Time{}, auth.ErrSessionInvalid
 		}
-		return store.User{}, store.Session{}, nil, fmt.Errorf("lock user: %w", err)
+		return store.User{}, store.Session{}, nil, time.Time{}, fmt.Errorf("lock user: %w", err)
 	}
 	sess, err := qtx.GetSessionByIDForUpdate(ctx, current.ID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return store.User{}, store.Session{}, nil, auth.ErrSessionInvalid
+			return store.User{}, store.Session{}, nil, time.Time{}, auth.ErrSessionInvalid
 		}
-		return store.User{}, store.Session{}, nil, fmt.Errorf("lock session: %w", err)
+		return store.User{}, store.Session{}, nil, time.Time{}, fmt.Errorf("lock session: %w", err)
 	}
+	now := clock()
 	if sess.UserID != user.ID || sess.AuthEpoch != user.AuthEpoch || auth.RequireLiveSession(sess, now) != nil {
-		return store.User{}, store.Session{}, nil, auth.ErrSessionInvalid
+		return store.User{}, store.Session{}, nil, time.Time{}, auth.ErrSessionInvalid
 	}
 	policy, err := lockPolicy(ctx, qtx, user.ID)
 	if err != nil {
-		return store.User{}, store.Session{}, nil, err
+		return store.User{}, store.Session{}, nil, time.Time{}, err
 	}
-	return user, sess, policy, nil
+	return user, sess, policy, now, nil
 }
 
 func lockPolicy(ctx context.Context, qtx *store.Queries, userID uuid.UUID) (*store.SecondFactorPolicy, error) {
