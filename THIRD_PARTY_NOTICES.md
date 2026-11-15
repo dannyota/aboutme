@@ -37,7 +37,7 @@ package manifests. Font notices are generated separately in
 
 - Files: `apps/web/app/components/public/ProjectLinkIcon.vue` (the `git-branch`,
   `external-link` and `link` geometry).
-- Source: [Lucide](https://lucide.dev/) npm package `@lucide/vue@1.69.0`.
+- Source: [Lucide](https://lucide.dev/) npm package `@lucide/vue@1.72.0`.
   Copyright (c) 2026 Lucide Icons and Contributors.
 - Licence: ISC, per the package `LICENSE`. The same file marks `external-link`
   and `link` as derived from the Feather project, Copyright (c) 2013-present
