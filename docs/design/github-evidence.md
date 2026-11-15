@@ -28,6 +28,13 @@ client id, secret and callback URL. The capabilities response tells the web app
 whether evidence is available. Sign-in start methods, purposes and scopes
 ([ADR 0016](../adr/0016-sign-in-providers.md)) are untouched.
 
+Connecting collects GitHub identity data. In production the credentials are set,
+and the feature turns on, only after two conditions hold. First, the bilingual
+privacy notice lists the GitHub connection: the GitHub user id, login and
+connected time, and that the token is never stored. Second, existing accounts
+have received the email the notice promises before a change in what is
+collected. The notice text needs the owner's approval.
+
 ## Connection
 
 | Field          | Rule                                                             |
@@ -73,22 +80,36 @@ whether evidence is available. Sign-in start methods, purposes and scopes
 The token exists only in server memory. The production application has token
 expiration on, so GitHub issues the access token for eight hours together with a
 refresh token. The server never stores or uses the refresh token and drops it
-with the token response.
+with the token response. An unused refresh token stays valid at GitHub for six
+months, which is why it is dropped at once.
 
 - A session starts at the callback, lasts at most 30 minutes, and is held in the
   memory of the server process, keyed by user. It records the user's
   authentication epoch and the connection generation. One session per account; a
   new one replaces the old.
 - It ends on "Done", expiry, sign-out, an epoch change, disconnect, replacement
-  and process exit. Ending discards the token and makes one revocation request,
-  `DELETE https://api.github.com/applications/{client_id}/token`, under the
-  outbound bounds and never retried. Revocation is always attempted and does not
-  count toward the per-account request limit. The request needs the token
-  itself, so a crash or a failed request leaves it valid at GitHub and held by
-  no one; a failed revocation is logged as a fixed category, without the token
-  or any response text.
+  and process exit. Ending discards the token through token cleanup.
+- Token cleanup is one path for every issued token that is discarded: a callback
+  that fails after the code exchange (generation mismatch, rejected scope,
+  failed profile fetch) and every session ending above, including process
+  shutdown where shutdown still allows a request. Cleanup claims the token
+  atomically, so concurrent endings send no second request, and makes exactly
+  one revocation attempt under the outbound bounds, never retried. Revocation is
+  always attempted and does not count toward the per-account request limit.
+- Revocation is `DELETE https://api.github.com/applications/{client_id}/token`,
+  authenticated with the application's client id and secret in Basic auth, with
+  `{"access_token": "<token>"}` as the JSON body. The request needs the token
+  itself, so a crash or a failed request leaves the token valid at GitHub, for
+  at most eight hours, and held by no one. A failed revocation is logged as a
+  fixed category.
 - The token is never written to the database, a file, a log, a response or the
   export. A database backup contains none.
+- No log, error or diagnostic dump contains the access or refresh token, the
+  client secret, an `Authorization` header, a request or response body, or a raw
+  GitHub error. The server container runs with core dumps off (`Ulimit=core:0:0`
+  in its Quadlet). [Host hardening](host-hardening.md#database-logs-and-cores)
+  proposes this limit for every Quadlet; the server's comes first, with this
+  feature.
 - When no session is live, the picker asks the owner to continue with GitHub;
   GitHub does not prompt again for an authorized application.
 
@@ -169,8 +190,8 @@ MCP tool reaches them.
 | One GitHub response                 | 512 KiB, read whole, then parsed      |
 | One GitHub request                  | 5 s; no retry                         |
 
-The code exchange and the profile fetch count toward the per-account request
-limit; revocation does not.
+The limits above were approved with this design. The code exchange and the
+profile fetch count toward the per-account request limit; revocation does not.
 
 ## Outbound requests
 
@@ -245,6 +266,10 @@ Either way each affected project changes through one library mutation.
 - A callback under another user's session, a replayed callback, and a callback
   after a disconnect all fail without creating a connection.
 - A token response with a non-empty or missing scope is refused.
+- Every token discarded after the code exchange gets exactly one revocation
+  attempt, also when endings race, and none of the secrets or raw responses
+  above reaches a log or error.
+- The server Quadlet sets `Ulimit=core:0:0`.
 - No route, export, log, error or database row contains a GitHub token.
 - An item is attached only when its rule holds for the connected account id; a
   login match never confirms; a contributor is never confirmed.

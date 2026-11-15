@@ -17,10 +17,11 @@ GitHub sign-in is built but off in production
 profile fetch and no refresh token is stored
 ([security: sign-in](../design/security-sign-in.md)). A GitHub token written to
 the database would also sit in every backup for 30 days, and GitHub OAuth
-application tokens do not expire on their own. GitHub grants read access to
-public information with no scope, links pull requests and releases to a durable
-numeric account id, and links commits and contributor lists by email address,
-which anyone can set
+application tokens do not expire by default; the production evidence application
+has expiration on, so its access tokens last eight hours. GitHub grants read
+access to public information with no scope, links pull requests and releases to
+a durable numeric account id, and links commits and contributor lists by email
+address, which anyone can set
 ([sources](../plans/roadmap.md#facts-that-shape-the-order)).
 
 ## Decision
