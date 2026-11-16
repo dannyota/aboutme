@@ -14,7 +14,7 @@ function sources(directory: string): string[] {
 }
 
 describe('main fill tokens', () => {
-  it('never color text or strokes, since the dark fill is under 4.5:1 as text', () => {
+  it('never color text or strokes', () => {
     const offenders = sources(appRoot)
       .filter((path) => FILL_AS_TEXT.test(readFileSync(path, 'utf8')))
       .map((path) => relative(appRoot, path));
