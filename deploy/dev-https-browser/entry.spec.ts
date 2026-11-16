@@ -27,9 +27,21 @@ const steps = {
   signedInShell: false,
 };
 
+let entryStage = 'before-setup';
+
 function stage(name: string): void {
+  entryStage = name;
   console.log(`entry-stage:${name}`);
 }
+
+test.beforeEach(() => {
+  entryStage = 'before-setup';
+});
+
+test.afterEach(async ({}, testInfo) => {
+  if (testInfo.status === testInfo.expectedStatus) return;
+  console.log(`entry-stage:fail-${entryStage}`);
+});
 
 function consoleStage(message: { location(): { url: string }; text(): string }): string {
   let path = 'unknown';
