@@ -1,7 +1,7 @@
 import type { LegalCopy } from './legal';
 
 export const legalVi: LegalCopy = {
-  privacyUpdated: 'Cập nhật lần cuối ngày 20/10/2026',
+  privacyUpdated: 'Cập nhật lần cuối ngày 16/11/2026',
   termsUpdated: 'Cập nhật lần cuối ngày 11/10/2026',
   privacyLink: 'Chính sách quyền riêng tư',
   termsLink: 'Điều khoản sử dụng',
@@ -57,6 +57,16 @@ export const legalVi: LegalCopy = {
           'Trợ lý AI đã kết nối: tên ứng dụng, các địa chỉ chuyển hướng '
           + '(redirect) của ứng dụng, quyền truy cập bạn đã cấp, và lần '
           + 'dùng gần nhất. Token truy cập chỉ được lưu dưới dạng mã băm.',
+          'Kết nối GitHub (không bắt buộc): nếu bạn kết nối GitHub để xác '
+          + 'nhận công việc trong một dự án, chúng tôi lưu ID tài khoản '
+          + 'GitHub, tên người dùng GitHub của bạn và thời điểm kết nối. '
+          + 'Chúng tôi không bao giờ lưu mã truy cập GitHub: mã chỉ nằm trong '
+          + 'bộ nhớ máy chủ tối đa 30 phút, và chúng tôi yêu cầu GitHub thu '
+          + 'hồi mã khi phiên kết nối kết thúc. Với mỗi mục bạn gắn vào dự '
+          + 'án (pull request đã được merge, bản phát hành đã công bố, hoặc '
+          + 'kho mã công khai), chúng tôi lưu đường dẫn, tên kho mã, tiêu '
+          + 'đề, ngày và thời điểm kiểm tra. Chúng tôi không xin quyền nào '
+          + 'trên tài khoản GitHub của bạn và chỉ đọc thông tin công khai.',
           'Nhật ký vận hành thông thường của máy chủ không ghi địa chỉ IP '
           + 'hoặc tiêu đề yêu cầu và được lưu tối đa 30 ngày.',
           'Hệ thống chống tấn công dùng địa chỉ IP, thời điểm yêu cầu, '
@@ -160,6 +170,9 @@ export const legalVi: LegalCopy = {
           + 'trang, phần tóm tắt và ảnh xem trước của trang (họ tên, tiêu '
           + 'đề và ảnh của bạn), và có thể giữ bản sao riêng của họ sau khi '
           + 'bạn hủy xuất bản.',
+          'Các mục bạn gắn vào dự án hiện trên trang công khai của dự án đó '
+          + 'kèm đường dẫn tới GitHub, và có thể cho thấy tên người dùng '
+          + 'GitHub của bạn.',
           'Trang Cộng đồng (aboutme.vn/showcase) chỉ hiện những CV mà chủ '
           + 'CV bật Hiện trong trang Cộng đồng. Trang này hiện ảnh xem trước '
           + 'của CV (họ tên, tiêu đề và ảnh của bạn), mẫu, ngôn ngữ và vị '
@@ -185,7 +198,12 @@ export const legalVi: LegalCopy = {
           + 'thư trả lời email tài khoản và thông báo không gửi được email '
           + 'tài khoản (có thể chứa địa chỉ email của bạn và nội dung thư '
           + 'gốc) được lưu trong hộp thư Google Workspace.',
-          'Đăng nhập bằng Google hoặc LinkedIn, gửi email hỗ trợ, thư trả '
+          'GitHub (Hoa Kỳ) cung cấp tính năng kết nối GitHub không bắt buộc. '
+          + 'Khi kết nối, bạn đăng nhập tại GitHub và chúng tôi nhận ID tài '
+          + 'khoản và tên người dùng của bạn. Khi bạn chọn mục để gắn, máy '
+          + 'chủ của chúng tôi hỏi GitHub về các đường dẫn bạn nhập.',
+          'Đăng nhập bằng Google hoặc LinkedIn, kết nối GitHub, gửi email '
+          + 'hỗ trợ, thư trả '
           + 'lời và thông báo không gửi được email tài khoản, dịch vụ '
           + 'AI bạn chọn kết nối và dịch vụ nước ngoài lấy đường dẫn CV '
           + 'công khai có thể dẫn đến việc xử lý dữ liệu ngoài Việt Nam. '
@@ -213,7 +231,9 @@ export const legalVi: LegalCopy = {
           + 'khoản. Chúng tôi giữ tài khoản, CV và ảnh của bạn cho đến khi '
           + 'bạn xóa chúng hoặc xóa tài khoản. Bản xuất gồm hồ sơ, nội dung '
           + 'CV và ảnh trong CV của bạn. Để lấy lịch sử phiên đăng nhập, '
-          + 'hãy liên hệ qua email.',
+          + 'hãy liên hệ qua email. Bạn có thể ngắt kết nối GitHub trong Cài '
+          + 'đặt và chọn giữ hay xóa các mục đã gắn. Kết nối và các mục này '
+          + 'có trong bản xuất dữ liệu của bạn và bị xóa cùng tài khoản.',
           'Khi bạn xóa tài khoản:',
         ],
         items: [

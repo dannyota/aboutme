@@ -38,7 +38,28 @@ describe('privacy and terms pages', () => {
     const wrapper = await mountSuspended(PrivacyPage);
     expect(title(wrapper)).toBe('Chính sách quyền riêng tư');
     expect(wrapper.get('[data-testid="legal-updated"]').text()).toBe(
-      'Cập nhật lần cuối ngày 20/10/2026',
+      'Cập nhật lần cuối ngày 16/11/2026',
+    );
+    expect(wrapper.text()).toContain(
+      'Kết nối GitHub (không bắt buộc): nếu bạn kết nối GitHub để xác nhận '
+      + 'công việc trong một dự án, chúng tôi lưu ID tài khoản GitHub, tên '
+      + 'người dùng GitHub của bạn và thời điểm kết nối. Chúng tôi không bao '
+      + 'giờ lưu mã truy cập GitHub',
+    );
+    expect(paragraphs(wrapper)).toContain(
+      'Các mục bạn gắn vào dự án hiện trên trang công khai của dự án đó kèm '
+      + 'đường dẫn tới GitHub, và có thể cho thấy tên người dùng GitHub của '
+      + 'bạn.',
+    );
+    expect(wrapper.text()).toContain(
+      'GitHub (Hoa Kỳ) cung cấp tính năng kết nối GitHub không bắt buộc.',
+    );
+    expect(wrapper.text()).toContain(
+      'Đăng nhập bằng Google hoặc LinkedIn, kết nối GitHub, gửi email hỗ trợ',
+    );
+    expect(wrapper.text()).toContain(
+      'Bạn có thể ngắt kết nối GitHub trong Cài đặt và chọn giữ hay xóa các '
+      + 'mục đã gắn.',
     );
     expect(wrapper.text()).toContain('mã băm Argon2id');
     expect(wrapper.text()).toContain(
@@ -151,7 +172,26 @@ describe('privacy and terms pages', () => {
     const wrapper = await mountSuspended(PrivacyPage);
     expect(title(wrapper)).toBe('Privacy Policy');
     expect(wrapper.get('[data-testid="legal-updated"]').text()).toBe(
-      'Last updated October 20, 2026',
+      'Last updated November 16, 2026',
+    );
+    expect(wrapper.text()).toContain(
+      'GitHub connection (optional): if you connect GitHub to confirm work '
+      + 'on a project, we store your GitHub account ID, your GitHub username, '
+      + 'and when you connected. We never store the GitHub access token',
+    );
+    expect(paragraphs(wrapper)).toContain(
+      'Items you attach to a project appear on that project\'s public page '
+      + 'with links to GitHub, which can reveal your GitHub username.',
+    );
+    expect(wrapper.text()).toContain(
+      'GitHub (United States) provides the optional GitHub connection.',
+    );
+    expect(wrapper.text()).toContain(
+      'Google or LinkedIn sign-in, the GitHub connection, support email',
+    );
+    expect(wrapper.text()).toContain(
+      'You can disconnect GitHub in Settings and choose to keep or remove '
+      + 'the items you attached.',
     );
     expect(wrapper.text()).toContain(
       'Your account, resumes, photos, backups, and logs are stored on '
