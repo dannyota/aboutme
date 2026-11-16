@@ -245,7 +245,7 @@ onBeforeUnmount(() => {
 <template>
   <AuthLayout testid="second-factor-page">
     <h1
-      class="border-b pb-4 text-xl font-semibold"
+      class="text-2xl font-extrabold tracking-[-0.02em]"
       data-page-title
     >
       {{ copy.title }}
@@ -318,7 +318,7 @@ onBeforeUnmount(() => {
             {{ copy.messages[passkeyMessage] }}
           </StatusBanner>
           <Button
-            class="mt-3 h-9 w-full"
+            class="mt-3 h-12 w-full"
             data-testid="second-factor-passkey-button"
             :disabled="passkeyBusy"
             type="button"
@@ -386,7 +386,7 @@ onBeforeUnmount(() => {
             />
           </FormField>
           <Button
-            class="h-9 w-full"
+            class="h-12 w-full"
             :disabled="totpBusy"
             type="submit"
           >
@@ -438,7 +438,7 @@ onBeforeUnmount(() => {
             />
           </FormField>
           <Button
-            class="h-9 w-full"
+            class="h-12 w-full"
             :disabled="recoveryBusy"
             type="submit"
           >
@@ -455,7 +455,7 @@ onBeforeUnmount(() => {
       >
         {{ copy.messages.unknownMethod }}
         <Button
-          class="mt-3 h-9 w-full"
+          class="mt-3 h-12 w-full"
           data-testid="second-factor-refresh-button"
           type="button"
           @click="refreshPage"

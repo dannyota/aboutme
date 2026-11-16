@@ -86,7 +86,7 @@ function messageFor(failure: PasswordAuthFailure): AuthMessage {
 <template>
   <AuthLayout testid="verify-email-page">
     <h1
-      class="border-b pb-4 text-xl font-semibold"
+      class="text-2xl font-extrabold tracking-[-0.02em]"
       data-page-title
     >
       {{ copy.verify.title }}

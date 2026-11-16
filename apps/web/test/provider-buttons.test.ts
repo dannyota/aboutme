@@ -95,6 +95,18 @@ describe('provider buttons', () => {
       expect(google.classes()).toContain('font-[family-name:Roboto]');
     });
 
+  it('draws every provider as a full-width outline pill', async () => {
+    registerCapabilities({ providerLogin: true, agentAccess: false });
+    const wrapper = await mountAfterCapabilities(LoginPage);
+    for (const link of wrapper.findAll('a[data-provider]')) {
+      const name = link.attributes('data-provider');
+      expect(link.attributes('data-variant'), name).toBe('outline');
+      expect(link.classes(), name).toContain('w-full');
+      expect(link.classes(), name).toContain('rounded-full');
+      expect(link.classes(), name).not.toContain('rounded-[4px]');
+    }
+  });
+
   it('renders every enabled provider on login and register', async () => {
     registerCapabilities({ providerLogin: true, agentAccess: false });
     for (const page of [LoginPage, RegisterPage]) {
