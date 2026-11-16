@@ -244,9 +244,8 @@ export async function expectAuthArtworkClear(page: Page): Promise<void> {
         bottom: rect.bottom,
       };
     };
-    const points = element.querySelectorAll('li');
     return {
-      point: box(points[points.length - 1]!),
+      points: [...element.querySelectorAll('li')].map(box),
       art: [
         box(element.querySelector('[data-auth-sheet]')),
         box(element.querySelector('[data-auth-lock]')),
@@ -257,12 +256,15 @@ export async function expectAuthArtworkClear(page: Page): Promise<void> {
         - document.documentElement.clientWidth,
     };
   });
+  expect(read.points.length, message).toBeGreaterThan(0);
   for (const art of read.art) {
-    const intersects = art.left < read.point.right
-      && read.point.left < art.right
-      && art.top < read.point.bottom
-      && read.point.top < art.bottom;
-    expect(intersects, message).toBe(false);
+    for (const point of read.points) {
+      const intersects = art.left < point.right
+        && point.left < art.right
+        && art.top < point.bottom
+        && point.top < art.bottom;
+      expect(intersects, message).toBe(false);
+    }
   }
   expect(read.panelRight, message).toBeLessThanOrEqual(read.viewport);
   expect(read.overflow, message).toBeLessThanOrEqual(0);
