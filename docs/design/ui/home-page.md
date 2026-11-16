@@ -5,69 +5,48 @@ The home page at `/`, in the identity the owner chose on 2026-11-15
 [visual design](../../../DESIGN.md). The copy lives in the web app's landing
 copy file, in Vietnamese and English.
 
+The page title is `aboutme.vn · CV miễn phí, riêng tư đến khi bạn muốn`, and in
+English `aboutme.vn · Free resumes, private until you choose`.
+
 ## Scope
 
-The identity ships in two stages, at most one release apart.
+The identity reaches the application one change at a time. Each change ships
+alone and leaves a coherent look.
 
-1. The home page alone. Its tokens and the chrome typeface are scoped to the
-   home route on the root element, so the shell header and logo on that page
-   take the new colors while their layout stays. Every other route, the seal
-   geometry, the renderer, brand art, and icons are untouched.
-2. The rest of the chrome: header and footer layout, sign-in and registration,
-   the editor shell, the Library, the showcase, the MCP guide, legal pages, the
-   public page bar, brand art, icons, Open Graph images, the link-preview card
-   pin, and the maintenance page.
+| Order | Surfaces                                                                                                                             | State              |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------ |
+| 1     | The home page                                                                                                                        | Shipped in v0.9.12 |
+| 2     | Tokens, type, primitives, and the shell header                                                                                       | Next               |
+| 3     | Sign-in, registration, password reset, email verification, second factor, and consent                                                | After 2            |
+| 4     | The editor shell, the publish dialog, and the resumes list                                                                           | After 2            |
+| 5     | The Library, template pages, and the showcase                                                                                        | After 2            |
+| 6     | A footer shared by the public pages, the MCP guide, legal pages, verify, views, settings, the projects workspace, and the error page | After 2            |
+| 7     | The public page bar and public project pages                                                                                         | After 2            |
+| 8     | Icons, Open Graph images, brand art, the link-preview card pin, the maintenance page, and the mail color                             | After 2            |
 
-Between the stages, leaving the home page changes ground, ink, primary color,
-typeface, and button shape, and two reds exist: `#DE1B5A` on the home page and
-`#CC2649` on every seal, Publish button, and icon.
+Until change 2 ships, the home route scopes its tokens and the chrome typeface
+on the root element, and leaving the home page changes ground, ink, primary
+color, typeface, and button shape. After change 2 every route shares the
+[tokens](typography-and-tokens.md); a surface whose own change has not shipped
+keeps its old layout in the new colors, and tokens that the identity removes
+stay as aliases of their replacements until change 6 deletes them. Until change
+8, icons, images, the card pin, and mail still use the earlier red `#CC2649`.
 
 ## Tokens
 
 ### Color
 
-| Token                                  | Light                           | Dark                               | Role                                                                                           |
-| -------------------------------------- | ------------------------------- | ---------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `--background`                         | `#FFFFFF`                       | `#0F0D26`                          | page ground                                                                                    |
-| `--foreground`                         | `#1A1650`                       | `#F3F1FF`                          | text, outline pills, wordmark                                                                  |
-| `--muted-foreground`                   | `#55517D`                       | `#B7B2DB`                          | leads, descriptions, notes                                                                     |
-| `--brand` (also `--primary`, `--seal`) | `#DE1B5A`                       | `#DE1B5A`                          | hero panel, primary pills, switch on, seal fills; text on it is `--brand-foreground` `#FFFFFF` |
-| `--brand-hover`                        | `#C7134D`                       | `#C7134D`                          | hover fill, tone-on-tone hero rings                                                            |
-| `--brand-text` (also `--seal-text`)    | `#C7134D`                       | `#FF7AA2`                          | pink words and thin strokes on a ground                                                        |
-| `--surface-mist`                       | `#F1EFFA`                       | `#191640`                          | editor panel, AI card, locale toggle, row hover                                                |
-| `--surface-blush`                      | `#FFE4EC`                       | `#3B1431`                          | template fan block, maker panel                                                                |
-| `--surface-sun`                        | `#FFF2C2`                       | `#332A0E`                          | data card                                                                                      |
-| `--panel`, `--footer`                  | `#1A1650`, `#1A1650`            | `#322C8F`, `#191640`               | publish panel and footer band; text on them is `#FFFFFF`, lead `#D9D6F2`                       |
-| `--card`                               | `#FFFFFF`                       | `#25225A`                          | cards and tags inside panels                                                                   |
-| `--border`, `--hairline`               | `#E3E0F2`, `rgba(26,22,80,.14)` | `#34315C`, `rgba(243,241,255,.16)` | decorative borders, row separators                                                             |
-| `--control`                            | `#7F7AAE`                       | `#8580B8`                          | input border, switch off, dashed tag                                                           |
-| `--coin`, `--coin-edge`                | `#FFD23F`, `#E9B416`            | same                               | coins, bullets, link icon; ink on it is `#1A1650` (11.4:1)                                     |
-| `--ring`                               | `#1A1650`                       | `#C9C3FF`                          | focus ring; `#FFFFFF` on brand, panel and footer                                               |
-
-### Contrast (text on ground)
-
-WCAG 2 ratios, computed by script.
-
-| Pair                                                 | Light                        | Dark                         |
-| ---------------------------------------------------- | ---------------------------- | ---------------------------- |
-| foreground on background, mist, blush, sun, card     | 16.5, 14.5, 13.8, 14.7, 16.5 | 17.0, 15.3, 14.2, 12.7, 13.0 |
-| muted on background, mist, blush, sun, card          | 7.3, 6.5, 6.1, 6.6, 7.3      | 9.4, 8.5, 7.8, 7.0, 7.2      |
-| white on `--brand`, on `--brand-hover`               | 4.76, 5.79                   | 4.76, 5.79                   |
-| `--brand-text` on background, card, mist             | 5.79, 5.79, 5.09             | 7.74, 5.88, 6.96             |
-| white, `#D9D6F2` on `--panel`                        | 16.5, 11.7                   | 11.1, 7.9                    |
-| seal words on the ticket fill (card plus 7% tint)    | 5.19                         | 5.30                         |
-| `--control` on card, mist, sun (3:1 needed)          | 3.96, 3.49, 3.54             | 3.97, 4.70, 3.91             |
-| `--ring` on background, mist, blush (3:1 needed)     | 16.5, 14.5, 13.8             | 11.5, 10.4, 9.6              |
-| `--brand` fill against background, card (3:1 needed) | 4.76, 4.76                   | 3.99, 3.03                   |
-
-Never set `--brand-text` light on `--panel` (2.85) and never set white text on
-`--coin`.
+The [token page](typography-and-tokens.md#color) holds every color and its
+contrast. The home page uses the brand fill for the hero panel, mist for the
+editor panel, the AI card, and row hover, blush for the template fan block and
+the maker panel, sun for the data card, and the indigo panel for the publish
+panel.
 
 ### Shape, shadow, spacing
 
 - Radii: `--radius-panel` 28 px, 36 from 48rem, 44 from 64rem. `--radius-card`
   22, 26, 28. Pills 999 px. Inputs keep 10 px, dialogs 14 px, the sheet 2 px.
-- `--shadow-paper` (hero sheet):
+- `--shadow-paper-hero` (hero sheet):
   `0 36px 56px -28px rgba(0,0,0,.5), 0 2px 6px rgba(0,0,0,.16)`, neutral, same
   in both themes.
 - `--shadow-float` (chips, coins, avatar):
@@ -85,9 +64,9 @@ Never set `--brand-text` light on `--panel` (2.85) and never set white text on
 
 | Role                    | Family, weight                           | Size / line height                                                |
 | ----------------------- | ---------------------------------------- | ----------------------------------------------------------------- |
-| h1                      | Plus Jakarta Sans 800, tracking -0.025em | 40/1.18; 48/1.18 from 48rem; 60/1.15 from 80rem                   |
-| h2 section              | 800, -0.02em                             | 32/1.25; 40/1.18 from 64rem                                       |
-| h2 in a card            | 800, -0.015em                            | 24/1.3; 32/1.25 from 64rem                                        |
+| h1                      | Plus Jakarta Sans 800, tracking -0.025em | 40/1.3; 48/1.3 from 48rem; 60/1.3 from 80rem                      |
+| h2 section              | 800, -0.02em                             | 32/1.3; 40/1.3 from 64rem                                         |
+| h2 in a card            | 800, -0.015em                            | 24/1.3; 32/1.3 from 64rem                                         |
 | h3 rows, template names | 800                                      | 16/1.4                                                            |
 | Hero lead               | 500                                      | 16/1.6; 18 from 48rem; 20 from 80rem                              |
 | Section lead            | 500, muted                               | 16/1.6; 18 from 48rem                                             |
