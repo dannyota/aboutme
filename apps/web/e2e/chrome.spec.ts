@@ -27,6 +27,7 @@ import {
 import {
   expectChromeDecoration, expectChromeFan, expectChromeList,
   expectChromeNavigation, expectRendererBoundary, expectSampleIsolation,
+  leakChromeIntoResume,
 } from './chrome-details';
 
 import type { ScreenContract } from './screen-contract';
@@ -165,14 +166,14 @@ async function expectChrome(
   }
   await expect(header).toHaveCSS('background-color', theme === 'light'
     ? 'rgb(255, 255, 255)'
-    : 'rgb(15, 13, 38)');
+    : 'rgb(14, 10, 13)');
   await expect(header).toHaveCSS('border-bottom-color', theme === 'light'
     ? 'rgb(227, 224, 242)'
-    : 'rgb(52, 49, 92)');
+    : 'rgb(46, 36, 44)');
   await expect(header).toHaveCSS('border-bottom-width', '1px');
   await expect(header).toHaveCSS('min-height', width < 768 ? '56px' : '64px');
   await expect(page.locator('body')).toHaveCSS('background-color',
-    theme === 'light' ? 'rgb(255, 255, 255)' : 'rgb(15, 13, 38)');
+    theme === 'light' ? 'rgb(255, 255, 255)' : 'rgb(14, 10, 13)');
   await expect(page.locator('body')).toHaveCSS('background-image', 'none');
   await expect(page.locator('body'), 'Chrome body font-size.')
     .toHaveCSS('font-size', '15px');
@@ -288,7 +289,7 @@ async function expectChrome(
     const galleryHeader = page.getByTestId('gallery-header');
     await expect(galleryHeader).toHaveCSS('background-color', theme === 'light'
       ? 'rgb(241, 239, 250)'
-      : 'rgb(25, 22, 64)');
+      : 'rgb(21, 16, 21)');
     await expect(galleryHeader).toHaveCSS('border-radius',
       width < 768 ? '22px' : width < 1024 ? '26px' : '28px');
     const grid = page.locator('.gallery-grid');
@@ -610,7 +611,7 @@ const HOME_TITLE = {
 } as const;
 
 function bodyColor(theme: Theme): string {
-  return theme === 'light' ? 'rgb(26, 22, 80)' : 'rgb(243, 241, 255)';
+  return theme === 'light' ? 'rgb(26, 22, 80)' : 'rgb(211, 202, 208)';
 }
 
 function chromeContract(
@@ -644,6 +645,18 @@ for (const entry of PAGES) {
     await page.goto(entry.path);
     await prepareScreen(page);
   }, chromeContract(entry.name, 'vi', 'light'));
+}
+
+for (const kind of ['selection', 'scrollbar'] as const) {
+  mutationTest(`chrome rejects a ${kind} that reaches the resume`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const response = await page.goto('/templates/creative-accent');
+    expect(response?.status()).toBe(200);
+    await proveMutation(() => expectRendererBoundary(page),
+      () => leakChromeIntoResume(page, kind), 'Chrome renderer boundary.');
+  });
 }
 
 for (const kind of ['shadow', 'panels'] as const) {

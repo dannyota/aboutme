@@ -27,23 +27,25 @@ const COLORS: Record<Theme, Record<string, string>> = {
     '--muted-foreground': '#55517d',
     '--card': '#ffffff',
     '--popover': '#ffffff',
-    '--brand': '#de1b5a',
-    '--primary': '#de1b5a',
-    '--seal': '#de1b5a',
-    '--brand-hover': '#c7134d',
-    '--primary-hover': '#c7134d',
+    '--brand': '#594bad',
+    '--primary': '#594bad',
+    '--brand-hover': '#4c3c9c',
+    '--primary-hover': '#4c3c9c',
     '--brand-foreground': '#ffffff',
     '--primary-foreground': '#ffffff',
+    '--brand-text': '#4f3da5',
+    '--brand-panel': '#594bad',
+    '--seal': '#de1b5a',
+    '--seal-hover': '#c7134d',
     '--seal-foreground': '#ffffff',
-    '--brand-text': '#c7134d',
     '--seal-text': '#c7134d',
     '--link': '#4336c9',
-    '--destructive': '#b54708',
-    '--surface-destructive': '#faf2ee',
+    '--destructive': '#914d00',
+    '--surface-destructive': '#f7f3ed',
     '--surface-mist': '#f1effa',
     '--muted': '#f1effa',
     '--editor-canvas': '#f1effa',
-    '--surface-blush': '#ffe4ec',
+    '--surface-blush': '#ece2ff',
     '--surface-sun': '#fff2c2',
     '--accent': '#f1effa',
     '--secondary': '#f1effa',
@@ -61,59 +63,61 @@ const COLORS: Record<Theme, Record<string, string>> = {
     '--coin': '#ffd23f',
     '--coin-edge': '#e9b416',
     '--coin-ink': '#1a1650',
-    '--chart-bar': '#5b52c7',
+    '--chart-bar': '#594bad',
     '--overlay': 'rgba(26,22,80,0.55)',
     '--logo-mark': '#de1b5a',
     '--logo-mark-inverse': '#ff7aa2',
   },
   dark: {
-    '--background': '#0f0d26',
-    '--foreground': '#f3f1ff',
-    '--card-foreground': '#f3f1ff',
-    '--popover-foreground': '#f3f1ff',
-    '--secondary-foreground': '#f3f1ff',
-    '--accent-foreground': '#f3f1ff',
-    '--muted-foreground': '#b7b2db',
-    '--card': '#25225a',
-    '--popover': '#25225a',
-    '--brand': '#de1b5a',
-    '--primary': '#de1b5a',
-    '--seal': '#de1b5a',
-    '--brand-hover': '#c7134d',
-    '--primary-hover': '#c7134d',
+    '--background': '#0e0a0d',
+    '--foreground': '#d3cad0',
+    '--card-foreground': '#d3cad0',
+    '--popover-foreground': '#d3cad0',
+    '--secondary-foreground': '#d3cad0',
+    '--accent-foreground': '#d3cad0',
+    '--muted-foreground': '#a3959f',
+    '--card': '#1b1419',
+    '--popover': '#1b1419',
+    '--brand': '#7267c0',
+    '--primary': '#7267c0',
+    '--brand-hover': '#675bb3',
+    '--primary-hover': '#675bb3',
     '--brand-foreground': '#ffffff',
     '--primary-foreground': '#ffffff',
+    '--brand-text': '#aea7ed',
+    '--brand-panel': '#382961',
+    '--seal': '#c42d58',
+    '--seal-hover': '#b42650',
     '--seal-foreground': '#ffffff',
-    '--brand-text': '#ff7aa2',
-    '--seal-text': '#ff7aa2',
-    '--link': '#b9b2ff',
-    '--destructive': '#fd8a4b',
-    '--surface-destructive': '#3f2e58',
-    '--surface-mist': '#191640',
-    '--muted': '#191640',
-    '--editor-canvas': '#191640',
-    '--surface-blush': '#3b1431',
-    '--surface-sun': '#332a0e',
-    '--accent': '#332f76',
-    '--secondary': '#332f76',
-    '--panel': '#322c8f',
-    '--panel-foreground': '#ffffff',
-    '--panel-muted': '#d9d6f2',
-    '--footer': '#191640',
-    '--border': '#34315c',
-    '--hairline': 'rgba(243,241,255,0.16)',
+    '--seal-text': '#e2788f',
+    '--link': '#b59bdb',
+    '--destructive': '#f0ab72',
+    '--surface-destructive': '#2c2020',
+    '--surface-mist': '#151015',
+    '--muted': '#151015',
+    '--editor-canvas': '#151015',
+    '--surface-blush': '#1c172f',
+    '--surface-sun': '#271a07',
+    '--accent': '#251b23',
+    '--secondary': '#251b23',
+    '--panel': '#25153a',
+    '--panel-foreground': '#e7dfe8',
+    '--panel-muted': '#c2b6cb',
+    '--footer': '#150c1c',
+    '--border': '#2e242c',
+    '--hairline': 'rgba(211,202,208,0.14)',
     '--hairline-inverse': 'rgba(255,255,255,0.2)',
-    '--input': '#8580b8',
-    '--control': '#8580b8',
-    '--ring': '#c9c3ff',
+    '--input': '#7e6d7a',
+    '--control': '#7e6d7a',
+    '--ring': '#cdbcd9',
     '--ring-inverse': '#ffffff',
     '--coin': '#ffd23f',
     '--coin-edge': '#e9b416',
     '--coin-ink': '#1a1650',
-    '--chart-bar': '#9a93f5',
-    '--overlay': 'rgba(5,4,16,0.72)',
-    '--logo-mark': '#ff7aa2',
-    '--logo-mark-inverse': '#ff7aa2',
+    '--chart-bar': '#8f85d7',
+    '--overlay': 'rgba(4,2,3,0.72)',
+    '--logo-mark': '#e2788f',
+    '--logo-mark-inverse': '#e2788f',
   },
 };
 
@@ -189,74 +193,83 @@ const GROUNDS = [
   ['surface-destructive', ['--surface-destructive']],
 ] as const;
 
-const TEXT = [
-  '--foreground', '--muted-foreground', '--link', '--brand-text',
-  '--destructive',
+const COLUMNS = [
+  ['--foreground', 4.5], ['--muted-foreground', 4.5], ['--link', 4.5],
+  ['--brand-text', 4.5], ['--seal-text', 4.5], ['--destructive', 4.5],
+  ['--control', 3], ['--brand', 3], ['--seal', 3],
 ] as const;
 
 type Row = readonly [
   foreground: number, muted: number, link: number, brandText: number,
-  destructive: number, control: number,
+  sealText: number, destructive: number, control: number, mainFill: number,
+  sealFill: number,
 ];
 
 const CONTRAST: Record<Theme, readonly Row[]> = {
   light: [
-    [16.48, 7.34, 8.05, 5.79, 5.43, 3.96],
-    [16.48, 7.34, 8.05, 5.79, 5.43, 3.96],
-    [14.49, 6.46, 7.08, 5.09, 4.77, 3.49],
-    [13.78, 6.14, 6.73, 4.84, 4.54, 3.31],
-    [14.70, 6.55, 7.18, 5.16, 4.84, 3.54],
-    [14.49, 6.46, 7.08, 5.09, 4.77, 3.49],
-    [14.91, 6.64, 7.28, 5.24, 4.91, 3.59],
+    [16.48, 7.34, 8.05, 8.26, 5.79, 6.43, 3.96, 6.92, 4.76],
+    [16.48, 7.34, 8.05, 8.26, 5.79, 6.43, 3.96, 6.92, 4.76],
+    [14.49, 6.46, 7.08, 7.26, 5.09, 5.66, 3.49, 6.09, 4.19],
+    [13.25, 5.91, 6.47, 6.64, 4.65, 5.17, 3.19, 5.57, 3.83],
+    [14.70, 6.55, 7.18, 7.37, 5.16, 5.74, 3.54, 6.17, 4.25],
+    [14.49, 6.46, 7.08, 7.26, 5.09, 5.66, 3.49, 6.09, 4.19],
+    [14.91, 6.64, 7.28, 7.47, 5.24, 5.82, 3.59, 6.26, 4.31],
   ],
   dark: [
-    [17.03, 9.41, 9.83, 7.74, 8.06, 5.22],
-    [12.95, 7.15, 7.47, 5.88, 6.13, 3.97],
-    [15.31, 8.46, 8.84, 6.96, 7.25, 4.70],
-    [14.16, 7.82, 8.17, 6.43, 6.70, 4.34],
-    [12.74, 7.04, 7.36, 5.79, 6.03, 3.91],
-    [10.41, 5.75, 6.01, 4.73, 4.93, 3.19],
-    [10.81, 5.97, 6.24, 4.91, 5.11, 3.31],
+    [12.29, 6.89, 8.12, 8.94, 6.85, 10.09, 4.08, 4.14, 3.62],
+    [11.31, 6.34, 7.47, 8.23, 6.30, 9.28, 3.75, 3.81, 3.33],
+    [11.76, 6.59, 7.77, 8.55, 6.55, 9.65, 3.90, 3.95, 3.46],
+    [10.82, 6.07, 7.15, 7.87, 6.03, 8.88, 3.59, 3.64, 3.19],
+    [10.61, 5.95, 7.01, 7.72, 5.91, 8.71, 3.52, 3.57, 3.12],
+    [10.42, 5.84, 6.89, 7.58, 5.81, 8.55, 3.46, 3.51, 3.07],
+    [9.84, 5.51, 6.50, 7.16, 5.48, 8.07, 3.26, 3.31, 2.89],
   ],
 };
 
-type Pair = readonly [foreground: string, ground: string, ratio: number];
+const DOCUMENTED_EXCEPTIONS = new Set([
+  'dark --seal on --surface-destructive',
+]);
+
+type Pair = readonly [
+  foreground: string, ground: string, ratio: number, minimum: number,
+];
 
 const NOTES: Record<Theme, readonly Pair[]> = {
   light: [
-    ['--brand-foreground', '--brand', 4.76],
-    ['--brand-foreground', '--brand-hover', 5.79],
-    ['--panel-foreground', '--panel', 16.48],
-    ['--panel-muted', '--panel', 11.65],
-    ['--ring', '--background', 16.48],
-    ['--ring', '--card', 16.48],
-    ['--ring', '--surface-mist', 14.49],
-    ['--chart-bar', '--card', 6.04],
-    ['--coin-ink', '--coin', 11.41],
+    ['--brand-foreground', '--brand', 6.92, 4.5],
+    ['--brand-foreground', '--brand-hover', 8.63, 4.5],
+    ['--seal-foreground', '--seal', 4.76, 4.5],
+    ['--seal-foreground', '--seal-hover', 5.79, 4.5],
+    ['--panel-foreground', '--brand-panel', 6.92, 4.5],
+    ['--panel-muted', '--brand-panel', 4.89, 4.5],
+    ['--coin-ink', '--panel-foreground', 16.48, 4.5],
+    ['--panel-foreground', '--panel', 16.48, 4.5],
+    ['--panel-muted', '--panel', 11.65, 4.5],
+    ['--panel-foreground', '--footer', 16.48, 4.5],
+    ['--ring', '--background', 16.48, 3],
+    ['--ring', '--card', 16.48, 3],
+    ['--ring', '--surface-mist', 14.49, 3],
+    ['--chart-bar', '--card', 6.92, 3],
+    ['--coin-ink', '--coin', 11.41, 4.5],
   ],
   dark: [
-    ['--brand-foreground', '--brand', 4.76],
-    ['--brand-foreground', '--brand-hover', 5.79],
-    ['--panel-foreground', '--panel', 11.10],
-    ['--panel-muted', '--panel', 7.85],
-    ['--ring', '--background', 11.51],
-    ['--ring', '--card', 8.75],
-    ['--ring', '--surface-mist', 10.35],
-    ['--chart-bar', '--card', 5.41],
-    ['--coin-ink', '--coin', 11.41],
-  ],
-};
-
-const BRAND_FILL: Record<Theme, readonly Pair[]> = {
-  light: [
-    ['--brand', '--background', 4.76],
-    ['--brand', '--surface-mist', 4.19],
-    ['--brand', '--surface-blush', 3.98],
-  ],
-  dark: [
-    ['--brand', '--background', 3.99],
-    ['--brand', '--surface-mist', 3.59],
-    ['--brand', '--card', 3.03],
+    ['--brand-foreground', '--brand', 4.75, 4.5],
+    ['--brand-foreground', '--brand-hover', 5.64, 4.5],
+    ['--seal-foreground', '--seal', 5.44, 4.5],
+    ['--seal-foreground', '--seal-hover', 6.30, 4.5],
+    ['--panel-foreground', '--brand-panel', 9.72, 4.5],
+    ['--panel-muted', '--brand-panel', 6.54, 4.5],
+    ['--coin-ink', '--panel-foreground', 12.65, 4.5],
+    ['--panel-foreground', '--panel', 12.93, 4.5],
+    ['--panel-muted', '--panel', 8.70, 4.5],
+    ['--panel-foreground', '--footer', 14.64, 4.5],
+    ['--ring', '--background', 11.04, 3],
+    ['--ring', '--card', 10.16, 3],
+    ['--ring', '--surface-mist', 10.56, 3],
+    ['--chart-bar', '--card', 5.60, 3],
+    ['--coin-ink', '--coin', 11.41, 4.5],
+    ['--brand', '--panel', 3.54, 3],
+    ['--brand', '--footer', 4.01, 3],
   ],
 };
 
@@ -285,41 +298,31 @@ describe('application theme', () => {
         const expected = CONTRAST[theme][row]!;
         for (const ground of grounds) {
           const groundHex = resolveValue(ground, tokens);
-          TEXT.forEach((text, column) => {
-            const ratio = contrast(resolveValue(text, tokens), groundHex);
-            const name = `${theme} ${text} on ${ground} (${label})`;
-            expect(ratio, name).toBeGreaterThanOrEqual(4.5);
-            expectRatio(ratio, expected[column]!, name);
+          COLUMNS.forEach(([token, minimum], column) => {
+            const ratio = contrast(resolveValue(token, tokens), groundHex);
+            const name = `${theme} ${token} on ${ground}`;
+            if (!DOCUMENTED_EXCEPTIONS.has(name)) {
+              expect(ratio, `${name} (${label})`)
+                .toBeGreaterThanOrEqual(minimum);
+            }
+            expectRatio(ratio, expected[column]!, `${name} (${label})`);
           });
-          const control = contrast(resolveValue('--control', tokens),
-            groundHex);
-          expect(control, `${theme} --control on ${ground}`)
-            .toBeGreaterThanOrEqual(3);
-          expectRatio(control, expected[5]!, `${theme} --control on ${ground}`);
         }
       });
     });
 
-    it(`meets the token page fill, ring and chart ratios in ${theme}`, () => {
-      const tokens = themeTokens(theme);
-      for (const [foreground, ground, expected] of NOTES[theme]) {
-        const ratio = contrast(
-          resolveValue(foreground, tokens), resolveValue(ground, tokens),
-        );
-        const mark = ['--ring', '--chart-bar'].includes(foreground);
-        const minimum = mark ? 3 : 4.5;
-        expect(ratio, `${foreground} on ${ground}`)
-          .toBeGreaterThanOrEqual(minimum);
-        expectRatio(ratio, expected, `${foreground} on ${ground}`);
-      }
-      for (const [fill, ground, expected] of BRAND_FILL[theme]) {
-        const ratio = contrast(
-          resolveValue(fill, tokens), resolveValue(ground, tokens),
-        );
-        expect(ratio, `${fill} on ${ground}`).toBeGreaterThanOrEqual(3);
-        expectRatio(ratio, expected, `${fill} on ${ground}`);
-      }
-    });
+    it(`meets the token page fill, hero, ring and chart ratios in ${theme}`,
+      () => {
+        const tokens = themeTokens(theme);
+        for (const [foreground, ground, expected, minimum] of NOTES[theme]) {
+          const ratio = contrast(
+            resolveValue(foreground, tokens), resolveValue(ground, tokens),
+          );
+          expect(ratio, `${foreground} on ${ground}`)
+            .toBeGreaterThanOrEqual(minimum);
+          expectRatio(ratio, expected, `${foreground} on ${ground}`);
+        }
+      });
 
     it(`keeps seal words readable on the ticket fill in ${theme}`, () => {
       const tokens = themeTokens(theme);
@@ -329,24 +332,38 @@ describe('application theme', () => {
     });
   }
 
-  it('keeps brand fills off the three dark grounds under 3:1', () => {
-    const tokens = themeTokens('dark');
-    const brand = resolveValue('--brand', tokens);
-    for (const ground of ['--surface-sun', '--accent', '--panel']) {
-      expect(contrast(brand, resolveValue(ground, tokens)), ground)
-        .toBeLessThan(3);
+  it('keeps the main fill off light panel and footer grounds', () => {
+    const tokens = themeTokens('light');
+    for (const ground of ['--panel', '--footer']) {
+      const ratio = contrast(
+        resolveValue('--brand', tokens), resolveValue(ground, tokens),
+      );
+      expect(ratio, ground).toBeLessThan(3);
+      expectRatio(ratio, 2.38, ground);
     }
-    expect(contrast(
-      resolveValue('--brand-text', themeTokens('light')),
-      resolveValue('--panel', themeTokens('light')),
-    )).toBeLessThan(3);
+  });
+
+  it('keeps the seal apart from the main color', () => {
+    for (const theme of ['light', 'dark'] as const) {
+      const block = blockDeclarations(css(), theme === 'light' ? LIGHT : DARK);
+      for (const name of [
+        '--seal', '--seal-hover', '--seal-foreground', '--seal-text',
+      ]) {
+        expect(block[name] ?? '', `${theme} ${name}`)
+          .not.toMatch(/var\(--(?:brand|primary)/u);
+      }
+      const tokens = themeTokens(theme);
+      expect(resolveValue('--seal', tokens))
+        .not.toBe(resolveValue('--brand', tokens));
+    }
   });
 
   it('keeps paper and fixed tokens out of the dark block', () => {
     const dark = blockDeclarations(css(), DARK);
     for (const token of [
       ...Object.keys(FIXED), ...Object.keys(REMOVED),
-      '--brand', '--brand-hover', '--brand-foreground', '--coin',
+      '--brand-foreground', '--seal-foreground', '--coin', '--coin-edge',
+      '--coin-ink',
     ]) {
       expect(dark[token], token).toBeUndefined();
     }
@@ -378,7 +395,8 @@ describe('application theme', () => {
 
     expect(theme['--font-sans']).toBe('var(--font-chrome)');
     for (const name of [
-      'seal', 'seal-foreground', 'seal-text', 'link', 'brand', 'brand-hover',
+      'seal', 'seal-hover', 'seal-foreground', 'seal-text', 'link', 'brand',
+      'brand-hover', 'brand-panel',
       'brand-foreground', 'brand-text', 'surface-mist', 'surface-blush',
       'surface-sun', 'surface-destructive', 'panel', 'panel-foreground',
       'panel-muted', 'footer', 'hairline', 'control', 'coin', 'coin-ink',
@@ -449,7 +467,7 @@ describe('application theme', () => {
           'utf8',
         ),
       ).toContain(
-        'bg-seal font-bold text-seal-foreground hover:bg-brand-hover',
+        'bg-seal font-bold text-seal-foreground hover:bg-seal-hover',
       );
     },
   );
@@ -464,6 +482,8 @@ describe('application theme', () => {
     expect(scope['--accent-foreground']).toBe('var(--paper-ink)');
     expect(scope['--ring']).toBe('#1a1650');
     expect(scope['--link']).toBe('#4336c9');
+    expect(scope['--brand-text']).toBe('#4f3da5');
+    expect(scope['--seal-text']).toBe('#c7134d');
     expect(scope['--font-chrome']).toBe('var(--font-paper)');
     expect(plain['background-color']).toBe('var(--paper)');
     expect(plain['color']).toBe('var(--paper-ink)');

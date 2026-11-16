@@ -67,7 +67,7 @@ describe('application icon links', () => {
           meta.getAttribute('media'), meta.getAttribute('content'),
         ])).toEqual([
           ['(prefers-color-scheme: light)', '#ffffff'],
-          ['(prefers-color-scheme: dark)', '#0f0d26'],
+          ['(prefers-color-scheme: dark)', '#0e0a0d'],
         ]);
       });
       wrapper.unmount();

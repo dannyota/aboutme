@@ -297,7 +297,7 @@ async function assertShowcase(
     })).toBe(true);
     await expect(tile).toHaveCSS('background-color', theme === 'light'
       ? 'rgb(255, 255, 255)'
-      : 'rgb(37, 34, 90)');
+      : 'rgb(27, 20, 25)');
     await expect.poll(() => measureTextContainment(
       tile.locator('.showcase-tile__meta'),
     )).toEqual({ visible: true, contained: true });
@@ -325,7 +325,7 @@ async function assertShowcase(
     : 'Create a free resume');
   await expect(invite).toHaveCSS('background-color', theme === 'light'
     ? 'rgb(255, 242, 194)'
-    : 'rgb(51, 42, 14)');
+    : 'rgb(39, 26, 7)');
   await expect.poll(() => measureTextContainment(invite))
     .toEqual({ visible: true, contained: true });
   const pager = page.getByTestId('showcase-pager');

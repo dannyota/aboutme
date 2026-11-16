@@ -363,7 +363,7 @@ async function assertGuide(
   const header = page.getByTestId('guide-header');
   await expect(header).toHaveCSS('background-color', theme === 'light'
     ? 'rgb(241, 239, 250)'
-    : 'rgb(25, 22, 64)');
+    : 'rgb(21, 16, 21)');
   await expect(header).toHaveCSS('border-radius',
     width < 768 ? '22px' : width < 1024 ? '26px' : '28px');
   await expect(header.locator('h1')).toHaveCSS('font-size',
@@ -380,7 +380,7 @@ async function assertGuide(
   for (const section of await guide.locator(':scope > section').all()) {
     await expect(section).toHaveCSS('background-color', theme === 'light'
       ? 'rgb(255, 255, 255)'
-      : 'rgb(37, 34, 90)');
+      : 'rgb(27, 20, 25)');
     await expect(section)
       .toHaveCSS('padding-left', width < 672 ? '20px' : '28px');
   }
@@ -452,7 +452,7 @@ async function assertGuide(
     await expect(pre).toHaveCSS('font-family', /monospace/u);
     await expect(pre).toHaveCSS('background-color', theme === 'light'
       ? 'rgb(241, 239, 250)'
-      : 'rgb(25, 22, 64)');
+      : 'rgb(21, 16, 21)');
     await expect(pre).toHaveCSS('border-radius', '10px');
   }
   await expect(header.getByRole('link', {

@@ -10,7 +10,7 @@ export const buttonVariants = cva(
       variant: {
         default:
           'bg-primary font-bold text-primary-foreground hover:bg-primary-hover',
-        seal: 'bg-seal font-bold text-seal-foreground hover:bg-brand-hover',
+        seal: 'bg-seal font-bold text-seal-foreground hover:bg-seal-hover',
         destructive:
           'border-[1.5px] border-destructive bg-transparent font-bold text-destructive hover:bg-destructive/10',
         outline:

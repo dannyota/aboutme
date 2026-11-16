@@ -253,7 +253,7 @@ export function chromeScreenContract(
       'Plus Jakarta Sans'],
     paint: ['body', 'color', theme === 'light'
       ? 'rgb(26, 22, 80)'
-      : 'rgb(243, 241, 255)'],
+      : 'rgb(211, 202, 208)'],
     copy: [titleSelector, title],
     aria: [titleSelector, `- heading "${title}" [level=1]`],
     image,
@@ -304,7 +304,7 @@ export function filterSheetContract(
       locale === 'vi' ? 'Đóng' : 'Close']],
     paint: [root, 'background-color', theme === 'light'
       ? 'rgb(255, 255, 255)'
-      : 'rgb(37, 34, 90)'],
+      : 'rgb(27, 20, 25)'],
     copy: [apply, surface === 'gallery'
       ? locale === 'vi'
         ? 'Xem 20 mẫu'

@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 const tokensCss = readFileSync('app/landing/styles/tokens.css', 'utf8');
 const homeCss = readFileSync('app/landing/styles/home.css', 'utf8');
 const heroArt = readFileSync('app/landing/components/HeroArt.vue', 'utf8');
+const hero = readFileSync('app/landing/components/HomeHero.vue', 'utf8');
 const HOME = 'html[data-page="home"]';
 
 describe('home styles', () => {
@@ -32,6 +33,35 @@ describe('home styles', () => {
     const home = declarations(homeCss, '.home');
     expect(home['--chip']).toBe('var(--paper)');
     expect(home['--chip-foreground']).toBe('var(--coin-ink)');
+  });
+
+  it('grounds the hero on the brand panel with panel text', () => {
+    expect(plain(hero, '.hero')['background']).toBe('var(--brand-panel)');
+    expect(plain(hero, '.hero')['color']).toBe('var(--panel-foreground)');
+    expect(plain(hero, '.hero-signin')['color'])
+      .toBe('var(--panel-foreground)');
+    expect(hero).toContain('stroke="rgb(0 0 0 / 14%)"');
+    expect(hero).not.toMatch(/var\(--brand(?:-hover)?\)/u);
+  });
+
+  it('draws the hero pills in panel text with an ink label', () => {
+    expect(plain(homeCss, '.home-pill--white')).toMatchObject({
+      'border-color': 'var(--panel-foreground)',
+      'background': 'var(--panel-foreground)',
+      'color': 'var(--coin-ink)',
+    });
+    expect(plain(homeCss, '.home-pill--ghost')).toMatchObject({
+      'border-color': 'var(--panel-foreground)',
+      'color': 'var(--panel-foreground)',
+    });
+    expect(plain(homeCss, '.home-pill--ghost:hover')).toMatchObject({
+      background: 'var(--panel-foreground)',
+      color: 'var(--brand-panel)',
+    });
+    expect(plain(homeCss, '.home-pill')).toMatchObject({
+      background: 'var(--brand)',
+      color: 'var(--brand-foreground)',
+    });
   });
 
   it('lifts the hero sheet with the heavier paper shadow', () => {

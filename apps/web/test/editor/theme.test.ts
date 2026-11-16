@@ -106,11 +106,11 @@ describe('theme preference boundary', () => {
       },
       {
         key: 'theme-color-dark', name: 'theme-color',
-        media: '(prefers-color-scheme: dark)', content: '#0f0d26',
+        media: '(prefers-color-scheme: dark)', content: '#0e0a0d',
       },
     ]);
     expect(themeColorMeta('dark')).toEqual([
-      { key: 'theme-color', name: 'theme-color', content: '#0f0d26' },
+      { key: 'theme-color', name: 'theme-color', content: '#0e0a0d' },
     ]);
     expect(themeColorMeta('light')).toEqual([
       { key: 'theme-color', name: 'theme-color', content: '#ffffff' },

@@ -7,7 +7,7 @@ export async function expectShowcaseHeading(
 ): Promise<void> {
   const expected = property === 'font-family'
     ? '"Plus Jakarta Sans", "Be Vietnam Pro", system-ui, sans-serif'
-    : theme === 'light' ? 'rgb(26, 22, 80)' : 'rgb(243, 241, 255)';
+    : theme === 'light' ? 'rgb(26, 22, 80)' : 'rgb(211, 202, 208)';
   await expect(page.getByTestId('showcase-header').locator('h1'),
     `Showcase heading ${property}.`).toHaveCSS(property, expected);
 }

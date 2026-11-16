@@ -7,8 +7,8 @@ export async function expectVerifyIcon(
 ): Promise<void> {
   const svg = page.locator('.verify-mark svg');
   const stroke = state === 'verified'
-    ? theme === 'light' ? 'rgb(255, 255, 255)' : 'rgb(37, 34, 90)'
-    : theme === 'light' ? 'rgb(85, 81, 125)' : 'rgb(183, 178, 219)';
+    ? theme === 'light' ? 'rgb(255, 255, 255)' : 'rgb(27, 20, 25)'
+    : theme === 'light' ? 'rgb(85, 81, 125)' : 'rgb(163, 149, 159)';
   const shield = [
     'M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 '
     + '13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 '

@@ -103,27 +103,27 @@
 }
 
 .home-pill--white {
-  border-color: var(--chip);
-  background: var(--chip);
-  color: var(--chip-foreground);
+  border-color: var(--panel-foreground);
+  background: var(--panel-foreground);
+  color: var(--coin-ink);
 }
 
 .home-pill--white:hover {
-  border-color: var(--chip-foreground);
-  background: var(--chip-foreground);
-  color: var(--chip);
+  border-color: var(--coin-ink);
+  background: var(--coin-ink);
+  color: var(--panel-foreground);
 }
 
 .home-pill--ghost {
-  border-color: var(--brand-foreground);
+  border-color: var(--panel-foreground);
   background: transparent;
-  color: var(--brand-foreground);
+  color: var(--panel-foreground);
 }
 
 .home-pill--ghost:hover {
-  border-color: var(--brand-foreground);
-  background: var(--brand-foreground);
-  color: var(--brand-hover);
+  border-color: var(--panel-foreground);
+  background: var(--panel-foreground);
+  color: var(--brand-panel);
 }
 
 .home .home-pill:focus-visible:not(:where(.resume-document, .resume-document *)) {

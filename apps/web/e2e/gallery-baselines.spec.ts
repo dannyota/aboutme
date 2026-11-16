@@ -102,9 +102,11 @@ async function assertLibrarySheet(
   await expect(sheet).toHaveRole('dialog');
   await expect(sheet).toHaveCSS('background-color', theme === 'light'
     ? 'rgb(255, 255, 255)'
-    : 'rgb(37, 34, 90)');
+    : 'rgb(27, 20, 25)');
   await expect(sheet.locator('[data-role="all"]')).toHaveCSS(
-    'background-color', 'rgb(222, 27, 90)',
+    'background-color', theme === 'light'
+      ? 'rgb(89, 75, 173)'
+      : 'rgb(114, 103, 192)',
   );
   await expect(sheet).toMatchAriaSnapshot(`- dialog "${heading}":
   - heading "${heading}" [level=2]`);
@@ -307,7 +309,10 @@ for (const theme of ['light', 'dark'] as const) {
           });
         }
         const colors = {
-          background: 'rgb(222, 27, 90)', text: 'rgb(255, 255, 255)',
+          background: theme === 'light'
+            ? 'rgb(89, 75, 173)'
+            : 'rgb(114, 103, 192)',
+          text: 'rgb(255, 255, 255)',
         };
         for (const role of ['backend', 'frontend']) {
           const selected = fields.locator(`[data-role="${role}"]`);

@@ -38,7 +38,8 @@ describe('button variant guard', () => {
     const classes = buttonVariants({ variant: 'seal' });
 
     expect(classes).toContain('bg-seal');
-    expect(classes).toContain('hover:bg-brand-hover');
+    expect(classes).toContain('hover:bg-seal-hover');
+    expect(classes).not.toMatch(/\b(?:bg|hover:bg)-(?:brand|primary)\b/u);
   });
 
   it('keeps the destructive variant an outline, apart from the seal fill',

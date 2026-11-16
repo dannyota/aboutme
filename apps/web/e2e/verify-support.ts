@@ -136,10 +136,10 @@ export async function expectVerifyDisplay(
   await expect(status.getByText(titleText, { exact: true })).toBeVisible();
   await expect(status).toHaveCSS('background-color', theme === 'light'
     ? 'rgb(241, 239, 250)'
-    : 'rgb(25, 22, 64)');
+    : 'rgb(21, 16, 21)');
   await expect(status).toHaveCSS('color', theme === 'light'
     ? 'rgb(26, 22, 80)'
-    : 'rgb(243, 241, 255)');
+    : 'rgb(211, 202, 208)');
   expect(await page.evaluate(() => Array.from(document.fonts).some((face) =>
     face.family === 'Plus Jakarta Sans' && face.status === 'loaded')))
     .toBe(true);
@@ -237,7 +237,7 @@ export function verifyContract(
         ? 'Kiểm chứng phiên bản đang chạy'
         : 'Verify what\'s running', theme),
     paint: ['[data-testid="verify-status"]', 'background-color',
-      theme === 'light' ? 'rgb(241, 239, 250)' : 'rgb(25, 22, 64)',
+      theme === 'light' ? 'rgb(241, 239, 250)' : 'rgb(21, 16, 21)',
     ] as const,
   };
 }

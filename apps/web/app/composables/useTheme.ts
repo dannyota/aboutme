@@ -7,7 +7,7 @@ export type Theme = 'light' | 'dark';
 
 export const THEME_COLOR: Readonly<Record<Theme, string>> = {
   light: '#ffffff',
-  dark: '#0f0d26',
+  dark: '#0e0a0d',
 };
 
 export type ThemeColorMeta = {

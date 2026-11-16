@@ -193,10 +193,10 @@ export async function expectGuideInstructionIcons(
   for (const [id, icon, color, count] of [
     ['guide-can', '.lucide-check', theme === 'light'
       ? 'rgb(67, 54, 201)'
-      : 'rgb(185, 178, 255)', 6],
+      : 'rgb(181, 155, 219)', 6],
     ['guide-cannot', '.lucide-minus', theme === 'light'
       ? 'rgb(85, 81, 125)'
-      : 'rgb(183, 178, 219)', 5],
+      : 'rgb(163, 149, 159)', 5],
   ] as const) {
     const icons = page.getByTestId(id).locator(icon);
     await expect(icons, 'Guide instruction icons.').toHaveCount(count);
@@ -216,10 +216,10 @@ export async function expectGuideIcons(
   for (const [id, paths, stroke] of [
     ['guide-can', ['M20 6 9 17l-5-5'], theme === 'light'
       ? 'rgb(67, 54, 201)'
-      : 'rgb(185, 178, 255)'],
+      : 'rgb(181, 155, 219)'],
     ['guide-cannot', ['M5 12h14'], theme === 'light'
       ? 'rgb(85, 81, 125)'
-      : 'rgb(183, 178, 219)'],
+      : 'rgb(163, 149, 159)'],
   ] as const) {
     await expectSvg(page.getByTestId(id).locator('svg'),
       lucideExpectation(paths, stroke), 'Guide SVG paint.');
