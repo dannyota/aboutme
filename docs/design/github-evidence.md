@@ -115,17 +115,20 @@ months, which is why it is dropped at once.
   10-second container stop. A callback that arrives after the signal does no
   exchange and redirects with `evidence=failed`.
 - One account boundary orders every change: the account's user row lock in a
-  database transaction. Session-authenticated operations revalidate the caller's
-  session inside it (live, same user, current epoch, same CSRF secret): the
-  callback's install, status, "Done", disconnect, logout, revoking one or all
-  sessions, a password change and self-deletion. Operations that carry another
-  proof keep that proof and run under the same user lock: a password reset, an
-  operator's deletion and the epoch change inside them. Only expiry and shutdown
-  end a session outside the boundary.
+  database transaction. The evidence routes lock the user, the caller's session,
+  then the GitHub connection row. Session-authenticated operations revalidate
+  the caller's session inside it (live, same user, current epoch, same CSRF
+  secret): the callback's install, status, "Done", disconnect, logout, revoking
+  one or all sessions, a password change and self-deletion. Operations that
+  carry another proof keep that proof and run under the same user lock: a
+  password reset, an operator's deletion and the epoch change inside them. Only
+  expiry and shutdown end a session outside the boundary.
 - Every path that changes the evidence connection or session, or tells the
   server that the account's sessions ended, keeps three rules:
-  1. It checks its authority under its locks, reading the clock after they are
-     held.
+  1. It checks its authority under its locks. It reads the clock once, after the
+     last row lock it takes before deciding, and checks every deadline against
+     that value: session expiry, the recent-proof window, enrollment and
+     ceremony expiry, and reset-token expiry.
   2. It ends the evidence session only after its own authorization has succeeded
      and all its session changes, rotation partners included, are done, as the
      last step before commit.
