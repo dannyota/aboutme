@@ -58,13 +58,13 @@ at least 160 px high, so it stays white with neutral ink in dark theme. It lifts
 editor. It shows the title, the relative updated time in paper-muted text, and a
 public seal and link or the Draft mark at the bottom. An overflow menu at the
 top right offers the [twin action](#language-twin) for a `vi` or `en` resume,
-then Rename and Delete. Create resume, a large primary button with a plus icon
-in the page header, is the one control that creates a new resume from blank, a
-sample, or an import; the twin action copies an existing resume. Both are
-disabled at three resumes. Remaining slots are 2 px dashed outlines with the
-sheet radius on a half-opaque card fill, reading Empty slot. For an empty list,
-the first slot says “No resumes yet.” and how to start, and that three are
-allowed.
+then Rename and Delete. Create resume, a large main pill with a plus icon in the
+page header, is the one control that creates a new resume from blank, a sample,
+or an import; the twin action copies an existing resume. Both are disabled at
+three resumes. Remaining slots are 2 px dashed `--control` outlines with the
+sheet radius on a transparent fill, reading Empty slot. The card menu follows
+the [menu rule](typography-and-tokens.md#controls). For an empty list, the first
+slot says “No resumes yet.” and how to start, and that three are allowed.
 
 A rename or delete from the list goes through the same save queue as the editor.
 While it is being saved, the card's mark reads “Đang lưu…” (“Saving…”). A rename
@@ -78,8 +78,8 @@ The editor is a four-region workspace on the flat `--editor-canvas` fill, with
 no canvas glows:
 
 1. A 4 rem tool rail for Document, Structure, Design, Templates, and Photo.
-2. A 16.5 rem resume outline with Personal details, indigo section icons, a
-   collapsible list, and Add section actions.
+2. A 16.5 rem resume outline with Personal details, `--muted-foreground` section
+   icons, a collapsible list, and Add section actions.
 3. A preview region, at least 29.5 rem wide, holding the rendered sheet. The
    four columns fill exactly 72 rem at the default inspector width.
 4. An inspector for details, sections, structure, customization, templates, and
@@ -88,17 +88,22 @@ no canvas glows:
 A project section's Add entry also offers library projects, and a linked entry
 names its project ([projects workspace](projects.md#in-the-resume-editor)).
 
-The top bar, rail, outline, and inspector sit on the card color with borders
-between them. Selection is shown by shape as well as color. The selected rail
-tool takes the `--surface-blue` fill, `--link` text, and a 3 px `--primary` bar
-inset on its left edge, moved to the bottom edge when the rail is horizontal.
-The current outline item takes the `--surface-blue` fill and semibold text.
+The top bar, rail, outline, and inspector sit on `--background` with `--border`
+rules between them; the preview sits on `--editor-canvas`. Selection is shown by
+shape as well as color. Rail tools are 44 px circles; the selected tool is an
+ink disk, a `--foreground` fill with a `--background` icon, in the vertical and
+the horizontal rail alike. Outline rows are 38 px pills with
+`--muted-foreground` icons; the current row takes the `--accent` fill and
+weight 700.
 
 The editor top bar is 64 px high. It holds the 24 px logo linking to the resume
 list, a divider, the resume title as the page h1, save state, public mark, the
 language toggle, Download PDF with the page size beside it, Publish, and the
-account menu. Publish is the seal button. Below 56 rem the logo shows the mark
-alone and the bar's gaps shrink from 16 to 8 px. When space runs short, the
+account menu. Download PDF is an outline pill. Publish is the seal button, the
+only red fill, with the ring "a" before its label. The title is weight 600 and,
+like the public link, follows the truncation rule of the
+[type scale](typography-and-tokens.md#type). Below 56 rem the logo shows the
+mark alone and the bar's gaps shrink from 16 to 8 px. When space runs short, the
 title and the public link truncate with an ellipsis before any control moves;
 the link's `title` attribute holds the whole address.
 
@@ -128,16 +133,17 @@ tab and are saved when the connection is back.”), with Try again (“Thử l�
 which checks at once. While it shows, unsaved work reads “Chưa lưu, đang thử
 lại”. Editor unavailable is shown only when the first load fails.
 
-The preview opens with a card-colored toolbar holding a PDF and Web toggle; the
-active mode uses the default button variant and the choice is remembered. PDF
-mode shows each page as its own sheet, then an estimated page count beside a
-pencil glyph. Web mode shows the continuous document on one full-width sheet.
-The preview area has 24 px padding, 16 px on phones. It reports loading or
-unavailable photos without rendering a placeholder image, and a render failure
-says that edits are still safe. The active A4 or Letter sheet remains intact and
-scrollable. Tablet and desktop PDF previews have a zoom card (out, percent to
-reset, in, Default size; 50 to 200%; Ctrl/Cmd +/−/0 and Ctrl/Cmd+wheel; kept per
-browser; hidden on phones and in Web mode).
+The preview opens with a transparent toolbar on the canvas holding a PDF and Web
+toggle: a `--card` pill track whose active mode is an ink pill. The choice is
+remembered. PDF mode shows each page as its own sheet, then an estimated page
+count beside a pencil glyph. Web mode shows the continuous document on one
+full-width sheet. The preview area has 24 px padding, 16 px on phones. It
+reports loading or unavailable photos without rendering a placeholder image, and
+a render failure says that edits are still safe. The active A4 or Letter sheet
+remains intact and scrollable. Tablet and desktop PDF previews have a zoom pill
+on `--card` with `--shadow-float` (out, percent to reset, in, Default size; 50
+to 200%; Ctrl/Cmd +/−/0 and Ctrl/Cmd+wheel; kept per browser; hidden on phones
+and in Web mode).
 
 The Design panel opens with a Page & PDF group: page size with its dimensions,
 and margins as Narrow, Normal, Wide, or Custom presets, where Custom reveals the
@@ -158,10 +164,16 @@ the Public resume, PDF download, SEO and GEO, and, when offered, Require sign-in
 to view switches with explanations, then the
 [showcase block](landing-and-library.md#publish-dialog-block). PDF download and
 SEO and GEO are disabled until Public resume is enabled. The primary action is
-Publish, Unpublish, or Update publication according to the current state.
-Success shows the seal, public link, and Copy link. When reauthentication finds
-a second factor, the dialog stays open, links that step in a new tab, and sends
-the same request once more when the owner chooses Continue.
+Publish, Unpublish, or Update publication according to the current state. The
+dialog follows the [dialog rule](typography-and-tokens.md#controls). The slug
+prefix sits in a `--surface-mist` cell inside the input, switches turn on in the
+main color, and the actions are the primary action as the seal button, then
+Cancel as an outline pill, stacked full width below 640 px. Unpublish is the
+destructive outline instead of the seal button. Success shows the seal ticket
+alone with `--seal-text`, then the public link in a mist pill with Copy link.
+When reauthentication finds a second factor, the dialog stays open, links that
+step in a new tab, and sends the same request once more when the owner chooses
+Continue.
 
 Settings is a narrow, left-aligned page divided by top rules. Signed-in devices
 show the device description, relative last-seen time, This device, and Log out
