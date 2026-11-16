@@ -37,7 +37,7 @@ stay as aliases of their replacements until change 6 deletes them. Until change
 ### Color
 
 The [token page](typography-and-tokens.md#color) holds every color and its
-contrast. The home page uses the brand fill for the hero panel, mist for the
+contrast. The home page uses `--brand-panel` for the hero panel, mist for the
 editor panel, the AI card, and row hover, blush for the template fan block and
 the maker panel, sun for the data card, and the indigo panel for the publish
 panel.
@@ -80,17 +80,17 @@ Plus Jakarta Sans already ships as
 
 ## The public mark
 
-`--seal` equals `--brand`: a second red beside it would differ by 1.12:1. Public
-is carried by the mark, not the hue.
+The lotus red is reserved for the logo and public. The main color is chàm, so a
+primary button can never read as the seal.
 
 - Public is the ticket: a rounded ticket tilted -6 degrees with a dashed inner
   line, the ring "a", the word PUBLIC or CÔNG KHAI, and the link. No other
   element uses that shape or uppercase.
-- The ticket carries its own paper fill (`--card` plus a 7% tint), so it never
-  sits pink on pink. On the resume sheet it keeps light values in both themes.
+- The ticket carries its own paper fill (`--card` plus a 7% tint). On the resume
+  sheet it keeps light values in both themes.
 - Seal words and strokes use `--seal-text`, not the fill.
-- The Publish button keeps its own variant: brand fill plus the ring "a" before
-  the label. No other pink button carries the ring "a".
+- The Publish button keeps its own variant: `--seal` fill, `--seal-hover` on
+  hover, and the ring "a" before the label. It is the only red fill.
 - Decorative chips on the home page are pills and circles, never tickets.
 
 ## Logo
@@ -100,10 +100,10 @@ Shapes are unchanged (`AppLogo`, `favicon-v3.svg` geometry).
 | Ground                           | Wordmark           | Mark and the dot before "vn" |
 | -------------------------------- | ------------------ | ---------------------------- |
 | Light `#FFFFFF`                  | `#1A1650` (16.5:1) | `#DE1B5A` (4.76:1)           |
-| Dark `#0F0D26`                   | `#F3F1FF` (17.0:1) | `#FF7AA2` (7.74:1)           |
+| Dark `#0E0A0D`                   | `#D3CAD0` (12.3:1) | `#E2788F` (6.85:1)           |
 | Indigo footer or panel `#1A1650` | `#FFFFFF`          | `#FF7AA2` (6.71:1)           |
 
-On brand pink the whole logo is white. Favicon stroke: `#DE1B5A`, `#FF7AA2`
+On the hero panel the whole logo is white. Favicon stroke: `#DE1B5A`, `#E2788F`
 under `prefers-color-scheme: dark`.
 
 ## Layout
@@ -117,7 +117,7 @@ stacks below 64rem.
 
 | Section                        | Below 64rem                                        | From 64rem                                                                                                        |
 | ------------------------------ | -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| Hero, `--brand` panel          | copy, then sheet centered                          | copy `1fr` and sheet column, gap 44; `6fr 5fr`, gap 48 from 80rem; copy centered vertically, sheet bottom-aligned |
+| Hero, `--brand-panel`          | copy, then sheet centered                          | copy `1fr` and sheet column, gap 44; `6fr 5fr`, gap 48 from 80rem; copy centered vertically, sheet bottom-aligned |
 | Editor, `--surface-mist` panel | text and facts, then picture                       | `4fr 6fr`, gap 48; `5fr 6fr`, gap 64 from 80rem                                                                   |
 | Templates, no panel            | heading, fan, list, button                         | fan left spanning both rows, heading and list right, `6fr 5fr`, gap 64                                            |
 | Publish, `--panel`             | text, then card, gap 64                            | `5fr 6fr`, gap 56                                                                                                 |
@@ -139,8 +139,10 @@ Hero sheet (rotated -3 degrees, hangs below the panel):
   resumes (white pill), Browse.
 - Hero chips, all `aria-hidden`: link pill top left (rotated 4 degrees), "0đ"
   coin on the left edge (64 px, 80 from 28rem), small "a" coin top right, the
-  seal ticket bottom right. Rings: the logo's two rings in `--brand-hover`,
-  cropped by the panel's top right corner.
+  seal ticket bottom right. Rings: the logo's two rings in black at 14% over the
+  hero ground, cropped by the panel's top right corner. Hero text and the
+  outline pill take `--panel-foreground`; the filled hero pill is
+  `--panel-foreground` with a `--coin-ink` label.
 - Editor facts: four rows with hairlines and a 14 px coin bullet. The picture is
   a labeled illustration of the editor until a real screenshot replaces it. Data
   card: a 150 px coin (124 from 64rem, 190 from 80rem) cropped by the bottom
@@ -152,6 +154,5 @@ Hero sheet (rotated -3 degrees, hangs below the panel):
 - Publish card: "Example settings", three rows (title, link on the first,
   description, state word and a decorative switch), stamp on the top right edge.
 - Maker: `maker-avatar-320.webp` and `maker-avatar-640.webp` by `srcset`, circle
-  crop, 168 px, 176 from 48rem, 232 from 64rem, 6 px white border. Buttons:
-  brand pill (Create, or Open your resumes when signed in), then two outline
-  pills.
+  crop, 168 px, 176 from 48rem, 232 from 64rem, 6 px white border. Buttons: main
+  pill (Create, or Open your resumes when signed in), then two outline pills.

@@ -21,20 +21,20 @@ as an alert rather than a stamp on paper.
 
 ## Decision
 
-Colorful product UI, calm white resume, and one mark that means public. The
-owner chose this identity on 2026-11-15. It reached the home page first; the
-other chrome surfaces follow in the order the
+Colorful product UI, calm white resume, and one red that means public. The owner
+chose this identity on 2026-11-15 and its colors on 2026-11-16. It reached the
+home page first; the other chrome surfaces follow in the order the
 [home page spec](../design/ui/home-page.md#scope) gives.
 
 **Principles.**
 
-- **One brand fill.** Lotus pink-red fills every primary action. A selected
-  option and the current location use ink and a tint instead, so the fill keeps
-  one job.
-- **One mark, one meaning.** Public is the ticket: its shape, tilt, uppercase
-  word, and link. No other element takes that shape, and only the Publish
-  control carries the ring "a". Destructive actions are outlines in a separate
-  hue and never fills.
+- **One main color.** Chàm, the ink made lighter, fills every primary action and
+  grounds the home hero. A selected option and the current location use ink and
+  a tint instead, so the fill keeps one job.
+- **One red, one meaning.** The lotus red is the logo and public: the seal
+  ticket with its shape, tilt, uppercase word, and link, its 20 px tile, and the
+  Publish button, the only red fill and the only control with the ring "a".
+  Destructive actions are outlines in a separate hue and never fills.
 - **State is a mark, not a hue.** Saved, saving, failed, draft, and public are a
   pencil tick, pencil text, destructive text, or the seal mark with the link
   (`StateMark`), never colored chips.
@@ -54,17 +54,21 @@ other chrome surfaces follow in the order the
 
 **Canvas and color.**
 
-- White ground `#FFFFFF` with indigo ink `#1A1650`; the dark theme is `#0F0D26`
-  with `#F3F1FF`. No gradients and no glows.
-- One brand fill, lotus pink-red `#DE1B5A` with white text and hover `#C7134D`,
-  is `--primary` and `--seal` in both themes. Pink words and thin strokes are
-  `#C7134D` light and `#FF7AA2` dark.
-- Supporting surfaces are mist, blush, and sun tints, an indigo inverse panel,
+- White ground `#FFFFFF` with indigo ink `#1A1650`. The dark theme is dim: a
+  near-black ground `#0E0A0D` with soft text `#D3CAD0` near 12:1. No gradients
+  and no glows.
+- The main color is chàm `#594BAD` with white text and hover `#4C3C9C`,
+  `#7267C0` in dark theme; it is `--primary`. The red is `--seal`: lotus
+  `#DE1B5A` with hover `#C7134D`, `#C42D58` in dark theme, and seal words
+  `#C7134D` light and `#E2788F` dark. The two fills are far apart under every
+  simulated color vision, so a primary button never reads as the seal.
+- Supporting surfaces are mist, a lilac tint, and sun, an indigo inverse panel,
   and a coin yellow `#FFD23F` with indigo ink. The focus ring has its own token.
-- Links are ink made lighter, `#4336C9` light and `#B9B2FF` dark, never pink. A
-  link inside a sentence is underlined.
-- `--destructive` is burnt orange, `#B54708` light and `#FD8A4B` dark, always an
-  outline, so Delete cannot be mistaken for Publish under any color vision.
+- Links are ink made lighter, `#4336C9` light and `#B59BDB` dark. A link inside
+  a sentence is underlined.
+- `--destructive` is a brown amber, `#914D00` light and `#F0AB72` dark, always
+  an outline, so Delete cannot be mistaken for Publish or a primary action under
+  any color vision.
 - Text meets WCAG AA on every ground. The
   [token page](../design/ui/typography-and-tokens.md) holds every value and
   ratio.
@@ -78,10 +82,10 @@ height 1.3 or more, because the typeface's stacked Vietnamese marks are tall.
 **Logo.** The mark is a stamp: a thick outer ring, a hairline inner ring, and a
 single-story "a", tilted −8° like the public stamp. The wordmark is stroked
 lowercase `aboutme.vn` in the text color. The mark and the dot before "vn" take
-the brand pink, `#FF7AA2` on dark and indigo grounds, and the whole logo is
-white on the brand fill. The logo is inline SVG with no gradient, mask, id,
-font, or external asset. At 24 px and in the favicon, the hairline inner ring
-drops out.
+the seal red, `#E2788F` on the dark ground and `#FF7AA2` on the indigo panel,
+and the whole logo is white on the hero. The logo is inline SVG with no
+gradient, mask, id, font, or external asset. At 24 px and in the favicon, the
+hairline inner ring drops out.
 
 **Seal.** `AppSeal` is a rounded ticket rotated −6°: the logo's seal mark (outer
 ring and "a") and the word PUBLIC (CÔNG KHAI in Vietnamese) on top, a hairline,
@@ -175,6 +179,10 @@ indigo ink, one lotus pink-red brand fill that is also the seal color, Plus
 Jakarta Sans, rounded panels and pill buttons, and the maker's introduction with
 his picture. The home page takes it first; the rest of the chrome follows within
 one release.
+
+On 2026-11-16 the owner moved the red back to the logo and the seal ("logo red
+show what we need"), chose chàm as the main color from three directions, and
+chose a dimmer dark theme.
 
 On 2026-11-16 the older principles, canvas, shape, and logo text in the Decision
 were rewritten to this identity, and the other surfaces follow one change at a

@@ -7,52 +7,60 @@ the [visual design](../../../DESIGN.md), in the identity of
 
 ## Rules
 
-Pink acts, ink selects, mist locates, the ticket publishes.
+The main color acts, ink selects, mist locates, the red publishes.
 
-- The brand fill marks primary actions and the on state of switches and
-  checkboxes. Nothing else.
+- The main color, chàm, fills primary actions and the on state of switches and
+  checkboxes, and grounds the home hero. Nothing else.
 - A selected option among several (segmented toggles, filter chips, the editor
   rail tool, tabs) is an ink pill: `--foreground` fill, `--background` text.
 - The current location (header link, outline row) is an `--accent` pill.
-- Public is the seal ticket and its 20 px tile. Only Publish carries the ring
-  "a".
+- The lotus red is reserved for the logo and public: the seal ticket, its 20 px
+  tile, the word that names the public state, and the Publish button, the only
+  red fill, which also carries the ring "a".
 - State is a mark, never a color. No state colors exist.
 
 ## Color
 
 The tokens are defined on `:root` and switched by `html[data-theme="dark"]`. The
-theme preference is persisted in the `aboutme-theme` cookie.
+theme preference is persisted in the `aboutme-theme` cookie. The dark theme is
+dim: low-chroma grounds, body text near 12:1, no pure white except labels on the
+two fills.
 
-| Token                                                                    | Light                                        | Dark                                            | Role                                            |
-| ------------------------------------------------------------------------ | -------------------------------------------- | ----------------------------------------------- | ----------------------------------------------- |
-| `--background`                                                           | `#FFFFFF`                                    | `#0F0D26`                                       | page, header, editor panels, inputs             |
-| `--foreground`, and the card, popover, secondary, and accent foregrounds | `#1A1650`                                    | `#F3F1FF`                                       | text, outline pills, wordmark                   |
-| `--muted-foreground`                                                     | `#55517D`                                    | `#B7B2DB`                                       | leads, descriptions, notes, icons               |
-| `--card`, `--popover`                                                    | `#FFFFFF`                                    | `#25225A`                                       | standalone cards, menus, dialogs, sheets        |
-| `--brand`, `--primary`, `--seal`                                         | `#DE1B5A`                                    | `#DE1B5A`                                       | primary pills, switch on, seal fills            |
-| `--brand-hover`, `--primary-hover`                                       | `#C7134D`                                    | `#C7134D`                                       | hover fill                                      |
-| `--brand-foreground`, `--primary-foreground`, `--seal-foreground`        | `#FFFFFF`                                    | `#FFFFFF`                                       | text on the brand fill                          |
-| `--brand-text`, `--seal-text`                                            | `#C7134D`                                    | `#FF7AA2`                                       | seal words, pink words, and thin strokes        |
-| `--link`                                                                 | `#4336C9`                                    | `#B9B2FF`                                       | links                                           |
-| `--destructive`                                                          | `#B54708`                                    | `#FD8A4B`                                       | destructive outline and text, error text        |
-| `--surface-destructive`                                                  | 7% destructive in card                       | 12% destructive in card                         | error banners                                   |
-| `--surface-mist`, `--muted`, `--editor-canvas`                           | `#F1EFFA`                                    | `#191640`                                       | tinted panels, tracks, the editor canvas        |
-| `--surface-blush`                                                        | `#FFE4EC`                                    | `#3B1431`                                       | the Library header, the maker panel             |
-| `--surface-sun`                                                          | `#FFF2C2`                                    | `#332A0E`                                       | data card                                       |
-| `--accent`, `--secondary`                                                | `#F1EFFA`                                    | `#332F76`                                       | hover fill, current location, secondary button  |
-| `--panel`, `--panel-foreground`, `--panel-muted`                         | `#1A1650`, `#FFFFFF`, `#D9D6F2`              | `#322C8F`, `#FFFFFF`, `#D9D6F2`                 | inverse panels                                  |
-| `--footer`                                                               | `#1A1650`                                    | `#191640`                                       | footer band; text as on `--panel`               |
-| `--border`                                                               | `#E3E0F2`                                    | `#34315C`                                       | decorative borders                              |
-| `--hairline`, `--hairline-inverse`                                       | `rgba(26,22,80,.14)`, `rgba(255,255,255,.2)` | `rgba(243,241,255,.16)`, `rgba(255,255,255,.2)` | row separators, popover borders                 |
-| `--input`, `--control`                                                   | `#7F7AAE`                                    | `#8580B8`                                       | control edges, switch off, dashed outlines      |
-| `--ring`, `--ring-inverse`                                               | `#1A1650`, `#FFFFFF`                         | `#C9C3FF`, `#FFFFFF`                            | focus ring; inverse on brand, panel, and footer |
-| `--coin`, `--coin-edge`, `--coin-ink`                                    | `#FFD23F`, `#E9B416`, `#1A1650`              | same                                            | coins, bullets, text selection                  |
-| `--chart-bar`                                                            | `#5B52C7`                                    | `#9A93F5`                                       | views chart bars                                |
-| `--overlay`                                                              | `rgba(26,22,80,.55)`                         | `rgba(5,4,16,.72)`                              | dialog scrim                                    |
-| `--logo-mark`, `--logo-mark-inverse`                                     | `#DE1B5A`, `#FF7AA2`                         | `#FF7AA2`, `#FF7AA2`                            | logo mark and dot; inverse on indigo grounds    |
+| Token                                                                    | Light                                        | Dark                                            | Role                                                           |
+| ------------------------------------------------------------------------ | -------------------------------------------- | ----------------------------------------------- | -------------------------------------------------------------- |
+| `--background`                                                           | `#FFFFFF`                                    | `#0E0A0D`                                       | page, header, editor panels, inputs                            |
+| `--foreground`, and the card, popover, secondary, and accent foregrounds | `#1A1650`                                    | `#D3CAD0`                                       | text, outline pills, wordmark                                  |
+| `--muted-foreground`                                                     | `#55517D`                                    | `#A3959F`                                       | leads, descriptions, notes, icons                              |
+| `--card`, `--popover`                                                    | `#FFFFFF`                                    | `#1B1419`                                       | standalone cards, menus, dialogs, sheets                       |
+| `--brand`, `--primary`                                                   | `#594BAD`                                    | `#7267C0`                                       | the main color: primary pills, switch on                       |
+| `--brand-hover`, `--primary-hover`                                       | `#4C3C9C`                                    | `#675BB3`                                       | hover fill                                                     |
+| `--brand-foreground`, `--primary-foreground`                             | `#FFFFFF`                                    | `#FFFFFF`                                       | text on the main fill                                          |
+| `--brand-text`                                                           | `#4F3DA5`                                    | `#AEA7ED`                                       | main-color words and thin strokes                              |
+| `--brand-panel`                                                          | `#594BAD`                                    | `#382961`                                       | home hero ground                                               |
+| `--seal`                                                                 | `#DE1B5A`                                    | `#C42D58`                                       | the Publish fill, the public tile                              |
+| `--seal-hover`                                                           | `#C7134D`                                    | `#B42650`                                       | Publish hover                                                  |
+| `--seal-foreground`                                                      | `#FFFFFF`                                    | `#FFFFFF`                                       | text on the seal fill                                          |
+| `--seal-text`                                                            | `#C7134D`                                    | `#E2788F`                                       | seal words and strokes                                         |
+| `--link`                                                                 | `#4336C9`                                    | `#B59BDB`                                       | links                                                          |
+| `--destructive`                                                          | `#914D00`                                    | `#F0AB72`                                       | destructive outline and text, error text                       |
+| `--surface-destructive`                                                  | 7% destructive in card                       | 8% destructive in card                          | error banners                                                  |
+| `--surface-mist`, `--muted`, `--editor-canvas`                           | `#F1EFFA`                                    | `#151015`                                       | tinted panels, tracks, the editor canvas                       |
+| `--surface-blush`                                                        | `#ECE2FF`                                    | `#1C172F`                                       | the Library header, the maker panel (a tint of the main color) |
+| `--surface-sun`                                                          | `#FFF2C2`                                    | `#271A07`                                       | data card                                                      |
+| `--accent`, `--secondary`                                                | `#F1EFFA`                                    | `#251B23`                                       | hover fill, current location, secondary button                 |
+| `--panel`, `--panel-foreground`, `--panel-muted`                         | `#1A1650`, `#FFFFFF`, `#D9D6F2`              | `#25153A`, `#E7DFE8`, `#C2B6CB`                 | inverse panels; hero text                                      |
+| `--footer`                                                               | `#1A1650`                                    | `#150C1C`                                       | footer band; text as on `--panel`                              |
+| `--border`                                                               | `#E3E0F2`                                    | `#2E242C`                                       | decorative borders                                             |
+| `--hairline`, `--hairline-inverse`                                       | `rgba(26,22,80,.14)`, `rgba(255,255,255,.2)` | `rgba(211,202,208,.14)`, `rgba(255,255,255,.2)` | row separators, popover borders                                |
+| `--input`, `--control`                                                   | `#7F7AAE`                                    | `#7E6D7A`                                       | control edges, switch off, dashed outlines                     |
+| `--ring`, `--ring-inverse`                                               | `#1A1650`, `#FFFFFF`                         | `#CDBCD9`, `#FFFFFF`                            | focus ring; inverse on the fills, panel, hero, and footer      |
+| `--coin`, `--coin-edge`, `--coin-ink`                                    | `#FFD23F`, `#E9B416`, `#1A1650`              | same                                            | coins, bullets, text selection, hero pill label                |
+| `--chart-bar`                                                            | `#594BAD`                                    | `#8F85D7`                                       | views chart bars                                               |
+| `--overlay`                                                              | `rgba(26,22,80,.55)`                         | `rgba(4,2,3,.72)`                               | dialog scrim                                                   |
+| `--logo-mark`, `--logo-mark-inverse`                                     | `#DE1B5A`, `#FF7AA2`                         | `#E2788F`, `#E2788F`                            | logo mark and dot; inverse on indigo grounds                   |
 
 The application sets `<meta name="theme-color">` to the page ground, `#FFFFFF`
-light and `#0F0D26` dark. With no stored preference it emits one tag per
+light and `#0E0A0D` dark. With no stored preference it emits one tag per
 `prefers-color-scheme`; with a stored theme it emits that theme's value, and the
 theme button updates it. The public resume page emits none.
 
@@ -67,52 +75,56 @@ coin; `--surface-blue` and `--surface-indigo` become `--surface-mist` and
 
 ### Contrast
 
-WCAG 2 ratios, light then dark. Text needs 4.5, marks and control edges 3.
-`theme.test.ts` checks every pair.
+WCAG 2 ratios, light then dark. Text needs 4.5; control edges, rings, and the
+two fills against their ground need 3. `theme.test.ts` checks every pair.
 
-| Ground              | Foreground   | Muted      | Link       | Brand text | Destructive | Control    |
-| ------------------- | ------------ | ---------- | ---------- | ---------- | ----------- | ---------- |
-| background          | 16.48, 17.03 | 7.34, 9.41 | 8.05, 9.83 | 5.79, 7.74 | 5.43, 8.06  | 3.96, 5.22 |
-| card, popover       | 16.48, 12.95 | 7.34, 7.15 | 8.05, 7.47 | 5.79, 5.88 | 5.43, 6.13  | 3.96, 3.97 |
-| mist, editor canvas | 14.49, 15.31 | 6.46, 8.46 | 7.08, 8.84 | 5.09, 6.96 | 4.77, 7.25  | 3.49, 4.70 |
-| blush               | 13.78, 14.16 | 6.14, 7.82 | 6.73, 8.17 | 4.84, 6.43 | 4.54, 6.70  | 3.31, 4.34 |
-| sun                 | 14.70, 12.74 | 6.55, 7.04 | 7.18, 7.36 | 5.16, 5.79 | 4.84, 6.03  | 3.54, 3.91 |
-| accent, secondary   | 14.49, 10.41 | 6.46, 5.75 | 7.08, 6.01 | 5.09, 4.73 | 4.77, 4.93  | 3.49, 3.19 |
-| surface-destructive | 14.91, 10.81 | 6.64, 5.97 | 7.28, 6.24 | 5.24, 4.91 | 4.91, 5.11  | 3.59, 3.31 |
+| Ground              | Foreground   | Muted      | Link       | Brand text | Seal text  | Destructive | Control    | Main fill  | Seal fill  |
+| ------------------- | ------------ | ---------- | ---------- | ---------- | ---------- | ----------- | ---------- | ---------- | ---------- |
+| background          | 16.48, 12.29 | 7.34, 6.89 | 8.05, 8.12 | 8.26, 8.94 | 5.79, 6.85 | 6.43, 10.09 | 3.96, 4.08 | 6.92, 4.14 | 4.76, 3.62 |
+| card, popover       | 16.48, 11.31 | 7.34, 6.34 | 8.05, 7.47 | 8.26, 8.23 | 5.79, 6.30 | 6.43, 9.28  | 3.96, 3.75 | 6.92, 3.81 | 4.76, 3.33 |
+| mist, editor canvas | 14.49, 11.76 | 6.46, 6.59 | 7.08, 7.77 | 7.26, 8.55 | 5.09, 6.55 | 5.66, 9.65  | 3.49, 3.90 | 6.09, 3.95 | 4.19, 3.46 |
+| blush               | 13.25, 10.82 | 5.91, 6.07 | 6.47, 7.15 | 6.64, 7.87 | 4.65, 6.03 | 5.17, 8.88  | 3.19, 3.59 | 5.57, 3.64 | 3.83, 3.19 |
+| sun                 | 14.70, 10.61 | 6.55, 5.95 | 7.18, 7.01 | 7.37, 7.72 | 5.16, 5.91 | 5.74, 8.71  | 3.54, 3.52 | 6.17, 3.57 | 4.25, 3.12 |
+| accent, secondary   | 14.49, 10.42 | 6.46, 5.84 | 7.08, 6.89 | 7.26, 7.58 | 5.09, 5.81 | 5.66, 8.55  | 3.49, 3.46 | 6.09, 3.51 | 4.19, 3.07 |
+| surface-destructive | 14.91, 9.84  | 6.64, 5.51 | 7.28, 6.50 | 7.47, 7.16 | 5.24, 5.48 | 5.82, 8.07  | 3.59, 3.26 | 6.26, 3.31 | 4.31, 2.89 |
 
-- White on `--brand` is 4.76 and on `--brand-hover` 5.79. White and
-  `--panel-muted` on `--panel` are 16.48 and 11.65 light, 11.10 and 7.85 dark.
-- `--ring` on background, card, and mist is 16.48, 16.48, 14.49 light and 11.51,
-  8.75, 10.35 dark. `--chart-bar` on card is 6.04 and 5.41.
-- The brand fill against its ground is 4.76 on white, 4.19 on mist, and 3.98 on
-  blush; in dark theme 3.99 on background, 3.59 on mist, and 3.03 on card. It
-  falls under 3 on dark `--surface-sun`, `--accent`, and `--panel`, so no
-  brand-filled control sits on those three grounds in dark theme; an outline or
-  a white pill takes its place.
-- Never set light `--brand-text` on `--panel` (2.85) and never set white text on
-  `--coin`.
+- White on `--brand` is 6.92 light and 4.75 dark; on `--brand-hover` 8.63 and
+  5.64; on `--seal` 4.76 and 5.44; on `--seal-hover` 5.79 and 6.30.
+- Hero: `--panel-foreground` on `--brand-panel` is 6.92 light and 9.72 dark,
+  `--panel-muted` 4.89 and 6.54; the hero pill label is 16.48 and 12.65.
+- `--panel` text is 16.48 and 12.93, its muted text 11.65 and 8.70; `--footer`
+  text 16.48 and 14.64.
+- The main fill is 2.38 on light `--panel` and `--footer`, so in light theme a
+  control there is a `--panel-foreground` pill. In dark theme the main fill
+  clears 3:1 on every ground, the panel, and the footer.
+- The seal fill is 2.89 on the dark error banner; no Publish control or public
+  tile sits there.
+- `--ring` on background, card, and mist is 16.48, 16.48, 14.49 light and 11.04,
+  10.16, 10.56 dark. `--chart-bar` on card is 6.92 and 5.60.
+- Never set white text on `--coin`.
 
 ### Links
 
-`--link` is ink made lighter. Pink is never a link color: for tritan and deutan
-readers pink text sits too close to error text.
+`--link` is ink made lighter, close to `--brand-text`. A link is marked by its
+underline or weight, never by hue alone.
 
 - A link inside a sentence is always underlined (1 px, offset 4 px), because
-  `--link` differs from body text by only 2.05:1 light and 1.73:1 dark.
+  `--link` differs from body text by only 2.05:1 light and 1.51:1 dark.
 - A link alone on its line or in a navigation row is weight 600 and underlines
   on hover and focus.
-- On `--brand`, `--panel`, and `--footer` a link takes the surface's text color
-  with an underline.
+- On `--brand-panel`, `--panel`, and `--footer` a link takes the surface's text
+  color with an underline.
 
-### Destructive beside the brand fill
+### Destructive, main, and seal
 
-The two hues are 25.6 apart in CIEDE2000 for typical vision but 11.8 for deutan
-and 8.0 for tritan readers, and their lightness is nearly equal. So shape and
-label carry the difference:
+Destructive is a browner amber, separated from both the seal red and the main
+color by CIEDE2000 10.7 or more under typical, protan, deutan, and tritan
+simulation, and the main color is 23.5 or more from the seal. Shape and label
+still carry the difference:
 
 - Destructive is never a fill. It is a 1.5 px outline pill with `--destructive`
-  text and a 10 percent tint on hover; a brand action is a filled pill with
-  white text.
+  text and a 10 percent tint on hover; a main action is a filled pill with white
+  text; Publish is the one red fill with the ring "a".
 - The label names the act. Error text keeps its alert icon or a word that says
   it failed.
 - No destructive text sits inside or against a seal ticket.
@@ -123,10 +135,11 @@ Chrome that stands for a resume sheet uses the paper tokens, defined once on
 `:root` and never switched by the dark theme: `--paper` `#FFFFFF`, `--paper-ink`
 `#171A18`, `--paper-muted` `#5F6763`, and `--paper-hover` `#F0F2F1`. The
 `.paper-surface` class paints the paper ground and ink and rebinds foreground,
-muted foreground, accent, ring (`#1A1650`), and link (`#4336C9`) to their light
-values, so controls inside stay legible on white paper in dark theme. A ticket
-on a sheet uses `--paper-seal-ground` `#FFFFFF` and `--paper-seal-ink`
-`#C7134D`. None of this is applied inside the renderer.
+muted foreground, accent, ring (`#1A1650`), link (`#4336C9`), `--brand-text`
+(`#4F3DA5`), and `--seal-text` (`#C7134D`) to their light values, so controls
+inside stay legible on white paper in dark theme. A ticket on a sheet uses
+`--paper-seal-ground` `#FFFFFF` and `--paper-seal-ink` `#C7134D`. None of this
+is applied inside the renderer.
 
 ## Type
 
@@ -182,13 +195,13 @@ every truncated or clamped chrome text takes `padding-block-start: 0.3em` with
 
 - Buttons use the button primitive's variants, 36, 40, or 48 px high,
   weight 700. `default` fills with `--primary` and darkens to `--primary-hover`.
-  `seal` is the same fill with the ring "a" before the label, for Publish.
-  `outline` is a 1.5 px `--foreground` border with an `--accent` hover.
-  `secondary` fills with `--secondary`; on `--surface-mist` in light theme,
-  where the fills match, the outline variant takes its place. `ghost` has an
-  `--accent` hover. `link` and `destructive` follow the rules above. `default`,
-  `link`, `seal`, and `destructive` are the guarded edits of
-  [ADR 0019](../../adr/0019-application-ui-toolkit.md).
+  `seal` fills with `--seal`, darkens to `--seal-hover`, and carries the ring
+  "a" before the label, for Publish. `outline` is a 1.5 px `--foreground` border
+  with an `--accent` hover. `secondary` fills with `--secondary`; on
+  `--surface-mist` in light theme, where the fills match, the outline variant
+  takes its place. `ghost` has an `--accent` hover. `link` and `destructive`
+  follow the rules above. `default`, `link`, `seal`, and `destructive` are the
+  guarded edits of [ADR 0019](../../adr/0019-application-ui-toolkit.md).
 - Inputs, selects, and textareas: `--background` fill, 1 px `--input` border, 10
   px radius, 40 px high and 44 under `pointer: coarse`, a 2 px `--ring` on
   focus. An invalid field takes a `--destructive` border and its message.
