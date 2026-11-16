@@ -1,7 +1,7 @@
 import type { LegalCopy } from './legal';
 
 export const legalEn: LegalCopy = {
-  privacyUpdated: 'Last updated October 20, 2026',
+  privacyUpdated: 'Last updated November 16, 2026',
   termsUpdated: 'Last updated October 11, 2026',
   privacyLink: 'Privacy Policy',
   termsLink: 'Terms of Service',
@@ -54,6 +54,16 @@ export const legalEn: LegalCopy = {
           'Connected agents: the app name, its redirect addresses, the '
           + 'access you granted, and when it was last used. Access '
           + 'tokens are stored only as hashes.',
+          'GitHub connection (optional): if you connect GitHub to confirm '
+          + 'work on a project, we store your GitHub account ID, your GitHub '
+          + 'username, and when you connected. We never store the GitHub '
+          + 'access token: it stays in server memory for at most 30 '
+          + 'minutes, and we ask GitHub to revoke it when the connection '
+          + 'session ends. For each item you attach (a merged pull request, '
+          + 'a published release, or a public repository), we store its '
+          + 'link, repository name, title, date, and when we checked it. We '
+          + 'ask for no permissions on your GitHub account and read only '
+          + 'public information.',
           'Ordinary server operational logs do not record request IP '
           + 'addresses or request headers and are kept for up to 30 days.',
           'Attack protection uses your IP address, request time, method, '
@@ -158,6 +168,9 @@ export const legalEn: LegalCopy = {
           + 'leaves the showcase right away. Search engines are asked not '
           + 'to index the showcase, but anyone who visits it can see and '
           + 'copy what it shows.',
+          'Items you attach to a project appear on that project\'s public '
+          + 'page with links to GitHub, which can reveal your GitHub '
+          + 'username.',
         ],
       },
       {
@@ -175,7 +188,12 @@ export const legalEn: LegalCopy = {
           + 'emails, and notices that one could not be delivered (which can '
           + 'include your email address and the original message) are kept '
           + 'in a Google Workspace mailbox.',
-          'Google or LinkedIn sign-in, support email, replies to and failed '
+          'GitHub (United States) provides the optional GitHub connection. '
+          + 'When you connect, you sign in at GitHub and we receive your '
+          + 'account ID and username. While you pick items, our server asks '
+          + 'GitHub about the links you enter.',
+          'Google or LinkedIn sign-in, the GitHub connection, support '
+          + 'email, replies to and failed '
           + 'deliveries of account emails, connected AI services '
           + 'you choose, and foreign services that fetch a public resume '
           + 'link may involve processing outside Vietnam. Password checks '
@@ -202,7 +220,10 @@ export const legalEn: LegalCopy = {
           + 'resumes, and delete your account. We keep your account, '
           + 'resumes, and photos until you delete them or your account. '
           + 'The export includes your profile, resume content, and resume '
-          + 'photos. Email us for session history.',
+          + 'photos. Email us for session history. You can disconnect '
+          + 'GitHub in Settings and choose to keep or remove the items you '
+          + 'attached. The connection and its items are in your data export '
+          + 'and are deleted with your account.',
           'When you delete your account:',
         ],
         items: [
