@@ -100,7 +100,7 @@ describe.each(['vi', 'en'] as const)('showcase legal text (%s)', (lng) => {
     const paragraphs = section('privacy', lng, headings[lng].public)
       .paragraphs!;
     expect(paragraphs.at(-1)).toBe(text[lng].public);
-    expect(paragraphs).toHaveLength(4);
+    expect(paragraphs).toHaveLength(5);
   });
 
   it('adds the Terms paragraph after the first of Your content', () => {

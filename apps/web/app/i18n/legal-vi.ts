@@ -170,6 +170,9 @@ export const legalVi: LegalCopy = {
           + 'trang, phần tóm tắt và ảnh xem trước của trang (họ tên, tiêu '
           + 'đề và ảnh của bạn), và có thể giữ bản sao riêng của họ sau khi '
           + 'bạn hủy xuất bản.',
+          'Các mục bạn gắn vào dự án hiện trên trang công khai của dự án đó '
+          + 'kèm đường dẫn tới GitHub, và có thể cho thấy tên người dùng '
+          + 'GitHub của bạn.',
           'Trang Cộng đồng (aboutme.vn/showcase) chỉ hiện những CV mà chủ '
           + 'CV bật Hiện trong trang Cộng đồng. Trang này hiện ảnh xem trước '
           + 'của CV (họ tên, tiêu đề và ảnh của bạn), mẫu, ngôn ngữ và vị '
@@ -178,9 +181,6 @@ export const legalVi: LegalCopy = {
           + 'trang Cộng đồng ngay lập tức. Trang Cộng đồng không cho công cụ '
           + 'tìm kiếm lập chỉ mục, nhưng bất kỳ ai truy cập đều có thể xem '
           + 'và sao chép những gì trang hiển thị.',
-          'Các mục bạn gắn vào dự án hiện trên trang công khai của dự án đó '
-          + 'kèm đường dẫn tới GitHub, và có thể cho thấy tên người dùng '
-          + 'GitHub của bạn.',
         ],
       },
       {

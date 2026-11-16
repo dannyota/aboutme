@@ -159,6 +159,9 @@ export const legalEn: LegalCopy = {
           + 'network, that service fetches the page\'s title, summary, and '
           + 'preview image (your name, headline, and photo), and may keep '
           + 'its own copy after you unpublish.',
+          'Items you attach to a project appear on that project\'s public '
+          + 'page with links to GitHub, which can reveal your GitHub '
+          + 'username.',
           'The community showcase (aboutme.vn/showcase) lists only '
           + 'resumes whose owners turn on Show in the community '
           + 'showcase. It shows the resume\'s preview image (your name, '
@@ -168,9 +171,6 @@ export const legalEn: LegalCopy = {
           + 'leaves the showcase right away. Search engines are asked not '
           + 'to index the showcase, but anyone who visits it can see and '
           + 'copy what it shows.',
-          'Items you attach to a project appear on that project\'s public '
-          + 'page with links to GitHub, which can reveal your GitHub '
-          + 'username.',
         ],
       },
       {
