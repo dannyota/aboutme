@@ -42,7 +42,7 @@ const pointIcons = [Lock, Link2, FileDown] as const;
       >
         {{ copy.brandPanel.statement }}
       </p>
-      <ul class="mt-7 grid gap-3.5 text-md text-panel-muted">
+      <ul class="mt-7 mb-8 grid gap-3.5 text-md text-panel-muted">
         <li
           v-for="(point, index) in copy.brandPanel.points"
           :key="point"
@@ -64,7 +64,8 @@ const pointIcons = [Lock, Link2, FileDown] as const;
       </ul>
       <div
         aria-hidden="true"
-        class="absolute right-12 -bottom-24 w-[13.75rem]"
+        class="relative mt-auto -mr-2 -mb-[9.5rem] w-[13.75rem] shrink-0
+          self-end pt-10"
         data-auth-illustration
       >
         <div
@@ -87,7 +88,7 @@ const pointIcons = [Lock, Link2, FileDown] as const;
           <span class="block h-1.5 w-3/5 rounded-full bg-paper-muted/30" />
         </div>
         <span
-          class="absolute -top-7 -left-7 grid size-[4.25rem]
+          class="absolute top-3 -left-7 grid size-[4.25rem]
             place-content-center rounded-full bg-coin text-coin-ink
             shadow-[inset_0_-5px_0_var(--coin-edge),var(--shadow-float)]"
           data-auth-lock

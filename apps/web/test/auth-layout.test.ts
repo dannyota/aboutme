@@ -130,6 +130,10 @@ describe('AuthLayout identity', () => {
     expect(art.get('[data-auth-sheet]').classes()).toContain('bg-paper');
     expect(art.get('[data-auth-sheet]').classes()).toContain('-rotate-3');
     expect(art.get('[data-auth-lock]').classes()).toContain('bg-coin');
+    expect(art.classes()).toContain('mt-auto');
+    expect(art.classes()).not.toContain('absolute');
+    expect(art.element.previousElementSibling?.tagName).toBe('UL');
+    expect(art.element.nextElementSibling).toBeNull();
   });
 
   it('gives the panel logo its inverse mark and drops removed tokens', () => {

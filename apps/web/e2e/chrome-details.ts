@@ -231,3 +231,71 @@ export async function leakChromeIntoResume(
     });
   };
 }
+
+export async function expectAuthArtworkClear(page: Page): Promise<void> {
+  const message = 'Chrome auth artwork clearance.';
+  const panel = page.getByTestId('auth-brand-panel');
+  await expect(panel, message).toBeVisible();
+  const read = await panel.evaluate((element) => {
+    const box = (node: Element | null) => {
+      const rect = node!.getBoundingClientRect();
+      return {
+        left: rect.left, right: rect.right, top: rect.top,
+        bottom: rect.bottom,
+      };
+    };
+    const points = element.querySelectorAll('li');
+    return {
+      point: box(points[points.length - 1]!),
+      art: [
+        box(element.querySelector('[data-auth-sheet]')),
+        box(element.querySelector('[data-auth-lock]')),
+      ],
+      panelRight: element.getBoundingClientRect().right,
+      viewport: document.documentElement.clientWidth,
+      overflow: document.documentElement.scrollWidth
+        - document.documentElement.clientWidth,
+    };
+  });
+  for (const art of read.art) {
+    const intersects = art.left < read.point.right
+      && read.point.left < art.right
+      && art.top < read.point.bottom
+      && read.point.top < art.bottom;
+    expect(intersects, message).toBe(false);
+  }
+  expect(read.panelRight, message).toBeLessThanOrEqual(read.viewport);
+  expect(read.overflow, message).toBeLessThanOrEqual(0);
+}
+
+export async function placeAuthArtworkOverPoints(
+  page: Page,
+): Promise<() => Promise<void>> {
+  const moved = await page.getByTestId('auth-brand-panel').evaluate(
+    (panel) => {
+      const art = panel.querySelector<HTMLElement>('[data-auth-illustration]')!;
+      const points = panel.querySelectorAll('li');
+      const last = points[points.length - 1]!;
+      const before = art.getAttribute('style');
+      art.dataset.e2eStyleBefore = before ?? '';
+      art.style.position = 'absolute';
+      art.style.margin = '0';
+      art.style.left = `${last.offsetLeft}px`;
+      art.style.top = `${last.offsetTop - 40}px`;
+      const sheet = art.querySelector('[data-auth-sheet]')!
+        .getBoundingClientRect();
+      const point = last.getBoundingClientRect();
+      return sheet.top < point.bottom && point.top < sheet.bottom;
+    },
+  );
+  expect(moved, 'Auth artwork mutation covers the last point.').toBe(true);
+  return async () => {
+    await page.getByTestId('auth-brand-panel').evaluate((panel) => {
+      const art = panel.querySelector<HTMLElement>('[data-auth-illustration]')!;
+      const before = art.dataset.e2eStyleBefore ?? '';
+      delete art.dataset.e2eStyleBefore;
+      if (before === '') art.removeAttribute('style');
+      else art.setAttribute('style', before);
+    });
+  };
+}
