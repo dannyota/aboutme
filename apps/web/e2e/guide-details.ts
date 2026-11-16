@@ -134,8 +134,9 @@ export const GUIDE_TYPE: readonly StyleRule[] = [
       + '[data-testid="guide-troubleshooting"] dd',
     message: 'Guide body typography',
     css: {
-      'font-family': '"Be Vietnam Pro", Inter, system-ui, sans-serif',
-      'font-size': '15px', 'font-weight': '400', 'line-height': '22.5px',
+      'font-family':
+        '"Plus Jakarta Sans", "Be Vietnam Pro", system-ui, sans-serif',
+      'font-size': '15px', 'font-weight': '500', 'line-height': '22.5px',
       'letter-spacing': 'normal', 'text-align': 'start',
       'text-transform': 'none',
     },
@@ -191,11 +192,11 @@ export async function expectGuideInstructionIcons(
 ): Promise<void> {
   for (const [id, icon, color, count] of [
     ['guide-can', '.lucide-check', theme === 'light'
-      ? 'rgb(35, 57, 154)'
-      : 'rgb(163, 182, 245)', 6],
+      ? 'rgb(67, 54, 201)'
+      : 'rgb(181, 155, 219)', 6],
     ['guide-cannot', '.lucide-minus', theme === 'light'
-      ? 'rgb(92, 97, 120)'
-      : 'rgb(165, 171, 191)', 5],
+      ? 'rgb(85, 81, 125)'
+      : 'rgb(163, 149, 159)', 5],
   ] as const) {
     const icons = page.getByTestId(id).locator(icon);
     await expect(icons, 'Guide instruction icons.').toHaveCount(count);
@@ -214,11 +215,11 @@ export async function expectGuideIcons(
 ): Promise<void> {
   for (const [id, paths, stroke] of [
     ['guide-can', ['M20 6 9 17l-5-5'], theme === 'light'
-      ? 'rgb(35, 57, 154)'
-      : 'rgb(163, 182, 245)'],
+      ? 'rgb(67, 54, 201)'
+      : 'rgb(181, 155, 219)'],
     ['guide-cannot', ['M5 12h14'], theme === 'light'
-      ? 'rgb(92, 97, 120)'
-      : 'rgb(165, 171, 191)'],
+      ? 'rgb(85, 81, 125)'
+      : 'rgb(163, 149, 159)'],
   ] as const) {
     await expectSvg(page.getByTestId(id).locator('svg'),
       lucideExpectation(paths, stroke), 'Guide SVG paint.');

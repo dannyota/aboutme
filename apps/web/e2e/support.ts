@@ -248,11 +248,12 @@ export function chromeScreenContract(
 ): ScreenContract {
   return {
     root, text, flow,
-    type: ['body', '"Be Vietnam Pro", Inter, system-ui, sans-serif',
-      'Be Vietnam Pro'],
+    type: ['body',
+      '"Plus Jakarta Sans", "Be Vietnam Pro", system-ui, sans-serif',
+      'Plus Jakarta Sans'],
     paint: ['body', 'color', theme === 'light'
-      ? 'rgb(16, 27, 63)'
-      : 'rgb(243, 241, 236)'],
+      ? 'rgb(26, 22, 80)'
+      : 'rgb(211, 202, 208)'],
     copy: [titleSelector, title],
     aria: [titleSelector, `- heading "${title}" [level=1]`],
     image,
@@ -303,7 +304,7 @@ export function filterSheetContract(
       locale === 'vi' ? 'Đóng' : 'Close']],
     paint: [root, 'background-color', theme === 'light'
       ? 'rgb(255, 255, 255)'
-      : 'rgb(26, 33, 56)'],
+      : 'rgb(27, 20, 25)'],
     copy: [apply, surface === 'gallery'
       ? locale === 'vi'
         ? 'Xem 20 mẫu'

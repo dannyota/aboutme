@@ -9,7 +9,7 @@ export function sheetType(surface: 'gallery' | 'showcase'): StyleRule[] {
       selector: `${root} > div > h2`,
       message: 'Sheet title typography',
       css: { 'font-size': '20px', 'font-weight': '700',
-        'line-height': '26px', 'letter-spacing': 'normal' },
+        'line-height': '28px', 'letter-spacing': 'normal' },
     },
     {
       selector: `${root} [data-action="${surface}-filters-apply"]`,

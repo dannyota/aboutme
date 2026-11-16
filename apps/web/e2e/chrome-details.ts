@@ -33,22 +33,22 @@ export async function expectChromeDecoration(
   }
   if (kind !== 'shadow') {
     const panels = theme === 'light'
-      ? [['landing-hero', '#de1b5a'], ['landing-editor', '#f1effa'],
+      ? [['landing-hero', '#594bad'], ['landing-editor', '#f1effa'],
           ['landing-publish', '#1a1650'], ['landing-ai', '#f1effa'],
-          ['landing-data', '#fff2c2'], ['landing-maker', '#ffe4ec'],
+          ['landing-data', '#fff2c2'], ['landing-maker', '#ece2ff'],
           ['landing-footer', '#1a1650']]
-      : [['landing-hero', '#de1b5a'], ['landing-editor', '#191640'],
-          ['landing-publish', '#322c8f'], ['landing-ai', '#191640'],
-          ['landing-data', '#332a0e'], ['landing-maker', '#3b1431'],
-          ['landing-footer', '#191640']];
+      : [['landing-hero', '#382961'], ['landing-editor', '#151015'],
+          ['landing-publish', '#25153a'], ['landing-ai', '#151015'],
+          ['landing-data', '#271a07'], ['landing-maker', '#1c172f'],
+          ['landing-footer', '#150c1c']];
     for (const [id, color] of panels) {
       await expectDeclaration(page.getByTestId(id!), 'background-color',
         color!, 'Chrome panel colors.');
     }
     await expectDeclaration(page.getByTestId('landing-hero'), 'color',
-      '#ffffff', 'Chrome panel colors.');
+      theme === 'light' ? '#ffffff' : '#e7dfe8', 'Chrome panel colors.');
     await expectDeclaration(page.getByTestId('landing-template-fan'),
-      'background-color', theme === 'light' ? '#ffe4ec' : '#3b1431',
+      'background-color', theme === 'light' ? '#ece2ff' : '#1c172f',
       'Chrome panel colors.');
   }
 }
@@ -145,4 +145,89 @@ export async function expectSampleIsolation(page: Page): Promise<void> {
     };
   }), message).toEqual({ visible: true, style: 'auto', radius: before });
   await link.blur();
+}
+
+export async function expectRendererBoundary(page: Page): Promise<void> {
+  const text = page.locator('.resume-document p').first();
+  const message = 'Chrome renderer boundary.';
+  await expect(text, message).toBeVisible();
+  const read = await text.evaluate((node) => {
+    const selection = (element: Element) => {
+      const css = getComputedStyle(element, '::selection');
+      return { background: css.backgroundColor, color: css.color };
+    };
+    const probe = document.createElement('span');
+    probe.style.backgroundColor = 'var(--coin)';
+    probe.style.color = 'var(--control)';
+    document.documentElement.append(probe);
+    const coin = getComputedStyle(probe).backgroundColor;
+    const control = getComputedStyle(probe).color;
+    probe.remove();
+    const chrome = Array.from(document.querySelectorAll('button')).find(
+      (button) => !button.closest('.resume-document, .paged-resume'),
+    )!;
+    const root = node.closest('.paged-resume')
+      ?? node.closest('.resume-document')!;
+    return {
+      coin,
+      control,
+      chromeSelection: selection(chrome).background,
+      chromeScrollbar: getComputedStyle(chrome).scrollbarColor,
+      browserBackground: selection(document.documentElement).background,
+      selections: [node, root].map((element) => ({
+        ...selection(element),
+        originating: getComputedStyle(element).color,
+      })),
+      scrollbar: [node, root].map((element) =>
+        getComputedStyle(element).scrollbarColor),
+      weight: getComputedStyle(root).fontWeight,
+    };
+  });
+  expect(read.chromeSelection, message).toBe(read.coin);
+  expect(read.chromeScrollbar, message).toContain(read.control);
+  for (const selection of read.selections) {
+    expect(selection.background, message).toBe(read.browserBackground);
+    expect(selection.background, message).not.toBe(read.coin);
+    expect(selection.color, message).toBe(selection.originating);
+  }
+  expect(read.scrollbar, message).toEqual(['auto', 'auto']);
+  expect(read.weight, message).toBe('400');
+}
+
+export async function leakChromeIntoResume(
+  page: Page, kind: 'selection' | 'scrollbar',
+): Promise<() => Promise<void>> {
+  const changed = await page.evaluate((input) => {
+    const root = document.querySelector('.paged-resume, .resume-document')!;
+    const ancestor = root.parentElement!;
+    ancestor.setAttribute('data-e2e-boundary-leak', '');
+    const sheet = document.createElement('style');
+    sheet.dataset.e2eBoundaryLeak = '';
+    const leak = '[data-e2e-boundary-leak]';
+    const selectionLeak = `${leak}::selection { background-color: `
+      + 'var(--coin); color: var(--coin-ink); }';
+    const scrollbarLeak = `${leak} { scrollbar-color: var(--control) `
+      + `transparent; } ${leak} > :is(.resume-document, .paged-resume) { `
+      + 'scrollbar-color: inherit !important; }';
+    sheet.textContent = input === 'selection' ? selectionLeak : scrollbarLeak;
+    document.head.append(sheet);
+    if (input === 'scrollbar') {
+      return getComputedStyle(root).scrollbarColor !== 'auto';
+    }
+    const probe = document.createElement('span');
+    probe.style.backgroundColor = 'var(--coin)';
+    document.documentElement.append(probe);
+    const coin = getComputedStyle(probe).backgroundColor;
+    probe.remove();
+    const text = root.querySelector('p') ?? root;
+    return getComputedStyle(text, '::selection').backgroundColor === coin;
+  }, kind);
+  expect(changed, 'Boundary leak mutation takes effect.').toBe(true);
+  return async () => {
+    await page.evaluate(() => {
+      document.querySelector('style[data-e2e-boundary-leak]')?.remove();
+      document.querySelector('[data-e2e-boundary-leak]')
+        ?.removeAttribute('data-e2e-boundary-leak');
+    });
+  };
 }

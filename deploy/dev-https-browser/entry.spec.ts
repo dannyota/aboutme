@@ -27,9 +27,21 @@ const steps = {
   signedInShell: false,
 };
 
+let entryStage = 'before-setup';
+
 function stage(name: string): void {
+  entryStage = name;
   console.log(`entry-stage:${name}`);
 }
+
+test.beforeEach(() => {
+  entryStage = 'before-setup';
+});
+
+test.afterEach(async ({}, testInfo) => {
+  if (testInfo.status === testInfo.expectedStatus) return;
+  console.log(`entry-stage:fail-${entryStage}`);
+});
 
 function consoleStage(message: { location(): { url: string }; text(): string }): string {
   let path = 'unknown';
@@ -341,6 +353,7 @@ for (const viewport of [
     await page.goto(`${ORIGIN}/app/settings/sessions`);
     await waitForHydration(page);
     await expect(page).toHaveTitle('Cài đặt · aboutme.vn');
+    stage(`workspace-locale-${viewport.name}-settings-vietnamese-headings`);
     await expect(
       page.getByRole('heading', { level: 1, name: 'Cài đặt' }),
     ).toBeVisible();
@@ -356,14 +369,19 @@ for (const viewport of [
     };
     page.on('request', countLocaleRequests);
     const settingsEnglish = page.getByTestId('landing-locale-en');
+    stage(`workspace-locale-${viewport.name}-settings-english-press`);
     await settingsEnglish.focus();
     await page.keyboard.press('Enter');
+    stage(`workspace-locale-${viewport.name}-settings-english-lang`);
     await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+    stage(`workspace-locale-${viewport.name}-settings-english-title`);
     await expect(page).toHaveTitle('Settings · aboutme.vn');
     await expect(
       page.getByRole('heading', { level: 1, name: 'Settings' }),
     ).toBeVisible();
+    stage(`workspace-locale-${viewport.name}-settings-english-focus`);
     await expect(settingsEnglish).toBeFocused();
+    stage(`workspace-locale-${viewport.name}-settings-english-requests`);
     expect(localeRequests).toBe(0);
     page.off('request', countLocaleRequests);
 

@@ -23,7 +23,8 @@ export async function assertGalleryDetail(
   await expectGalleryDetails(page, locale, tab);
   await expect.poll(() => galleryFontLoaded(page.locator('html'))).toBe(true);
   await expect(page.locator('.template-detail__info h1')).toHaveCSS(
-    'font-family', '"Be Vietnam Pro", Inter, system-ui, sans-serif',
+    'font-family',
+    '"Plus Jakarta Sans", "Be Vietnam Pro", system-ui, sans-serif',
   );
   const names = locale === 'vi'
     ? ['Trang CV', 'PDF', 'ATS đọc được gì']
@@ -140,7 +141,8 @@ export async function assertLibrary(
   await expect.poll(() => galleryFontLoaded(page.locator('html'))).toBe(true);
   await expect(page.getByTestId('gallery-header').getByRole('heading'))
     .toHaveCSS(
-      'font-family', '"Be Vietnam Pro", Inter, system-ui, sans-serif',
+      'font-family',
+      '"Plus Jakarta Sans", "Be Vietnam Pro", system-ui, sans-serif',
     );
   await expectLibraryGrid(page, width);
   if (width >= 1024) {
@@ -156,8 +158,8 @@ export async function assertLibrary(
     await expect(fields.locator('[data-role="'
       + (filtered ? 'backend' : 'all') + '"]')).toHaveCSS(
       'background-color', theme === 'light'
-        ? 'rgb(38, 64, 156)'
-        : 'rgb(143, 166, 240)',
+        ? 'rgb(89, 75, 173)'
+        : 'rgb(114, 103, 192)',
     );
   }
   const cards = page.locator('[data-template]:visible');

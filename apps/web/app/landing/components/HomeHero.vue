@@ -26,7 +26,7 @@ defineProps<{
       <svg viewBox="0 0 400 400">
         <g
           fill="none"
-          stroke="var(--brand-hover)"
+          stroke="rgb(0 0 0 / 14%)"
           transform="rotate(-8 200 200)"
         >
           <circle
@@ -106,8 +106,8 @@ defineProps<{
   display: flow-root;
   margin-bottom: 112px;
   padding-bottom: 0;
-  background: var(--brand);
-  color: var(--brand-foreground);
+  background: var(--brand-panel);
+  color: var(--panel-foreground);
 }
 
 .rings {
@@ -141,7 +141,7 @@ defineProps<{
 .hero-signin {
   align-self: center;
   padding: 6px 4px;
-  color: var(--brand-foreground);
+  color: var(--panel-foreground);
 }
 
 @media (min-width: 48rem) {

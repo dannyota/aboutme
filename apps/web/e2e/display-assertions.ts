@@ -155,7 +155,7 @@ export async function measureGalleryDetail(layout: Locator): Promise<{
 
 export async function galleryFontLoaded(root: Locator): Promise<boolean> {
   return root.evaluate(() => Array.from(document.fonts).some((face) =>
-    face.family.replaceAll('"', '') === 'Be Vietnam Pro'
+    face.family.replaceAll('"', '') === 'Plus Jakarta Sans'
     && face.status === 'loaded'));
 }
 

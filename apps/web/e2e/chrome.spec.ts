@@ -6,8 +6,11 @@ import {
   test,
   webkit,
 } from '@playwright/test';
+import { CURRENT_VERSION } from '@aboutme/schema/released';
 import { SAMPLES } from '@aboutme/schema/samples';
 import { TEMPLATES } from '@aboutme/schema/templates';
+import { readFileSync } from 'node:fs';
+import { resolve as resolvePath } from 'node:path';
 
 import { captureReviewImage } from './review-images';
 import {
@@ -23,13 +26,15 @@ import {
 } from './style-mutation';
 import {
   expectChromeDecoration, expectChromeFan, expectChromeList,
-  expectChromeNavigation, expectSampleIsolation,
+  expectChromeNavigation, expectRendererBoundary, expectSampleIsolation,
+  leakChromeIntoResume,
 } from './chrome-details';
 
 import type { ScreenContract } from './screen-contract';
 import {
   chromeScreenContract,
   expectThumbnailRenders,
+  mockSignedInSession,
   prepareScreen,
 } from './support';
 
@@ -67,6 +72,64 @@ test('live thumbnails are checked at the requested viewport', async ({
   await expect(page.locator('h1')).toHaveCount(1);
 });
 
+const EDITOR_DOCUMENT = JSON.parse(readFileSync(resolvePath(
+  import.meta.dirname, '../../../packages/schema/fixtures/full.json',
+), 'utf8')) as { personalDetails?: { photo?: unknown } };
+delete EDITOR_DOCUMENT.personalDetails?.photo;
+
+async function openEditorPreview(page: Page): Promise<void> {
+  await mockSignedInSession(page);
+  await page.route('**/api/v1/events', async (route) => {
+    await route.fulfill({
+      status: 200, contentType: 'text/event-stream', body: '',
+    });
+  });
+  await page.route('**/api/v1/resumes/resume-1', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.continue();
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-store, no-transform',
+        'ETag': '"r1"',
+        'X-Resume-Schema-Version': String(CURRENT_VERSION),
+      },
+      json: {
+        data: {
+          id: 'resume-1', title: 'Fixture', lng: 'en', live: false,
+          downloadEnabled: false, seoGeoEnabled: false, slug: null,
+          publicTitle: null, faviconEmoji: null,
+          schemaVersion: CURRENT_VERSION,
+          createdAt: '2026-01-01T00:00:00Z',
+          updatedAt: '2026-01-01T00:00:00Z',
+          revision: '1',
+          document: EDITOR_DOCUMENT,
+        },
+      },
+    });
+  });
+  const response = await page.goto('/app/resumes/resume-1');
+  expect(response?.status()).toBe(200);
+  await expect(page.getByTestId('save-status')).toBeVisible();
+}
+
+for (const surface of ['template page', 'editor preview'] as const) {
+  test(`chrome selection, scrollbar and weight stop at the resume in the `
+    + `${surface}`, async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    if (surface === 'editor preview') {
+      await openEditorPreview(page);
+    } else {
+      const response = await page.goto('/templates/creative-accent');
+      expect(response?.status()).toBe(200);
+    }
+    await expectRendererBoundary(page);
+  });
+}
+
 type ChromePage = typeof PAGES[number]['name'];
 type Locale = 'vi' | 'en';
 type Theme = typeof THEMES[number];
@@ -103,33 +166,28 @@ async function expectChrome(
   }
   await expect(header).toHaveCSS('background-color', theme === 'light'
     ? 'rgb(255, 255, 255)'
-    : home ? 'rgb(15, 13, 38)' : 'rgb(20, 26, 46)');
-  if (home) {
-    await expect(header).toHaveCSS('border-bottom-color', theme === 'light'
-      ? 'rgb(227, 224, 242)'
-      : 'rgba(243, 241, 255, 0.16)');
-    await expect(header).toHaveCSS('border-bottom-width', '1px');
-  }
+    : 'rgb(14, 10, 13)');
+  await expect(header).toHaveCSS('border-bottom-color', theme === 'light'
+    ? 'rgb(227, 224, 242)'
+    : 'rgb(46, 36, 44)');
+  await expect(header).toHaveCSS('border-bottom-width', '1px');
+  await expect(header).toHaveCSS('min-height', width < 768 ? '56px' : '64px');
   await expect(page.locator('body')).toHaveCSS('background-color',
-    theme === 'light'
-      ? home ? 'rgb(255, 255, 255)' : 'rgb(249, 248, 245)'
-      : home ? 'rgb(15, 13, 38)' : 'rgb(12, 16, 32)');
-  await expect(page.locator('body')).toHaveCSS('background-image',
-    home ? 'none' : /radial-gradient/u);
+    theme === 'light' ? 'rgb(255, 255, 255)' : 'rgb(14, 10, 13)');
+  await expect(page.locator('body')).toHaveCSS('background-image', 'none');
   await expect(page.locator('body'), 'Chrome body font-size.')
     .toHaveCSS('font-size', '15px');
   await expect(page.locator('body')).toHaveCSS('line-height', '22.5px');
-  await expect(page.locator('body')).toHaveCSS('color', bodyColor(name, theme));
-  await expect(page.locator('body')).toHaveCSS('font-family', home
-    ? '"Plus Jakarta Sans", "Be Vietnam Pro", system-ui, sans-serif'
-    : '"Be Vietnam Pro", Inter, system-ui, sans-serif');
+  await expect(page.locator('body')).toHaveCSS('color', bodyColor(theme));
+  await expect(page.locator('body')).toHaveCSS('font-family',
+    '"Plus Jakarta Sans", "Be Vietnam Pro", system-ui, sans-serif');
   expect(await page.evaluate((face) => ({
     loaded: document.fonts.check(`15px "${face}"`),
     face: Array.from(document.fonts).some((font) =>
       font.family === face && font.status === 'loaded'),
     overflow: document.documentElement.scrollWidth
       <= document.documentElement.clientWidth + 1,
-  }), home ? 'Plus Jakarta Sans' : 'Be Vietnam Pro'))
+  }), 'Plus Jakarta Sans'))
     .toEqual({ loaded: true, face: true, overflow: true });
 
   if (name === 'login') {
@@ -230,9 +288,10 @@ async function expectChrome(
   } else {
     const galleryHeader = page.getByTestId('gallery-header');
     await expect(galleryHeader).toHaveCSS('background-color', theme === 'light'
-      ? 'rgb(236, 238, 247)'
-      : 'rgb(21, 29, 54)');
-    await expect(galleryHeader).toHaveCSS('border-radius', '20px');
+      ? 'rgb(241, 239, 250)'
+      : 'rgb(21, 16, 21)');
+    await expect(galleryHeader).toHaveCSS('border-radius',
+      width < 768 ? '22px' : width < 1024 ? '26px' : '28px');
     const grid = page.locator('.gallery-grid');
     await expect(grid.locator(':scope > li')).toHaveCount(TEMPLATES.length);
     await expect.poll(() => measureChromeGrid(grid), 'Chrome grid geometry.')
@@ -551,11 +610,8 @@ const HOME_TITLE = {
   en: 'Write your resume here. Send it as one link.',
 } as const;
 
-function bodyColor(name: ChromePage, theme: Theme): string {
-  if (name === 'home') {
-    return theme === 'light' ? 'rgb(26, 22, 80)' : 'rgb(243, 241, 255)';
-  }
-  return theme === 'light' ? 'rgb(16, 27, 63)' : 'rgb(243, 241, 236)';
+function bodyColor(theme: Theme): string {
+  return theme === 'light' ? 'rgb(26, 22, 80)' : 'rgb(211, 202, 208)';
 }
 
 function chromeContract(
@@ -577,7 +633,7 @@ function chromeContract(
         type: ['body',
           '"Plus Jakarta Sans", "Be Vietnam Pro", system-ui, sans-serif',
           'Plus Jakarta Sans'],
-        paint: ['body', 'color', bodyColor(name, theme)],
+        paint: ['body', 'color', bodyColor(theme)],
         faces: ['Be Vietnam Pro'],
       }
     : contract;
@@ -589,6 +645,18 @@ for (const entry of PAGES) {
     await page.goto(entry.path);
     await prepareScreen(page);
   }, chromeContract(entry.name, 'vi', 'light'));
+}
+
+for (const kind of ['selection', 'scrollbar'] as const) {
+  mutationTest(`chrome rejects a ${kind} that reaches the resume`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const response = await page.goto('/templates/creative-accent');
+    expect(response?.status()).toBe(200);
+    await proveMutation(() => expectRendererBoundary(page),
+      () => leakChromeIntoResume(page, kind), 'Chrome renderer boundary.');
+  });
 }
 
 for (const kind of ['shadow', 'panels'] as const) {

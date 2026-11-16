@@ -39,7 +39,7 @@ defineProps<{
     >
       {{ document.operator.text }} {{ document.operator.contactLabel }}:
       <a
-        class="text-primary underline underline-offset-4"
+        class="text-link underline underline-offset-4"
         :href="`mailto:${legalContact}`"
       >{{ legalContact }}</a>.
     </p>
@@ -81,7 +81,7 @@ defineProps<{
         class="mt-3 text-base"
       >
         <a
-          class="text-primary underline underline-offset-4"
+          class="text-link underline underline-offset-4"
           :href="repositoryUrl"
           rel="noopener noreferrer"
         >{{ section.repositoryLink }}</a>
@@ -92,7 +92,7 @@ defineProps<{
       >
         {{ section.contactLabel }}:
         <a
-          class="text-primary underline underline-offset-4"
+          class="text-link underline underline-offset-4"
           data-testid="legal-contact"
           :href="`mailto:${legalContact}`"
         >{{ legalContact }}</a>

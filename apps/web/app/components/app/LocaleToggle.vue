@@ -16,28 +16,24 @@ withDefaults(defineProps<{
 const { locale, setLocale } = useLocale();
 
 const localeClass = cn(
-  'px-2 font-normal text-muted-foreground hover:text-foreground',
-  'aria-pressed:text-foreground aria-pressed:underline',
-  'aria-pressed:decoration-2 aria-pressed:underline-offset-[6px]',
+  'h-[30px] rounded-full px-2 text-[13px] font-semibold',
+  'text-muted-foreground aria-[pressed=false]:hover:text-foreground',
+  'hover:no-underline focus-visible:no-underline',
+  'aria-pressed:bg-foreground aria-pressed:text-background',
 );
 </script>
 
 <template>
   <div
-    class="flex items-center"
+    class="flex items-center gap-0.5 rounded-full bg-surface-mist p-[3px]"
     role="group"
     :aria-label="label"
     :data-testid="testId"
   >
     <template
-      v-for="(option, index) in locales"
+      v-for="option in locales"
       :key="option"
     >
-      <span
-        v-if="index > 0"
-        aria-hidden="true"
-        class="h-4 w-px bg-border"
-      />
       <Button
         type="button"
         :aria-label="localeNames[option]"

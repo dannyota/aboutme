@@ -58,8 +58,8 @@ export const workspaceTitles: WorkspaceCopy<WorkspaceTitles> = {
 };
 
 export const homeTitle: Record<Locale, string> = {
-  vi: 'aboutme.vn — CV miễn phí, riêng tư đến khi bạn muốn',
-  en: 'aboutme.vn — Free resumes, private until you choose',
+  vi: 'aboutme.vn · CV miễn phí, riêng tư đến khi bạn muốn',
+  en: 'aboutme.vn · Free resumes, private until you choose',
 };
 
 export const ogLocales: Record<Locale, string> = {

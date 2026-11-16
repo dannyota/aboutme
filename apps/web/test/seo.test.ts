@@ -44,8 +44,8 @@ const sitePages = [
   {
     route: '/',
     title: {
-      vi: 'aboutme.vn — CV miễn phí, riêng tư đến khi bạn muốn',
-      en: 'aboutme.vn — Free resumes, private until you choose',
+      vi: 'aboutme.vn · CV miễn phí, riêng tư đến khi bạn muốn',
+      en: 'aboutme.vn · Free resumes, private until you choose',
     },
     description: {
       vi: 'Công cụ tạo CV mã nguồn mở.',

@@ -362,16 +362,17 @@ async function assertGuide(
   await expectGuideInstructionIcons(page, theme);
   const header = page.getByTestId('guide-header');
   await expect(header).toHaveCSS('background-color', theme === 'light'
-    ? 'rgb(236, 238, 247)'
-    : 'rgb(21, 29, 54)');
-  await expect(header).toHaveCSS('border-radius', '20px');
+    ? 'rgb(241, 239, 250)'
+    : 'rgb(21, 16, 21)');
+  await expect(header).toHaveCSS('border-radius',
+    width < 768 ? '22px' : width < 1024 ? '26px' : '28px');
   await expect(header.locator('h1')).toHaveCSS('font-size',
     width < 672 ? '24px' : '32px');
   await expect(header.locator('h1')).toHaveCSS('font-weight', '700');
   await expect(header.locator('h1')).toHaveCSS('font-family',
-    '"Be Vietnam Pro", Inter, system-ui, sans-serif');
+    '"Plus Jakarta Sans", "Be Vietnam Pro", system-ui, sans-serif');
   await expect(header.locator('h1')).toHaveCSS('line-height',
-    width < 672 ? '31.2px' : '41.6px');
+    width < 672 ? '32.4px' : '41.6px');
   for (const heading of await guide.locator('h2').all()) {
     await expect(heading).toHaveCSS('font-size', '18px');
     await expect(heading).toHaveCSS('font-weight', '600');
@@ -379,7 +380,7 @@ async function assertGuide(
   for (const section of await guide.locator(':scope > section').all()) {
     await expect(section).toHaveCSS('background-color', theme === 'light'
       ? 'rgb(255, 255, 255)'
-      : 'rgb(20, 26, 46)');
+      : 'rgb(27, 20, 25)');
     await expect(section)
       .toHaveCSS('padding-left', width < 672 ? '20px' : '28px');
   }
@@ -450,8 +451,8 @@ async function assertGuide(
     await expect(pre).toHaveCSS('font-size', '13px');
     await expect(pre).toHaveCSS('font-family', /monospace/u);
     await expect(pre).toHaveCSS('background-color', theme === 'light'
-      ? 'rgb(239, 237, 230)'
-      : 'rgb(26, 33, 56)');
+      ? 'rgb(241, 239, 250)'
+      : 'rgb(21, 16, 21)');
     await expect(pre).toHaveCSS('border-radius', '10px');
   }
   await expect(header.getByRole('link', {
