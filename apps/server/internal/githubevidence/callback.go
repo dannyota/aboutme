@@ -5,8 +5,6 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/jackc/pgx/v5"
-
 	"danny.vn/aboutme/apps/server/internal/api"
 	"danny.vn/aboutme/apps/server/internal/auth"
 	"danny.vn/aboutme/apps/server/internal/store"
@@ -108,12 +106,8 @@ func (s *Service) handleCallback(w http.ResponseWriter, r *http.Request) {
 
 func (s *Service) installConnection(ctx context.Context, a account, want int64, profile githubProfile, token *heldToken) (*liveSession, error) {
 	var stored int64
-	row, err := a.q.GetGitHubConnectionForUpdate(ctx, a.user.ID)
-	switch {
-	case err == nil:
-		stored = row.Generation
-	case !errors.Is(err, pgx.ErrNoRows):
-		return nil, err
+	if a.found {
+		stored = a.connection.Generation
 	}
 	if stored != want {
 		return nil, errGenerationMismatch
@@ -127,7 +121,7 @@ func (s *Service) installConnection(ctx context.Context, a account, want int64, 
 	if err != nil {
 		return nil, err
 	}
-	session, ok := s.registry.install(a.user.ID, token, a.user.AuthEpoch, connection.Generation)
+	session, ok := s.registry.install(a.user.ID, token, a.user.AuthEpoch, connection.Generation, a.now)
 	if !ok {
 		return nil, errRegistryClosed
 	}

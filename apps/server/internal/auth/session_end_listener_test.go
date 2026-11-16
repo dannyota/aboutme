@@ -6,6 +6,7 @@ import (
 	"slices"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -106,7 +107,7 @@ func TestSessionEndListener_EpochChangeLeavesTheNotificationToItsCaller(t *testi
 		if _, err := qtx.AdvanceUserAuthEpoch(context.Background(), userID); err != nil {
 			return err
 		}
-		_, err := sessions.ReplaceAfterEpochChangeTx(context.Background(), qtx, userID, sess.ID, nil)
+		_, err := sessions.ReplaceAfterEpochChangeTx(context.Background(), qtx, userID, sess.ID, nil, time.Now())
 		return err
 	})
 	if err != nil {

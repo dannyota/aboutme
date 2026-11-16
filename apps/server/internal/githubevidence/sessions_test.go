@@ -54,7 +54,7 @@ func (r *revocations) total() int {
 
 func installed(t *testing.T, reg *registry, account uuid.UUID, token string) *liveSession {
 	t.Helper()
-	session, ok := reg.install(account, reg.hold(token), 1, 1)
+	session, ok := reg.install(account, reg.hold(token), 1, 1, time.Now())
 	if !ok {
 		t.Fatal("install refused")
 	}
@@ -78,7 +78,7 @@ func TestRegistry_EachEndingRevokesExactlyOnce(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
 				revoked := &revocations{}
-				reg := newRegistry(sessionTTL, time.Now, revoked.revoke)
+				reg := newRegistry(sessionTTL, revoked.revoke)
 				account := uuid.New()
 				installed(t, reg, account, sentinelToken)
 				synctest.Wait()
@@ -107,7 +107,7 @@ func TestRegistry_EachEndingRevokesExactlyOnce(t *testing.T) {
 func TestRegistry_ExpiryRevokesWithoutARequestAtThirtyMinutes(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		revoked := &revocations{}
-		reg := newRegistry(sessionTTL, time.Now, revoked.revoke)
+		reg := newRegistry(sessionTTL, revoked.revoke)
 		account := uuid.New()
 		start := time.Now()
 		live := installed(t, reg, account, sentinelToken)
@@ -130,7 +130,7 @@ func TestRegistry_ExpiryRevokesWithoutARequestAtThirtyMinutes(t *testing.T) {
 func TestRegistry_RacingEndingsSendOneRevocation(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		revoked := &revocations{}
-		reg := newRegistry(sessionTTL, time.Now, revoked.revoke)
+		reg := newRegistry(sessionTTL, revoked.revoke)
 		account := uuid.New()
 		live := installed(t, reg, account, sentinelToken)
 		pending := reg.hold("pending-token")
@@ -157,7 +157,7 @@ func TestRegistry_RacingEndingsSendOneRevocation(t *testing.T) {
 func TestRegistry_CloseRevokesPendingTokensAndRefusesTheirInstall(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		revoked := &revocations{}
-		reg := newRegistry(sessionTTL, time.Now, revoked.revoke)
+		reg := newRegistry(sessionTTL, revoked.revoke)
 		account := uuid.New()
 		pending := reg.hold(sentinelToken)
 		reg.close()
@@ -165,7 +165,7 @@ func TestRegistry_CloseRevokesPendingTokensAndRefusesTheirInstall(t *testing.T) 
 		if revoked.count(sentinelToken) != 1 {
 			t.Fatalf("close revoked the pending token %d times, want 1", revoked.count(sentinelToken))
 		}
-		if _, ok := reg.install(account, pending, 1, 1); ok {
+		if _, ok := reg.install(account, pending, 1, 1, time.Now()); ok {
 			t.Fatal("install of a token claimed at close succeeded")
 		}
 		late := reg.hold("late-token")
@@ -184,7 +184,7 @@ func TestRegistry_CloseRevokesPendingTokensAndRefusesTheirInstall(t *testing.T) 
 func TestRegistry_ReleasedCallbackTokenRevokesOnce(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		revoked := &revocations{}
-		reg := newRegistry(sessionTTL, time.Now, revoked.revoke)
+		reg := newRegistry(sessionTTL, revoked.revoke)
 		token := reg.hold(sentinelToken)
 		reg.release(token)
 		reg.release(token)
@@ -193,7 +193,7 @@ func TestRegistry_ReleasedCallbackTokenRevokesOnce(t *testing.T) {
 		if revoked.count(sentinelToken) != 1 || revoked.total() != 1 || len(reg.pending) != 0 {
 			t.Fatalf("released token revoked %d times, %d pending left; want 1 and 0", revoked.count(sentinelToken), len(reg.pending))
 		}
-		if _, ok := reg.install(uuid.New(), token, 1, 1); ok {
+		if _, ok := reg.install(uuid.New(), token, 1, 1, time.Now()); ok {
 			t.Fatal("install of a released token succeeded")
 		}
 	})
@@ -202,7 +202,7 @@ func TestRegistry_ReleasedCallbackTokenRevokesOnce(t *testing.T) {
 func TestRegistry_ShutdownWaitsForRevocations(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		revoked := &revocations{block: 4 * time.Second}
-		reg := newRegistry(sessionTTL, time.Now, revoked.revoke)
+		reg := newRegistry(sessionTTL, revoked.revoke)
 		installed(t, reg, uuid.New(), "first")
 		reg.hold("pending")
 		svc := &Service{registry: reg}
@@ -224,7 +224,7 @@ func TestRegistry_ShutdownWaitsForRevocations(t *testing.T) {
 func TestRegistry_ShutdownWaitIsBounded(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		revoked := &revocations{block: time.Hour}
-		reg := newRegistry(sessionTTL, time.Now, revoked.revoke)
+		reg := newRegistry(sessionTTL, revoked.revoke)
 		installed(t, reg, uuid.New(), "stuck")
 		svc := &Service{registry: reg}
 		start := time.Now()

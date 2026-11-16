@@ -19,21 +19,20 @@ func (s *Service) RemovePasskey(ctx context.Context, current store.Session, pass
 	var issue auth.SessionIssue
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		qtx := s.q.WithTx(tx)
-		user, sess, policy, now, err := lockAccount(ctx, qtx, current, s.now)
+		user, sess, policy, err := lockAccountRows(ctx, qtx, current)
 		if err != nil {
 			return err
 		}
+		_, passkeyErr := qtx.GetWebAuthnCredentialForUpdate(ctx, store.GetWebAuthnCredentialForUpdateParams{ID: passkeyID, UserID: user.ID})
+		if passkeyErr != nil && !errors.Is(passkeyErr, pgx.ErrNoRows) {
+			return fmt.Errorf("lock passkey: %w", passkeyErr)
+		}
+		now := s.now()
 		if err = auth.RequireRecentSecondFactorReauth(user, policy, sess, now); err != nil {
 			return err
 		}
-		if policy == nil {
+		if policy == nil || passkeyErr != nil {
 			return auth.ErrSecondFactorNotFound
-		}
-		if _, err = qtx.GetWebAuthnCredentialForUpdate(ctx, store.GetWebAuthnCredentialForUpdateParams{ID: passkeyID, UserID: user.ID}); err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return auth.ErrSecondFactorNotFound
-			}
-			return fmt.Errorf("lock passkey: %w", err)
 		}
 		if _, err = qtx.DeleteWebAuthnCredentialForUser(ctx, store.DeleteWebAuthnCredentialForUserParams{ID: passkeyID, UserID: user.ID}); err != nil {
 			return fmt.Errorf("delete passkey: %w", err)
@@ -69,7 +68,7 @@ func (s *Service) commitFactorChange(ctx context.Context, qtx *store.Queries, us
 	if _, err := qtx.AdvanceUserAuthEpoch(ctx, user.ID); err != nil {
 		return auth.SessionIssue{}, fmt.Errorf("advance epoch: %w", err)
 	}
-	issue, err := s.sessions.ReplaceAfterEpochChangeTx(ctx, qtx, user.ID, sess.ID, factorProof)
+	issue, err := s.sessions.ReplaceAfterEpochChangeTx(ctx, qtx, user.ID, sess.ID, factorProof, now)
 	if err != nil {
 		return auth.SessionIssue{}, err
 	}

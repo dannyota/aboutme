@@ -15,27 +15,38 @@ import (
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
-func lockAccount(ctx context.Context, qtx *store.Queries, current store.Session, clock func() time.Time) (store.User, store.Session, *store.SecondFactorPolicy, time.Time, error) {
+func lockAccountRows(ctx context.Context, qtx *store.Queries, current store.Session) (store.User, store.Session, *store.SecondFactorPolicy, error) {
 	user, err := qtx.GetUserForUpdate(ctx, current.UserID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return store.User{}, store.Session{}, nil, time.Time{}, auth.ErrSessionInvalid
+			return store.User{}, store.Session{}, nil, auth.ErrSessionInvalid
 		}
-		return store.User{}, store.Session{}, nil, time.Time{}, fmt.Errorf("lock user: %w", err)
+		return store.User{}, store.Session{}, nil, fmt.Errorf("lock user: %w", err)
 	}
 	sess, err := qtx.GetSessionByIDForUpdate(ctx, current.ID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return store.User{}, store.Session{}, nil, time.Time{}, auth.ErrSessionInvalid
+			return store.User{}, store.Session{}, nil, auth.ErrSessionInvalid
 		}
-		return store.User{}, store.Session{}, nil, time.Time{}, fmt.Errorf("lock session: %w", err)
+		return store.User{}, store.Session{}, nil, fmt.Errorf("lock session: %w", err)
 	}
-	now := clock()
-	if sess.UserID != user.ID || sess.AuthEpoch != user.AuthEpoch || auth.RequireLiveSession(sess, now) != nil {
-		return store.User{}, store.Session{}, nil, time.Time{}, auth.ErrSessionInvalid
+	if sess.UserID != user.ID || sess.AuthEpoch != user.AuthEpoch {
+		return store.User{}, store.Session{}, nil, auth.ErrSessionInvalid
 	}
 	policy, err := lockPolicy(ctx, qtx, user.ID)
 	if err != nil {
+		return store.User{}, store.Session{}, nil, err
+	}
+	return user, sess, policy, nil
+}
+
+func lockAccount(ctx context.Context, qtx *store.Queries, current store.Session, clock func() time.Time) (store.User, store.Session, *store.SecondFactorPolicy, time.Time, error) {
+	user, sess, policy, err := lockAccountRows(ctx, qtx, current)
+	if err != nil {
+		return store.User{}, store.Session{}, nil, time.Time{}, err
+	}
+	now := clock()
+	if err = auth.RequireLiveSession(sess, now); err != nil {
 		return store.User{}, store.Session{}, nil, time.Time{}, err
 	}
 	return user, sess, policy, now, nil
@@ -57,15 +68,27 @@ func lockPolicyBeforePending(ctx context.Context, qtx *store.Queries, user store
 	return err
 }
 
-func claimCeremony(ctx context.Context, qtx *store.Queries, digest []byte, user store.User, purpose string, sessionID, pendingID *uuid.UUID, now time.Time) (store.WebauthnCeremony, error) {
+func lockCeremony(ctx context.Context, qtx *store.Queries, digest []byte) (*store.WebauthnCeremony, error) {
 	ceremony, err := qtx.GetWebAuthnCeremonyByTokenDigestForUpdate(ctx, digest)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return store.WebauthnCeremony{}, auth.ErrSecondFactorChallengeInvalid
+		return nil, nil
 	}
 	if err != nil {
-		return store.WebauthnCeremony{}, fmt.Errorf("lock ceremony: %w", err)
+		return nil, fmt.Errorf("lock ceremony: %w", err)
 	}
-	if ceremony.UserID != user.ID || ceremony.Purpose != purpose || ceremony.AuthEpoch != user.AuthEpoch ||
+	return &ceremony, nil
+}
+
+func claimCeremony(ctx context.Context, qtx *store.Queries, digest []byte, user store.User, purpose string, sessionID, pendingID *uuid.UUID, now time.Time) (store.WebauthnCeremony, error) {
+	ceremony, err := lockCeremony(ctx, qtx, digest)
+	if err != nil {
+		return store.WebauthnCeremony{}, err
+	}
+	return claimLockedCeremony(ctx, qtx, ceremony, digest, user, purpose, sessionID, pendingID, now)
+}
+
+func claimLockedCeremony(ctx context.Context, qtx *store.Queries, ceremony *store.WebauthnCeremony, digest []byte, user store.User, purpose string, sessionID, pendingID *uuid.UUID, now time.Time) (store.WebauthnCeremony, error) {
+	if ceremony == nil || ceremony.UserID != user.ID || ceremony.Purpose != purpose || ceremony.AuthEpoch != user.AuthEpoch ||
 		!sameID(ceremony.SessionID, sessionID) || !sameID(ceremony.PendingAuthenticationID, pendingID) ||
 		ceremony.ConsumedAt != nil || !ceremony.ExpiresAt.After(now) {
 		return store.WebauthnCeremony{}, auth.ErrSecondFactorChallengeInvalid

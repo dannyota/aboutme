@@ -104,26 +104,40 @@ func newService(opts Options, endpoint string, transport http.RoundTripper) (*Se
 	}
 	s.client = newClient(opts.Config.ClientID, opts.Config.ClientSecret, endpoint, transport,
 		newWindowLimiter(requestLimit, limitWindow), opts.Clock)
-	s.registry = newRegistry(sessionTTL, opts.Clock, s.revokeToken)
+	s.registry = newRegistry(sessionTTL, s.revokeToken)
 	s.client.hold = s.registry.hold
 	return s, nil
 }
 
 type account struct {
-	tx   pgx.Tx
-	q    *store.Queries
-	user store.User
-	now  time.Time
+	tx         pgx.Tx
+	q          *store.Queries
+	user       store.User
+	connection store.GithubConnection
+	found      bool
+	now        time.Time
 }
 
 func (s *Service) inAccount(ctx context.Context, sess store.Session, change func(context.Context, account) error) error {
 	return pgx.BeginFunc(ctx, s.pool, func(dbTx pgx.Tx) error {
 		qtx := s.q.WithTx(dbTx)
-		user, now, err := auth.LockSessionAccount(ctx, qtx, sess, s.now)
+		user, current, err := auth.LockSessionAccount(ctx, qtx, sess)
 		if err != nil {
 			return err
 		}
-		return change(ctx, account{tx: dbTx, q: qtx, user: user, now: now})
+		a := account{tx: dbTx, q: qtx, user: user}
+		a.connection, err = qtx.GetGitHubConnectionForUpdate(ctx, user.ID)
+		switch {
+		case err == nil:
+			a.found = true
+		case !errors.Is(err, pgx.ErrNoRows):
+			return err
+		}
+		a.now = s.now()
+		if err = auth.RequireLiveSession(current, a.now); err != nil {
+			return err
+		}
+		return change(ctx, a)
 	})
 }
 

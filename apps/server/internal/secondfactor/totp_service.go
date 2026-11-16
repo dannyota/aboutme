@@ -139,21 +139,19 @@ func (s *Service) RemoveTOTP(ctx context.Context, current store.Session) (auth.S
 	var issue auth.SessionIssue
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		qtx := s.q.WithTx(tx)
-		user, sess, policy, now, lockErr := lockAccount(ctx, qtx, current, s.now)
+		user, sess, policy, lockErr := lockAccountRows(ctx, qtx, current)
 		if lockErr != nil {
 			return lockErr
-		}
-		if reauthErr := auth.RequireRecentSecondFactorReauth(user, policy, sess, now); reauthErr != nil {
-			return reauthErr
-		}
-		if policy == nil {
-			return auth.ErrSecondFactorNotFound
 		}
 		cred, credErr := lockTOTPCredential(ctx, qtx, user.ID)
 		if credErr != nil {
 			return credErr
 		}
-		if cred == nil {
+		now := s.now()
+		if reauthErr := auth.RequireRecentSecondFactorReauth(user, policy, sess, now); reauthErr != nil {
+			return reauthErr
+		}
+		if policy == nil || cred == nil {
 			return auth.ErrSecondFactorNotFound
 		}
 		if _, delErr := qtx.DeleteTOTPCredentialForUser(ctx, user.ID); delErr != nil {

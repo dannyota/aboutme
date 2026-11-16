@@ -255,7 +255,7 @@ func TestAuthenticate_PoolBackedRejectsStaleAuthenticationEpoch(t *testing.T) {
 	}
 }
 
-func advanceEpochAndReplace(ctx context.Context, pool *store.Pool, q *store.Queries, sm *auth.SessionManager, userID, sessionID uuid.UUID, factorAt *time.Time) (auth.SessionIssue, error) {
+func advanceEpochAndReplace(ctx context.Context, pool *store.Pool, q *store.Queries, sm *auth.SessionManager, userID, sessionID uuid.UUID, factorAt *time.Time, now time.Time) (auth.SessionIssue, error) {
 	var replacement auth.SessionIssue
 	err := pgx.BeginFunc(ctx, pool, func(tx pgx.Tx) error {
 		qtx := q.WithTx(tx)
@@ -266,7 +266,7 @@ func advanceEpochAndReplace(ctx context.Context, pool *store.Pool, q *store.Quer
 			return advanceErr
 		}
 		var replaceErr error
-		replacement, replaceErr = sm.ReplaceAfterEpochChangeTx(ctx, qtx, userID, sessionID, factorAt)
+		replacement, replaceErr = sm.ReplaceAfterEpochChangeTx(ctx, qtx, userID, sessionID, factorAt, now)
 		return replaceErr
 	})
 	return replacement, err
@@ -289,7 +289,7 @@ func TestReplaceAfterEpochChangeTx_RevokesPriorSessionsAndPreservesWindows(t *te
 	}
 	clk.Advance(5 * time.Minute)
 	factorAt := clk.Now()
-	replacement, err := advanceEpochAndReplace(ctx, pool, q, sm, userID, current.ID, &factorAt)
+	replacement, err := advanceEpochAndReplace(ctx, pool, q, sm, userID, current.ID, &factorAt, clk.Now())
 	if err != nil {
 		t.Fatalf("ReplaceAfterEpochChangeTx() error = %v", err)
 	}
@@ -340,7 +340,7 @@ func TestReplaceAfterEpochChangeTx_FinalRemovalClearsFactorProof(t *testing.T) {
 	if _, execErr := pool.Exec(ctx, "UPDATE sessions SET second_factor_verified_at = reauthenticated_at WHERE id = $1", current.ID); execErr != nil {
 		t.Fatalf("set factor proof: %v", execErr)
 	}
-	replacement, err := advanceEpochAndReplace(ctx, pool, q, sm, userID, current.ID, nil)
+	replacement, err := advanceEpochAndReplace(ctx, pool, q, sm, userID, current.ID, nil, time.Now())
 	if err != nil {
 		t.Fatalf("ReplaceAfterEpochChangeTx() error = %v", err)
 	}
@@ -369,7 +369,7 @@ func TestReplaceAfterEpochChangeTx_RejectsAnOlderEpochSession(t *testing.T) {
 				return advanceErr
 			}
 		}
-		_, replaceErr := sm.ReplaceAfterEpochChangeTx(ctx, qtx, userID, current.ID, nil)
+		_, replaceErr := sm.ReplaceAfterEpochChangeTx(ctx, qtx, userID, current.ID, nil, time.Now())
 		return replaceErr
 	})
 	if !errors.Is(err, auth.ErrSessionInvalid) {
@@ -393,7 +393,7 @@ func TestReplaceAfterEpochChangeTx_LogoutEverywhereFirstMintsNothing(t *testing.
 	if _, revokeErr := sm.RevokeAll(ctx, userID); revokeErr != nil {
 		t.Fatalf("RevokeAll() error = %v", revokeErr)
 	}
-	if _, replaceErr := advanceEpochAndReplace(ctx, pool, q, sm, userID, current.ID, nil); !errors.Is(replaceErr, auth.ErrSessionInvalid) {
+	if _, replaceErr := advanceEpochAndReplace(ctx, pool, q, sm, userID, current.ID, nil, time.Now()); !errors.Is(replaceErr, auth.ErrSessionInvalid) {
 		t.Fatalf("ReplaceAfterEpochChangeTx(after logout everywhere) error = %v, want ErrSessionInvalid", replaceErr)
 	}
 	var live int

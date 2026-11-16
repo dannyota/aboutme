@@ -57,7 +57,7 @@ func (m *SessionManager) TouchReauthenticated(ctx context.Context, sessionID uui
 	return nil
 }
 
-func (m *SessionManager) ReplaceAfterEpochChangeTx(ctx context.Context, qtx *store.Queries, userID, currentSessionID uuid.UUID, secondFactorVerifiedAt *time.Time) (SessionIssue, error) {
+func (m *SessionManager) ReplaceAfterEpochChangeTx(ctx context.Context, qtx *store.Queries, userID, currentSessionID uuid.UUID, secondFactorVerifiedAt *time.Time, now time.Time) (SessionIssue, error) {
 	user, err := qtx.GetUserForUpdate(ctx, userID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -72,7 +72,6 @@ func (m *SessionManager) ReplaceAfterEpochChangeTx(ctx context.Context, qtx *sto
 		}
 		return SessionIssue{}, fmt.Errorf("auth: replace session: lock current session: %w", err)
 	}
-	now := m.now()
 	if current.UserID != user.ID || current.AuthEpoch+1 != user.AuthEpoch || RequireLiveSession(current, now) != nil {
 		return SessionIssue{}, ErrSessionInvalid
 	}
@@ -106,19 +105,19 @@ func (m *SessionManager) ReplaceAfterEpochChangeTx(ctx context.Context, qtx *sto
 	return SessionIssue{RawToken: raw, Session: replacement}, nil
 }
 
-func LockSessionAccount(ctx context.Context, qtx *store.Queries, sess store.Session, clock func() time.Time) (store.User, time.Time, error) {
+func LockSessionAccount(ctx context.Context, qtx *store.Queries, sess store.Session) (store.User, store.Session, error) {
 	user, err := lockAccountUser(ctx, qtx, sess.UserID)
 	if err != nil {
-		return store.User{}, time.Time{}, err
+		return store.User{}, store.Session{}, err
 	}
-	current, now, err := lockCallerSessionAt(ctx, qtx, user, sess.ID, clock)
+	current, err := lockCallerSessionRow(ctx, qtx, user, sess.ID)
 	if err != nil {
-		return store.User{}, time.Time{}, err
+		return store.User{}, store.Session{}, err
 	}
 	if subtle.ConstantTimeCompare(current.CSRFSecret, sess.CSRFSecret) != 1 {
-		return store.User{}, time.Time{}, ErrSessionInvalid
+		return store.User{}, store.Session{}, ErrSessionInvalid
 	}
-	return user, now, nil
+	return user, current, nil
 }
 
 func RequireRecentReauth(sess store.Session, now time.Time) error {

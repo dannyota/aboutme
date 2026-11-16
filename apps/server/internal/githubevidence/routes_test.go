@@ -652,7 +652,7 @@ func TestEvidence_SessionEndingsRevokeOnce(t *testing.T) {
 				if _, err := qtx.AdvanceUserAuthEpoch(context.Background(), h.user.ID); err != nil {
 					return err
 				}
-				if _, err := h.sessions.ReplaceAfterEpochChangeTx(context.Background(), qtx, h.user.ID, h.session.ID, nil); err != nil {
+				if _, err := h.sessions.ReplaceAfterEpochChangeTx(context.Background(), qtx, h.user.ID, h.session.ID, nil, time.Now()); err != nil {
 					return err
 				}
 				h.sessions.AccountSessionsEndedLocked(h.user.ID)

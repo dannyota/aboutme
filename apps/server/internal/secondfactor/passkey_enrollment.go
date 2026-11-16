@@ -79,11 +79,19 @@ func (s *Service) CompletePasskeyRegistration(ctx context.Context, current store
 	)
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		qtx := s.q.WithTx(tx)
-		user, sess, policy, now, lockErr := lockAccount(ctx, qtx, current, s.now)
+		user, sess, policy, lockErr := lockAccountRows(ctx, qtx, current)
 		if lockErr != nil {
 			return lockErr
 		}
-		ceremony, claimErr := claimCeremony(ctx, qtx, reg.ceremonyDigest, user, purposeRegistration, &sess.ID, nil, now)
+		locked, lockErr := lockCeremony(ctx, qtx, reg.ceremonyDigest)
+		if lockErr != nil {
+			return lockErr
+		}
+		now := s.now()
+		if liveErr := auth.RequireLiveSession(sess, now); liveErr != nil {
+			return liveErr
+		}
+		ceremony, claimErr := claimLockedCeremony(ctx, qtx, locked, reg.ceremonyDigest, user, purposeRegistration, &sess.ID, nil, now)
 		if claimErr != nil {
 			return claimErr
 		}

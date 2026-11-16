@@ -820,6 +820,9 @@ DELETE FROM password_reset_tokens WHERE id = $1;
 -- name: GetSessionByIDForUpdate :one
 SELECT * FROM sessions WHERE id = $1 FOR UPDATE;
 
+-- name: GetSessionForUserForUpdate :one
+SELECT * FROM sessions WHERE id = sqlc.arg(id)::uuid AND user_id = sqlc.arg(user_id)::uuid FOR UPDATE;
+
 -- name: CreateAuthEmailJob :one
 INSERT INTO auth_email_jobs (
     id, kind, state, registration_id, reset_token_id, user_id, token_digest,

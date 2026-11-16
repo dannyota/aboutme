@@ -102,7 +102,7 @@ func (s *Service) CompleteTOTPEnrollment(ctx context.Context, current store.Sess
 	)
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		qtx := s.q.WithTx(tx)
-		user, sess, policy, now, lockErr := lockAccount(ctx, qtx, current, s.now)
+		user, sess, policy, lockErr := lockAccountRows(ctx, qtx, current)
 		if lockErr != nil {
 			return lockErr
 		}
@@ -111,14 +111,15 @@ func (s *Service) CompleteTOTPEnrollment(ctx context.Context, current store.Sess
 			return credErr
 		}
 		enr, enrErr := qtx.GetTOTPEnrollmentForUpdate(ctx, digest[:])
-		if errors.Is(enrErr, pgx.ErrNoRows) {
-			outcome = auth.ErrTOTPEnrollmentInvalid
-			return nil
-		}
-		if enrErr != nil {
+		missing := errors.Is(enrErr, pgx.ErrNoRows)
+		if enrErr != nil && !missing {
 			return fmt.Errorf("lock totp enrollment: %w", enrErr)
 		}
-		if enr.UserID != user.ID || enr.SessionID != sess.ID || enr.AuthEpoch != user.AuthEpoch || !enr.ExpiresAt.After(now) {
+		now := s.now()
+		if liveErr := auth.RequireLiveSession(sess, now); liveErr != nil {
+			return liveErr
+		}
+		if missing || enr.UserID != user.ID || enr.SessionID != sess.ID || enr.AuthEpoch != user.AuthEpoch || !enr.ExpiresAt.After(now) {
 			outcome = auth.ErrTOTPEnrollmentInvalid
 			return nil
 		}

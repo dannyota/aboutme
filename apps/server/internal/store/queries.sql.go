@@ -3376,6 +3376,38 @@ func (q *Queries) GetSessionByTokenHash(ctx context.Context, tokenHash []byte) (
 	return i, err
 }
 
+const getSessionForUserForUpdate = `-- name: GetSessionForUserForUpdate :one
+SELECT id, user_id, token_hash, csrf_secret, created_at, last_seen_at, reauthenticated_at, absolute_expires_at, rotation_grace_until, revoked_at, ua, ip, rotated_from, auth_epoch, second_factor_verified_at FROM sessions WHERE id = $1::uuid AND user_id = $2::uuid FOR UPDATE
+`
+
+type GetSessionForUserForUpdateParams struct {
+	ID     uuid.UUID
+	UserID uuid.UUID
+}
+
+func (q *Queries) GetSessionForUserForUpdate(ctx context.Context, arg GetSessionForUserForUpdateParams) (Session, error) {
+	row := q.db.QueryRow(ctx, getSessionForUserForUpdate, arg.ID, arg.UserID)
+	var i Session
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.TokenHash,
+		&i.CSRFSecret,
+		&i.CreatedAt,
+		&i.LastSeenAt,
+		&i.ReauthenticatedAt,
+		&i.AbsoluteExpiresAt,
+		&i.RotationGraceUntil,
+		&i.RevokedAt,
+		&i.UA,
+		&i.IP,
+		&i.RotatedFrom,
+		&i.AuthEpoch,
+		&i.SecondFactorVerifiedAt,
+	)
+	return i, err
+}
+
 const getSlugClaim = `-- name: GetSlugClaim :one
 SELECT id FROM resumes WHERE slug = $1::text
 `

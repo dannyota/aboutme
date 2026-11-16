@@ -621,7 +621,7 @@ func TestGoogleCallback_LinkRechecksEpochUnderUserLock(t *testing.T) {
 		t.Fatalf("advance epoch: %v", err)
 	}
 	now := time.Now()
-	if _, err := auth.NewSessionManagerWithPool(pool).ReplaceAfterEpochChangeTx(t.Context(), qtx, userID, sess.ID, &now); err != nil {
+	if _, err := auth.NewSessionManagerWithPool(pool).ReplaceAfterEpochChangeTx(t.Context(), qtx, userID, sess.ID, &now, time.Now()); err != nil {
 		t.Fatalf("ReplaceAfterEpochChangeTx() error = %v", err)
 	}
 

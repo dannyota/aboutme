@@ -87,7 +87,7 @@ func (s *shutdownStub) snapshot() (int, map[string]int, []string) {
 func newShutdownService(stub *shutdownStub) *Service {
 	s := &Service{logger: slog.New(slog.DiscardHandler), now: time.Now, callbackURL: testOrigin + CallbackPath}
 	s.client = newTestClient("", stub, time.Now)
-	s.registry = newRegistry(sessionTTL, time.Now, s.revokeToken)
+	s.registry = newRegistry(sessionTTL, s.revokeToken)
 	s.client.hold = s.registry.hold
 	return s
 }
@@ -141,7 +141,7 @@ func TestShutdown_RevokesEveryHeldTokenOnceWithinTheBound(t *testing.T) {
 		stub := newShutdownStub(4 * time.Second)
 		s := newShutdownService(stub)
 		account := uuid.New()
-		if _, ok := s.registry.install(account, s.registry.hold("live-token"), 1, 1); !ok {
+		if _, ok := s.registry.install(account, s.registry.hold("live-token"), 1, 1, time.Now()); !ok {
 			t.Fatal("install refused")
 		}
 		s.registry.hold("pending-token")

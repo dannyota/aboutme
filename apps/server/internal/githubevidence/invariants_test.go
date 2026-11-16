@@ -3,6 +3,7 @@ package githubevidence
 import (
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -11,11 +12,13 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	schema "danny.vn/aboutme/packages/schema/gen/go"
@@ -161,11 +164,25 @@ func firstLine(sql string) string {
 	return line
 }
 
+type offsetClock struct {
+	offset atomic.Int64
+}
+
+func (c *offsetClock) now() time.Time {
+	return time.Now().Add(time.Duration(c.offset.Load()))
+}
+
+func (c *offsetClock) advance(d time.Duration) {
+	c.offset.Add(int64(d))
+}
+
 type invHarness struct {
 	*harness
 	trace     *statementTrace
+	clock     *offsetClock
 	passwords *auth.PasswordService
 	factors   *secondfactor.Service
+	ring      *secondfactor.TOTPKeyRing
 	accounts  *accountapi.Service
 	hasher    *password.Hasher
 }
@@ -191,13 +208,14 @@ func newInvariantHarness(t *testing.T) *invHarness {
 	pool := &store.Pool{Pool: traced}
 	t.Cleanup(traced.Close)
 
+	clock := &offsetClock{}
 	gh := newStubGitHub(t)
 	logs := &syncBuffer{}
 	logger := slog.New(slog.NewJSONHandler(logs, nil))
 	sessions := auth.NewSessionManagerWithPool(pool)
 	svc, err := newService(Options{
 		Config:       config.GitHubEvidenceConfig{ClientID: testClientID, ClientSecret: config.Secret(testClientSecret)},
-		PublicOrigin: testOrigin, Pool: pool, Sessions: sessions, Logger: logger,
+		PublicOrigin: testOrigin, Pool: pool, Sessions: sessions, Logger: logger, Clock: clock.now,
 	}, gh.URL, newTransport())
 	if err != nil {
 		t.Fatal(err)
@@ -237,7 +255,7 @@ func newInvariantHarness(t *testing.T) *invHarness {
 	}
 	passwords, err := auth.NewPasswordService(auth.PasswordServiceOptions{
 		Pool: pool, Queries: store.New(pool), Sessions: sessions, Policy: password.NewPolicy(nil, nil), Hasher: hasher,
-		Outbox: outbox, Limits: limits, PublicOrigin: testOrigin, Clock: time.Now, Entropy: rand.Reader, Logger: logger,
+		Outbox: outbox, Limits: limits, PublicOrigin: testOrigin, Clock: clock.now, Entropy: rand.Reader, Logger: logger,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -246,9 +264,18 @@ func newInvariantHarness(t *testing.T) *invHarness {
 	if err != nil {
 		t.Fatal(err)
 	}
+	var totpKey [32]byte
+	if _, err = rand.Read(totpKey[:]); err != nil {
+		t.Fatal(err)
+	}
+	totpRing, err := secondfactor.NewTOTPKeyRing(base64.RawURLEncoding.EncodeToString(totpKey[:]), "", rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
 	factors, err := secondfactor.New(secondfactor.Options{
 		Pool: pool, Pending: auth.NewPendingAuthenticationManager(pool, logger), Sessions: sessions, Outbox: outbox,
-		RelyingParty: rp, Clock: time.Now, Entropy: rand.Reader, Logger: logger,
+		RelyingParty: rp, EnrollmentEnabled: true, TOTPKeyRing: totpRing, TOTPEnrollmentEnabled: true,
+		TOTPIssuer: "evidence.example", Clock: clock.now, Entropy: rand.Reader, Logger: logger,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -267,7 +294,7 @@ func newInvariantHarness(t *testing.T) *invHarness {
 	}
 	accounts, err := accountapi.New(accountapi.Dependencies{
 		Pool: pool, Sessions: sessions, Coordinator: coordinator, Media: backend,
-		Projector: docmigrate.NewIdentityProjector(), Logger: logger, PublicOrigin: testOrigin,
+		Projector: docmigrate.NewIdentityProjector(), Logger: logger, PublicOrigin: testOrigin, Now: clock.now,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -276,20 +303,24 @@ func newInvariantHarness(t *testing.T) *invHarness {
 	h := &harness{t: t, gh: gh, pool: plain, q: store.New(plain), svc: svc, auth: authService, sessions: sessions, logs: logs,
 		handler: api.New(logger, noopPinger{}, api.Options{}, nil, svc.RegisterRoutes, authService.RegisterRoutes, passwords.RegisterRoutes)}
 	h.user, h.raw, h.session = h.newAccount()
-	return &invHarness{harness: h, trace: trace, passwords: passwords, factors: factors, accounts: accounts, hasher: hasher}
+	return &invHarness{harness: h, trace: trace, clock: clock, passwords: passwords, factors: factors, ring: totpRing, accounts: accounts, hasher: hasher}
 }
 
 type callerRun struct {
-	ih         *invHarness
-	ownerToken string
-	raw        string
-	session    store.Session
-	other      store.Session
-	resetToken password.Token
-	resetID    uuid.UUID
-	slug       string
-	pending    started
-	code       string
+	ih           *invHarness
+	ownerToken   string
+	raw          string
+	session      store.Session
+	other        store.Session
+	resetToken   password.Token
+	resetID      uuid.UUID
+	slug         string
+	pending      started
+	code         string
+	factor       auth.SecondFactorCredential
+	passkeyID    uuid.UUID
+	enrollmentID string
+	totpSecret   string
 }
 
 func (c *callerRun) serve(method, path, body string) *httptest.ResponseRecorder {
@@ -322,6 +353,19 @@ func (c *callerRun) freshSession() (store.Session, error) {
 	return store.New(c.ih.pool).GetSessionByID(context.Background(), c.session.ID)
 }
 
+func (c *callerRun) enableSecondFactor(proofAge time.Duration) error {
+	handle := make([]byte, 32)
+	if _, err := rand.Read(handle); err != nil {
+		return err
+	}
+	if _, err := c.ih.pool.Exec(context.Background(), `INSERT INTO second_factor_policies (user_id, webauthn_user_handle, enabled_at) VALUES ($1, $2, now())`, c.ih.user.ID, handle); err != nil {
+		return err
+	}
+	proof := time.Now().Add(-proofAge)
+	_, err := c.ih.pool.Exec(context.Background(), `UPDATE sessions SET reauthenticated_at = $2, second_factor_verified_at = $2 WHERE id = $1`, c.session.ID, proof)
+	return err
+}
+
 func statusAccepted(rec *httptest.ResponseRecorder, want int) error {
 	if rec.Code != want {
 		return fmt.Errorf("status %d %s", rec.Code, firstLine(rec.Body.String()))
@@ -329,13 +373,68 @@ func statusAccepted(rec *httptest.ResponseRecorder, want int) error {
 	return nil
 }
 
+type invariantSite struct {
+	file string
+	fn   string
+}
+
+func (s invariantSite) String() string {
+	return s.file + ":" + s.fn
+}
+
+type lockStep struct {
+	waits string
+	sql   string
+	key   func(c *callerRun) any
+}
+
 type callerCase struct {
 	name       string
+	site       invariantSite
 	setup      func(c *callerRun) error
 	run        func(c *callerRun) error
 	invalidate func(c *callerRun) error
 	stale      func(c *callerRun) error
 	untouched  []string
+	lastLocks  []lockStep
+	lapse      func(c *callerRun, holder pgx.Tx) error
+}
+
+const (
+	proofLapse = 16 * time.Minute
+	idleLapse  = 31 * 24 * time.Hour
+)
+
+func callerSessionID(c *callerRun) any { return c.session.ID }
+
+func otherSessionID(c *callerRun) any { return c.other.ID }
+
+func accountUserID(c *callerRun) any { return c.ih.user.ID }
+
+func sessionLock(waits string, key func(c *callerRun) any) lockStep {
+	return lockStep{waits: waits, sql: `SELECT 1 FROM sessions WHERE id = $1 FOR UPDATE`, key: key}
+}
+
+func policyLock() lockStep {
+	return lockStep{waits: "getsecondfactorpolicyforupdate", sql: `SELECT 1 FROM second_factor_policies WHERE user_id = $1 FOR UPDATE`, key: accountUserID}
+}
+
+func connectionLock() lockStep {
+	return lockStep{waits: "getgithubconnectionforupdate", sql: `SELECT 1 FROM github_connections WHERE user_id = $1 FOR UPDATE`, key: accountUserID}
+}
+
+func advanceClock(d time.Duration) func(*callerRun, pgx.Tx) error {
+	return func(c *callerRun, _ pgx.Tx) error {
+		c.ih.clock.advance(d)
+		return nil
+	}
+}
+
+func expireHeldSession(key func(c *callerRun) any) func(*callerRun, pgx.Tx) error {
+	return func(c *callerRun, holder pgx.Tx) error {
+		_, err := holder.Exec(context.Background(), `UPDATE sessions SET absolute_expires_at = $2 WHERE id = $1`, key(c), time.Now())
+		return err
+	}
 }
 
 func documentForDeletion() schema.Resume {
@@ -359,25 +458,41 @@ func documentForDeletion() schema.Resume {
 const newPassword = "a long enough brand new password"
 
 func callerCases() []callerCase {
+	var cases []callerCase
+	for _, group := range [][]callerCase{signOutCases(), deletionCases(), evidenceCases(), factorCases()} {
+		cases = append(cases, group...)
+	}
+	return cases
+}
+
+func signOutCases() []callerCase {
 	expire := func(c *callerRun) error { return c.expireSession() }
 	return []callerCase{
-		{name: "logout", run: func(c *callerRun) error {
+		{name: "logout", site: invariantSite{"internal/auth/sessions_handlers.go", "Service.handleLogout"}, run: func(c *callerRun) error {
 			return statusAccepted(c.serve(http.MethodPost, auth.LogoutPath, ""), http.StatusNoContent)
-		}, invalidate: func(c *callerRun) error { return c.revokeSession() }},
-		{name: "revoke one", setup: func(c *callerRun) error {
+		}, invalidate: func(c *callerRun) error { return c.revokeSession() },
+			lastLocks: []lockStep{sessionLock("getsessionbyidforupdate", callerSessionID)}, lapse: expireHeldSession(callerSessionID)},
+		{name: "revoke one", site: invariantSite{"internal/auth/sessions_revoke_http.go", "Service.handleRevokeSession"}, setup: func(c *callerRun) error {
 			_, other, err := c.ih.sessions.Issue(context.Background(), c.ih.user.ID, "evidence-test", "203.0.113.9")
 			c.other = other
 			return err
 		}, run: func(c *callerRun) error {
 			return statusAccepted(c.serve(http.MethodDelete, auth.SessionsPath+"/"+c.other.ID.String(), ""), http.StatusNoContent)
-		}, invalidate: expire},
-		{name: "revoke all", run: func(c *callerRun) error {
+		}, invalidate: expire,
+			lastLocks: []lockStep{sessionLock("getsessionforuserforupdate", otherSessionID)}, lapse: expireHeldSession(otherSessionID)},
+		{name: "revoke all", site: invariantSite{"internal/auth/sessions_revoke_http.go", "Service.handleRevokeAllSessions"}, run: func(c *callerRun) error {
 			return statusAccepted(c.serve(http.MethodDelete, auth.SessionsPath, ""), http.StatusNoContent)
-		}, invalidate: expire},
-		{name: "password change", setup: func(c *callerRun) error { return c.setPassword() }, run: func(c *callerRun) error {
+		}, invalidate: expire,
+			lastLocks: []lockStep{sessionLock("getsessionbyidforupdate", callerSessionID)}, lapse: expireHeldSession(callerSessionID)},
+		{name: "password change", site: invariantSite{"internal/auth/password_account.go", "PasswordService.change"}, setup: func(c *callerRun) error {
+			if err := c.setPassword(); err != nil {
+				return err
+			}
+			return c.enableSecondFactor(0)
+		}, run: func(c *callerRun) error {
 			return statusAccepted(c.serve(http.MethodPut, auth.PasswordMePath, `{"password":"`+newPassword+`"}`), http.StatusNoContent)
-		}, invalidate: expire},
-		{name: "password reset", setup: func(c *callerRun) error {
+		}, invalidate: expire, lastLocks: []lockStep{policyLock()}, lapse: advanceClock(proofLapse)},
+		{name: "password reset", site: invariantSite{"internal/auth/password_reset.go", "PasswordService.reset"}, setup: func(c *callerRun) error {
 			if err := c.setPassword(); err != nil {
 				return err
 			}
@@ -397,28 +512,26 @@ func callerCases() []callerCase {
 			defer func() { c.raw = raw }()
 			return statusAccepted(c.serve(http.MethodPost, auth.PasswordResetPath, `{"token":"`+c.resetToken.Raw+`","password":"`+newPassword+`"}`), http.StatusNoContent)
 		}, invalidate: func(c *callerRun) error {
-			_, err := c.ih.pool.Exec(context.Background(), `UPDATE password_reset_tokens SET created_at = $2::timestamptz - interval '30 minutes', expires_at = $2::timestamptz WHERE id = $1`, c.resetID, time.Now())
-			return err
-		}},
-		{name: "epoch change", setup: func(c *callerRun) error {
-			handle := make([]byte, 32)
-			if _, err := rand.Read(handle); err != nil {
-				return err
-			}
-			if _, err := c.ih.pool.Exec(context.Background(), `INSERT INTO second_factor_policies (user_id, webauthn_user_handle, enabled_at) VALUES ($1, $2, now())`, c.ih.user.ID, handle); err != nil {
-				return err
-			}
-			_, err := c.ih.pool.Exec(context.Background(), `UPDATE sessions SET second_factor_verified_at = now() WHERE id = $1`, c.session.ID)
-			return err
-		}, run: func(c *callerRun) error {
-			current, err := c.freshSession()
-			if err != nil {
-				return err
-			}
-			_, err = c.ih.factors.RegenerateRecoveryCodes(context.Background(), current)
-			return err
-		}, invalidate: expire, untouched: []string{"-- name: advanceuserauthepoch"}},
-		{name: "self deletion", run: func(c *callerRun) error {
+			return expireResetToken(c.ih.pool, c.resetID)
+		}, lastLocks: []lockStep{{waits: "getpasswordresettokenforupdate", sql: `SELECT 1 FROM password_reset_tokens WHERE id = $1 FOR UPDATE`, key: func(c *callerRun) any { return c.resetID }}},
+			lapse: func(c *callerRun, holder pgx.Tx) error { return expireResetToken(holder, c.resetID) }},
+	}
+}
+
+type execer interface {
+	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
+}
+
+func expireResetToken(db execer, id uuid.UUID) error {
+	_, err := db.Exec(context.Background(), `UPDATE password_reset_tokens SET created_at = $2::timestamptz - interval '30 minutes', expires_at = $2::timestamptz WHERE id = $1`, id, time.Now())
+	return err
+}
+
+func deletionCases() []callerCase {
+	expire := func(c *callerRun) error { return c.expireSession() }
+	deletion := invariantSite{"internal/accountapi/delete_transaction.go", "Service.mutateDeletion"}
+	return []callerCase{
+		{name: "self deletion", site: deletion, setup: func(c *callerRun) error { return c.enableSecondFactor(0) }, run: func(c *callerRun) error {
 			r := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "https://evidence.example/api/v1/me", nil)
 			r.RemoteAddr = "203.0.113.7:4000"
 			r.Header.Set("Origin", testOrigin)
@@ -427,8 +540,8 @@ func callerCases() []callerCase {
 			rec := httptest.NewRecorder()
 			c.ih.accounts.DeleteHandler().ServeHTTP(rec, r)
 			return statusAccepted(rec, http.StatusNoContent)
-		}, invalidate: expire},
-		{name: "operator deletion", setup: func(c *callerRun) error {
+		}, invalidate: expire, lastLocks: []lockStep{policyLock()}, lapse: advanceClock(proofLapse)},
+		{name: "operator deletion", site: deletion, setup: func(c *callerRun) error {
 			created, err := resume.NewStore(c.ih.pool, docmigrate.NewIdentityProjector()).Create(context.Background(), c.ih.user.ID, "Operator", documentForDeletion())
 			if err != nil {
 				return err
@@ -442,20 +555,31 @@ func callerCases() []callerCase {
 		}, invalidate: func(c *callerRun) error {
 			_, err := c.ih.pool.Exec(context.Background(), `UPDATE resumes SET slug = $2 WHERE slug = $1`, c.slug, c.slug+"-moved")
 			return err
-		}},
-		{name: "evidence status", stale: func(c *callerRun) error {
+		}, lastLocks: []lockStep{{waits: "listaccountdeletionresumesetforupdate", sql: `SELECT 1 FROM resumes WHERE user_id = $1 FOR UPDATE`, key: accountUserID}},
+			lapse: func(c *callerRun, holder pgx.Tx) error {
+				_, err := holder.Exec(context.Background(), `UPDATE resumes SET slug = slug || '-moved', revision = revision + 1 WHERE user_id = $1`, c.ih.user.ID)
+				return err
+			}},
+	}
+}
+
+func evidenceCases() []callerCase {
+	expire := func(c *callerRun) error { return c.expireSession() }
+	routes := "internal/githubevidence/routes.go"
+	return []callerCase{
+		{name: "evidence status", site: invariantSite{routes, "Service.handleStatus"}, stale: func(c *callerRun) error {
 			_, err := c.ih.pool.Exec(context.Background(), `UPDATE github_connections SET generation = generation + 1 WHERE user_id = $1`, c.ih.user.ID)
 			return err
 		}, run: func(c *callerRun) error {
 			return statusAccepted(c.serve(http.MethodGet, StatusPath, ""), http.StatusOK)
-		}, invalidate: expire},
-		{name: "evidence done", run: func(c *callerRun) error {
+		}, invalidate: expire, lastLocks: []lockStep{connectionLock()}, lapse: advanceClock(idleLapse)},
+		{name: "evidence done", site: invariantSite{routes, "Service.handleSessionEnd"}, run: func(c *callerRun) error {
 			return statusAccepted(c.serve(http.MethodPost, SessionEndPath, ""), http.StatusNoContent)
-		}, invalidate: expire},
-		{name: "evidence disconnect", run: func(c *callerRun) error {
+		}, invalidate: expire, lastLocks: []lockStep{connectionLock()}, lapse: advanceClock(idleLapse)},
+		{name: "evidence disconnect", site: invariantSite{routes, "Service.handleDisconnect"}, run: func(c *callerRun) error {
 			return statusAccepted(c.serve(http.MethodDelete, StatusPath+"?keepLinks=true", ""), http.StatusNoContent)
-		}, invalidate: expire},
-		{name: "evidence callback", setup: func(c *callerRun) error {
+		}, invalidate: expire, lastLocks: []lockStep{connectionLock()}, lapse: advanceClock(idleLapse)},
+		{name: "evidence callback", site: invariantSite{"internal/githubevidence/callback.go", "Service.handleCallback"}, setup: func(c *callerRun) error {
 			s, err := c.ih.startE(c.raw, c.session)
 			if err != nil {
 				return err
@@ -469,7 +593,7 @@ func callerCases() []callerCase {
 				return fmt.Errorf("callback Location %q", rec.Header().Get("Location"))
 			}
 			return nil
-		}, invalidate: expire},
+		}, invalidate: expire, lastLocks: []lockStep{connectionLock()}, lapse: advanceClock(idleLapse)},
 	}
 }
 
@@ -506,7 +630,7 @@ func prepareCaller(t *testing.T, tc callerCase) *callerRun {
 	return c
 }
 
-func (ih *invHarness) holdAccount(t *testing.T) (pgx.Tx, int32) {
+func (ih *invHarness) beginHolder(t *testing.T) (pgx.Tx, int32) {
 	t.Helper()
 	holder, err := ih.pool.Begin(t.Context())
 	if err != nil {
@@ -521,10 +645,45 @@ func (ih *invHarness) holdAccount(t *testing.T) (pgx.Tx, int32) {
 	if err = holder.QueryRow(t.Context(), `SELECT pg_backend_pid()`).Scan(&pid); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = store.New(ih.pool).WithTx(holder).GetUserForUpdate(t.Context(), ih.user.ID); err != nil {
+	return holder, pid
+}
+
+func (ih *invHarness) holdAccount(t *testing.T) (pgx.Tx, int32) {
+	t.Helper()
+	holder, pid := ih.beginHolder(t)
+	if _, err := store.New(ih.pool).WithTx(holder).GetUserForUpdate(t.Context(), ih.user.ID); err != nil {
 		t.Fatal(err)
 	}
 	return holder, pid
+}
+
+func (ih *invHarness) waitBlockedOn(pid int32, waits string, done <-chan struct{}) error {
+	want := "-- name: " + waits + " "
+	deadline := time.Now().Add(raceWait)
+	for time.Now().Before(deadline) {
+		select {
+		case <-done:
+			return errors.New("it finished without waiting")
+		default:
+		}
+		rows, err := ih.pool.Query(context.Background(), `SELECT query FROM pg_stat_activity WHERE $1::integer = ANY(pg_blocking_pids(pid))`, pid)
+		if err != nil {
+			return err
+		}
+		queries, err := pgx.CollectRows(rows, pgx.RowTo[string])
+		if err != nil {
+			return err
+		}
+		for _, query := range queries {
+			query = strings.ToLower(strings.TrimSpace(query))
+			if !strings.HasPrefix(query, want) {
+				return fmt.Errorf("it waited in %q", firstLine(query))
+			}
+			return nil
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	return fmt.Errorf("nothing waited on backend %d within %s", pid, raceWait)
 }
 
 func runStaleUnderTheLock(t *testing.T, tc callerCase) (*callerRun, error) {
@@ -551,6 +710,66 @@ func runStaleUnderTheLock(t *testing.T, tc callerCase) (*callerRun, error) {
 	return c, runErr
 }
 
+func runLapsedAtTheLastLock(t *testing.T, tc callerCase) (*callerRun, error) {
+	t.Helper()
+	c := prepareCaller(t, tc)
+	holders := make([]pgx.Tx, len(tc.lastLocks))
+	pids := make([]int32, len(tc.lastLocks))
+	for i, step := range tc.lastLocks {
+		holders[i], pids[i] = c.ih.beginHolder(t)
+		if _, err := holders[i].Exec(t.Context(), step.sql, step.key(c)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	done := make(chan struct{})
+	var runErr error
+	go func() {
+		defer close(done)
+		runErr = tc.run(c)
+	}()
+	abort := func(format string, args ...any) {
+		for _, holder := range holders {
+			if err := holder.Rollback(context.Background()); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
+				t.Errorf("rollback holder: %v", err)
+			}
+		}
+		<-done
+		t.Fatalf(format, args...)
+	}
+	last := len(tc.lastLocks) - 1
+	for i, step := range tc.lastLocks {
+		if err := c.ih.waitBlockedOn(pids[i], step.waits, done); err != nil {
+			abort("%s did not wait for %s: %v (run: %v)", tc.name, step.waits, err, runErr)
+		}
+		if i == last {
+			if err := tc.lapse(c, holders[i]); err != nil {
+				abort("lapse: %v", err)
+			}
+		}
+		if err := holders[i].Commit(t.Context()); err != nil {
+			abort("release %s: %v", step.waits, err)
+		}
+	}
+	<-done
+	return c, runErr
+}
+
+func requireNothingChanged(t *testing.T, tc callerCase, c *callerRun) {
+	t.Helper()
+	for _, statement := range tc.untouched {
+		if c.ih.trace.executed(statement) {
+			t.Errorf("%s ran %q before rejecting stale authority", tc.name, statement)
+		}
+	}
+	c.ih.drain()
+	if token := c.ih.liveToken(); token != c.ownerToken {
+		t.Errorf("%s with stale authority changed the evidence session", tc.name)
+	}
+	if _, revoked, _, _ := c.ih.gh.snapshot(); len(revoked) != 0 && tc.name != "evidence callback" {
+		t.Errorf("%s with stale authority revoked %d tokens", tc.name, len(revoked))
+	}
+}
+
 func TestInvariantI1_AuthorityRevalidatedAfterTheLocks(t *testing.T) {
 	for _, tc := range callerCases() {
 		t.Run(tc.name, func(t *testing.T) {
@@ -558,18 +777,22 @@ func TestInvariantI1_AuthorityRevalidatedAfterTheLocks(t *testing.T) {
 			if err == nil {
 				t.Errorf("%s accepted authority that went stale while it waited for the account lock", tc.name)
 			}
-			for _, statement := range tc.untouched {
-				if c.ih.trace.executed(statement) {
-					t.Errorf("%s ran %q before rejecting stale authority", tc.name, statement)
-				}
+			requireNothingChanged(t, tc, c)
+		})
+	}
+}
+
+func TestInvariantI1_ClockReadAfterTheLastLock(t *testing.T) {
+	for _, tc := range callerCases() {
+		t.Run(tc.name, func(t *testing.T) {
+			c, err := runLapsedAtTheLastLock(t, tc)
+			if err == nil {
+				t.Errorf("%s accepted a proof that lapsed while it waited for %s", tc.name, tc.lastLocks[len(tc.lastLocks)-1].waits)
 			}
-			c.ih.drain()
-			if token := c.ih.liveToken(); token != c.ownerToken {
-				t.Errorf("%s with stale authority changed the evidence session", tc.name)
+			if n := c.ih.trace.marks(); n != 0 {
+				t.Errorf("%s notified %d times after its proof lapsed", tc.name, n)
 			}
-			if _, revoked, _, _ := c.ih.gh.snapshot(); len(revoked) != 0 && tc.name != "evidence callback" {
-				t.Errorf("%s with stale authority revoked %d tokens", tc.name, len(revoked))
-			}
+			requireNothingChanged(t, tc, c)
 		})
 	}
 }

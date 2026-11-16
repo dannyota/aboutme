@@ -95,10 +95,9 @@ func (s *Service) handleStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body statusBody
-	err := s.inAccount(r.Context(), sess, func(ctx context.Context, a account) error {
-		var snapshotErr error
-		body, snapshotErr = s.statusSnapshot(ctx, a)
-		return snapshotErr
+	err := s.inAccount(r.Context(), sess, func(_ context.Context, a account) error {
+		body = s.statusSnapshot(a)
+		return nil
 	})
 	if errors.Is(err, auth.ErrSessionInvalid) {
 		writeSessionRequired(w)
@@ -111,32 +110,28 @@ func (s *Service) handleStatus(w http.ResponseWriter, r *http.Request) {
 	api.WriteData(w, http.StatusOK, body)
 }
 
-func (s *Service) statusSnapshot(ctx context.Context, a account) (statusBody, error) {
+func (s *Service) statusSnapshot(a account) statusBody {
 	var body statusBody
 	var generation int64
-	row, err := a.q.GetGitHubConnection(ctx, a.user.ID)
-	switch {
-	case err == nil:
+	if row := a.connection; a.found {
 		generation = row.Generation
 		if row.GithubUserID != nil && row.Login != nil && row.ConnectedAt != nil {
 			body.Connection = &connectionBody{GitHubUserID: *row.GithubUserID, Login: *row.Login, ConnectedAt: row.ConnectedAt.UTC()}
 		}
-	case !errors.Is(err, pgx.ErrNoRows):
-		return statusBody{}, err
 	}
 	if s.hooks.statusRead != nil {
 		s.hooks.statusRead(a.tx)
 	}
 	live, isLive := s.registry.current(a.user.ID)
 	if !isLive {
-		return body, nil
+		return body
 	}
 	if body.Connection != nil && live.generation == generation && live.epoch == a.user.AuthEpoch && live.expiresAt.After(a.now) {
 		body.Session = &sessionBody{ExpiresAt: live.expiresAt.UTC()}
-		return body, nil
+		return body
 	}
 	s.registry.endSession(a.user.ID, live)
-	return body, nil
+	return body
 }
 
 func (s *Service) handleStart(w http.ResponseWriter, r *http.Request) {

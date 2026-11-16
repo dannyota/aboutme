@@ -121,18 +121,55 @@ func TestBoundary_RevokingAnotherBrowserSessionDuringTheExchange(t *testing.T) {
 }
 
 func TestBoundary_ShutdownDuringTheExchangeCommitsNothing(t *testing.T) {
-	h := newHarness(t)
-	h.onceBeforeToken(func() { h.svc.registry.close() })
-	requireOutcome(t, h.connect(h.raw, h.session), outcomeFailed)
-	h.drain()
-	if _, revoked, _, profiles := h.gh.snapshot(); len(revoked) != 0 || profiles != 0 {
-		t.Fatalf("the exchange canceled at shutdown yielded a token: %d revocations, %d profile fetches", len(revoked), profiles)
-	}
-	if len(h.svc.registry.pending) != 0 || len(h.svc.registry.sessions) != 0 {
-		t.Fatal("a token is still held after shutdown")
-	}
-	if row := h.connection(h.user.ID); row.found {
-		t.Fatalf("a callback that failed at shutdown committed a connection: %+v", row)
+	for _, tc := range []struct {
+		name      string
+		arrange   func(h *harness)
+		delivered bool
+	}{
+		{"signal before the token response", func(h *harness) {
+			h.onceBeforeToken(func() {
+				h.svc.registry.close()
+				ctx, cancel := context.WithTimeout(context.Background(), raceWait)
+				defer cancel()
+				if err := h.svc.registry.wait(ctx); err != nil {
+					h.t.Errorf("the canceled exchange was still running when the token response was written: %v", err)
+				}
+			})
+		}, false},
+		{"signal after the token response", func(h *harness) {
+			hold := h.svc.client.hold
+			h.svc.client.hold = func(value string) *heldToken {
+				h.svc.registry.close()
+				return hold(value)
+			}
+		}, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newHarness(t)
+			tc.arrange(h)
+			requireOutcome(t, h.connect(h.raw, h.session), outcomeFailed)
+			h.drain()
+			tokens, revoked, _, profiles := h.gh.snapshot()
+			if len(tokens) != 1 {
+				t.Fatalf("the stub issued %d tokens, want 1", len(tokens))
+			}
+			want := []string{}
+			if tc.delivered {
+				want = tokens
+			}
+			if !slices.Equal(revoked, want) {
+				t.Fatalf("revoked %d tokens, want %d: every token the exchange yielded is revoked once and an undelivered one is never sent", len(revoked), len(want))
+			}
+			if profiles != 0 {
+				t.Fatalf("profile fetches after the signal = %d, want 0", profiles)
+			}
+			if len(h.svc.registry.pending) != 0 || len(h.svc.registry.sessions) != 0 {
+				t.Fatal("a token is still held after shutdown")
+			}
+			if row := h.connection(h.user.ID); row.found {
+				t.Fatalf("a callback that failed at shutdown committed a connection: %+v", row)
+			}
+		})
 	}
 }
 

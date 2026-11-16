@@ -60,18 +60,16 @@ type registry struct {
 	inflight int
 	idle     []chan struct{}
 	ttl      time.Duration
-	now      func() time.Time
 	revoke   func(token string)
 	observe  func()
 }
 
-func newRegistry(ttl time.Duration, now func() time.Time, revoke func(token string)) *registry {
+func newRegistry(ttl time.Duration, revoke func(token string)) *registry {
 	return &registry{
 		sessions: map[uuid.UUID]*liveSession{},
 		pending:  map[*heldToken]struct{}{},
 		issuing:  map[*issue]struct{}{},
 		ttl:      ttl,
-		now:      now,
 		revoke:   revoke,
 	}
 }
@@ -121,7 +119,7 @@ func (r *registry) release(token *heldToken) {
 	r.spawn(claimed)
 }
 
-func (r *registry) install(account uuid.UUID, token *heldToken, epoch, generation int64) (*liveSession, bool) {
+func (r *registry) install(account uuid.UUID, token *heldToken, epoch, generation int64, now time.Time) (*liveSession, bool) {
 	r.observed()
 	r.mu.Lock()
 	if _, pending := r.pending[token]; r.closed || !pending {
@@ -134,7 +132,7 @@ func (r *registry) install(account uuid.UUID, token *heldToken, epoch, generatio
 		previous.timer.Stop()
 		claimed = r.claimLocked(previous.token, claimed)
 	}
-	session := &liveSession{token: token, epoch: epoch, generation: generation, expiresAt: r.now().Add(r.ttl)}
+	session := &liveSession{token: token, epoch: epoch, generation: generation, expiresAt: now.Add(r.ttl)}
 	session.timer = time.AfterFunc(r.ttl, func() { r.endSession(account, session) })
 	r.sessions[account] = session
 	r.mu.Unlock()
