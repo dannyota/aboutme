@@ -12,10 +12,10 @@ const legal = computed(() => legalCopy[props.locale]);
     :data-testid="testid"
   >
     {{ legal.agreement[0] }}<NuxtLink
-      class="text-primary underline underline-offset-4"
+      class="text-link underline underline-offset-4"
       to="/terms"
     >{{ legal.termsLink }}</NuxtLink>{{ legal.agreement[1] }}<NuxtLink
-      class="text-primary underline underline-offset-4"
+      class="text-link underline underline-offset-4"
       to="/privacy"
     >{{ legal.privacyLink }}</NuxtLink>{{ legal.agreement[2] }}
   </p>
