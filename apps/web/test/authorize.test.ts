@@ -68,6 +68,39 @@ beforeEach(() => {
   });
 });
 
+describe('/authorize identity', () => {
+  it('shows one bordered card with hairline scope rows and pill actions',
+    async () => {
+      const wrapper = await mountSuspended(AuthorizePage, { route: route() });
+      await flushPromises();
+      const card = wrapper.get('[data-testid="authorize-page"]');
+      for (const name of [
+        'max-w-[32rem]', 'rounded-[var(--radius-card)]', 'border',
+        'border-border', 'bg-card',
+      ]) {
+        expect(card.classes(), name).toContain(name);
+      }
+      expect(card.classes().join(' ')).not.toMatch(/shadow/u);
+      expect(card.get('h1').classes()).toEqual(
+        ['text-2xl', 'font-extrabold', 'tracking-[-0.02em]'],
+      );
+      const scopes = wrapper.get('[data-testid="consent-scopes"]');
+      for (const name of ['divide-y', 'divide-hairline', 'border-y',
+        'border-hairline']) {
+        expect(scopes.classes(), name).toContain(name);
+      }
+      const approve = wrapper.get('[data-decision="approve"]');
+      const deny = wrapper.get('[data-decision="deny"]');
+      expect(approve.attributes('data-variant')).toBeUndefined();
+      expect(approve.classes()).toContain('bg-primary');
+      expect(deny.attributes('data-variant')).toBe('outline');
+      for (const button of [approve, deny]) {
+        expect(button.classes()).toContain('rounded-full');
+        expect(button.classes()).not.toContain('h-9');
+      }
+    });
+});
+
 describe('/authorize', () => {
   for (const language of ['vi', 'en'] as const) {
     it(`signs in without an oversized next in ${language}`, async () => {

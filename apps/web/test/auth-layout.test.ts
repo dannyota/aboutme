@@ -69,6 +69,95 @@ describe('AuthLayout', () => {
   });
 });
 
+describe('AuthLayout identity', () => {
+  beforeEach(() => setSiteLocale('en'));
+
+  it('lays out the form beside a panel with no outer card', async () => {
+    const wrapper = await mountSuspended(LoginPage);
+    await flushPromises();
+    const page = wrapper.get('[data-testid="login-page"]');
+    const main = page.classes();
+
+    for (const name of [
+      'max-w-[26rem]', 'lg:grid', 'lg:max-w-[79rem]',
+      'lg:grid-cols-[5fr_6fr]',
+    ]) {
+      expect(main, name).toContain(name);
+    }
+    for (const node of [page, ...page.findAll('div')]) {
+      const classes = node.classes().join(' ');
+      expect(classes).not.toMatch(
+        /shadow-\[var\(--shadow-product\)\]|radius-feature|lg:bg-card/u,
+      );
+      expect(classes).not.toMatch(/(?:^|\s)lg:border(?:\s|$)/u);
+    }
+    const form = page.get('[data-auth-form]');
+    expect(form.classes()).toContain('lg:col-start-2');
+    expect(form.get('div').classes()).toContain('max-w-[26rem]');
+  });
+
+  it('paints the brand panel on --panel with the panel radius', async () => {
+    const wrapper = await mountSuspended(LoginPage);
+    await flushPromises();
+    const panel = wrapper.get('[data-testid="auth-brand-panel"]');
+
+    for (const name of [
+      'bg-panel', 'text-panel-foreground', 'rounded-[var(--radius-panel)]',
+      'overflow-hidden', 'hidden', 'lg:flex', 'lg:col-start-1',
+    ]) {
+      expect(panel.classes(), name).toContain(name);
+    }
+    expect(panel.get('[data-logo-size]').attributes('data-logo-size'))
+      .toBe('md');
+    expect(panel.find('[data-app-seal]').exists()).toBe(false);
+    const statement = panel.get('[data-auth-statement]');
+    for (const name of ['text-2xl', 'font-extrabold', 'tracking-[-0.02em]']) {
+      expect(statement.classes(), name).toContain(name);
+    }
+    const points = panel.findAll('li');
+    expect(points).toHaveLength(3);
+    for (const point of points) {
+      const coin = point.get('[data-auth-coin]');
+      for (const name of [
+        'size-7', 'rounded-full', 'bg-coin', 'text-coin-ink',
+      ]) {
+        expect(coin.classes(), name).toContain(name);
+      }
+      expect(coin.find('svg').exists()).toBe(true);
+    }
+    const art = panel.get('[data-auth-illustration]');
+    expect(art.attributes('aria-hidden')).toBe('true');
+    expect(art.get('[data-auth-sheet]').classes()).toContain('bg-paper');
+    expect(art.get('[data-auth-sheet]').classes()).toContain('-rotate-3');
+    expect(art.get('[data-auth-lock]').classes()).toContain('bg-coin');
+  });
+
+  it('gives the panel logo its inverse mark and drops removed tokens', () => {
+    const source = readFileSync(
+      join(appRoot, 'components/auth/AuthLayout.vue'), 'utf8',
+    );
+    expect(source).toContain('color: var(--logo-mark-inverse);');
+    expect(source).not.toMatch(
+      /surface-blue|brand-indigo|brand-ochre|gradient|bg-white/u,
+    );
+    expect(source).not.toMatch(/shadow-product|radius-feature/u);
+    expect(source).not.toMatch(/#[\da-f]{3,8}\b/iu);
+  });
+
+  it('sets every heading at 32/1.3 weight 800 with no rule and full-width '
+    + '48 px submit pills', () => {
+    for (const path of authPages) {
+      const source = readFileSync(join(appRoot, path), 'utf8');
+      const heading = /<h1\s+class="([^"]+)"/u.exec(source)?.[1] ?? '';
+      expect(heading, path).toBe('text-2xl font-extrabold tracking-[-0.02em]');
+      expect(source, path).not.toMatch(/\bh-9\b/u);
+      for (const match of source.matchAll(/<Button\s[^>]*?type="submit"/gu)) {
+        expect(match[0], path).toMatch(/class="[^"]*\bh-12 w-full\b/u);
+      }
+    }
+  });
+});
+
 describe('auth page source guard', () => {
   it('uses AuthLayout with its page testid and drops text-primary', () => {
     for (const path of authPages) {
