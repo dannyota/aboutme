@@ -45,6 +45,7 @@ Open items that outlived their shipped plans. One line each, with the evidence t
 - The ci-tools package still carries the `hashicorp/aws` OpenTofu provider (`.github/actions/ci-tools/action.yml`, `scripts/test/workflow-safety-test.sh`) that only the removed `deploy/aws` roots used. Drop it at the next package republish.
 - The ops tag and `/readyz` descriptions in `docs/api/openapi.yaml` (lines 57 and 307) still name ECS and CloudFront as health-check users, which production no longer has. Fix both descriptions with the regenerated web API client (`apps/web/app/api/generated/openapi.ts`) in one backend change.
 - `deploy/vn/scripts/cutover.sh` still calls the AWS CLI (`aws rds`, `aws ssm`, `aws ecs`) for the AWS-to-Vietnam cutover that finished on 2026-10-11 with v0.7.3. Remove the AWS steps, or the script with its tests (`deploy/vn/tests/cutover-ssh-failure-test.sh`, `workload-lock-test.sh`), in one devops change.
+- `deploy/vn/scripts/deploy.sh` reuses one ssh ControlMaster with no `ServerAliveInterval`, so a long quiet step can hang on a dead connection: the first v0.9.13 deploy waited about 57 minutes in `deploy-host.sh … pull` after the host had pulled every image, and its failure path then could not run `fence.sh release` over the broken mux (exit 255, production unchanged, rerun clean). Add keepalive options and a bound on each remote step, with a test.
 
 ## Production acceptance
 
