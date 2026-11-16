@@ -182,10 +182,11 @@ day, with verified commit/SHA-256 manifests. Export `server`,
 `render-browser-supervisor`, `migrate`, `db-setup` from `server` with
 `CGO_ENABLED=0`, `-trimpath`, `-ldflags="-s -w"`, linux/amd64. Export complete
 production `make web-build` `.output/` from `web`. No smoke builds/installs,
-development server or startup mocks. Mount artifacts read-only in pinned
-Playwright/Node bases from `deploy/{server,web}.Dockerfile`; use the PostgreSQL
-pin in `deploy/compose.yml`, matching build digests and real supervisor/browser
-paths. This tests binaries, not release images.
+development server or startup mocks. Mount artifacts read-only in the pinned
+Playwright image that `deploy/server.Dockerfile` copies Chromium from and the
+pinned Node runtime base of `deploy/web.Dockerfile`; use the PostgreSQL pin in
+`deploy/compose.yml`, matching build digests and real supervisor/browser paths.
+This tests binaries, not release images.
 
 | Phase          | Deadline and required evidence                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

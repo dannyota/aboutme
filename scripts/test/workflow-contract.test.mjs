@@ -506,6 +506,20 @@ test("selector checks old modes on deletions and renames", () => {
 });
 
 const imageCheck = "./.github/actions/release-image-check";
+const serverContentsChecks = [
+  "docker image inspect --format '{{.Size}}' \"$IMAGE\"",
+  "--user 0:0",
+  "sha256sum \"$chrome\"",
+  "dpkg-query -W",
+  "find / -xdev",
+  "-iname \"*firefox*\"",
+  "-iname \"*webkit*\"",
+  "-iname \"*ffmpeg*\"",
+  "-iname \"*yarn*\"",
+  "-iname \"*headless[-_]shell*\"",
+  "runuser -u pwuser -- find /ms-playwright /opt/chromium -writable -print",
+  "for tool in node npm npx corepack yarn",
+];
 const readImageCheck = () => parseYaml(read(`${imageCheck.slice(2)}/action.yml`), imageCheck).toJS();
 
 test("image scans share one cached vulnerability database per workflow run", () => {
@@ -625,6 +639,12 @@ test("release contracts reject authority, dependency, timeout, and signing drift
     ["shared scan omitted", (_manual, _release, action) => { action.runs.steps.find((step) => step.id === "scan-image").run = "true"; }, /scan command/],
     ["shared command probe ignored", (_manual, _release, action) => { action.runs.steps.find((step) => step.id === "probe-host-operation-dispatch")["continue-on-error"] = true; }, /must block/],
     ["shared command probe skipped", (_manual, _release, action) => { action.runs.steps.find((step) => step.id === "probe-host-operation-dispatch").if = "false"; }, /server-only check/],
+    ["server contents check ignored", (_manual, _release, action) => { action.runs.steps.find((step) => step.id === "check-server-runtime-contents")["continue-on-error"] = true; }, /must block/],
+    ["server contents check skipped", (_manual, _release, action) => { action.runs.steps.find((step) => step.id === "check-server-runtime-contents").if = "false"; }, /server-only check/],
+    ...serverContentsChecks.map((text) => [`server contents check without ${text}`, (_manual, _release, action) => {
+      const step = action.runs.steps.find((candidate) => candidate.id === "check-server-runtime-contents");
+      step.run = step.run.replaceAll(text, "");
+    }, /server runtime contents/]),
     ["shared publication", (_manual, _release, action) => { action.runs.steps.push({ run: 'docker push "$IMAGE"' }); }, /build-only/],
   ];
   for (const [name, mutate, diagnostic] of fixtures) {
@@ -645,7 +665,7 @@ test("release contracts reject authority, dependency, timeout, and signing drift
   }
 });
 
-test("app build, smoke, command probe, or scan failure prevents a push", () => {
+test("app build, smoke, command probe, contents, or scan failure prevents a push", () => {
   const steps = readImageCheck().runs.steps.filter((step) => step.run);
   const directory = mkdtempSync(join(tmpdir(), "release-check-contract-"));
   const trace = join(directory, "trace");
@@ -667,6 +687,11 @@ docker() {
     build) [ "$FAIL_STAGE" != build ] ;;
     inspect) printf 'linux/%s\\n' "$ARCH" ;;
     run)
+      if [[ $* == *"--user 0:0"* ]]; then
+        printf 'contents\\n' >> "$TRACE_FILE"
+        [ "$FAIL_STAGE" != contents ]
+        return
+      fi
       if [[ $* == *"--entrypoint /usr/local/bin/server"* ]]; then
         local probe code output
         case "\${*:8}" in
@@ -701,7 +726,7 @@ docker() {
   try {
     for (const name of ["caddy", "server"]) {
       for (const arch of ["arm64", "amd64"]) {
-        for (const stage of ["none", "build", "smoke", "scan", "probe-usage", "probe-status", "probe-queue", "probe-reencrypt", "probe-output", "probe-timeout"]) {
+        for (const stage of ["none", "build", "smoke", "scan", "probe-usage", "probe-status", "probe-queue", "probe-reencrypt", "probe-output", "probe-timeout", "contents"]) {
           rmSync(trace, { force: true });
           const result = spawnSync("bash", ["-e", "-o", "pipefail", "-c", script], {
             cwd: directory,
@@ -710,7 +735,7 @@ docker() {
             encoding: "utf8", timeout: 5000,
           });
           assert.ifError(result.error);
-          const succeeds = stage === "none" || (name !== "server" && stage.startsWith("probe-"));
+          const succeeds = stage === "none" || (name !== "server" && (stage.startsWith("probe-") || stage === "contents"));
           assert.equal(result.status, succeeds ? 0 : 1, `${name}/${arch}/${stage}: ${result.stderr}`);
           const commands = readFileSync(trace, "utf8").trim().split("\n");
           assert.equal(commands.includes("push"), succeeds, `${name}/${arch}/${stage}: publication`);
@@ -721,12 +746,90 @@ docker() {
             assert.deepEqual(commands.filter((command) => command.startsWith("probe ")),
               name === "server" ? ["probe usage", "probe status", "probe queue", "probe reencrypt"] : [],
               `${name}/${arch}/${stage}: server-only dispatch probes`);
+            assert.equal(commands.includes("contents"), name === "server", `${name}/${arch}/${stage}: server-only contents check`);
           }
         }
       }
     }
   } finally {
     rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+const serverRuntimePackages = [
+  "ca-certificates", "fonts-freefont-ttf", "fonts-ipafont-gothic", "fonts-liberation", "fonts-noto-color-emoji",
+  "fonts-tlwg-loma-otf", "fonts-unifont", "fonts-wqy-zenhei", "libasound2t64", "libatk-bridge2.0-0t64",
+  "libatk1.0-0t64", "libatspi2.0-0t64", "libcairo2", "libcups2t64", "libdbus-1-3", "libdrm2", "libfontconfig1",
+  "libfreetype6", "libgbm1", "libglib2.0-0t64", "libnspr4", "libnss3", "libpango-1.0-0", "libx11-6", "libxcb1",
+  "libxcomposite1", "libxdamage1", "libxext6", "libxfixes3", "libxkbcommon0", "libxrandr2", "wget",
+  "xfonts-cyrillic", "xfonts-scalable",
+];
+const chromiumModes = [
+  "RUN find /ms-playwright/chromium-1248 -type d -exec chmod 0755 {} + \\",
+  "    && find /ms-playwright/chromium-1248 -type f -exec sh -c 'for file; do \\",
+  "        case \"$(head -c 4 \"$file\" | od -An -tx1 | tr -d \" \\n\")\" in \\",
+  "            7f454c46|2321*) chmod 0755 \"$file\" ;; \\",
+  "            *) chmod 0644 \"$file\" ;; \\",
+  "        esac; \\",
+  "    done' sh {} +",
+].join("\n");
+
+function checkServerDockerfile(text) {
+  const stages = [...text.matchAll(/^FROM (\S+)(?: AS (\S+))?$/gm)].map((match) => ({ image: match[1], name: match[2] }));
+  assert.deepEqual(stages.map((stage) => stage.name), ["build", "chromium", "runtime"], "server stages");
+  const image = Object.fromEntries(stages.map((stage) => [stage.name, stage.image]));
+  assert.match(image.chromium, /^mcr\.microsoft\.com\/playwright:v[0-9.]+-noble@sha256:[0-9a-f]{64}$/, "Chromium source is the pinned Playwright image");
+  assert.match(image.runtime, /^docker\.io\/library\/ubuntu:noble(-[0-9]{8}(\.[0-9]+)?)?@sha256:[0-9a-f]{64}$/, "runtime base is digest-pinned Ubuntu noble");
+  const chromium = text.slice(text.indexOf(`FROM ${image.chromium} AS chromium`), text.indexOf(`FROM ${image.runtime} AS runtime`));
+  assert.equal(chromium.trim(), `FROM ${image.chromium} AS chromium\n\n${chromiumModes}`, "Chromium tree is not writable by group or others");
+  const runtime = text.slice(text.indexOf(`FROM ${image.runtime} AS runtime`));
+  assert.deepEqual(runtime.match(/^ARG UBUNTU_SNAPSHOT=.*$/gm), ["ARG UBUNTU_SNAPSHOT=20261114T000000Z"], "one fixed Ubuntu snapshot");
+  assert.ok(runtime.includes("'URIs: https://snapshot.ubuntu.com/ubuntu/'\"${UBUNTU_SNAPSHOT}\"/"), "apt reads only the snapshot");
+  assert.deepEqual(runtime.match(/from=chromium\S*/g), [
+    "from=chromium,source=/etc/ssl/certs/ca-certificates.crt,target=/run/bootstrap-ca.crt",
+    "from=chromium",
+  ], "the Playwright stage lends only its CA bundle and Chromium");
+  assert.deepEqual(runtime.match(/^COPY --from=chromium .*$/gm), ["COPY --from=chromium --chown=0:0 /ms-playwright/chromium-1248 /ms-playwright/chromium-1248"], "only the pinned Chromium build is copied, owned by root");
+  assert.deepEqual((runtime.match(/\$apt [^\\\n]*/g) ?? []).map((command) => command.trim()), ["$apt update", "$apt -y --no-install-recommends upgrade", "$apt -y --no-install-recommends install"], "apt commands");
+  assert.match(runtime, /&& rm -rf \/var\/lib\/apt\/lists\/\* \\\n/, "apt lists are removed");
+  const install = runtime.match(/\$apt -y --no-install-recommends install \\\n((?:\s+[^\s&\\]+(?: [^\s&\\]+)* \\\n)+)/);
+  assert.ok(install, "install package list");
+  assert.deepEqual(install[1].trim().split(/[\s\\]+/).filter(Boolean), serverRuntimePackages, "runtime packages");
+  assert.ok(runtime.includes("groupadd --gid 1001 pwuser"), "pwuser group");
+  assert.ok(runtime.includes("useradd --uid 1001 --gid 1001 --groups users --comment ',,,' --create-home --shell /bin/bash pwuser"), "pwuser identity");
+  assert.ok(runtime.includes("ENV CHROMIUM_PATH=/opt/chromium/chrome TZ=UTC LANG=C.UTF-8 LC_ALL=C.UTF-8\n"), "runtime environment");
+  assert.match(runtime, /\nUSER pwuser\n/, "runtime user");
+  assert.doesNotMatch(runtime, /node|npm|npx|corepack|yarn|firefox|webkit|ffmpeg|headless/i, "no Node.js, Yarn, Firefox, WebKit, FFmpeg or headless shell");
+}
+
+test("server runtime is pinned Ubuntu noble with only Playwright's Chromium", () => {
+  const dockerfile = read("deploy/server.Dockerfile");
+  checkServerDockerfile(dockerfile);
+  const runtimeFrom = dockerfile.match(/^FROM \S+ AS runtime$/m)[0];
+  const fixtures = [
+    ["Playwright runtime", (text) => text.replace(runtimeFrom, runtimeFrom.replace(/\S+(?= AS runtime)/, text.match(/^FROM (\S+) AS chromium$/m)[1])), /Ubuntu noble/],
+    ["unpinned runtime", (text) => text.replace(runtimeFrom, "FROM docker.io/library/ubuntu:noble AS runtime"), /Ubuntu noble/],
+    ["whole Playwright tree", (text) => text.replace("--chown=0:0 /ms-playwright/chromium-1248 /ms-playwright/chromium-1248", "--chown=0:0 /ms-playwright /ms-playwright"), /pinned Chromium build/],
+    ["extra Playwright copy", (text) => text.replace("\nCOPY --from=build /out/server", "\nCOPY --from=chromium /usr/bin/node /usr/bin/node\nCOPY --from=build /out/server"), /CA bundle and Chromium/],
+    ["live archive", (text) => text.replace("https://snapshot.ubuntu.com/ubuntu/'\"${UBUNTU_SNAPSHOT}\"/", "http://archive.ubuntu.com/ubuntu/"), /snapshot/],
+    ["moving snapshot", (text) => text.replace("ARG UBUNTU_SNAPSHOT=20261114T000000Z", "ARG UBUNTU_SNAPSHOT"), /fixed Ubuntu snapshot/],
+    ["recommends", (text) => text.replace("$apt -y --no-install-recommends install", "$apt -y install"), /apt commands/],
+    ["apt lists kept", (text) => text.replace("&& rm -rf /var/lib/apt/lists/* \\\n", "\\\n"), /apt lists/],
+    ["extra package", (text) => text.replace("libxrandr2 wget", "libxrandr2 wget nodejs"), /runtime packages|Node\.js/],
+    ["dropped font", (text) => text.replace(" fonts-noto-color-emoji", ""), /runtime packages/],
+    ["X server", (text) => text.replace("xfonts-scalable \\\n", "xfonts-scalable xvfb \\\n"), /runtime packages/],
+    ["copied Chromium modes", (text) => text.replace(chromiumModes, ""), /not writable/],
+    ["world-writable Chromium files", (text) => text.replace("chmod 0644", "chmod 0666"), /not writable/],
+    ["group-writable Chromium directories", (text) => text.replace("-type d -exec chmod 0755", "-type d -exec chmod 0775"), /not writable/],
+    ["Chromium owner", (text) => text.replace(" --chown=0:0", ""), /owned by root/],
+    ["changed user", (text) => text.replace("--uid 1001", "--uid 1000"), /pwuser identity/],
+    ["root runtime", (text) => text.replace("\nUSER pwuser\n", "\n"), /runtime user/],
+    ["changed environment", (text) => text.replace("TZ=UTC ", ""), /runtime environment/],
+  ];
+  for (const [name, mutate, diagnostic] of fixtures) {
+    const mutated = mutate(dockerfile);
+    assert.notEqual(mutated, dockerfile, `${name}: fixture applies`);
+    assert.throws(() => checkServerDockerfile(mutated), diagnostic, name);
   }
 });
 
@@ -819,16 +922,20 @@ function checkReleaseContracts(manual, release, action) {
   assert.deepEqual(release.jobs.eligibility.permissions, { contents: "read", actions: "read" });
   assert.deepEqual(release.jobs.release.permissions, { actions: "read", contents: "write" });
   assert.equal(action.runs.using, "composite");
-  assert.deepEqual(action.runs.steps.map((step) => step.id), ["load-ci-tools", "build-release-image", "smoke-test-release-image", "probe-host-operation-dispatch", "install-trivy", "download-trivy-db", "scan-image", "upload-trivy-report"], "shared build-only steps");
+  assert.deepEqual(action.runs.steps.map((step) => step.id), ["load-ci-tools", "build-release-image", "smoke-test-release-image", "probe-host-operation-dispatch", "check-server-runtime-contents", "install-trivy", "download-trivy-db", "scan-image", "upload-trivy-report"], "shared build-only steps");
   assert.equal(action.runs.steps[0].uses, "./.github/actions/ci-tools", "Trivy comes from the ci-tools package");
   for (const step of action.runs.steps) {
     assert.equal(step["continue-on-error"], undefined, `${step.name}: must block on failure`);
-    if (step.id === "probe-host-operation-dispatch") {
+    if (["probe-host-operation-dispatch", "check-server-runtime-contents"].includes(step.id)) {
       assert.equal(step.if, "env.NAME == 'server'", `${step.name}: server-only check`);
     } else {
       assert.equal(step.if, step.id === "upload-trivy-report" ? "always()" : undefined, `${step.name}: unconditional check`);
     }
     if (step.run) assert.equal(step.shell, "bash");
+  }
+  const contents = action.runs.steps.find((step) => step.id === "check-server-runtime-contents");
+  for (const text of serverContentsChecks) {
+    assert.ok(contents.run.includes(text), `server runtime contents: ${text}`);
   }
   const scan = action.runs.steps.find((step) => step.id === "scan-image");
   assert.equal(scan.env.REPORT_NAME, "${{ inputs.report-name }}");
