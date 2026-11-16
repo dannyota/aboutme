@@ -19,7 +19,7 @@
 #     own — app/api/generated/ holds generated files and nothing else.
 #
 # Generation itself goes through openapi-gen.sh, the same script
-# `npm run api:gen` uses, so the gate can never check a different
+# `pnpm run api:gen` uses, so the gate can never check a different
 # invocation than the one that produces the artifact.
 set -Eeuo pipefail
 

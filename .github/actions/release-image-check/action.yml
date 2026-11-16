@@ -79,6 +79,35 @@ runs:
           account-delete status 018f5b6a-9a3e-7c21-8b1e-000000000030
         probe 2 'usage: server media-deletion-status' media-deletion-status extra
         probe 1 'usage: server totp-key-reencrypt' totp-key-reencrypt extra
+    - name: Check server runtime contents
+      id: check-server-runtime-contents
+      if: env.NAME == 'server'
+      shell: bash
+      run: |
+        size=$(docker image inspect --format '{{.Size}}' "$IMAGE")
+        printf 'image size bytes: %s\n' "$size"
+        docker run --rm --network none --user 0:0 --entrypoint sh "$IMAGE" -c '
+          set -eu
+          chrome=$(readlink -f /opt/chromium/chrome)
+          sha256sum "$chrome"
+          dpkg-query -W
+          forbidden=$(find / -xdev \( -iname "*firefox*" -o -iname "*webkit*" -o -iname "*ffmpeg*" \
+            -o -iname "*yarn*" -o -iname "*headless[-_]shell*" \) -print)
+          if [ -n "$forbidden" ]; then
+            printf "%s\n" "$forbidden" | sed "s/^/forbidden runtime path: /" >&2
+            exit 1
+          fi
+          writable=$(runuser -u pwuser -- find /ms-playwright /opt/chromium -writable -print)
+          if [ -n "$writable" ]; then
+            printf "%s\n" "$writable" | sed "s/^/writable by pwuser: /" >&2
+            exit 1
+          fi
+          for tool in node npm npx corepack yarn; do
+            if found=$(command -v "$tool"); then
+              printf "forbidden tool on PATH: %s\n" "$found" >&2
+              exit 1
+            fi
+          done'
     - name: Install Trivy
       id: install-trivy
       shell: bash

@@ -24,6 +24,8 @@ Authenticated requests run client-side. Controllers supply authorized render inp
 
 `scripts/ui-add.sh` generates UI primitives. Repository `scripts/generate-web-e2e-source-manifest.sh` writes `scripts/web-e2e-source.manifest`; the primary regenerates it when source coverage changes. Public-root generation is mapped in the [scripts guide](../../scripts/AGENTS.md).
 
+`apps/web` is a member of the root [pnpm workspace](../../docs/design/pnpm-workspace.md) and takes `@aboutme/schema` through `workspace:*`. Install from the repository root with `pnpm install --frozen-lockfile`, and run package scripts here with `pnpm run <script>` or binaries with `pnpm exec <bin>`; both refuse stale dependencies.
+
 ## Authorities and checks
 
 Read [web rules](../../instructions/web.md), [web design](../../docs/design/web.md), [localization](../../docs/design/localization.md), and [renderer architecture](../../docs/architecture/rendering-and-editor.md). [ADR 0019](../../docs/adr/0019-application-ui-toolkit.md) owns UI primitives.

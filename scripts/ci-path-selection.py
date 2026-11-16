@@ -11,7 +11,7 @@ MANIFEST = "scripts/web-e2e-source.manifest"
 WEB_FILES = {MANIFEST, "scripts/web-e2e-source.sh",
              "scripts/generate-web-e2e-source-manifest.sh",
              "scripts/collect-browser-diagnostics.py", "Makefile", ".tool-versions", ".gitignore",
-             "package.json", "package-lock.json"}
+             "package.json", "pnpm-lock.yaml"}
 
 
 def git(arguments, deadline):

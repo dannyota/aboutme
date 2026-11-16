@@ -81,7 +81,8 @@ Each part holds whole sections of this spec.
 | ------------------------------------------------------------------------------ | ---------------------------------------------------------- |
 | [Logo and seal](docs/design/ui/identity-and-seal.md)                           | Logo; Seal and state marks                                 |
 | [Typography and tokens](docs/design/ui/typography-and-tokens.md)               | Typography and tokens                                      |
-| [Landing and Library](docs/design/ui/landing-and-library.md)                   | Landing; Library; Community showcase                       |
+| [Home page](docs/design/ui/home-page.md)                                       | Home page identity, tokens, and layout                     |
+| [Landing and Library](docs/design/ui/landing-and-library.md)                   | Library; Community showcase                                |
 | [Library filters](docs/design/ui/library-filters.md)                           | Proposed Library rows, phone sheet, and filter behavior    |
 | [Community showcase](docs/design/ui/showcase.md)                               | Community showcase page layout                             |
 | [Shell and editor](docs/design/ui/shell-and-editor.md)                         | Authenticated chrome and editor                            |

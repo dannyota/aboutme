@@ -505,9 +505,13 @@ try:
     verify_manifest(artifacts, expected)
     _, platform = command(['uname', '-s'])
     require(platform == 'Linux', 'linux_required')
-    for component, base in (('server', server_base), ('web', web_base)):
-        pins = re.findall(r'^FROM (\S+) AS runtime$', (repo / ('deploy/' + component + '.Dockerfile')).read_text(), re.M)
-        require(pins == [base], 'base_pin_mismatch')
+    server_dockerfile = (repo / 'deploy/server.Dockerfile').read_text()
+    web_dockerfile = (repo / 'deploy/web.Dockerfile').read_text()
+    for pattern, text, base in ((r'^FROM (\S+) AS chromium$', server_dockerfile, server_base),
+                                (r'^FROM (\S+) AS runtime$', web_dockerfile, web_base)):
+        require(re.findall(pattern, text, re.M) == [base], 'base_pin_mismatch')
+    chromium = re.findall(r'^COPY --from=chromium --chown=0:0 (/ms-playwright/chromium-[0-9]+) \1$', server_dockerfile, re.M)
+    require(len(chromium) == 1, 'chromium_pin_refused')
     engine_host, engine_env = local_engine()
     # The checked copy is the only tree mounted into containers.
     work = Path(tempfile.mkdtemp(prefix='aboutme-runtime-'))
@@ -556,7 +560,7 @@ try:
                   DATABASE_URL=dsn.replace('smoke@', 'aboutme_app@'), PGPASSWORD=app,
                   PUBLIC_ORIGIN='https://smoke.invalid', PUBLIC_RENDER_ORIGIN='http://127.0.0.1:3000',
                   TRUSTED_PROXY_CIDRS='127.0.0.1/32', MEDIA_BACKEND='fs', MEDIA_FS_DIR='/media',
-                  PRINT_LISTEN_ADDR='127.0.0.1:8081', CHROMIUM_PATH='/ms-playwright/chromium-1248/chrome-linux64/chrome',
+                  PRINT_LISTEN_ADDR='127.0.0.1:8081', CHROMIUM_PATH=chromium[0] + '/chrome-linux64/chrome',
                   APP_BUILD_DIGEST='sha256:' + evidence['artifact_sha256'],
                   PUBLIC_RENDERER_BUILD_DIGEST='sha256:' + evidence['artifact_sha256'],
                   TOTP_ACTIVE_KEY=key(), VIEW_PASS_KEY=key(), PASSWORD_RATE_HMAC_KEY=key(),

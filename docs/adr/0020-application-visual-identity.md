@@ -1,7 +1,8 @@
 # 0020: Application visual identity: the seal, the aurora canvas, and the resume ground
 
-Status: Accepted (2026-09-04, 2026-09-24, 2026-09-27, 2026-09-28, 2026-11-01).
-The owner chose each direction, including the public page color scheme below.
+Status: Accepted (2026-09-04, 2026-09-24, 2026-09-27, 2026-09-28, 2026-11-01,
+2026-11-15). The owner chose each direction, including the public page color
+scheme below.
 
 ## Context
 
@@ -20,7 +21,35 @@ as an alert rather than a stamp on paper.
 
 ## Decision
 
-Colorful product UI, calm white resume, and one red that means public.
+Colorful product UI, calm white resume, and one mark that means public.
+
+**The 2026-11-15 identity.** The owner chose a warmer, friendlier identity for
+the application chrome. It ships in two stages at most one release apart: the
+home page first, then every other chrome surface
+([home page spec](../design/ui/home-page.md#scope)). Where this paragraph and
+the rules below disagree, this paragraph wins on the home page now and
+everywhere after the second stage, which also rewrites the rules below.
+
+- **Ground and ink.** White `#FFFFFF` with indigo text `#1A1650`; dark theme
+  `#0F0D26` with `#F3F1FF`. No gradients and no glows.
+- **One brand fill.** Lotus pink-red `#DE1B5A` with white text, hover `#C7134D`,
+  is `--primary` and `--seal`. Pink words and thin strokes are `#C7134D` light
+  and `#FF7AA2` dark. Supporting surfaces are mist, blush, and sun tints, and a
+  coin yellow `#FFD23F` with indigo ink. The focus ring has its own token.
+- **One mark, one meaning** replaces "one red, one meaning". Public is the seal
+  ticket: its shape, tilt, uppercase word, and link. No other element takes that
+  shape, and only the Publish button carries the ring "a".
+- **Typeface.** Plus Jakarta Sans is the chrome typeface. Be Vietnam Pro stays
+  for the resume and the seal.
+- **Shape.** Large rounded panels and cards on the page, pill buttons; inputs
+  keep 10 px, dialogs 14 px, and the sheet 2 px.
+- **Logo.** The shapes are unchanged. The wordmark takes the text color, and the
+  mark and the dot before "vn" take the brand pink.
+- **The maker speaks.** The home page ends with the maker's first-person
+  introduction and his own picture.
+- **Unchanged.** State is a mark, the 8 px module, nothing animates on load, the
+  landing shows the product, renderer isolation, the public page color scheme,
+  and the destructive hue.
 
 **Principles.**
 
@@ -160,6 +189,14 @@ otherwise for the public page on screen.
   the page bar, the scheme, and the dark palette rule.
 
 ## History
+
+### Amendment: the 2026-11-15 identity
+
+Accepted by the owner on 2026-11-15 from three home page mockups: white ground,
+indigo ink, one lotus pink-red brand fill that is also the seal color, Plus
+Jakarta Sans, rounded panels and pill buttons, and the maker's introduction with
+his picture. The home page takes it first; the rest of the chrome follows within
+one release.
 
 ### Amendment: Display assertions (2026-11-01)
 

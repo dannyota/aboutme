@@ -94,7 +94,8 @@ Current behavior lives in code, deployment configuration, and
 | Other   | [Showcase copy](showcase-copy.md)                                      | Approved bilingual interface and legal text                                   |
 | Other   | [UI: logo and seal](ui/identity-and-seal.md)                           | Logo, public seal, and state marks                                            |
 | Other   | [UI: typography and tokens](ui/typography-and-tokens.md)               | Chrome type, color tokens, spacing, radius, buttons, dialogs                  |
-| Other   | [UI: landing and Library](ui/landing-and-library.md)                   | Landing page and template Library layout                                      |
+| Other   | [UI: home page](ui/home-page.md)                                       | Home page identity, tokens, layout, and staged rollout                        |
+| Other   | [UI: landing and Library](ui/landing-and-library.md)                   | Template Library layout                                                       |
 | Other   | [UI: Library filters](ui/library-filters.md)                           | Proposed Library rows and sheet; links, URL state, copy, and accessibility    |
 | Other   | [UI: showcase page](ui/showcase.md)                                    | Page composition and shared interaction rules                                 |
 | Other   | [UI: showcase filters](ui/showcase-filters.md)                         | Narrow-screen controls, sheet, active filters, and desktop rail               |

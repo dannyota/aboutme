@@ -121,7 +121,7 @@ copy_browser_sources() {
   local source=$1 destination=$2 file
   local -a spec_sources=()
   mapfile -t spec_sources <"$source/spec-sources.txt"
-  for file in Dockerfile package.json package-lock.json run.sh verify-evidence.mjs \
+  for file in Dockerfile package.json pnpm-lock.yaml pnpm-workspace.yaml run.sh verify-evidence.mjs \
     spec-sources.txt "${spec_sources[@]}"; do
     cp "$source/$file" "$destination/"
   done

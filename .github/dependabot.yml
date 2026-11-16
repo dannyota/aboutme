@@ -44,22 +44,10 @@ updates:
   - package-ecosystem: npm
     directories:
       - "/"
-      - /packages/schema
     schedule:
       interval: weekly
-    open-pull-requests-limit: 2
-    groups:
-      npm:
-        patterns:
-          - "*"
-        update-types:
-          - minor
-          - patch
-  - package-ecosystem: npm
-    directories:
-      - /apps/web
-    schedule:
-      interval: weekly
+    cooldown:
+      default-days: 1
     open-pull-requests-limit: 2
     groups:
       npm:
@@ -82,6 +70,8 @@ updates:
       - /deploy/dev-https-browser
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 1
     open-pull-requests-limit: 2
     groups:
       npm:

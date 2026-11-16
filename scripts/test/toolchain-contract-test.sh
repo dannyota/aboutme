@@ -19,7 +19,7 @@ while read -r name version; do
   [[ -z $name || $name == \#* ]] && continue
   expected[$name]=$version
 done <"$ROOT/.tool-versions"
-export FIXTURE_NODE=${expected[nodejs]} FIXTURE_GO=${expected[golang]}
+export FIXTURE_NODE=${expected[nodejs]} FIXTURE_GO=${expected[golang]} FIXTURE_PNPM=${expected[pnpm]}
 export FIXTURE_SQLC=${expected[sqlc]}
 export FIXTURE_CADDY=${expected[caddy]} FIXTURE_GITLEAKS=${expected[gitleaks]}
 export FIXTURE_GOLANGCI=${expected[golangci-lint]} FIXTURE_GOVULNCHECK=${expected[govulncheck]}
@@ -31,6 +31,11 @@ cp "$BASH" "$BIN/bash"
 cat >"$BIN/node" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "v$FIXTURE_NODE"
+EOF
+
+cat >"$BIN/pnpm" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$FIXTURE_PNPM"
 EOF
 
 cat >"$BIN/go" <<'EOF'
@@ -106,8 +111,11 @@ chmod +x "$BIN/sqlc"
 
 CONTRACT=$WORK/contract
 mkdir -p "$CONTRACT/scripts" "$CONTRACT/.github/workflows" \
-  "$CONTRACT/apps/web" "$CONTRACT/deploy/caddy/production"
+  "$CONTRACT/apps/web" "$CONTRACT/deploy/caddy/production" "$CONTRACT/deploy/dev-https-browser"
 cp "$ROOT/.tool-versions" "$CONTRACT/.tool-versions"
+cp "$ROOT/package.json" "$ROOT/Makefile" "$CONTRACT/"
+cp "$ROOT/deploy/dev-https-browser/package.json" "$ROOT/deploy/dev-https-browser/Dockerfile" \
+  "$CONTRACT/deploy/dev-https-browser/"
 cp "$ROOT/scripts/check-tool-versions.sh" "$CONTRACT/scripts/"
 cp "$ROOT/.github/workflows/ci.yml" "$CONTRACT/.github/workflows/"
 cp "$ROOT/.github/workflows/security-scan.yml" "$CONTRACT/.github/workflows/"
@@ -173,6 +181,40 @@ fi
 grep -Fq "caddy: hosted CI must contain 'caddy_${FIXTURE_CADDY}_linux_amd64.tar.gz'" \
   "$WORK/caddy-drift.out" ||
   fail "repository contract did not identify the drifted Caddy archive"
+
+cp -R "$ROOT/.github/actions" "$CONTRACT/.github/"
+sed "s/pnpm@$FIXTURE_PNPM/pnpm@9.9.9/" "$ROOT/deploy/web.Dockerfile" >"$CONTRACT/deploy/web.Dockerfile"
+if PATH="$BIN:/usr/bin:/bin" "$CONTRACT/scripts/check-tool-versions.sh" ci \
+  >"$WORK/pnpm-image-drift.out" 2>&1; then
+  fail "repository contract accepted an image pnpm that differs from .tool-versions"
+fi
+grep -Fq "pnpm: deploy/web.Dockerfile has pnpm@9.9.9, want pnpm@$FIXTURE_PNPM" \
+  "$WORK/pnpm-image-drift.out" ||
+  fail "repository contract did not identify the drifted image pnpm"
+cp "$ROOT/deploy/web.Dockerfile" "$CONTRACT/deploy/"
+
+sed "s/pnpm@$FIXTURE_PNPM/pnpm@9.9.9/" "$ROOT/deploy/dev-https-browser/package.json" \
+  >"$CONTRACT/deploy/dev-https-browser/package.json"
+if PATH="$BIN:/usr/bin:/bin" "$CONTRACT/scripts/check-tool-versions.sh" ci \
+  >"$WORK/pnpm-manifest-drift.out" 2>&1; then
+  fail "repository contract accepted a packageManager pin that differs from .tool-versions"
+fi
+grep -Fq "pnpm: deploy/dev-https-browser/package.json must contain" \
+  "$WORK/pnpm-manifest-drift.out" ||
+  fail "repository contract did not identify the drifted packageManager pin"
+cp "$ROOT/deploy/dev-https-browser/package.json" "$CONTRACT/deploy/dev-https-browser/"
+
+cat >"$BIN/pnpm" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' 9.9.9
+EOF
+chmod +x "$BIN/pnpm"
+if PATH="$BIN:/usr/bin:/bin" "$CONTRACT/scripts/check-tool-versions.sh" pnpm \
+  >"$WORK/pnpm-installed-drift.out" 2>&1; then
+  fail "tool check accepted an installed pnpm that differs from .tool-versions"
+fi
+grep -Fq "pnpm: want $FIXTURE_PNPM, got 9.9.9" "$WORK/pnpm-installed-drift.out" ||
+  fail "tool check did not report the exact pnpm mismatch"
 
 node --test "$ROOT/scripts/test/workflow-contract.test.mjs"
 

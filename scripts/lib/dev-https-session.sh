@@ -109,7 +109,8 @@ PY
     mock-oauth) launch_service "$name" "$ROOT/apps/server" "$BIN_DIR/mock-oauth" ;;
     mail-capture) launch_service "$name" "$ROOT/apps/server" "$BIN_DIR/mail-capture" --secret-file "$SECRETS_DIR/auth-email-capture-bearer" --addr 127.0.0.1:20444 ;;
     server) launch_service "$name" "$ROOT/apps/server" "$BIN_DIR/server" ;;
-    web) launch_service "$name" "$ROOT/apps/web" npm run dev -- --port 20440 --host 127.0.0.1 ;;
+    # pnpm 12 runs scripts in a process group of their own (pnpm CHANGELOG 12.20.0), outside the session group the listener check requires.
+    web) launch_service "$name" "$ROOT/apps/web" bash -c 'pnpm exec true && node_modules/.bin/nuxt prepare && exec node_modules/.bin/nuxt dev --port 20440 --host 127.0.0.1' dev-https-web ;;
     caddy) launch_service "$name" "$ROOT" caddy run --config "$CADDYFILE_GEN" --adapter caddyfile ;;
     esac
     pid=$LAUNCHED_PID

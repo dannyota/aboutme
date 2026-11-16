@@ -18,6 +18,8 @@ Before application `v1.0.0`, released snapshots, manifest entries, and older-cli
 
 The generator also writes `apps/server/internal/showcase/presets.generated.go`. The web generator `apps/web/scripts/generate-document-validator.mjs` consumes the working schema to write `apps/web/app/editor/documentValidator.generated.mjs`. Briefs must explicitly name affected `gen/ts/` output and web validator output across the backend and frontend lanes.
 
+`packages/schema` is a member of the root [pnpm workspace](../../docs/design/pnpm-workspace.md). Install from the repository root with `pnpm install --frozen-lockfile`; run `pnpm run generate` and `pnpm test` here.
+
 ## Authorities and checks
 
 Read [Go rules](../../instructions/go.md), [web rules](../../instructions/web.md), [verification](../../instructions/verification.md), [data design](../../docs/design/data.md), [font design](../../docs/design/fonts.md), and [template contract](../../docs/design/templates/contract.md).

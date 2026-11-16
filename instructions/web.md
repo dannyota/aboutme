@@ -4,10 +4,10 @@ Read this file for TypeScript, Nuxt, renderer, source-manifest, or display-check
 
 - Follow Google TypeScript style with the configured ESLint.
 - In `apps/web`, TypeScript is pinned to 6.0.3 until `vue-tsc` supports TS 7.
-- `npm audit` runs through `scripts/npm-audit.sh`: any high or critical advisory
-  fails unless `.github/npm-audit-exceptions.json` lists its GHSA ID with a
-  `reason` and an `expires` date. An expired entry fails every run; remove it or
-  renew it with a new reason.
+- `pnpm audit` runs through `scripts/npm-audit.sh` per project directory: any
+  high or critical advisory fails unless `.github/npm-audit-exceptions.json`
+  lists its GHSA ID with a `reason` and an `expires` date. An expired entry
+  fails every run; remove it or renew it with a new reason.
 - Renderer CSS and template tokens are frontend implementation; the designer
   supplies visual direction and UI specs.
 - The render context takes an optional project link map, entry id to project page URL. Only the public page and the PDF of a published resume pass it; the editor preview and an unpublished resume's PDF never do ([project entry points](../docs/design/project-entry-points.md)).
