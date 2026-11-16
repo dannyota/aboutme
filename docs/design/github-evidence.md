@@ -35,11 +35,10 @@ purposes and scopes ([ADR 0016](../adr/0016-sign-in-providers.md)) are
 untouched.
 
 Connecting collects GitHub identity data. In production the credentials are set,
-and the feature turns on, only after two conditions hold. First, the bilingual
-privacy notice lists the GitHub connection: the GitHub user id, login and
-connected time, and that the token is never stored. Second, existing accounts
-have received the email the notice promises before a change in what is
-collected. The notice text needs the owner's approval.
+and the feature turns on, only after the deployed bilingual privacy notice lists
+the GitHub connection: the GitHub user id, login and connected time, and that
+the token is never stored. The owner approved that text on 2026-11-16 and waived
+the advance email for the two accounts that existed then.
 
 ## Connection
 
