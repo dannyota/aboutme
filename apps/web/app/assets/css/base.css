@@ -2,10 +2,8 @@ html[data-ui="app"] body {
   min-height: 100vh;
   margin: 0;
   background-color: var(--background);
-  background-image: var(--gradient-aurora);
-  background-repeat: no-repeat;
   color: var(--foreground);
-  font-family: var(--font-sans);
+  font-family: var(--font-chrome);
   font-size: 0.9375rem;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
@@ -198,6 +196,46 @@ html[data-ui="app"]
   ) {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
+}
+
+html[data-ui="app"]
+  body
+  :where(*):not(
+    :where(
+      .resume-document,
+      .paged-resume,
+      .resume-document *,
+      .paged-resume *
+    )
+  )::selection {
+  background-color: var(--coin);
+  color: var(--coin-ink);
+}
+
+html[data-ui="app"]
+  body
+  :where(*):not(
+    :where(
+      .resume-document,
+      .paged-resume,
+      .resume-document *,
+      .paged-resume *
+    )
+  ) {
+  scrollbar-color: var(--control) transparent;
+}
+
+html[data-ui="app"]
+  body
+  :where([data-app-seal]):not(
+    :where(
+      .resume-document,
+      .paged-resume,
+      .resume-document *,
+      .paged-resume *
+    )
+  ) {
+  font-family: var(--font-paper);
 }
 
 @media (prefers-reduced-motion: reduce) {

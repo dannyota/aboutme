@@ -10,6 +10,8 @@ import AppRoot from '../../app/app.vue';
 import ThemeToggle from '../../app/components/app/ThemeToggle.vue';
 import {
   createThemeController,
+  THEME_COLOR,
+  themeColorMeta,
   type Theme,
 } from '../../app/composables/useTheme';
 import { setSiteLocale } from '../support/locale';
@@ -84,14 +86,77 @@ describe('theme preference boundary', () => {
   });
 
   it(
-    'renders a labelled native control with text that states the current mode',
+    'renders a 36 px circle named only by its label',
     async () => {
       const wrapper = await mountSuspended(ThemeToggle);
 
       const button = wrapper.get('[data-slot="button"]');
       expect(button.attributes('aria-label')).toMatch(/^Switch to /);
-      expect(button.text()).toMatch(/(Light|Dark) mode/);
+      expect(button.text()).toBe('');
+      expect(button.classes()).toContain('size-9');
+      expect(button.classes()).toContain('rounded-full');
     },
+  );
+
+  it('emits one theme-color per scheme until a theme is stored', () => {
+    expect(themeColorMeta(undefined)).toEqual([
+      {
+        key: 'theme-color-light', name: 'theme-color',
+        media: '(prefers-color-scheme: light)', content: '#ffffff',
+      },
+      {
+        key: 'theme-color-dark', name: 'theme-color',
+        media: '(prefers-color-scheme: dark)', content: '#0f0d26',
+      },
+    ]);
+    expect(themeColorMeta('dark')).toEqual([
+      { key: 'theme-color', name: 'theme-color', content: '#0f0d26' },
+    ]);
+    expect(themeColorMeta('light')).toEqual([
+      { key: 'theme-color', name: 'theme-color', content: '#ffffff' },
+    ]);
+  });
+
+  it('takes theme-color from the page ground of each theme', async () => {
+    const css = await readFile(themeCss, 'utf8');
+    const ground = (selector: string): string | undefined => {
+      const start = css.indexOf(`${selector} {`);
+      const body = css.slice(start, css.indexOf('}', start));
+      return /--background:\s*(#[\da-f]{6});/iu.exec(body)?.[1]
+        ?.toLowerCase();
+    };
+    expect(THEME_COLOR.light).toBe(ground(':root'));
+    expect(THEME_COLOR.dark).toBe(ground('html[data-theme="dark"]'));
+  });
+
+  it(
+    'switches theme-color to the chosen theme from the account menu',
+    async () => {
+      setSiteLocale('en');
+      const wrapper = await mountSuspended(AppRoot, {
+        route: '/app/resumes',
+      });
+      await flushPromises();
+      await wrapper.get('[aria-label="Account menu"]').trigger('click');
+      await flushPromises();
+      const item = document.body.querySelector<HTMLElement>(
+        '[data-testid="theme-toggle"]',
+      );
+      expect(item).not.toBeNull();
+      item!.click();
+      await flushPromises();
+
+      await vi.waitFor(() => {
+        const theme = document.documentElement.dataset.theme as Theme;
+        expect([...document.head.querySelectorAll(
+          'meta[name="theme-color"]',
+        )].map((meta) => [
+          meta.getAttribute('media'), meta.getAttribute('content'),
+        ])).toEqual([[null, THEME_COLOR[theme]]]);
+      });
+      wrapper.unmount();
+    },
+    15_000,
   );
 
   it(
@@ -168,11 +233,12 @@ describe('theme preference boundary', () => {
     const tokens = await readFile(themeCss, 'utf8');
 
     expect(tokens).toContain('--color-seal: var(--seal)');
+    expect(tokens).toContain('--font-sans: var(--font-chrome);');
     expect(tokens).toContain(
-      '--font-sans: "Be Vietnam Pro", "Inter", system-ui, sans-serif',
+      '--font-paper: "Be Vietnam Pro", "Inter", system-ui, sans-serif;',
     );
     expect(tokens).not.toMatch(/--positive(?:-foreground)?\s*:/);
-    expect(tokens).not.toMatch(/--chart-/);
+    expect(tokens).not.toMatch(/--chart-[1-5]\s*:/);
   });
 
   it(

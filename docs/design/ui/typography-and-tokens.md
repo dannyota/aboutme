@@ -78,7 +78,7 @@ WCAG 2 ratios, light then dark. Text needs 4.5, marks and control edges 3.
 | blush               | 13.78, 14.16 | 6.14, 7.82 | 6.73, 8.17 | 4.84, 6.43 | 4.54, 6.70  | 3.31, 4.34 |
 | sun                 | 14.70, 12.74 | 6.55, 7.04 | 7.18, 7.36 | 5.16, 5.79 | 4.84, 6.03  | 3.54, 3.91 |
 | accent, secondary   | 14.49, 10.41 | 6.46, 5.75 | 7.08, 6.01 | 5.09, 4.73 | 4.77, 4.93  | 3.49, 3.19 |
-| surface-destructive | 14.91, 10.81 | 6.64, 5.97 | 7.28, 6.24 | 5.24, 4.91 | 4.91, 5.11  | 3.59, 3.25 |
+| surface-destructive | 14.91, 10.81 | 6.64, 5.97 | 7.28, 6.24 | 5.24, 4.91 | 4.91, 5.11  | 3.59, 3.31 |
 
 - White on `--brand` is 4.76 and on `--brand-hover` 5.79. White and
   `--panel-muted` on `--panel` are 16.48 and 11.65 light, 11.10 and 7.85 dark.

@@ -61,7 +61,7 @@ const axisDays = computed(() => {
           <div
             v-for="day in props.days"
             :key="day.date"
-            class="flex-1 rounded-t bg-primary/70"
+            class="flex-1 rounded-t bg-chart-bar"
             :data-testid="`views-bar-${day.date}`"
             :style="{ height: `${barHeightPercent(day.real)}%` }"
             :title="props.copy.chartDay(day.date, day.real)"

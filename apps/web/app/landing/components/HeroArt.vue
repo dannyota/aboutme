@@ -84,7 +84,7 @@ defineProps<{
   overflow: hidden;
   border-radius: 2px;
   background: var(--paper);
-  box-shadow: var(--shadow-paper);
+  box-shadow: var(--shadow-paper-hero);
   color: var(--paper-ink);
   font: 400 15px/1.5 var(--font-paper);
   font-feature-settings: normal;

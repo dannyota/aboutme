@@ -116,10 +116,11 @@ describe('settings sessions page', () => {
 
   it('keeps the theme cookie in app surface head metadata', async () => {
     document.cookie = 'aboutme-theme=dark; Path=/';
-    const source = await import('node:fs/promises').then(({ readFile }) =>
-      readFile('app/app.vue', 'utf8'),
-    );
-    expect(source).toMatch(/useCookie<Theme \| undefined>\(["']aboutme-theme/);
+    const { readFile } = await import('node:fs/promises');
+    const source = await readFile('app/app.vue', 'utf8');
+    const theme = await readFile('app/composables/useTheme.ts', 'utf8');
+    expect(source).toMatch(/const theme = useStoredTheme\(\);/);
+    expect(theme).toMatch(/useCookie<Theme \| undefined>\(["']aboutme-theme/);
     expect(source).toMatch(/["']data-theme["']:\s*theme\.value/);
   });
 

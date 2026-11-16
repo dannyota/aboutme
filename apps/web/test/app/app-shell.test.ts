@@ -335,7 +335,7 @@ describe('AppShell', () => {
     expect(found['Đăng nhập']).toBe('/login');
     expect(found['Tạo CV của bạn']).toBe('/register');
     const theme = wrapper.get('[aria-label^="Chuyển sang chế độ"]');
-    expect(theme.text()).toMatch(/Chế độ (sáng|tối)/);
+    expect(theme.text()).toBe('');
 
     setSiteLocale('en');
     const english = await mountShell('/');
@@ -653,11 +653,6 @@ describe('AppShell', () => {
       expect(signedOut.get('header').classes()).toContain('max-lg:gap-2');
       expect(signedOut.get('a[href="/"]').classes())
         .toContain('shrink-0');
-      for (const href of ['/templates', '/showcase', '/guide/mcp']) {
-        const link = signedOut.findAll('a')
-          .find((a) => a.attributes('href') === href);
-        expect(link?.classes(), href).toContain('max-lg:px-2');
-      }
       const locale = signedOut.get('[data-testid="landing-locale"]');
       const labels = locale.findAll('button span');
       expect(labels[0]?.classes()).toContain('lg:hidden');
@@ -669,14 +664,55 @@ describe('AppShell', () => {
       const signedIn = await mountShell('/app/resumes');
       await flushPromises();
       expect(signedIn.get('header').classes()).not.toContain('max-lg:gap-2');
-      const library = signedIn.findAll('a')
-        .find((a) => a.attributes('href') === '/templates');
-      expect(library?.classes()).not.toContain('max-lg:px-2');
       const signedInLabels = signedIn
         .get('[data-testid="landing-locale"]').findAll('button span');
       expect(signedInLabels[0]?.classes()).toContain('sm:hidden');
     },
   );
+
+  it('draws the header bar, pill links, and the locale pill track',
+    async () => {
+      meStatus = 401;
+      setSiteLocale('en');
+      const wrapper = await mountShell('/templates');
+      await flushPromises();
+      const header = wrapper.get('header').classes();
+      for (const name of [
+        'min-h-14', 'md:min-h-16', 'border-b', 'border-border',
+        'bg-background', 'px-[max(1rem,calc((100vw-75rem)/2))]',
+        'md:px-[max(1.5rem,calc((100vw-75rem)/2))]',
+        'lg:px-[max(2rem,calc((100vw-75rem)/2))]',
+      ]) {
+        expect(header, name).toContain(name);
+      }
+      expect(header).not.toContain('bg-card');
+      const library = wrapper.findAll('a')
+        .find((a) => a.attributes('href') === '/templates');
+      for (const name of [
+        'rounded-full', 'text-base', 'font-semibold', 'text-foreground',
+        'hover:bg-accent', 'aria-[current=page]:bg-accent', 'max-lg:px-1.5',
+      ]) {
+        expect(library?.classes(), name).toContain(name);
+      }
+      expect(library?.attributes('aria-current')).toBe('page');
+      const locale = wrapper.get('[data-testid="landing-locale"]');
+      expect(locale.classes()).toContain('bg-surface-mist');
+      expect(locale.classes()).toContain('rounded-full');
+      expect(locale.find('span.bg-border').exists()).toBe(false);
+      const pressed = locale.get('button[aria-pressed="true"]').classes();
+      expect(pressed).toContain('aria-pressed:bg-foreground');
+      expect(pressed).toContain('aria-pressed:text-background');
+      for (const name of ['Sign in', 'Create your resume']) {
+        const button = wrapper.findAll('a')
+          .find((a) => a.text() === name);
+        expect(button?.classes(), name).toContain('h-10');
+        expect(button?.classes(), name).toContain('rounded-full');
+      }
+      const theme = wrapper.get('[aria-label^="Switch to"]');
+      expect(theme.classes()).toContain('size-9');
+      expect(theme.text()).toBe('');
+      wrapper.unmount();
+    });
 
   it('shows the mark-only logo below 64rem in both states', async () => {
     for (const status of [401, 200]) {

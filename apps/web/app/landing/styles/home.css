@@ -1,4 +1,6 @@
 .home {
+  --chip: var(--paper);
+  --chip-foreground: var(--coin-ink);
   overflow-x: clip;
   color: var(--foreground);
   font: 500 16px/1.6 var(--font-chrome);
@@ -28,7 +30,7 @@
 .home-h1 {
   font-weight: 800;
   font-size: 40px;
-  line-height: 1.18;
+  line-height: 1.3;
   letter-spacing: -0.025em;
   text-wrap: balance;
 }
@@ -36,7 +38,7 @@
 .home-h2 {
   font-weight: 800;
   font-size: 32px;
-  line-height: 1.25;
+  line-height: 1.3;
   letter-spacing: -0.02em;
   text-wrap: balance;
 }
@@ -188,12 +190,10 @@
 
   .home-h2 {
     font-size: 40px;
-    line-height: 1.18;
   }
 
   .home-h2-card {
     font-size: 32px;
-    line-height: 1.25;
   }
 }
 
@@ -204,7 +204,6 @@
 
   .home-h1 {
     font-size: 60px;
-    line-height: 1.15;
   }
 }
 

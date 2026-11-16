@@ -241,7 +241,6 @@ export default defineNuxtConfig({
           name: 'format-detection',
           content: 'telephone=no, date=no, address=no, email=no',
         },
-        { name: 'theme-color', content: '#26409c' },
       ],
     },
   },

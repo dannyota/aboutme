@@ -52,7 +52,7 @@ defineExpose({
       >
         <span
           v-if="text === ''"
-          class="inline-block h-5 w-24 animate-pulse rounded-md bg-primary/10
+          class="inline-block h-5 w-24 animate-pulse rounded-md bg-accent
             align-top"
           data-slot="skeleton"
         />

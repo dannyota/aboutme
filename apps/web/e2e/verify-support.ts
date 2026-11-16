@@ -108,7 +108,7 @@ export async function expectVerifyDisplay(
   locale: 'vi' | 'en',
   theme: 'light' | 'dark',
 ): Promise<void> {
-  await expectScreen(page, verifyContract(locale, theme, state));
+  await expectScreen(page, verifyContract(locale, theme));
   await expectVerifyStructure(page, state, locale);
   await expectVerifyIcon(page, state, theme);
   const title = locale === 'vi'
@@ -118,7 +118,7 @@ export async function expectVerifyDisplay(
   await expect(heading).toBeVisible();
   const wide = page.viewportSize()!.width >= 672;
   await expect(heading).toHaveCSS('font-size', wide ? '32px' : '24px');
-  await expect(heading).toHaveCSS('line-height', wide ? '41.6px' : '31.2px');
+  await expect(heading).toHaveCSS('line-height', wide ? '41.6px' : '32.4px');
   await expect(heading).toHaveCSS('font-weight', '700');
   await expect(page.locator('body')).toHaveCSS('font-size', '15px');
   await expect(page.locator('body')).toHaveCSS('line-height', '22.5px');
@@ -134,18 +134,14 @@ export async function expectVerifyDisplay(
         ? 'Máy chủ này không công bố thông tin triển khai'
         : 'This server publishes no deployment record');
   await expect(status.getByText(titleText, { exact: true })).toBeVisible();
-  const colors = {
-    dark: { unavailable: 'rgb(26, 33, 56)', verified: 'rgb(21, 29, 54)' },
-    light: {
-      unavailable: 'rgb(239, 237, 230)', verified: 'rgb(236, 238, 247)',
-    },
-  };
-  await expect(status).toHaveCSS('background-color', colors[theme][state]);
+  await expect(status).toHaveCSS('background-color', theme === 'light'
+    ? 'rgb(241, 239, 250)'
+    : 'rgb(25, 22, 64)');
   await expect(status).toHaveCSS('color', theme === 'light'
-    ? 'rgb(16, 27, 63)'
-    : 'rgb(243, 241, 236)');
+    ? 'rgb(26, 22, 80)'
+    : 'rgb(243, 241, 255)');
   expect(await page.evaluate(() => Array.from(document.fonts).some((face) =>
-    face.family === 'Be Vietnam Pro' && face.status === 'loaded')))
+    face.family === 'Plus Jakarta Sans' && face.status === 'loaded')))
     .toBe(true);
   const mark = status.locator('.verify-mark');
   await expect(mark.locator('svg')).toHaveCount(1);
@@ -231,7 +227,6 @@ export async function expectVerifyDisplay(
 
 export function verifyContract(
   locale: 'vi' | 'en', theme: 'light' | 'dark',
-  state: 'verified' | 'unavailable' = 'verified',
 ) {
   return {
     ...chromeScreenContract('[data-testid="verify-page"]',
@@ -242,9 +237,7 @@ export function verifyContract(
         ? 'Kiểm chứng phiên bản đang chạy'
         : 'Verify what\'s running', theme),
     paint: ['[data-testid="verify-status"]', 'background-color',
-      state === 'verified'
-        ? theme === 'light' ? 'rgb(236, 238, 247)' : 'rgb(21, 29, 54)'
-        : theme === 'light' ? 'rgb(239, 237, 230)' : 'rgb(26, 33, 56)',
+      theme === 'light' ? 'rgb(241, 239, 250)' : 'rgb(25, 22, 64)',
     ] as const,
   };
 }

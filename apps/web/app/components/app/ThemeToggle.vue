@@ -17,7 +17,7 @@ const copy = computed(() => shellCopy[props.locale]);
     type="button"
     :aria-label="theme === 'dark' ? copy.switchToLight : copy.switchToDark"
     :class="cn('theme-toggle', $attrs.class)"
-    size="sm"
+    size="icon"
     variant="ghost"
     @click="toggleTheme"
   >
@@ -31,8 +31,5 @@ const copy = computed(() => shellCopy[props.locale]);
       :size="16"
       aria-hidden="true"
     />
-    <span class="hidden lg:inline">
-      {{ theme === 'dark' ? copy.darkMode : copy.lightMode }}
-    </span>
   </Button>
 </template>

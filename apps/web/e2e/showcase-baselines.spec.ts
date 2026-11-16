@@ -216,9 +216,9 @@ async function assertShowcase(
   );
   await expectShowcaseHeading(page, 'font-family', theme);
   expect(await page.evaluate(() => (
-    document.fonts.check('700 28px "Be Vietnam Pro"', 'CV từ cộng đồng')
+    document.fonts.check('700 28px "Plus Jakarta Sans"', 'CV từ cộng đồng')
     && Array.from(document.fonts).some((face) =>
-      face.family === 'Be Vietnam Pro' && face.status === 'loaded')
+      face.family === 'Plus Jakarta Sans' && face.status === 'loaded')
   ))).toBe(true);
   await expect(page.getByTestId('showcase-count')).toHaveText(
     locale === 'vi'
@@ -297,7 +297,7 @@ async function assertShowcase(
     })).toBe(true);
     await expect(tile).toHaveCSS('background-color', theme === 'light'
       ? 'rgb(255, 255, 255)'
-      : 'rgb(20, 26, 46)');
+      : 'rgb(37, 34, 90)');
     await expect.poll(() => measureTextContainment(
       tile.locator('.showcase-tile__meta'),
     )).toEqual({ visible: true, contained: true });
@@ -324,8 +324,8 @@ async function assertShowcase(
     ? 'Tạo CV miễn phí'
     : 'Create a free resume');
   await expect(invite).toHaveCSS('background-color', theme === 'light'
-    ? 'rgb(246, 238, 223)'
-    : 'rgb(35, 29, 22)');
+    ? 'rgb(255, 242, 194)'
+    : 'rgb(51, 42, 14)');
   await expect.poll(() => measureTextContainment(invite))
     .toEqual({ visible: true, contained: true });
   const pager = page.getByTestId('showcase-pager');

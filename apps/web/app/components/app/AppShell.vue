@@ -61,23 +61,27 @@ const ctaLabel = computed(() => (onMarketingPath.value
   ? copy.value.createResume
   : copy.value.createAccount));
 const linkClass = cn(
-  'rounded-md px-2.5 py-1.5 text-sm text-muted-foreground',
-  'transition-colors hover:bg-accent hover:text-accent-foreground',
+  'whitespace-nowrap rounded-full px-2 py-2 text-base font-semibold',
+  'leading-5 text-foreground transition-colors max-lg:px-1.5 xl:px-3',
+  'hover:bg-accent hover:text-accent-foreground',
   'aria-[current=page]:bg-accent aria-[current=page]:text-accent-foreground',
 );
 const templatesLinkClass = computed(() => cn(
   linkClass,
-  signedIn.value ? 'max-sm:hidden' : 'max-lg:px-2',
+  signedIn.value && 'max-sm:hidden',
 ));
 const compactLogo = computed(() => !signedIn.value);
 const headerClass = computed(() => cn(
-  'flex min-h-14 items-center gap-4 border-b border-border bg-card',
-  'px-[max(1rem,calc((100vw-76rem)/2))]',
+  'flex min-h-14 items-center gap-3 border-b border-border bg-background',
+  'px-[max(1rem,calc((100vw-75rem)/2))] md:min-h-16',
+  'md:px-[max(1.5rem,calc((100vw-75rem)/2))]',
+  'lg:px-[max(2rem,calc((100vw-75rem)/2))]',
   compactLogo.value && 'max-lg:gap-2',
 ));
+const accountButtonClass = 'h-10 px-3';
 const guideLinkClass = computed(() => cn(
   linkClass,
-  signedIn.value ? 'max-[64rem]:hidden' : 'max-[44rem]:hidden max-lg:px-2',
+  signedIn.value ? 'max-[64rem]:hidden' : 'max-[44rem]:hidden',
 ));
 const settingsLinkClass = cn(linkClass, 'max-sm:hidden');
 const viewsLinkClass = cn(linkClass, 'max-sm:hidden');
@@ -105,7 +109,7 @@ const projectsLinkClass = cn(linkClass, 'max-md:hidden');
     </NuxtLink>
     <nav
       :aria-label="copy.primaryNavigation"
-      class="flex flex-1 items-center gap-1"
+      class="flex flex-1 items-center gap-0.5"
     >
       <NuxtLink
         :aria-current="onTemplatesPath ? 'page' : undefined"
@@ -152,7 +156,7 @@ const projectsLinkClass = cn(linkClass, 'max-md:hidden');
         rel="noopener noreferrer"
       >{{ copy.openSource }}</a>
     </nav>
-    <div class="ml-auto flex items-center gap-2">
+    <div class="ml-auto flex items-center gap-1">
       <LocaleToggle
         v-if="localized"
         :compact="!signedIn"
@@ -168,14 +172,16 @@ const projectsLinkClass = cn(linkClass, 'max-md:hidden');
       <template v-if="showSignedOutLinks">
         <NuxtLink
           :class="cn(
-            buttonVariants({ variant: 'ghost', size: 'sm' }),
+            buttonVariants({ variant: 'ghost' }),
+            accountButtonClass,
             hidePhoneAccountLinks && 'max-[44rem]:hidden',
           )"
           :to="signInLink"
         >{{ copy.signIn }}</NuxtLink>
         <NuxtLink
           :class="cn(
-            buttonVariants({ variant: 'default', size: 'sm' }),
+            buttonVariants({ variant: 'default' }),
+            accountButtonClass,
             hidePhoneAccountLinks && 'max-[44rem]:hidden',
           )"
           :to="createAccountLink"

@@ -60,10 +60,16 @@ describe('application icon links', () => {
           },
         ]);
       });
-      expect(
-        document.head.querySelector('meta[name="theme-color"]')
-          ?.getAttribute('content'),
-      ).toBe('#26409c');
+      await vi.waitFor(() => {
+        expect([...document.head.querySelectorAll(
+          'meta[name="theme-color"]',
+        )].map((meta) => [
+          meta.getAttribute('media'), meta.getAttribute('content'),
+        ])).toEqual([
+          ['(prefers-color-scheme: light)', '#ffffff'],
+          ['(prefers-color-scheme: dark)', '#0f0d26'],
+        ]);
+      });
       wrapper.unmount();
     });
 
@@ -148,7 +154,7 @@ describe('the chrome font preload', () => {
       expect(preload?.getAttribute('type')).toBe('font/woff2');
       expect(preload?.getAttribute('crossorigin')).toBe('anonymous');
       expect(preload?.getAttribute('href'))
-        .toMatch(/be-vietnam-pro-var[\w.-]*\.woff2$/u);
+        .toMatch(/plus-jakarta-sans-var[\w.-]*\.woff2$/u);
     });
     wrapper.unmount();
   });
