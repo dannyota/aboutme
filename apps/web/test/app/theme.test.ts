@@ -468,6 +468,7 @@ describe('application theme', () => {
     expect(plain['background-color']).toBe('var(--paper)');
     expect(plain['color']).toBe('var(--paper-ink)');
     expect(plain['font-family']).toBe('var(--font-paper)');
+    expect(plain['font-weight']).toBe('400');
   });
 
   it('paints a flat chrome ground in the chrome face', () => {
@@ -476,6 +477,7 @@ describe('application theme', () => {
 
     expect(body['background-color']).toBe('var(--background)');
     expect(body['font-family']).toBe('var(--font-chrome)');
+    expect(body['font-weight']).toBe('500');
     expect(body['background-image']).toBeUndefined();
     expect(base).not.toMatch(/gradient|glow/u);
   });
@@ -486,9 +488,11 @@ describe('application theme', () => {
       + '.resume-document *, .paged-resume * ) )';
 
     expect(base).toContain(
-      `html[data-ui="app"] body :where(*)${guard}::selection { `
+      `html[data-ui="app"] body :where(*)${guard}`
+      + ':not(:has(.resume-document, .paged-resume))::selection { '
       + 'background-color: var(--coin); color: var(--coin-ink); }',
     );
+    expect(base.match(/::selection/gu)).toHaveLength(1);
     expect(base).toContain(
       `html[data-ui="app"] body :where(*)${guard} { `
       + 'scrollbar-color: var(--control) transparent; }',
@@ -496,6 +500,15 @@ describe('application theme', () => {
     expect(base).toContain(
       `html[data-ui="app"] body :where([data-app-seal])${guard} { `
       + 'font-family: var(--font-paper); }',
+    );
+  });
+
+  it('resets inherited chrome scrollbar and weight at the resume', () => {
+    const base = readFileSync(basePath, 'utf8').replaceAll(/\s+/gu, ' ');
+
+    expect(base).toContain(
+      'html[data-ui="app"] body :where(.resume-document, .paged-resume) { '
+      + 'scrollbar-color: auto; font-weight: 400; }',
     );
   });
 

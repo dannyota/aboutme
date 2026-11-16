@@ -146,6 +146,7 @@ html[data-theme="dark"] {
   background-color: var(--paper);
   color: var(--paper-ink);
   font-family: var(--font-paper);
+  font-weight: 400;
 }
 
 @theme inline {

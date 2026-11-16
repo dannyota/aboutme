@@ -136,7 +136,7 @@ export const GUIDE_TYPE: readonly StyleRule[] = [
     css: {
       'font-family':
         '"Plus Jakarta Sans", "Be Vietnam Pro", system-ui, sans-serif',
-      'font-size': '15px', 'font-weight': '400', 'line-height': '22.5px',
+      'font-size': '15px', 'font-weight': '500', 'line-height': '22.5px',
       'letter-spacing': 'normal', 'text-align': 'start',
       'text-transform': 'none',
     },

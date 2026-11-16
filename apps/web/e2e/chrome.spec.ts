@@ -6,8 +6,11 @@ import {
   test,
   webkit,
 } from '@playwright/test';
+import { CURRENT_VERSION } from '@aboutme/schema/released';
 import { SAMPLES } from '@aboutme/schema/samples';
 import { TEMPLATES } from '@aboutme/schema/templates';
+import { readFileSync } from 'node:fs';
+import { resolve as resolvePath } from 'node:path';
 
 import { captureReviewImage } from './review-images';
 import {
@@ -23,13 +26,14 @@ import {
 } from './style-mutation';
 import {
   expectChromeDecoration, expectChromeFan, expectChromeList,
-  expectChromeNavigation, expectSampleIsolation,
+  expectChromeNavigation, expectRendererBoundary, expectSampleIsolation,
 } from './chrome-details';
 
 import type { ScreenContract } from './screen-contract';
 import {
   chromeScreenContract,
   expectThumbnailRenders,
+  mockSignedInSession,
   prepareScreen,
 } from './support';
 
@@ -66,6 +70,64 @@ test('live thumbnails are checked at the requested viewport', async ({
     .toEqual({ x: 0, y: 0 });
   await expect(page.locator('h1')).toHaveCount(1);
 });
+
+const EDITOR_DOCUMENT = JSON.parse(readFileSync(resolvePath(
+  import.meta.dirname, '../../../packages/schema/fixtures/full.json',
+), 'utf8')) as { personalDetails?: { photo?: unknown } };
+delete EDITOR_DOCUMENT.personalDetails?.photo;
+
+async function openEditorPreview(page: Page): Promise<void> {
+  await mockSignedInSession(page);
+  await page.route('**/api/v1/events', async (route) => {
+    await route.fulfill({
+      status: 200, contentType: 'text/event-stream', body: '',
+    });
+  });
+  await page.route('**/api/v1/resumes/resume-1', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.continue();
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-store, no-transform',
+        'ETag': '"r1"',
+        'X-Resume-Schema-Version': String(CURRENT_VERSION),
+      },
+      json: {
+        data: {
+          id: 'resume-1', title: 'Fixture', lng: 'en', live: false,
+          downloadEnabled: false, seoGeoEnabled: false, slug: null,
+          publicTitle: null, faviconEmoji: null,
+          schemaVersion: CURRENT_VERSION,
+          createdAt: '2026-01-01T00:00:00Z',
+          updatedAt: '2026-01-01T00:00:00Z',
+          revision: '1',
+          document: EDITOR_DOCUMENT,
+        },
+      },
+    });
+  });
+  const response = await page.goto('/app/resumes/resume-1');
+  expect(response?.status()).toBe(200);
+  await expect(page.getByTestId('save-status')).toBeVisible();
+}
+
+for (const surface of ['template page', 'editor preview'] as const) {
+  test(`chrome selection, scrollbar and weight stop at the resume in the `
+    + `${surface}`, async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    if (surface === 'editor preview') {
+      await openEditorPreview(page);
+    } else {
+      const response = await page.goto('/templates/creative-accent');
+      expect(response?.status()).toBe(200);
+    }
+    await expectRendererBoundary(page);
+  });
+}
 
 type ChromePage = typeof PAGES[number]['name'];
 type Locale = 'vi' | 'en';

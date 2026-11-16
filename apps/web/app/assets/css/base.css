@@ -5,6 +5,7 @@ html[data-ui="app"] body {
   color: var(--foreground);
   font-family: var(--font-chrome);
   font-size: 0.9375rem;
+  font-weight: 500;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
@@ -207,7 +208,7 @@ html[data-ui="app"]
       .resume-document *,
       .paged-resume *
     )
-  )::selection {
+  ):not(:has(.resume-document, .paged-resume))::selection {
   background-color: var(--coin);
   color: var(--coin-ink);
 }
@@ -223,6 +224,11 @@ html[data-ui="app"]
     )
   ) {
   scrollbar-color: var(--control) transparent;
+}
+
+html[data-ui="app"] body :where(.resume-document, .paged-resume) {
+  scrollbar-color: auto;
+  font-weight: 400;
 }
 
 html[data-ui="app"]

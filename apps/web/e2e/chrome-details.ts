@@ -146,3 +146,47 @@ export async function expectSampleIsolation(page: Page): Promise<void> {
   }), message).toEqual({ visible: true, style: 'auto', radius: before });
   await link.blur();
 }
+
+export async function expectRendererBoundary(page: Page): Promise<void> {
+  const text = page.locator('.resume-document p').first();
+  const message = 'Chrome renderer boundary.';
+  await expect(text, message).toBeVisible();
+  const read = await text.evaluate((node) => {
+    const selection = (element: Element): string[] => {
+      const css = getComputedStyle(element, '::selection');
+      return [css.backgroundColor, css.color];
+    };
+    const probe = document.createElement('span');
+    probe.style.backgroundColor = 'var(--coin)';
+    probe.style.color = 'var(--control)';
+    document.documentElement.append(probe);
+    const coin = getComputedStyle(probe).backgroundColor;
+    const control = getComputedStyle(probe).color;
+    probe.remove();
+    const chrome = Array.from(document.querySelectorAll('button')).find(
+      (button) => !button.closest('.resume-document, .paged-resume'),
+    )!;
+    const root = node.closest('.paged-resume')
+      ?? node.closest('.resume-document')!;
+    return {
+      coin,
+      control,
+      chromeSelection: selection(chrome)[0],
+      chromeScrollbar: getComputedStyle(chrome).scrollbarColor,
+      textSelection: selection(node),
+      rootSelection: selection(root),
+      browserSelection: selection(document.documentElement),
+      scrollbar: [node, root].map((element) =>
+        getComputedStyle(element).scrollbarColor),
+      weight: [node, root].map((element) =>
+        getComputedStyle(element).fontWeight),
+    };
+  });
+  expect(read.chromeSelection, message).toBe(read.coin);
+  expect(read.chromeScrollbar, message).toContain(read.control);
+  expect(read.textSelection, message).toEqual(read.browserSelection);
+  expect(read.rootSelection, message).toEqual(read.browserSelection);
+  expect(read.textSelection[0], message).not.toBe(read.coin);
+  expect(read.scrollbar, message).toEqual(['auto', 'auto']);
+  expect(read.weight[1], message).toBe('400');
+}

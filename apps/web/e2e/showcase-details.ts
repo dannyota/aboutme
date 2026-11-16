@@ -19,7 +19,7 @@ export function showcaseType(width: number, empty: boolean): StyleRule[] {
       message: 'Showcase body typography',
       css: { 'font-size': width >= 1024 ? '16px' : '15px',
         'line-height': width >= 1024 ? '24.8px' : '22.5px',
-        'font-weight': '400', 'letter-spacing': 'normal' },
+        'font-weight': '500', 'letter-spacing': 'normal' },
     },
     ...(!empty
       ? [
@@ -27,7 +27,7 @@ export function showcaseType(width: number, empty: boolean): StyleRule[] {
             selector: '.showcase-tile__language',
             message: 'Showcase language typography',
             css: { 'font-size': '14px', 'line-height': '21px',
-              'font-weight': '400', 'letter-spacing': 'normal' },
+              'font-weight': '500', 'letter-spacing': 'normal' },
           },
           {
             selector: '.showcase-tile__template',
@@ -45,7 +45,7 @@ export function showcaseType(width: number, empty: boolean): StyleRule[] {
             selector: '.showcase-tile__slug',
             message: 'Showcase slug typography',
             css: { 'font-size': '13px', 'line-height': '19.5px',
-              'font-weight': '400', 'letter-spacing': 'normal' },
+              'font-weight': '500', 'letter-spacing': 'normal' },
           },
         ]
       : []),

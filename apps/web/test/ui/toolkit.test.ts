@@ -9,6 +9,8 @@ const RENDERER_GUARD
   = ':not(:where(.resume-document,.paged-resume,'
     + '.resume-document *,.paged-resume *))';
 const APP_GUARD = 'html[data-ui="app"] body';
+const RENDERER_BOUNDARY
+  = `${APP_GUARD} :where(.resume-document,.paged-resume)`;
 
 function normalizeSelector(selector: string): string {
   return selector
@@ -82,10 +84,20 @@ describe('stylesheet contract (decisions U2)', () => {
     for (const selector of selectors(css('base.css'))) {
       const normalized = normalizeSelector(selector);
       expect(normalized.startsWith(APP_GUARD), selector).toBe(true);
-      if (normalized !== APP_GUARD) {
+      if (normalized !== APP_GUARD && normalized !== RENDERER_BOUNDARY) {
         expect(normalized, selector).toContain(RENDERER_GUARD);
       }
     }
+  });
+
+  it('resets only inherited chrome values at the renderer boundary', () => {
+    const boundary = selectors(css('base.css'))
+      .filter((selector) => normalizeSelector(selector) === RENDERER_BOUNDARY);
+    expect(boundary).toHaveLength(1);
+    const body = css('base.css').replaceAll(/\s+/g, ' ')
+      .split(':where(.resume-document, .paged-resume) {')[1]
+      ?.split('}')[0]?.trim();
+    expect(body).toBe('scrollbar-color: auto; font-weight: 400;');
   });
 
   it('defines tokens on the document root for both themes', () => {
