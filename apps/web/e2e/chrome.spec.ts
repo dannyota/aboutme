@@ -27,7 +27,7 @@ import {
 import {
   expectChromeDecoration, expectChromeFan, expectChromeList,
   expectChromeNavigation, expectRendererBoundary, expectSampleIsolation,
-  leakChromeIntoResume,
+  expectSlugPrefixCell, leakChromeIntoResume,
 } from './chrome-details';
 
 import type { ScreenContract } from './screen-contract';
@@ -129,6 +129,29 @@ for (const surface of ['template page', 'editor preview'] as const) {
     await expectRendererBoundary(page);
   });
 }
+
+async function openPublishDialog(page: Page): Promise<void> {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openEditorPreview(page);
+  await page.locator('[data-action="publish"]').click();
+}
+
+test('the publish slug prefix sits in a mist cell inside the input', async ({
+  page,
+}) => {
+  await openPublishDialog(page);
+  await expectSlugPrefixCell(page);
+});
+
+mutationTest('the publish slug prefix rejects a cell moved off the input',
+  async ({ page }) => {
+    test.setTimeout(60_000);
+    await openPublishDialog(page);
+    await proveMutation(() => expectSlugPrefixCell(page),
+      () => applyStyleMutation(page.getByTestId('publish-slug-prefix'), {
+        transform: ['translateY(4px)', /matrix/u],
+      }), 'Publish slug prefix cell.');
+  });
 
 type ChromePage = typeof PAGES[number]['name'];
 type Locale = 'vi' | 'en';

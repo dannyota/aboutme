@@ -169,6 +169,51 @@ describe('EditorPreview', () => {
     },
   );
 
+  it(
+    'sets the mode toggle on the canvas as a card pill track with an ink pill',
+    async () => {
+      const accepted = acceptedFixture();
+      const wrapper = mount(EditorPreview, {
+        props: {
+          document: accepted.document,
+          lng: accepted.metadata.lng,
+        },
+        global: { stubs: { ResumeDocument: true } },
+      });
+      const toolbar = wrapper.get('[data-testid="preview-toolbar"]').classes();
+      const track = wrapper.get('[data-testid="preview-mode-switch"]')
+        .classes();
+
+      expect(toolbar).not.toContain('bg-card');
+      expect(toolbar).not.toContain('border-b');
+      expect(track).toEqual(expect.arrayContaining([
+        'rounded-full',
+        'bg-card',
+        'p-[3px]',
+      ]));
+      expect(track).not.toContain('rounded-md');
+      expect(track).not.toContain('border');
+      const modes = wrapper.findAll('[data-mode]');
+      expect(modes).toHaveLength(2);
+      for (const mode of modes) {
+        expect(mode.attributes('data-variant')).toBe('link');
+        expect(mode.classes()).toEqual(expect.arrayContaining([
+          'h-[30px]',
+          'rounded-full',
+          'text-muted-foreground',
+          'aria-pressed:bg-foreground',
+          'aria-pressed:text-background',
+        ]));
+      }
+      await wrapper.get('[data-mode="web"]').trigger('click');
+      expect(wrapper.get('[data-mode="web"]').attributes('aria-pressed'))
+        .toBe('true');
+      expect(wrapper.get('[data-mode="web"]').attributes('data-variant'))
+        .toBe('link');
+      wrapper.unmount();
+    },
+  );
+
   it('defaults the preview to PDF mode', () => {
     const accepted = acceptedFixture();
     const wrapper = mount(EditorPreview, {
@@ -515,6 +560,37 @@ describe('EditorPreview zoom controls', () => {
         phone.find('[data-testid="preview-zoom-controls"]').exists(),
       ).toBe(false);
       phone.unmount();
+    },
+  );
+
+  it(
+    'floats the zoom pill on the card with the float shadow and an ink '
+    + 'Default size when pressed',
+    async () => {
+      const wrapper = await mountPreviewAtWidth(WIDE_LAYOUT_WIDTH);
+      const pill = wrapper.get('[data-testid="preview-zoom-controls"]')
+        .classes();
+
+      expect(pill).toEqual(expect.arrayContaining([
+        'rounded-full',
+        'bg-card',
+        'shadow-[var(--shadow-float)]',
+      ]));
+      expect(pill).not.toContain('rounded-md');
+      expect(pill).not.toContain('border');
+      expect(pill).not.toContain('shadow-[var(--shadow-paper)]');
+      const fit = wrapper.get('[data-testid="zoom-fit"]');
+      expect(fit.attributes('aria-pressed')).toBe('true');
+      expect(fit.attributes('data-variant')).toBe('ghost');
+      expect(fit.classes()).toEqual(expect.arrayContaining([
+        'aria-pressed:bg-foreground',
+        'aria-pressed:text-background',
+      ]));
+      for (const id of ['zoom-out', 'zoom-percent', 'zoom-in', 'zoom-fit']) {
+        expect(wrapper.get(`[data-testid="${id}"]`).classes(), id)
+          .toContain('rounded-full');
+      }
+      wrapper.unmount();
     },
   );
 

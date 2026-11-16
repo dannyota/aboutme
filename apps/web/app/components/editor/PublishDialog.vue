@@ -28,6 +28,7 @@ import PublishPreview from './PublishPreview.vue';
 import PublishReauthentication from './PublishReauthentication.vue';
 import PublishResult from './PublishResult.vue';
 import PublishShowcase from './PublishShowcase.vue';
+import SealRing from './SealRing.vue';
 import type { ResumeRecord } from '../../stores/resumes';
 import { useCapabilities } from '../../composables/useCapabilities';
 
@@ -126,8 +127,9 @@ const providerReauth = computed(() =>
     || state.value.kind === 'provider-started-rate-limited')
   && state.value.method === 'provider',
 );
+const unpublishing = computed(() => !live.value && initialLive.value);
 const primaryAction = computed(() => {
-  if (!live.value && initialLive.value) return copy.value.unpublish;
+  if (unpublishing.value) return copy.value.unpublish;
   if (live.value && initialLive.value) return copy.value.update;
   return copy.value.publish;
 });
@@ -279,7 +281,7 @@ function focusIssue(path: string): void {
     </template>
     <div class="grid gap-4">
       <div
-        class="relative"
+        class="grid gap-1.5 [&>[data-field]]:contents"
         data-testid="publish-slug-field"
       >
         <TextField
@@ -292,7 +294,7 @@ function focusIssue(path: string): void {
           :error="slugError"
           :control-attrs="{
             'aria-describedby': slugDescribedBy,
-            'class': 'pl-28',
+            'class': 'col-start-1 row-start-2 pl-[8.25rem]',
             'data-action': 'publish-slug',
             'minlength': '4',
             'maxlength': '30',
@@ -302,8 +304,10 @@ function focusIssue(path: string): void {
         <span
           :id="slugPrefixId"
           aria-hidden="true"
-          class="pointer-events-none absolute bottom-2 left-3 text-sm
-            text-muted-foreground"
+          class="pointer-events-none col-start-1 row-start-2 m-px flex
+            w-[7.5rem] items-center self-stretch justify-self-start
+            rounded-l-[9px] border-r border-border bg-surface-mist px-3
+            text-sm font-semibold text-muted-foreground"
           data-testid="publish-slug-prefix"
         >aboutme.vn/</span>
       </div>
@@ -460,8 +464,9 @@ function focusIssue(path: string): void {
         type="submit"
         data-action="publish-submit"
         :disabled="submitDisabled"
-        variant="seal"
+        :variant="unpublishing ? 'destructive' : 'seal'"
       >
+        <SealRing v-if="!unpublishing" />
         {{ primaryAction }}
       </Button>
     </template>

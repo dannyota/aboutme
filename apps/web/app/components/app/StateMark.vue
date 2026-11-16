@@ -77,7 +77,7 @@ const copy = computed(() => workspaceCopy[locale.value]);
         size="mark"
       />
       <a
-        class="min-w-0 truncate"
+        class="-mt-[0.3em] min-w-0 truncate pt-[0.3em]"
         data-public-link
         :href="publicLink"
         :title="`aboutme.vn${publicLink}`"

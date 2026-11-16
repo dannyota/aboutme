@@ -82,7 +82,12 @@ describe('StateMark', () => {
 
     expect(wrapper.classes()).toContain('min-w-0');
     expect(anchor.classes()).toEqual(
-      expect.arrayContaining(['min-w-0', 'truncate']),
+      expect.arrayContaining([
+        'min-w-0',
+        'truncate',
+        'pt-[0.3em]',
+        '-mt-[0.3em]',
+      ]),
     );
     expect(anchor.attributes('title')).toBe(`aboutme.vn${link}`);
     expect(wrapper.get('[data-app-seal="mark"]').classes()).toContain(

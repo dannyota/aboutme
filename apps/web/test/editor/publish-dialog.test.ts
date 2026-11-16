@@ -396,6 +396,79 @@ describe('PublishDialog', () => {
         .toBe('Unpublish');
     });
 
+  it(
+    'carries the ring a on the seal action and turns Unpublish into the '
+    + 'destructive outline',
+    async () => {
+      const privateRecord = editorRecord();
+      const privateWrapper = await mountDialog(
+        privateRecord,
+        actionsFor(privateRecord).actions,
+      );
+      const publish = privateWrapper.get('[data-action="publish-submit"]');
+      expect(publish.attributes('data-variant')).toBe('seal');
+      expect(publish.element.firstElementChild?.matches('svg[data-ring-a]'))
+        .toBe(true);
+      expect(publish.text()).toBe('Publish');
+      const cancel = privateWrapper.get('[data-action="publish-close"]');
+      expect(cancel.attributes('data-variant')).toBe('outline');
+      expect(cancel.classes()).toContain('rounded-full');
+      expect(privateWrapper.get('[data-slot="dialog-footer"]').classes())
+        .toEqual(expect.arrayContaining([
+          'flex-col-reverse',
+          'sm:flex-row',
+          'sm:justify-end',
+        ]));
+
+      const liveRecord = editorRecord({ live: true, slug: 'ada-lovelace' });
+      const liveWrapper = await mountDialog(
+        liveRecord,
+        actionsFor(liveRecord).actions,
+      );
+      const update = liveWrapper.get('[data-action="publish-submit"]');
+      expect(update.attributes('data-variant')).toBe('seal');
+      expect(update.find('[data-ring-a]').exists()).toBe(true);
+      await liveWrapper.get('[data-action="publish-live"]').trigger('click');
+      const unpublish = liveWrapper.get('[data-action="publish-submit"]');
+      expect(unpublish.text()).toBe('Unpublish');
+      expect(unpublish.attributes('data-variant')).toBe('destructive');
+      expect(unpublish.find('[data-ring-a]').exists()).toBe(false);
+      expect(liveWrapper.findAll('[data-variant="seal"]')).toHaveLength(0);
+    },
+  );
+
+  it('sets the slug prefix in a mist cell inside the input', async () => {
+    const record = editorRecord();
+    const wrapper = await mountDialog(record, actionsFor(record).actions);
+    const field = wrapper.get('[data-testid="publish-slug-field"]');
+    const prefix = wrapper.get('[data-testid="publish-slug-prefix"]');
+    const input = wrapper.get('[data-action="publish-slug"]');
+
+    expect(field.classes()).toEqual(expect.arrayContaining([
+      'grid',
+      'gap-1.5',
+      '[&>[data-field]]:contents',
+    ]));
+    expect(field.classes()).not.toContain('relative');
+    expect(input.classes()).toEqual(expect.arrayContaining([
+      'col-start-1',
+      'row-start-2',
+    ]));
+    expect(prefix.classes()).toEqual(expect.arrayContaining([
+      'col-start-1',
+      'row-start-2',
+      'self-stretch',
+      'm-px',
+      'bg-surface-mist',
+      'border-r',
+      'border-border',
+      'text-muted-foreground',
+    ]));
+    expect(prefix.classes()).not.toContain('absolute');
+    expect(prefix.element.previousElementSibling?.getAttribute('data-field'))
+      .toBe('slug');
+  });
+
   it('validates every edited slug boundary and permits blank only when private',
     async () => {
       const record = editorRecord();
@@ -1030,6 +1103,49 @@ describe('PublishDialog', () => {
     },
   );
 
+  it(
+    'shows the seal ticket alone, then the public link in a mist pill with '
+    + 'Copy link',
+    async () => {
+      const record = editorRecord();
+      const context = actionsFor(record, {
+        kind: 'accepted',
+        resume: acceptedFixture({
+          metadata: {
+            ...acceptedFixture().metadata,
+            live: true,
+            slug: 'canonical-slug',
+          },
+        }),
+      });
+      const wrapper = await mountDialog(record, context.actions);
+      const success = wrapper.get('.publish-dialog__success');
+      const stamp = success.get('[data-app-seal="stamp"]');
+      const pill = success.get('[data-testid="publish-link-pill"]');
+
+      expect(stamp.classes()).toContain('text-seal-text');
+      expect(stamp.element.parentElement).toBe(success.element);
+      expect(pill.classes()).toEqual(expect.arrayContaining([
+        'rounded-full',
+        'bg-surface-mist',
+      ]));
+      expect(stamp.element.compareDocumentPosition(pill.element)
+        & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      const link = pill.get('[data-action="view-public-resume"]');
+      expect(link.classes()).toEqual(expect.arrayContaining([
+        'min-w-0',
+        'truncate',
+        'pt-[0.3em]',
+        '-mt-[0.3em]',
+      ]));
+      const copy = pill.get('[data-action="copy-link"]');
+      expect(copy.attributes('data-variant')).toBe('outline');
+      expect(copy.text()).toBe('Copy link');
+      expect(link.element.compareDocumentPosition(copy.element)
+        & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    },
+  );
+
   it('shows only a canonical public link for a live accepted result',
     async () => {
       const record = editorRecord();
@@ -1050,7 +1166,12 @@ describe('PublishDialog', () => {
       ).toBe('/canonical-slug');
       expect(
         wrapper.get('[data-action="view-public-resume"]').classes(),
-      ).toEqual(expect.arrayContaining(['text-link', 'underline']));
+      ).toEqual(expect.arrayContaining([
+        'text-link',
+        'font-semibold',
+        'hover:underline',
+        'focus-visible:underline',
+      ]));
 
       context.state.value = {
         kind: 'accepted',
@@ -1444,6 +1565,12 @@ describe('PublishDialog browser tab fields', () => {
       expect(preview.get('[data-tab-title]').text())
         .toBe('Danny from aboutme.vn');
       expect(preview.get('[data-tab-icon]').text()).toBe('🚀');
+      const picked = wrapper.get(
+        '[data-action="publish-favicon-pick"][aria-pressed="true"]',
+      );
+      expect(picked.text()).toBe('🚀');
+      expect(picked.attributes('data-variant')).toBe('outline');
+      expect(picked.classes()).toContain('aria-pressed:bg-foreground');
     });
 
   it('sends the tab fields only when they change', async () => {

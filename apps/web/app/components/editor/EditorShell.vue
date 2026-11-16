@@ -53,6 +53,7 @@ import { defaultSectionNames } from './sectionTypes';
 import TemplatePanel from './templates/TemplatePanel.vue';
 import ConflictPanel from './ConflictPanel.vue';
 import HeldWriteAlert from './HeldWriteAlert.vue';
+import SealRing from './SealRing.vue';
 import SessionCheckBanner from './SessionCheckBanner.vue';
 import type { SessionCheck } from '../../composables/sessionCheck';
 import LanguageTwinReview from './LanguageTwinReview.vue';
@@ -84,9 +85,12 @@ const { locale } = useLocale();
 const copy = computed(() => editorShellCopy[locale.value]);
 
 const railButtonClass
-  = 'aria-pressed:bg-surface-blue aria-pressed:text-link '
-    + 'aria-pressed:shadow-[inset_3px_0_0_var(--primary)] '
-    + 'max-[72rem]:aria-pressed:shadow-[inset_0_-3px_0_var(--primary)]';
+  = 'size-11 rounded-full text-muted-foreground hover:text-foreground '
+    + 'aria-pressed:bg-foreground aria-pressed:text-background';
+const outlineRowClass
+  = 'h-[38px] w-full justify-start gap-2.5 px-3 has-[>svg]:px-3 '
+    + 'font-semibold aria-[current=page]:bg-accent '
+    + 'aria-[current=page]:font-bold';
 
 const inspector = ref<InspectorPanel>({ kind: 'personal' });
 const narrowRegion = ref<'editor' | 'preview'>('editor');
@@ -219,9 +223,9 @@ async function discardAndSignIn(): Promise<void> {
   >
     <header
       class="editor-topbar col-span-full flex h-16 min-w-0 items-center
-        gap-4 border-b bg-card px-4 max-[56rem]:gap-2 max-[42rem]:h-24
-        max-[42rem]:flex-col max-[42rem]:gap-0 max-[42rem]:px-2
-        max-[42rem]:py-2"
+        gap-4 border-b border-border bg-background px-4 max-[56rem]:gap-2
+        max-[42rem]:h-24 max-[42rem]:flex-col max-[42rem]:gap-0
+        max-[42rem]:px-2 max-[42rem]:py-2"
       data-region="topbar"
     >
       <div
@@ -249,7 +253,8 @@ async function discardAndSignIn(): Promise<void> {
           class="h-5 border-l max-[42rem]:hidden"
         />
         <h1
-          class="min-w-0 truncate text-sm font-medium max-[42rem]:hidden"
+          class="-mt-[0.3em] min-w-0 truncate pt-[0.3em] text-sm
+            font-semibold max-[42rem]:hidden"
           data-resume-title
         >
           {{ record.current.metadata.title }}
@@ -296,6 +301,7 @@ async function discardAndSignIn(): Promise<void> {
           variant="seal"
           @click="publishOpen = true"
         >
+          <SealRing />
           {{ copy.publish }}
         </Button>
         <div
@@ -318,9 +324,10 @@ async function discardAndSignIn(): Promise<void> {
 
     <aside
       class="editor-app-rail col-start-1 row-start-2 flex flex-col items-center
-        gap-2 border-r bg-card p-2 max-[72rem]:col-start-2
+        gap-2 border-r border-border bg-background p-2 max-[72rem]:col-start-2
         max-[72rem]:z-20 max-[72rem]:h-14 max-[72rem]:flex-row
-        max-[72rem]:border-b max-[72rem]:border-r-0 max-[42rem]:col-start-1
+        max-[72rem]:border-b max-[72rem]:border-r-0 max-[72rem]:px-3
+        max-[72rem]:py-0 max-[42rem]:col-start-1
         max-[72rem]:data-[narrow-active=false]:pointer-events-none
         max-[72rem]:data-[narrow-active=false]:invisible
         max-[72rem]:data-[narrow-active=false]:opacity-0"
@@ -394,7 +401,8 @@ async function discardAndSignIn(): Promise<void> {
 
     <aside
       class="editor-outline col-start-2 row-start-2 flex min-w-0 flex-col
-        overflow-auto border-r bg-card max-[72rem]:col-start-1
+        overflow-auto border-r border-border bg-background
+        max-[72rem]:col-start-1
         max-[72rem]:row-start-2 max-[72rem]:w-full max-[72rem]:max-w-[38rem]
         max-[72rem]:data-[narrow-active=false]:pointer-events-none
         max-[72rem]:data-[narrow-active=false]:invisible max-[72rem]:pb-16
@@ -448,8 +456,7 @@ async function discardAndSignIn(): Promise<void> {
                   : undefined
               "
               :data-outline-key="item.key"
-              class="w-full justify-start aria-[current=page]:bg-surface-blue
-                aria-[current=page]:font-semibold"
+              :class="outlineRowClass"
               variant="ghost"
               @click="selectOutline(item.key)"
             >
@@ -457,7 +464,7 @@ async function discardAndSignIn(): Promise<void> {
                 :is="item.icon"
                 :size="18"
                 aria-hidden="true"
-                class="text-brand-indigo"
+                class="text-muted-foreground"
                 :data-icon-key="item.iconKey"
                 data-outline-icon
               />
@@ -500,7 +507,8 @@ async function discardAndSignIn(): Promise<void> {
     <PanelResizeHandle />
     <aside
       class="editor-inspector relative col-start-4 row-start-2 min-w-0
-        overflow-auto border-l bg-card p-4 max-[72rem]:col-start-2
+        overflow-auto border-l border-border bg-background p-4
+        max-[72rem]:col-start-2
         max-[72rem]:row-start-2 max-[72rem]:ml-0 max-[72rem]:w-full
         max-[72rem]:max-w-none max-[72rem]:pt-20 max-[42rem]:col-start-1
         max-[42rem]:w-full max-[42rem]:max-w-none max-[72rem]:pb-24
@@ -554,9 +562,7 @@ async function discardAndSignIn(): Promise<void> {
                     : undefined
                 "
                 :data-outline-key="item.key"
-                class="w-full justify-start
-                  aria-[current=page]:bg-surface-blue
-                  aria-[current=page]:font-semibold"
+                :class="outlineRowClass"
                 type="button"
                 variant="ghost"
                 @click="selectOutline(item.key)"
@@ -565,7 +571,7 @@ async function discardAndSignIn(): Promise<void> {
                   :is="item.icon"
                   :size="18"
                   aria-hidden="true"
-                  class="text-brand-indigo"
+                  class="text-muted-foreground"
                   :data-icon-key="item.iconKey"
                   data-outline-icon
                 />

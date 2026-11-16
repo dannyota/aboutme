@@ -33,6 +33,30 @@ describe('EditorRegionTabs', () => {
     expect(preview.attributes('aria-pressed')).toBe('false');
   });
 
+  it('marks the active tab with an ink pill on the page ground', () => {
+    const wrapper = mount(EditorRegionTabs, {
+      props: { modelValue: 'editor' },
+    });
+    const list = wrapper.get('[role="tablist"]');
+
+    expect(list.classes()).toEqual(expect.arrayContaining([
+      'bg-background',
+      'border-t',
+      'border-border',
+    ]));
+    expect(list.classes()).not.toContain('bg-card');
+    for (const tab of list.findAll('[role="tab"]')) {
+      expect(tab.attributes('data-variant')).toBe('ghost');
+      expect(tab.classes()).toEqual(expect.arrayContaining([
+        'rounded-full',
+        'text-muted-foreground',
+        'aria-selected:bg-foreground',
+        'aria-selected:text-background',
+      ]));
+      expect(tab.classes()).not.toContain('aria-selected:text-link');
+    }
+  });
+
   it('hides only from 72 rem, where the preview has its own column', () => {
     const wrapper = mount(EditorRegionTabs, {
       props: { modelValue: 'editor' },

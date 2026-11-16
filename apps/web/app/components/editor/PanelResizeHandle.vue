@@ -87,9 +87,9 @@ const announcedWidthRem = computed(() => Math.round(panel.widthRem.value));
     <span
       aria-hidden="true"
       class="absolute inset-y-0 left-0 w-px bg-border
-        group-hover:w-[3px] group-hover:bg-primary
-        group-active:w-[3px] group-active:bg-primary
-        group-focus-visible:w-[3px] group-focus-visible:bg-primary"
+        group-hover:w-[3px] group-hover:bg-control
+        group-active:w-[3px] group-active:bg-control
+        group-focus-visible:w-[3px] group-focus-visible:bg-control"
     />
   </div>
 </template>

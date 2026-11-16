@@ -344,6 +344,97 @@ describe('EditorShell', () => {
     wrapper.unmount();
   });
 
+  it('sets the top bar, rail, outline and inspector on the page ground', () => {
+    const wrapper = mountShell();
+    const rules: Record<string, readonly string[]> = {
+      'topbar': ['border-b'],
+      'app-rail': ['border-r', 'max-[72rem]:border-b'],
+      'outline': ['border-r'],
+      'inspector': ['border-l'],
+    };
+
+    for (const [region, edges] of Object.entries(rules)) {
+      const classes = wrapper.get(`[data-region="${region}"]`).classes();
+      expect(classes, region).toEqual(expect.arrayContaining([
+        'bg-background',
+        'border-border',
+        ...edges,
+      ]));
+      expect(classes, region).not.toContain('bg-card');
+    }
+    expect(wrapper.get('[data-region="preview"]').classes())
+      .toContain('bg-editor-canvas');
+  });
+
+  it(
+    'draws outline rows as 38 px pills with muted icons and an accent '
+    + 'current row',
+    async () => {
+      const wrapper = mountShell({}, { attachTo: document.body });
+      const expectRows = (rows: readonly Element[]): void => {
+        expect(rows.length).toBe(3);
+        for (const row of rows) {
+          const classes = [...row.classList];
+          expect(classes).toEqual(expect.arrayContaining([
+            'h-[38px]',
+            'rounded-full',
+            'font-semibold',
+            'aria-[current=page]:bg-accent',
+            'aria-[current=page]:font-bold',
+          ]));
+          expect(classes.join(' ')).not.toMatch(/surface-blue/u);
+          const icon = row.querySelector('[data-outline-icon]');
+          expect(icon?.classList.contains('text-muted-foreground')).toBe(true);
+          expect(icon?.classList.contains('text-brand-indigo')).toBe(false);
+        }
+        expect(rows[0]?.getAttribute('aria-current')).toBe('page');
+      };
+
+      try {
+        expectRows(wrapper.findAll('[aria-label="Resume outline"] '
+          + '[data-outline-key]').map((row) => row.element));
+        await wrapper.get('[data-action="open-sections"]').trigger('click');
+        await wrapper.vm.$nextTick();
+        await wrapper.vm.$nextTick();
+        expectRows([...document.body.querySelectorAll(
+          '[aria-label="Resume sections"] [data-outline-key]',
+        )]);
+      } finally {
+        wrapper.unmount();
+      }
+    },
+  );
+
+  it(
+    'draws the top bar title, the Download PDF outline pill and the seal '
+    + 'Publish button with the ring a',
+    () => {
+      const wrapper = mountShell();
+      const title = wrapper.get('[data-resume-title]').classes();
+
+      expect(title).toEqual(expect.arrayContaining([
+        'truncate',
+        'font-semibold',
+        'pt-[0.3em]',
+        '-mt-[0.3em]',
+      ]));
+      expect(title).not.toContain('font-medium');
+      const download = wrapper.get('[data-action="download-pdf"]');
+      expect(download.attributes('data-variant')).toBe('outline');
+      expect(download.classes()).toContain('rounded-full');
+      expect(download.get('[data-download-pdf-size]').classes())
+        .toContain('max-[42rem]:hidden');
+      expect(download.attributes('aria-label')).toBe('Download PDF, A4');
+      const publish = wrapper.get('[data-action="publish"]');
+      expect(publish.attributes('data-variant')).toBe('seal');
+      const ring = publish.element.firstElementChild;
+      expect(ring?.matches('svg[data-ring-a]')).toBe(true);
+      expect(ring?.getAttribute('aria-hidden')).toBe('true');
+      expect(publish.text()).toBe('Publish');
+      expect(wrapper.findAll('[data-ring-a]')).toHaveLength(1);
+    },
+  );
+
   it('places each editor region in an explicit grid cell', () => {
     const wrapper = mountShell();
 
@@ -490,12 +581,21 @@ describe('EditorShell', () => {
     expect(design.attributes('aria-pressed')).toBe('false');
     await design.trigger('click');
     expect(design.attributes('aria-pressed')).toBe('true');
-    expect(design.classes()).toEqual(
-      expect.arrayContaining([
-        'aria-pressed:bg-surface-blue',
-        'aria-pressed:text-link',
-      ]),
-    );
+    const tools = wrapper.findAll('[data-region="app-rail"] [aria-pressed]');
+    expect(tools).toHaveLength(5);
+    for (const tool of tools) {
+      const classes = tool.classes();
+      expect(classes).toEqual(expect.arrayContaining([
+        'size-11',
+        'rounded-full',
+        'text-muted-foreground',
+        'aria-pressed:bg-foreground',
+        'aria-pressed:text-background',
+      ]));
+      expect(classes.join(' ')).not.toMatch(
+        /surface-blue|text-link|shadow-\[inset|--primary/u,
+      );
+    }
     expect(wrapper.get('[data-testid="customization-title"]').text())
       .toBe('Customization');
     expect(wrapper.findAll('[data-testid="customization-title"]'))

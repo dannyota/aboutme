@@ -231,3 +231,36 @@ export async function leakChromeIntoResume(
     });
   };
 }
+
+export async function expectSlugPrefixCell(page: Page): Promise<void> {
+  const message = 'Publish slug prefix cell.';
+  const field = page.getByTestId('publish-slug-field');
+  await expect(field, message).toBeVisible();
+  await expect.poll(() => field.evaluate((node) => {
+    const input = node.querySelector('[data-action="publish-slug"]')!;
+    const cell = node.querySelector('[data-testid="publish-slug-prefix"]')!;
+    const outer = input.getBoundingClientRect();
+    const inner = cell.getBoundingClientRect();
+    const range = document.createRange();
+    range.selectNodeContents(cell);
+    const text = range.getBoundingClientRect();
+    const near = (a: number, b: number) => Math.abs(a - b) <= 1;
+    const textStart = outer.left
+      + Number.parseFloat(getComputedStyle(input).paddingLeft);
+    return {
+      left: near(inner.left, outer.left + 1),
+      top: near(inner.top, outer.top + 1),
+      bottom: near(inner.bottom, outer.bottom - 1),
+      clear: inner.right < textStart,
+      text: text.left >= inner.left && text.right <= inner.right - 1,
+      ground: getComputedStyle(cell).backgroundColor,
+    };
+  }), message).toEqual({
+    left: true,
+    top: true,
+    bottom: true,
+    clear: true,
+    text: true,
+    ground: 'rgb(241, 239, 250)',
+  });
+}
