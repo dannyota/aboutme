@@ -13,6 +13,25 @@ import (
 	"github.com/google/uuid"
 )
 
+const getAccountExportGitHubConnection = `-- name: GetAccountExportGitHubConnection :one
+SELECT github_user_id, login, connected_at
+FROM github_connections
+WHERE user_id = $1 AND github_user_id IS NOT NULL
+`
+
+type GetAccountExportGitHubConnectionRow struct {
+	GithubUserID *int64
+	Login        *string
+	ConnectedAt  *time.Time
+}
+
+func (q *Queries) GetAccountExportGitHubConnection(ctx context.Context, userID uuid.UUID) (GetAccountExportGitHubConnectionRow, error) {
+	row := q.db.QueryRow(ctx, getAccountExportGitHubConnection, userID)
+	var i GetAccountExportGitHubConnectionRow
+	err := row.Scan(&i.GithubUserID, &i.Login, &i.ConnectedAt)
+	return i, err
+}
+
 const getAccountExportProfile = `-- name: GetAccountExportProfile :one
 SELECT id, email, name, created_at, updated_at
 FROM users

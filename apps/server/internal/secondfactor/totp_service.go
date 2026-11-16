@@ -139,22 +139,19 @@ func (s *Service) RemoveTOTP(ctx context.Context, current store.Session) (auth.S
 	var issue auth.SessionIssue
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		qtx := s.q.WithTx(tx)
-		now := s.now()
-		user, sess, policy, lockErr := lockAccount(ctx, qtx, current, now)
+		user, sess, policy, lockErr := lockAccountRows(ctx, qtx, current)
 		if lockErr != nil {
 			return lockErr
-		}
-		if reauthErr := auth.RequireRecentSecondFactorReauth(user, policy, sess, now); reauthErr != nil {
-			return reauthErr
-		}
-		if policy == nil {
-			return auth.ErrSecondFactorNotFound
 		}
 		cred, credErr := lockTOTPCredential(ctx, qtx, user.ID)
 		if credErr != nil {
 			return credErr
 		}
-		if cred == nil {
+		now := s.now()
+		if reauthErr := auth.RequireRecentSecondFactorReauth(user, policy, sess, now); reauthErr != nil {
+			return reauthErr
+		}
+		if policy == nil || cred == nil {
 			return auth.ErrSecondFactorNotFound
 		}
 		if _, delErr := qtx.DeleteTOTPCredentialForUser(ctx, user.ID); delErr != nil {
@@ -179,7 +176,11 @@ func (s *Service) RemoveTOTP(ctx context.Context, current store.Session) (auth.S
 		}
 		var changeErr error
 		issue, changeErr = s.commitFactorChange(ctx, qtx, user, sess, proof, kind, now)
-		return changeErr
+		if changeErr != nil {
+			return changeErr
+		}
+		s.sessions.AccountSessionsEndedLocked(user.ID)
+		return nil
 	})
 	if err != nil {
 		return auth.SessionIssue{}, err

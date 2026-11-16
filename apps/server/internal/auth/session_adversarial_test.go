@@ -624,7 +624,7 @@ func TestReplaceAfterEpochChange_RacesRotation(t *testing.T) {
 		t.Fatal("rotation admission did not happen before the deadline")
 	}
 
-	replacement, replaceErr := advanceEpochAndReplace(ctx, pool, q, sm, userID, predecessor.ID, nil)
+	replacement, replaceErr := advanceEpochAndReplace(ctx, pool, q, sm, userID, predecessor.ID, nil, clock.Now())
 	close(release)
 	var result authResult
 	select {
@@ -678,7 +678,7 @@ func TestReplaceAfterEpochChange_RacesIssue(t *testing.T) {
 	if err != nil {
 		t.Fatalf("advance epoch: %v", err)
 	}
-	replacement, err := sm.ReplaceAfterEpochChangeTx(ctx, qtx, userID, current.ID, nil)
+	replacement, err := sm.ReplaceAfterEpochChangeTx(ctx, qtx, userID, current.ID, nil, time.Now())
 	if err != nil {
 		t.Fatalf("ReplaceAfterEpochChangeTx() error = %v", err)
 	}

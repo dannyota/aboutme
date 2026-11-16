@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -56,7 +57,7 @@ func (m *SessionManager) TouchReauthenticated(ctx context.Context, sessionID uui
 	return nil
 }
 
-func (m *SessionManager) ReplaceAfterEpochChangeTx(ctx context.Context, qtx *store.Queries, userID, currentSessionID uuid.UUID, secondFactorVerifiedAt *time.Time) (SessionIssue, error) {
+func (m *SessionManager) ReplaceAfterEpochChangeTx(ctx context.Context, qtx *store.Queries, userID, currentSessionID uuid.UUID, secondFactorVerifiedAt *time.Time, now time.Time) (SessionIssue, error) {
 	user, err := qtx.GetUserForUpdate(ctx, userID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -71,7 +72,6 @@ func (m *SessionManager) ReplaceAfterEpochChangeTx(ctx context.Context, qtx *sto
 		}
 		return SessionIssue{}, fmt.Errorf("auth: replace session: lock current session: %w", err)
 	}
-	now := m.now()
 	if current.UserID != user.ID || current.AuthEpoch+1 != user.AuthEpoch || RequireLiveSession(current, now) != nil {
 		return SessionIssue{}, ErrSessionInvalid
 	}
@@ -103,6 +103,21 @@ func (m *SessionManager) ReplaceAfterEpochChangeTx(ctx context.Context, qtx *sto
 		return SessionIssue{}, fmt.Errorf("auth: replace session: create replacement: %w", err)
 	}
 	return SessionIssue{RawToken: raw, Session: replacement}, nil
+}
+
+func LockSessionAccount(ctx context.Context, qtx *store.Queries, sess store.Session) (store.User, store.Session, error) {
+	user, err := lockAccountUser(ctx, qtx, sess.UserID)
+	if err != nil {
+		return store.User{}, store.Session{}, err
+	}
+	current, err := lockCallerSessionRow(ctx, qtx, user, sess.ID)
+	if err != nil {
+		return store.User{}, store.Session{}, err
+	}
+	if subtle.ConstantTimeCompare(current.CSRFSecret, sess.CSRFSecret) != 1 {
+		return store.User{}, store.Session{}, ErrSessionInvalid
+	}
+	return user, current, nil
 }
 
 func RequireRecentReauth(sess store.Session, now time.Time) error {

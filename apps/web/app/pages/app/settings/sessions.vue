@@ -2,6 +2,7 @@
 import type { AuthProvider } from '../../../composables/useAuth';
 import PasswordSettings from '../../../components/auth/PasswordSettings.vue';
 import ConnectedAgents from '../../../components/settings/ConnectedAgents.vue';
+import GitHubEvidence from '../../../components/settings/GitHubEvidence.vue';
 import LinkedIdentities from '@/components/settings/LinkedIdentities.vue';
 import PrivacySettings from '../../../components/settings/PrivacySettings.vue';
 import SecondFactorSettings
@@ -81,7 +82,8 @@ const {
   mutate,
   refresh: refreshMe,
 } = useAuth();
-const { loginProviders, agentAccess, passkeyEnrollment } = useCapabilities();
+const { loginProviders, agentAccess, passkeyEnrollment, githubEvidence }
+  = useCapabilities();
 const enabledIdentities = computed(() =>
   identities.value.filter((identity) =>
     loginProviders.value.includes(identity.provider)));
@@ -588,6 +590,14 @@ const linkErrorMessage = computed(() => {
           </li>
         </ul>
       </div>
+    </section>
+
+    <section
+      v-if="githubEvidence"
+      aria-labelledby="github-evidence-title"
+      class="border-t py-8"
+    >
+      <GitHubEvidence />
     </section>
   </main>
 </template>

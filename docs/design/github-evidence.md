@@ -18,15 +18,28 @@ page" ([roadmap](../plans/roadmap.md#v09-show-the-work)). It builds on the
 
 ## Enablement
 
-| Configuration                          | Evidence routes | GitHub sign-in         |
-| -------------------------------------- | --------------- | ---------------------- |
-| Evidence application credentials unset | 404             | As ADR 0016 configures |
-| Evidence application credentials set   | On              | As ADR 0016 configures |
+| Configuration                                 | Evidence routes           | GitHub sign-in         |
+| --------------------------------------------- | ------------------------- | ---------------------- |
+| Evidence client id and secret both unset      | 404                       | As ADR 0016 configures |
+| Evidence client id and secret both set        | On                        | As ADR 0016 configures |
+| Only one of the evidence client id and secret | The server does not start | Unchanged              |
+
+On the production host, the deploy's secrets check rejects a half-set pair
+before any service changes.
 
 The evidence application is a GitHub OAuth application of its own, with its own
-client id, secret and callback URL. The capabilities response tells the web app
-whether evidence is available. Sign-in start methods, purposes and scopes
-([ADR 0016](../adr/0016-sign-in-providers.md)) are untouched.
+client id and secret. Its callback URL is the public origin plus the fixed path
+`/api/v1/github-evidence/callback`, as for sign-in providers. The capabilities
+response tells the web app whether evidence is available. Sign-in start methods,
+purposes and scopes ([ADR 0016](../adr/0016-sign-in-providers.md)) are
+untouched.
+
+Connecting collects GitHub identity data. In production the credentials are set,
+and the feature turns on, only after two conditions hold. First, the bilingual
+privacy notice lists the GitHub connection: the GitHub user id, login and
+connected time, and that the token is never stored. Second, existing accounts
+have received the email the notice promises before a change in what is
+collected. The notice text needs the owner's approval.
 
 ## Connection
 
@@ -55,26 +68,96 @@ whether evidence is available. Sign-in start methods, purposes and scopes
   discards the token and fails through the existing no-oracle path. It never
   resolves or links an identity, never updates reauthentication proof, and never
   starts a session of the account.
+- The account boundary orders the callback's install against every ending,
+  whichever takes the account lock first. The install sees an ending that
+  committed before it. A disconnect or a replacement has changed the generation,
+  and revoking the caller's own session or an epoch change has invalidated it,
+  so the install is refused and its token revoked. "Done", expiry and revoking
+  another session of the account end only the session live at that moment, so a
+  later install proceeds. Once shutdown has begun, no install proceeds. An
+  ending that comes after the install ends the new session.
+- The one exception is a commit that fails after the install. The callback then
+  ends exactly the session it installed, after the lock is released.
 - The token response must contain a `scope` field that is present and empty. Any
   other value, or a missing field, discards the token and fails the connection.
 - Connecting a different GitHub account replaces the connection and removes the
   confirmed mark from every item checked against the old account, as one
   owner-locked library mutation per affected project.
+- Settings (`/app/settings/sessions`) shows a GitHub evidence section only when
+  the capability is on. It shows the connected login and connected time, whether
+  a session is live and its expiry, and offers Connect (Continue once
+  connected), Done and Disconnect. It shows no other GitHub data.
+- The callback ends with a redirect to that section carrying
+  `evidence=connected` or `evidence=failed`. No other value is produced, a
+  failure gives no reason, and the page ignores any other value.
 
 ## Evidence session
 
-The token exists only in server memory.
+The token exists only in server memory. The production application has token
+expiration on, so GitHub issues the access token for eight hours together with a
+refresh token. The server never stores or uses the refresh token and drops it
+with the token response. An unused refresh token stays valid at GitHub for six
+months, which is why it is dropped at once.
 
 - A session starts at the callback, lasts at most 30 minutes, and is held in the
   memory of the server process, keyed by user. It records the user's
   authentication epoch and the connection generation. One session per account; a
   new one replaces the old.
 - It ends on "Done", expiry, sign-out, an epoch change, disconnect, replacement
-  and process exit. Ending discards the token and asks GitHub to revoke it. The
-  request needs the token itself, so a crash or a failed request leaves it valid
-  at GitHub and held by no one; a failed revocation is logged without the token.
+  and process exit. Ending discards the token through token cleanup.
+- Sign-out means any revocation of the account's sessions: logout, revoking one
+  session or all of them, a password change or reset, and account deletion. An
+  epoch change ends the session inside the transaction that changes the epoch.
+- On shutdown, evidence cleanup starts at the signal, alongside the HTTP drains.
+  In-flight code exchanges are cancelled, and every held token gets its one
+  revocation attempt in parallel. Cleanup ends within 6 seconds of the signal
+  (the 5-second request bound plus 1 second), so it fits inside Podman's
+  10-second container stop. A callback that arrives after the signal does no
+  exchange and redirects with `evidence=failed`.
+- One account boundary orders every change: the account's user row lock in a
+  database transaction. The evidence routes lock the user, the caller's session,
+  then the GitHub connection row. Session-authenticated operations revalidate
+  the caller's session inside it (live, same user, current epoch, same CSRF
+  secret): the callback's install, status, "Done", disconnect, logout, revoking
+  one or all sessions, a password change and self-deletion. Operations that
+  carry another proof keep that proof and run under the same user lock: a
+  password reset, an operator's deletion and the epoch change inside them. Only
+  expiry and shutdown end a session outside the boundary.
+- Every path that changes the evidence connection or session, or tells the
+  server that the account's sessions ended, keeps three rules:
+  1. It checks its authority under its locks. It reads the clock once, after the
+     last row lock it takes before deciding, and checks every deadline against
+     that value: session expiry, the recent-proof window, enrollment and
+     ceremony expiry, and reset-token expiry.
+  2. It ends the evidence session only after its own authorization has succeeded
+     and all its session changes, rotation partners included, are done, as the
+     last step before commit.
+  3. Nothing after that can roll the transaction back except a failed commit.
+- A token is held for cleanup as soon as the token response yields one
+  unambiguous access token, before any other validation. A response that carries
+  two different access tokens is logged as a fixed category, and neither is
+  revoked.
+- Token cleanup is one path for every issued token that is discarded: a callback
+  that fails after the code exchange (generation mismatch, rejected scope,
+  failed profile fetch) and every session ending above, including process
+  shutdown where shutdown still allows a request. Cleanup claims the token
+  atomically, so concurrent endings send no second request, and makes exactly
+  one revocation attempt under the outbound bounds, never retried. Revocation is
+  always attempted and does not count toward the per-account request limit.
+- Revocation is `DELETE https://api.github.com/applications/{client_id}/token`,
+  authenticated with the application's client id and secret in Basic auth, with
+  `{"access_token": "<token>"}` as the JSON body. The request needs the token
+  itself, so a crash or a failed request leaves the token valid at GitHub, for
+  at most eight hours, and held by no one. A failed revocation is logged as a
+  fixed category.
 - The token is never written to the database, a file, a log, a response or the
   export. A database backup contains none.
+- No log, error or diagnostic dump contains the access or refresh token, the
+  client secret, an `Authorization` header, a request or response body, or a raw
+  GitHub error. The server container runs with core dumps off (`Ulimit=core=0:0`
+  in its Quadlet). [Host hardening](host-hardening.md#database-logs-and-cores)
+  proposes this limit for every Quadlet; the server's comes first, with this
+  feature.
 - When no session is live, the picker asks the owner to continue with GitHub;
   GitHub does not prompt again for an authorized application.
 
@@ -111,7 +194,7 @@ MCP tool reaches them.
 | ---------------------------------------------------------- | --------------------------------------------------- |
 | `GET /api/v1/github-evidence`                              | Connection, whether a session is live, its expiry   |
 | `POST /api/v1/github-evidence/start`                       | Begin connect or continue; returns an authorize URL |
-| `DELETE /api/v1/github-evidence`                           | Disconnect, with `keepLinks` true or false          |
+| `DELETE /api/v1/github-evidence?keepLinks=`                | Disconnect, with `keepLinks` `true` or `false`      |
 | `POST /api/v1/github-evidence/session/end`                 | "Done"                                              |
 | `GET /api/v1/github-evidence/candidates?kind=&page=`       | One page of repositories, pull requests or releases |
 | `POST /api/v1/projects/{id}/evidence`                      | Attach `{kind, link}` or `{kind, candidateId}`      |
@@ -144,6 +227,12 @@ MCP tool reaches them.
   `evidence_not_confirmed`, `evidence_limit`, `evidence_unsupported_link`,
   `evidence_upstream` (GitHub error, limit or timeout), plus the existing
   precondition and validation errors.
+- With evidence off, every route answers 404 `evidence_unavailable`. Start
+  answers 503 `evidence_unavailable` once shutdown has begun. "Done" without a
+  live session answers 409 `evidence_session_required`. The eleventh start in an
+  hour answers the API's 429 `rate_limited` with `Retry-After`;
+  `evidence_upstream` is only for GitHub's own errors and timeouts and for the
+  spent request budget.
 
 | Limit                               | Value                                 |
 | ----------------------------------- | ------------------------------------- |
@@ -155,12 +244,16 @@ MCP tool reaches them.
 | One GitHub response                 | 512 KiB, read whole, then parsed      |
 | One GitHub request                  | 5 s; no retry                         |
 
+The limits above were approved with this design. The code exchange and the
+profile fetch count toward the per-account request limit; revocation does not.
+
 ## Outbound requests
 
 A dedicated client, not the sign-in provider client.
 
-- The only destination is `https://api.github.com`, with certificate validation,
-  no proxy from the environment and redirects refused.
+- The only destinations are `POST https://github.com/login/oauth/access_token`
+  for the code exchange and `https://api.github.com`, with certificate
+  validation, no proxy from the environment and redirects refused.
 - A pasted link is parsed into owner, repository and number or tag and never
   fetched as given. Recheck addresses the repository by its stored id, so a
   rename or transfer is followed without a redirect; if the repository id or
@@ -169,7 +262,7 @@ A dedicated client, not the sign-in provider client.
   action. Only the listed fields are kept. GitHub text is untrusted: stored as
   plain text and rendered as text.
 - The host has no egress allowlist, so this client is the boundary; a test
-  proves it refuses any other host, scheme and redirect.
+  proves it refuses any other destination, scheme and redirect.
 
 ## Staleness and rechecking
 
@@ -199,6 +292,9 @@ page's own data.
 - The connection and the evidence are account data: both are in the account
   export and deleted with the account. A GitHub id shared by several accounts
   links them for anyone holding the database.
+- The operator's account deletion command runs outside the server process. The
+  token of an account deleted that way is revoked at session expiry, within 30
+  minutes.
 - Confirmation states what GitHub records. It does not claim sole authorship.
 - Nothing about a viewer is stored, and no request reaches GitHub when a page is
   viewed.
@@ -206,9 +302,12 @@ page's own data.
 ## Disconnecting
 
 `DELETE /api/v1/github-evidence` advances the generation, clears the connection,
-ends the session and asks GitHub to revoke its token. With `keepLinks` the items
-stay as plain links; without it they are removed. Either way each affected
-project changes through one library mutation.
+ends the session and asks GitHub to revoke its token. `keepLinks` is a required
+query boolean; a missing or other value is a validation error. With
+`keepLinks=true` the items stay as plain links; with `false` they are removed.
+Either way each affected project changes through one library mutation.
+Disconnecting advances the generation even when nothing is connected, so a
+callback started earlier fails.
 
 ## Data
 
@@ -217,7 +316,8 @@ project changes through one library mutation.
 - `project_evidence`: project (cascade), position, the item fields above.
 - The OAuth transaction purpose and user-binding constraints gain `evidence`,
   with the connection generation recorded on the transaction.
-- Configuration: evidence client id, client secret and callback URL.
+- Configuration: evidence client id and client secret; the callback URL is the
+  public origin plus the fixed callback path, as for sign-in providers.
 
 ## Checks
 
@@ -226,14 +326,19 @@ project changes through one library mutation.
 - A callback under another user's session, a replayed callback, and a callback
   after a disconnect all fail without creating a connection.
 - A token response with a non-empty or missing scope is refused.
+- Every token discarded after the code exchange gets exactly one revocation
+  attempt, also when endings race, and none of the secrets or raw responses
+  above reaches a log or error.
+- The server Quadlet sets `Ulimit=core=0:0`.
+- The host secrets check fails on one secret of the pair before app-down.
 - No route, export, log, error or database row contains a GitHub token.
 - An item is attached only when its rule holds for the connected account id; a
   login match never confirms; a contributor is never confirmed.
 - A project `PUT` or agent write that carries evidence fields changes no
   evidence.
 - A disconnect that commits during an attach leaves nothing attached.
-- Requests leave only for the fixed host; another host, scheme, path shape or a
-  redirect is refused without a second request.
+- Requests leave only for the two fixed destinations; another host, scheme, path
+  shape or a redirect is refused without a second request.
 - Recheck of a renamed repository keeps the item; a different repository under
   the old name does not confirm.
 - Evidence changes reach the project page on the next request and are revoked
@@ -241,6 +346,7 @@ project changes through one library mutation.
 
 ## Owner action before release
 
-The owner creates a second GitHub OAuth application for production, for evidence
-only, and supplies its client id, secret and callback URL. Until then the
-feature stays off. The limits above were approved with this design.
+The owner created the production evidence application on 2026-11-15, with token
+expiration on and no device flow. Its registered callback is
+`https://aboutme.vn/api/v1/github-evidence/callback`. Its client id and secret
+reach the server as configuration; until both are set the feature stays off.

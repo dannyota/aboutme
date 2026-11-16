@@ -183,6 +183,16 @@ The TOTP key ring uses two host secret slots, selected in
 `/etc/aboutme/flags.env`; the [key-management design](totp-key-management.md)
 owns the application key-ring contract.
 
+`/etc/aboutme/flags.env` holds one unquoted `NAME=value` per line, so Podman's
+env-file reader and the deployer read the same values; any other line or a
+repeated name stops the deploy. The deployer reads `MCP_ENABLED` only from env
+files and inline `Environment=` lines, and refuses a server unit that sets the
+environment another way. pgBackRest's key file sits in a root-owned directory,
+group `postgres`, mode 0750, so `postgres` can read it but cannot write there.
+The Telegram token is replaced in place under the sender's lock, with no
+temporary plaintext file or Podman copy. An imported vStorage key file must have
+the one-section shape `create-s3-key` writes; any other shape is refused.
+
 A later second replica uses the pinned admission and password-email key versions
 from [key identity](scaling/admission.md#key-identity). A key change then
 requires closed admission, joined or fenced work, and proved zero claim, rate,

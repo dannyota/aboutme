@@ -19,6 +19,7 @@ describe("GET /capabilities", () => {
     expect(schema.additionalProperties).toBe(false);
     expect(schema.required.sort()).toEqual([
       "agentAccess",
+      "githubEvidence",
       "passkeyEnrollment",
       "passwordRegistration",
       "providerLogin",

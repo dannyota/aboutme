@@ -158,10 +158,12 @@ Settings is a narrow, left-aligned page divided by top rules. Signed-in devices
 show the device description, relative last-seen time, This device, and Log out
 or Revoke actions, with Log out everywhere below. Password settings are always
 present. Account export and deletion appear in the Privacy section. Connected
-agents and sign-in providers appear only when their capabilities are enabled.
-Connected agents links the [MCP guide](../mcp-guide.md) at `/guide/mcp` from its
-empty state (“Xem cách kết nối trợ lý AI” or “See how to connect an AI
-assistant”) and again under the grant list when it has entries.
+agents, sign-in providers and
+[GitHub evidence](../github-evidence.md#connection) appear only when their
+capabilities are enabled. Connected agents links the
+[MCP guide](../mcp-guide.md) at `/guide/mcp` from its empty state (“Xem cách kết
+nối trợ lý AI” or “See how to connect an AI assistant”) and again under the
+grant list when it has entries.
 
 ## Language twin
 

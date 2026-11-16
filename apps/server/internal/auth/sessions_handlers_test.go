@@ -961,7 +961,7 @@ func TestRevokeAll_EpochReplacementCommittedFirst(t *testing.T) {
 	if _, err := qtx.AdvanceUserAuthEpoch(t.Context(), userID); err != nil {
 		t.Fatalf("advance epoch: %v", err)
 	}
-	replacement, err := auth.NewSessionManagerWithPool(pool).ReplaceAfterEpochChangeTx(t.Context(), qtx, userID, changer.ID, nil)
+	replacement, err := auth.NewSessionManagerWithPool(pool).ReplaceAfterEpochChangeTx(t.Context(), qtx, userID, changer.ID, nil, time.Now())
 	if err != nil {
 		t.Fatalf("ReplaceAfterEpochChangeTx() error = %v", err)
 	}
@@ -1038,7 +1038,7 @@ func TestRevokeAll_LogoutFirstThenReplacementFails(t *testing.T) {
 		if _, advanceErr := qtx.AdvanceUserAuthEpoch(t.Context(), userID); advanceErr != nil {
 			return advanceErr
 		}
-		_, replaceErr := auth.NewSessionManagerWithPool(pool).ReplaceAfterEpochChangeTx(t.Context(), qtx, userID, changer.ID, nil)
+		_, replaceErr := auth.NewSessionManagerWithPool(pool).ReplaceAfterEpochChangeTx(t.Context(), qtx, userID, changer.ID, nil, time.Now())
 		return replaceErr
 	})
 	if !errors.Is(err, auth.ErrSessionInvalid) {

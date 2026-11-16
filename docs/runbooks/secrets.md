@@ -25,6 +25,15 @@ secret change so the rendered units and running containers use it.
   Google; `google,linkedin` enables both. Import the corresponding
   `<provider>-client-id` and `<provider>-client-secret` before enabling them.
   Keep provider callback URLs under `https://aboutme.vn/api/v1/auth/`.
+- [GitHub evidence](../design/github-evidence.md) uses its own GitHub OAuth
+  application, registered with the callback
+  `https://aboutme.vn/api/v1/github-evidence/callback`. To turn it on, import
+  its client id as `github-evidence-client-id` and its client secret as
+  `github-evidence-client-secret`, then redeploy. Deploys give the server both
+  secrets or neither, and refuse one without the other before the site changes.
+  To turn it off, delete both files from `/etc/aboutme/secrets/` and both Podman
+  secrets on the host, then redeploy; no script does this. A file left behind
+  lets `secrets.sh` recreate its Podman secret.
 - `PASSWORD_REGISTRATION_ENABLED=false` disables new email registration. Login,
   password reset, pending verification, and provider sign-up keep working. Set
   `true` and redeploy to restore registration.

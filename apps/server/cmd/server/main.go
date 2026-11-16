@@ -149,6 +149,13 @@ func run() error {
 		return fmt.Errorf("create account service: %w", err)
 	}
 	authService.SetAccountDeleteHandler(accountService.DeleteHandler())
+	evidence, err := app.NewGitHubEvidence(cfg, logger, pool, sessionManager)
+	if err != nil {
+		return fmt.Errorf("create github evidence: %w", err)
+	}
+	authService.SetSessionEndListener(evidence)
+	passwordAuth.Service.SetSessionEndListener(evidence)
+	sessionManager.SetEndListener(evidence)
 	cards, err := app.NewPreviewCards(cfg.PreviewCards, pool, reader, printQueue, logger)
 	if err != nil {
 		return err
@@ -193,7 +200,7 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("create agent access: %w", err)
 	}
-	secondFactor, err := app.NewSecondFactor(logger, cfg, pool)
+	secondFactor, err := app.NewSecondFactor(logger, cfg, pool, evidence)
 	if err != nil {
 		return fmt.Errorf("create second factor routes: %w", err)
 	}
@@ -202,6 +209,7 @@ func run() error {
 		Config: cfg, Logger: logger, Readiness: readiness, Public: publicService,
 		Providers: authService, Account: accountService, Resumes: resumeService, Projects: projectService, Passwords: passwordAuth.Service,
 		Agents: agentRoutes, SecondFactor: secondFactor.RegisterRoutes, Streams: streams, Views: views.Service,
+		Evidence: evidence.RegisterRoutes,
 	})
 
 	var lc net.ListenConfig
@@ -255,8 +263,17 @@ func run() error {
 		runTOTPHealthTicker(workerCtx, logger, secondFactor.TOTPHealth)
 	}()
 
+	evidenceCtx, stopEvidence := context.WithCancel(ctx)
+	defer stopEvidence()
+	evidenceClosed := evidence.Run(evidenceCtx)
+
 	logger.Info("starting", "env", cfg.Env)
 	err = servePair(ctx, logger, ln, handler, printListener, printHandler, closePrintQueue)
+	stopEvidence()
+	<-evidenceClosed
+	if shutdownErr := evidence.Shutdown(context.WithoutCancel(ctx)); shutdownErr != nil {
+		logger.Error("github evidence shutdown did not finish revocations")
+	}
 	cancelWorker()
 	stopViews()
 	<-workerDone

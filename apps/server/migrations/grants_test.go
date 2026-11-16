@@ -21,7 +21,7 @@ var businessTables = []string{
 	"pending_authentications", "webauthn_ceremonies", "authentication_security_events",
 	"totp_credentials", "totp_enrollments",
 	"privacy_notice_campaigns", "privacy_notice_recipients",
-	"projects", "project_slug_holds",
+	"projects", "project_slug_holds", "github_connections",
 }
 
 func TestBusinessTableSetMatchesPublicSchema(t *testing.T) {

@@ -412,7 +412,7 @@ export interface paths {
         };
         /**
          * Which optional sign-in and agent surfaces this deployment enables
-         * @description Unauthenticated read of the configuration the web needs before it renders a sign-in or settings page: `providerLogin` and `providers` (`PROVIDER_LOGIN_ENABLED`), `agentAccess` (`MCP_ENABLED`), `passwordRegistration` (`PASSWORD_REGISTRATION_ENABLED`), `passkeyEnrollment` (`PASSKEY_ENROLLMENT_ENABLED`), and `totpEnrollment` (`TOTP_ENROLLMENT_ENABLED`). The response is `Cache-Control: no-store` so a configuration change is visible on the next request. It reveals no other configuration.
+         * @description Unauthenticated read of the configuration the web needs before it renders a sign-in or settings page: `providerLogin` and `providers` (`PROVIDER_LOGIN_ENABLED`), `agentAccess` (`MCP_ENABLED`), `passwordRegistration` (`PASSWORD_REGISTRATION_ENABLED`), `passkeyEnrollment` (`PASSKEY_ENROLLMENT_ENABLED`), `totpEnrollment` (`TOTP_ENROLLMENT_ENABLED`), `signInToView` (`SIGN_IN_TO_VIEW_ENABLED`), and `githubEvidence` (`GITHUB_EVIDENCE_CLIENT_ID` and `GITHUB_EVIDENCE_CLIENT_SECRET` both set). The response is `Cache-Control: no-store` so a configuration change is visible on the next request. It reveals no other configuration.
          */
         get: operations["getCapabilities"];
         put?: never;
@@ -494,6 +494,90 @@ export interface paths {
          *     An `id` that doesn't exist, belongs to a DIFFERENT user, is already revoked, is idle-expired, is absolute-expired, or is a grace-dead rotation predecessor all return the same `404` under the no-oracle contract — never a distinct `403` that would confirm the id exists for someone else, or a distinct `410`/`400` that would confirm it once existed but is merely dead.
          */
         delete: operations["deleteSession"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/github-evidence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The GitHub connection and whether an evidence session is live
+         * @description Returns the caller's GitHub connection (`null` when none) and the live evidence session's expiry (`null` when none is live). A session whose recorded authentication epoch or connection generation no longer matches is ended here and reported as `null`. Takes no query or body.
+         */
+        get: operations["getGitHubEvidence"];
+        put?: never;
+        post?: never;
+        /**
+         * Disconnect GitHub
+         * @description Under the owner lock, advances the connection generation and clears the GitHub user id, login and connected time; the row and its generation stay. Then ends the evidence session and asks GitHub to revoke its token. Advances the generation even when nothing is connected, so a callback begun earlier fails. `keepLinks` is required; no evidence is stored in this release, so its value changes nothing else yet. Takes no body.
+         */
+        delete: operations["deleteGitHubEvidence"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/github-evidence/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Begin connecting GitHub, or continue with it
+         * @description Creates a one-use OAuth transaction with purpose `evidence`, a fresh `state`, PKCE S256 and the callback URL `PUBLIC_ORIGIN` + `/api/v1/github-evidence/callback`, bound to the caller and the connection generation at this moment. It expires after ten minutes. Sets the `__Host-oauth-tx` cookie and returns GitHub's authorize URL for a top-level navigation; the URL asks for no scope. Never redirects. `GET` answers `405`. At most 10 starts per account per hour. Takes no query or body.
+         */
+        post: operations["postGitHubEvidenceStart"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/github-evidence/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Complete connecting GitHub
+         * @description GitHub's redirect target. Consumes the `__Host-oauth-tx` transaction once and clears the cookie on every outcome. Requires the transaction's `state`, its callback URL, and a live `__Host-session` of the user who started it. Then exchanges the code, refuses a token response whose `scope` is missing or not empty, and fetches the GitHub profile. One owner-locked transaction compares the generation recorded at start with the stored one and, only when equal, installs the connection, advances the generation and starts a 30-minute in-memory evidence session that replaces any earlier one. Any failure after the exchange asks GitHub to revoke the token. The refresh token is dropped unread. It never signs in, links an identity or updates reauthentication proof.
+         */
+        get: operations["getGitHubEvidenceCallback"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/github-evidence/session/end": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Done with GitHub
+         * @description Ends the caller's live evidence session and asks GitHub to revoke its token, once. Takes no query or body.
+         */
+        post: operations["postGitHubEvidenceSessionEnd"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1814,6 +1898,31 @@ export interface components {
             /** @description Whether the account has a password credential. A provider-only account is `false` until a password is added. */
             hasPassword: boolean;
         };
+        /** @description The connected GitHub account. `githubUserId` is the only matching key; `login` is as last seen and for display only. Holds no token. */
+        GitHubConnection: {
+            /** Format: int64 */
+            githubUserId: number;
+            login: string;
+            /** Format: date-time */
+            connectedAt: string;
+        };
+        GitHubEvidenceStatus: {
+            /** @description The connection, or `null` when none is connected. */
+            connection: components["schemas"]["GitHubConnection"] | null;
+            /** @description The live evidence session, or `null` when none is live. */
+            session: {
+                /**
+                 * Format: date-time
+                 * @description At most 30 minutes after the session started.
+                 */
+                expiresAt: string;
+            } | null;
+        };
+        /**
+         * @description Error codes of the GitHub evidence routes beside the existing `request_invalid`, `session_required`, `csrf_rejected`, `method_not_allowed` and `rate_limited` (`429` with `Retry-After` when the start limit is spent). `evidence_unavailable`: the feature is off (`404`) or the server is shutting down (`503`). `evidence_session_required`: no evidence session is live (`409`). `evidence_upstream`: a GitHub error, a GitHub timeout, or the per-account GitHub request budget spent; reserved for routes that answer GitHub results as JSON, since the callback only redirects.
+         * @enum {string}
+         */
+        GitHubEvidenceErrorCode: "evidence_unavailable" | "evidence_session_required" | "evidence_upstream";
         Capabilities: {
             /** @description At least one provider's login and linking routes are registered; true exactly when `providers` is non-empty. */
             providerLogin: boolean;
@@ -1829,6 +1938,8 @@ export interface components {
             totpEnrollment: boolean;
             /** @description Owners may turn the per-resume sign-in-to-view switch on (`SIGN_IN_TO_VIEW_ENABLED`). Never derived from any account's own state, and never lifts a gate already set on a resume. See `docs/design/viewer-analytics/sign-in-to-view.md`. */
             signInToView: boolean;
+            /** @description The `/github-evidence` routes are registered: both `GITHUB_EVIDENCE_CLIENT_ID` and `GITHUB_EVIDENCE_CLIENT_SECRET` are set. Independent of `providers` and `PROVIDER_LOGIN_ENABLED`. */
+            githubEvidence: boolean;
         };
         /**
          * @description One linked OAuth provider identity. `GET /me` exposes the link's own id, its provider, and when it was linked — never the provider's own subject/user id, an internal correlation key with no reason to ever reach a client. `id` is the value `DELETE /me/identities/{identityId}` takes.
@@ -2316,6 +2427,8 @@ export interface components {
                 account: components["schemas"]["AccountExportProfile"];
                 resumes: components["schemas"]["AccountExportResume"][];
                 projects: components["schemas"]["ProjectRecord"][];
+                /** @description Present only when a GitHub account is connected for evidence: its GitHub user id, login and connected time. Never holds a token. */
+                githubConnection?: components["schemas"]["GitHubConnection"];
             };
         };
         AccountExportProfile: {
@@ -3062,6 +3175,115 @@ export interface components {
         };
         /** @description The start routes' own rate limit is exhausted. Anonymous sign-in `GET` starts are keyed by client IP. Authenticated link and reauthentication `POST` starts are keyed by `(account, client IP)`. Both are tighter than the whole-server default because each accepted start writes a database row. Carries `Retry-After` in whole seconds. */
         AuthStartRateLimited: {
+            headers: {
+                /** @description Whole seconds to wait before retrying. */
+                "Retry-After"?: number;
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "rate_limited",
+                 *         "message": "too many requests; retry later"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `evidence_unavailable`: GitHub evidence is off because `GITHUB_EVIDENCE_CLIENT_ID` and `GITHUB_EVIDENCE_CLIENT_SECRET` are not both set. Every `/github-evidence` path and method answers this. */
+        GitHubEvidenceUnavailable: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "evidence_unavailable",
+                 *         "message": "GitHub evidence is not available"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `request_invalid`: an unexpected query, body or `keepLinks` value. */
+        GitHubEvidenceRequestInvalid: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "request_invalid",
+                 *         "message": "keepLinks must be given once as true or false"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `session_required`: no valid `__Host-session` cookie. Clears the cookie. */
+        GitHubEvidenceSessionMissing: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "session_required",
+                 *         "message": "a valid session is required"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `csrf_rejected`: the Origin or CSRF token check failed. */
+        GitHubEvidenceCsrfRejected: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "csrf_rejected",
+                 *         "message": "CSRF validation failed"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `method_not_allowed`; `Allow` names the served methods. */
+        GitHubEvidenceMethodNotAllowed: {
+            headers: {
+                /**
+                 * @description Methods this path serves.
+                 * @example POST
+                 */
+                Allow?: string;
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "method_not_allowed",
+                 *         "message": "method not allowed; use POST"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `rate_limited`: the 10 starts per account per hour are spent. This is a local limit, not an upstream failure. Carries `Retry-After` in whole seconds. */
+        GitHubEvidenceStartLimited: {
             headers: {
                 /** @description Whole seconds to wait before retrying. */
                 "Retry-After"?: number;
@@ -6489,7 +6711,8 @@ export interface operations {
                      *         "passwordRegistration": true,
                      *         "passkeyEnrollment": false,
                      *         "totpEnrollment": false,
-                     *         "signInToView": false
+                     *         "signInToView": false,
+                     *         "githubEvidence": false
                      *       }
                      *     }
                      */
@@ -6698,6 +6921,193 @@ export interface operations {
                      *       "error": {
                      *         "code": "not_found",
                      *         "message": "no such session"
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getGitHubEvidence: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Connection and session state. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "data": {
+                     *         "connection": {
+                     *           "githubUserId": 583231,
+                     *           "login": "octocat",
+                     *           "connectedAt": "2026-11-15T08:30:00Z"
+                     *         },
+                     *         "session": {
+                     *           "expiresAt": "2026-11-15T09:00:00Z"
+                     *         }
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Envelope"] & {
+                        data?: components["schemas"]["GitHubEvidenceStatus"];
+                    };
+                };
+            };
+            400: components["responses"]["GitHubEvidenceRequestInvalid"];
+            401: components["responses"]["GitHubEvidenceSessionMissing"];
+            404: components["responses"]["GitHubEvidenceUnavailable"];
+            405: components["responses"]["GitHubEvidenceMethodNotAllowed"];
+        };
+    };
+    deleteGitHubEvidence: {
+        parameters: {
+            query: {
+                /** @description `true` keeps attached evidence as plain links, `false` removes it. Given exactly once; any other value, a missing value or any other query parameter is `400 request_invalid`. */
+                keepLinks: "true" | "false";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Disconnected. No body. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["GitHubEvidenceRequestInvalid"];
+            401: components["responses"]["GitHubEvidenceSessionMissing"];
+            403: components["responses"]["GitHubEvidenceCsrfRejected"];
+            404: components["responses"]["GitHubEvidenceUnavailable"];
+            405: components["responses"]["GitHubEvidenceMethodNotAllowed"];
+        };
+    };
+    postGitHubEvidenceStart: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The authorize URL to navigate the browser to. */
+            200: {
+                headers: {
+                    /** @description The `__Host-oauth-tx` transaction handle (`Secure; HttpOnly; SameSite=Lax; Path=/`, 10 minutes). */
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "data": {
+                     *         "authorizeUrl": "https://github.com/login/oauth/authorize?client_id=...&redirect_uri=...&state=...&code_challenge=...&code_challenge_method=S256"
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["AuthStartResponse"];
+                };
+            };
+            400: components["responses"]["GitHubEvidenceRequestInvalid"];
+            401: components["responses"]["GitHubEvidenceSessionMissing"];
+            403: components["responses"]["GitHubEvidenceCsrfRejected"];
+            404: components["responses"]["GitHubEvidenceUnavailable"];
+            405: components["responses"]["GitHubEvidenceMethodNotAllowed"];
+            429: components["responses"]["GitHubEvidenceStartLimited"];
+            /** @description The server is shutting down and starts no evidence session. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "evidence_unavailable",
+                     *         "message": "GitHub evidence is not available"
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getGitHubEvidenceCallback: {
+        parameters: {
+            query?: {
+                /** @description GitHub's authorization code. */
+                code?: string;
+                /** @description Must equal the transaction's own `state`. */
+                state?: string;
+                /** @description Set by GitHub when the owner declines; always fails. */
+                error?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Always redirects to `PUBLIC_ORIGIN` + `/app/settings/sessions?evidence=connected` or `?evidence=failed`. No other value is produced and a failure carries no reason. */
+            302: {
+                headers: {
+                    /** @example https://aboutme.vn/app/settings/sessions?evidence=connected */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["GitHubEvidenceUnavailable"];
+            405: components["responses"]["GitHubEvidenceMethodNotAllowed"];
+        };
+    };
+    postGitHubEvidenceSessionEnd: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The session ended. No body. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["GitHubEvidenceRequestInvalid"];
+            401: components["responses"]["GitHubEvidenceSessionMissing"];
+            403: components["responses"]["GitHubEvidenceCsrfRejected"];
+            404: components["responses"]["GitHubEvidenceUnavailable"];
+            405: components["responses"]["GitHubEvidenceMethodNotAllowed"];
+            /** @description No evidence session is live. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "evidence_session_required",
+                     *         "message": "no GitHub evidence session is live"
                      *       }
                      *     }
                      */

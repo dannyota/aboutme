@@ -30,13 +30,14 @@ type RouterDependencies struct {
 	SecondFactor func(*http.ServeMux)
 	Streams      *realtimeapi.Service
 	Views        *viewapi.Service
+	Evidence     func(*http.ServeMux)
 }
 
 func NewRouter(deps RouterDependencies) http.Handler {
 	cfg := deps.Config
 	return api.New(deps.Logger, deps.Readiness, api.Options{
 		TrustedProxies: api.TrustedProxies(cfg.TrustedProxyCIDRs),
-	}, deps.Public, deps.Providers.RegisterRoutes, deps.Account.RegisterRoutes, deps.Resumes.RegisterRoutes, deps.Projects.RegisterRoutes, deps.Passwords.RegisterRoutes, deps.Agents, deps.SecondFactor, capabilitiesRegistrar(cfg), deps.Streams.RegisterRoutes, deps.Views.RegisterRoutes)
+	}, deps.Public, deps.Providers.RegisterRoutes, deps.Account.RegisterRoutes, deps.Resumes.RegisterRoutes, deps.Projects.RegisterRoutes, deps.Passwords.RegisterRoutes, deps.Agents, deps.SecondFactor, capabilitiesRegistrar(cfg), deps.Streams.RegisterRoutes, deps.Views.RegisterRoutes, deps.Evidence)
 }
 
 func capabilitiesRegistrar(cfg config.Config) func(*http.ServeMux) {
@@ -48,6 +49,7 @@ func capabilitiesRegistrar(cfg config.Config) func(*http.ServeMux) {
 		PasskeyEnrollment:    cfg.PasskeyEnrollment,
 		TotpEnrollment:       cfg.TOTPEnrollment,
 		SignInToView:         cfg.SignInToViewEnabled,
+		GitHubEvidence:       cfg.GitHubEvidence.Enabled(),
 	})
 	return func(mux *http.ServeMux) {
 		mux.Handle("/api/v1/capabilities", handler)

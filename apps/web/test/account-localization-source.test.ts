@@ -5,6 +5,9 @@ import { describe, expect, test } from 'vitest';
 
 import { agentSettingsCopy } from '../app/i18n/agent-settings';
 import { consentCopy } from '../app/i18n/consent';
+import {
+  githubEvidenceSettingsCopy,
+} from '../app/i18n/github-evidence-settings';
 import { identitySettingsCopy } from '../app/i18n/identity-settings';
 import { passwordSettingsCopy } from '../app/i18n/password-settings';
 import { privacySettingsCopy } from '../app/i18n/privacy-settings';
@@ -21,6 +24,7 @@ import {
 const catalogNames = new Set([
   'agent-settings',
   'consent',
+  'github-evidence-settings',
   'identity-settings',
   'password-settings',
   'privacy-settings',
@@ -29,6 +33,7 @@ const catalogNames = new Set([
 const coveredSources = [
   'components/auth/PasswordSettings.vue',
   'components/settings/ConnectedAgents.vue',
+  'components/settings/GitHubEvidence.vue',
   'components/settings/LinkedIdentities.vue',
   'components/settings/PrivacySettings.vue',
   'components/settings/ReauthPrompt.vue',
@@ -137,10 +142,11 @@ function accountCatalogViolationsFromRoots(files: readonly string[]): string[] {
 }
 
 describe('account localization source guard', () => {
-  test('keeps the six account catalogs typed, complete, and aligned', () => {
+  test('keeps the seven account catalogs typed, complete, and aligned', () => {
     const catalogs = [
       ['agent-settings', agentSettingsCopy],
       ['consent', consentCopy],
+      ['github-evidence-settings', githubEvidenceSettingsCopy],
       ['identity-settings', identitySettingsCopy],
       ['password-settings', passwordSettingsCopy],
       ['privacy-settings', privacySettingsCopy],

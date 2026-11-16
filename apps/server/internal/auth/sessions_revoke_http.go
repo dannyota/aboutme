@@ -23,19 +23,20 @@ func (s *Service) handleRevokeAllSessions(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	now := s.sessionMgr.now()
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		qtx := s.q.WithTx(tx)
 		user, lockErr := lockAccountUser(ctx, qtx, sess.UserID)
 		if lockErr != nil {
 			return lockErr
 		}
-		if _, gateErr := lockCallerSession(ctx, qtx, user, sess.ID, now); gateErr != nil {
+		_, now, gateErr := lockCallerSessionAt(ctx, qtx, user, sess.ID, s.sessionMgr.now)
+		if gateErr != nil {
 			return gateErr
 		}
 		if _, revokeErr := qtx.RevokeAllSessions(ctx, store.RevokeAllSessionsParams{UserID: user.ID, RevokedAt: &now}); revokeErr != nil {
 			return fmt.Errorf("revoke all sessions: %w", revokeErr)
 		}
+		s.sessionMgr.AccountSessionsEndedLocked(user.ID)
 		return nil
 	})
 	if err != nil {
@@ -62,8 +63,6 @@ func (s *Service) handleRevokeSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	now := s.sessionMgr.now()
-
 	targetID, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {
 		api.WriteError(w, http.StatusNotFound, notFoundCode, "no such session")
@@ -77,29 +76,31 @@ func (s *Service) handleRevokeSession(w http.ResponseWriter, r *http.Request) {
 		if lockErr != nil {
 			return lockErr
 		}
-		if _, gateErr := lockCallerSession(ctx, qtx, user, sess.ID, now); gateErr != nil {
+		caller, gateErr := lockCallerSessionRow(ctx, qtx, user, sess.ID)
+		if gateErr != nil {
 			return gateErr
 		}
-		n, revokeErr := qtx.RevokeSessionForUser(ctx, store.RevokeSessionForUserParams{
-			ID:         targetID,
-			UserID:     user.ID,
-			RevokedAt:  &now,
-			IdleCutoff: now.Add(-idleTimeout),
-			Now:        now,
-		})
-		if revokeErr != nil {
-			return fmt.Errorf("revoke session for user: %w", revokeErr)
+		target, targetErr := qtx.GetSessionForUserForUpdate(ctx, store.GetSessionForUserForUpdateParams{ID: targetID, UserID: user.ID})
+		if targetErr != nil && !errors.Is(targetErr, pgx.ErrNoRows) {
+			return fmt.Errorf("lock target session: %w", targetErr)
 		}
-		if n == 0 {
+		now := s.sessionMgr.now()
+		if liveErr := RequireLiveSession(caller, now); liveErr != nil {
+			return liveErr
+		}
+		if targetErr != nil || sessionDead(target, now) {
 			return errSessionTargetNotFound
 		}
-		target, readErr := qtx.GetSessionByID(ctx, targetID)
-		if readErr != nil {
-			return fmt.Errorf("get revoked session: %w", readErr)
+		if revokeErr := qtx.RevokeSession(ctx, store.RevokeSessionParams{ID: target.ID, RevokedAt: &now}); revokeErr != nil {
+			return fmt.Errorf("revoke session for user: %w", revokeErr)
 		}
 		var sweepErr error
 		revokedIDs, sweepErr = revokeLineagePartnersTx(ctx, qtx, target, now)
-		return sweepErr
+		if sweepErr != nil {
+			return sweepErr
+		}
+		s.sessionMgr.AccountSessionsEndedLocked(user.ID)
+		return nil
 	})
 	switch {
 	case errors.Is(err, errSessionTargetNotFound):
@@ -153,6 +154,11 @@ func lockAccountUser(ctx context.Context, qtx *store.Queries, userID uuid.UUID) 
 }
 
 func lockCallerSession(ctx context.Context, qtx *store.Queries, user store.User, sessionID uuid.UUID, now time.Time) (store.Session, error) {
+	sess, _, err := lockCallerSessionAt(ctx, qtx, user, sessionID, func() time.Time { return now })
+	return sess, err
+}
+
+func lockCallerSessionRow(ctx context.Context, qtx *store.Queries, user store.User, sessionID uuid.UUID) (store.Session, error) {
 	sess, err := qtx.GetSessionByIDForUpdate(ctx, sessionID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return store.Session{}, ErrSessionInvalid
@@ -160,10 +166,22 @@ func lockCallerSession(ctx context.Context, qtx *store.Queries, user store.User,
 	if err != nil {
 		return store.Session{}, fmt.Errorf("lock caller session: %w", err)
 	}
-	if sess.UserID != user.ID || sess.AuthEpoch != user.AuthEpoch || RequireLiveSession(sess, now) != nil {
+	if sess.UserID != user.ID || sess.AuthEpoch != user.AuthEpoch {
 		return store.Session{}, ErrSessionInvalid
 	}
 	return sess, nil
+}
+
+func lockCallerSessionAt(ctx context.Context, qtx *store.Queries, user store.User, sessionID uuid.UUID, clock func() time.Time) (store.Session, time.Time, error) {
+	sess, err := lockCallerSessionRow(ctx, qtx, user, sessionID)
+	if err != nil {
+		return store.Session{}, time.Time{}, err
+	}
+	now := clock()
+	if err = RequireLiveSession(sess, now); err != nil {
+		return store.Session{}, time.Time{}, err
+	}
+	return sess, now, nil
 }
 
 func lockSecondFactorPolicy(ctx context.Context, qtx *store.Queries, userID uuid.UUID) (*store.SecondFactorPolicy, error) {
@@ -178,18 +196,32 @@ func lockSecondFactorPolicy(ctx context.Context, qtx *store.Queries, userID uuid
 }
 
 func lockSensitiveSession(ctx context.Context, qtx *store.Queries, user store.User, sessionID uuid.UUID, now time.Time) (store.Session, error) {
-	sess, err := lockCallerSession(ctx, qtx, user, sessionID, now)
+	sess, _, err := lockSensitiveSessionAt(ctx, qtx, user, sessionID, func() time.Time { return now })
+	return sess, err
+}
+
+func lockSensitiveRows(ctx context.Context, qtx *store.Queries, user store.User, sessionID uuid.UUID) (store.Session, *store.SecondFactorPolicy, error) {
+	sess, err := lockCallerSessionRow(ctx, qtx, user, sessionID)
 	if err != nil {
-		return store.Session{}, err
+		return store.Session{}, nil, err
 	}
 	policy, err := lockSecondFactorPolicy(ctx, qtx, user.ID)
 	if err != nil {
-		return store.Session{}, err
+		return store.Session{}, nil, err
 	}
+	return sess, policy, nil
+}
+
+func lockSensitiveSessionAt(ctx context.Context, qtx *store.Queries, user store.User, sessionID uuid.UUID, clock func() time.Time) (store.Session, time.Time, error) {
+	sess, policy, err := lockSensitiveRows(ctx, qtx, user, sessionID)
+	if err != nil {
+		return store.Session{}, time.Time{}, err
+	}
+	now := clock()
 	if err = RequireRecentSecondFactorReauth(user, policy, sess, now); err != nil {
-		return store.Session{}, err
+		return store.Session{}, time.Time{}, err
 	}
-	return sess, nil
+	return sess, now, nil
 }
 
 func (s *Service) recheckSensitiveSession(ctx context.Context, sess store.Session) error {

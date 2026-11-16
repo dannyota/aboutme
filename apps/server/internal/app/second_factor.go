@@ -22,7 +22,7 @@ type SecondFactor struct {
 	TOTPHealth     *secondfactor.TOTPHealthChecker
 }
 
-func NewSecondFactor(logger *slog.Logger, cfg config.Config, pool *store.Pool) (SecondFactor, error) {
+func NewSecondFactor(logger *slog.Logger, cfg config.Config, pool *store.Pool, ended auth.SessionEndListener) (SecondFactor, error) {
 	rp, err := secondfactor.NewRelyingParty(cfg.PublicOrigin)
 	if err != nil {
 		return SecondFactor{}, fmt.Errorf("create passkey relying party: %w", err)
@@ -37,6 +37,7 @@ func NewSecondFactor(logger *slog.Logger, cfg config.Config, pool *store.Pool) (
 	}
 	pending := auth.NewPendingAuthenticationManager(pool, logger)
 	sessions := auth.NewSessionManagerWithPool(pool)
+	sessions.SetEndListener(ended)
 
 	totpRing, err := secondfactor.NewTOTPKeyRing(cfg.TOTPActiveKey, cfg.TOTPPreviousKey, rand.Reader)
 	if err != nil {

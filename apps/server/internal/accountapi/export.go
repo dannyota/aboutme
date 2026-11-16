@@ -123,11 +123,32 @@ type exportEnvelope struct {
 }
 
 type exportData struct {
-	ExportVersion int               `json:"exportVersion"`
-	ExportedAt    time.Time         `json:"exportedAt"`
-	Account       exportProfile     `json:"account"`
-	Resumes       []exportResume    `json:"resumes"`
-	Projects      []project.Project `json:"projects"`
+	ExportVersion    int                     `json:"exportVersion"`
+	ExportedAt       time.Time               `json:"exportedAt"`
+	Account          exportProfile           `json:"account"`
+	Resumes          []exportResume          `json:"resumes"`
+	Projects         []project.Project       `json:"projects"`
+	GitHubConnection *exportGitHubConnection `json:"githubConnection,omitempty"`
+}
+
+type exportGitHubConnection struct {
+	GitHubUserID int64     `json:"githubUserId"`
+	Login        string    `json:"login"`
+	ConnectedAt  time.Time `json:"connectedAt"`
+}
+
+func exportGitHubConnectionOf(ctx context.Context, q *store.Queries, userID uuid.UUID) (*exportGitHubConnection, error) {
+	row, err := q.GetAccountExportGitHubConnection(ctx, userID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read github connection: %w", err)
+	}
+	if row.GithubUserID == nil || row.Login == nil || row.ConnectedAt == nil {
+		return nil, errors.New("account export github connection is incomplete")
+	}
+	return &exportGitHubConnection{GitHubUserID: *row.GithubUserID, Login: *row.Login, ConnectedAt: row.ConnectedAt.UTC()}, nil
 }
 
 type exportProfile struct {
@@ -249,6 +270,10 @@ func (s *Service) exportAttachment(ctx context.Context, userID uuid.UUID) ([]byt
 	if projectErr != nil {
 		return nil, projectErr
 	}
+	connection, connectionErr := exportGitHubConnectionOf(ctx, q, userID)
+	if connectionErr != nil {
+		return nil, connectionErr
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("commit snapshot: %w", err)
 	}
@@ -261,8 +286,9 @@ func (s *Service) exportAttachment(ctx context.Context, userID uuid.UUID) ([]byt
 			CreatedAt: profile.CreatedAt, UpdatedAt: profile.UpdatedAt,
 			LinkedProviders: providers,
 		},
-		Resumes:  resumes,
-		Projects: projects,
+		Resumes:          resumes,
+		Projects:         projects,
+		GitHubConnection: connection,
 	})
 }
 

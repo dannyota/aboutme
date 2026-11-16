@@ -147,6 +147,10 @@ func NewService(logger *slog.Logger, cfg config.Config, pool *store.Pool) (*Serv
 	}, nil
 }
 
+func (s *Service) SetSessionEndListener(listener SessionEndListener) {
+	s.sessionMgr.SetEndListener(listener)
+}
+
 func endpointOrDefault(configured, fallback string) string {
 	if configured != "" {
 		return configured

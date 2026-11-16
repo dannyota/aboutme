@@ -149,30 +149,35 @@ func (s *PasswordService) reset(ctx context.Context, rawToken, rawPassword, clie
 			}
 			return lerr
 		}
-		if now.After(live.ExpiresAt) {
+		lockedAt := s.clock()
+		if lockedAt.After(live.ExpiresAt) {
 			return errPasswordTokenInvalid
 		}
 		if _, uerr := qtx.UpsertPasswordCredential(ctx, store.UpsertPasswordCredentialParams{
 			UserID:      rt.UserID,
 			EncodedHash: []byte(encodedHash),
 			CreatedAt:   cred.CreatedAt,
-			ChangedAt:   now,
+			ChangedAt:   lockedAt,
 		}); uerr != nil {
 			return uerr
 		}
 		if _, derr := qtx.DeletePasswordResetToken(ctx, live.ID); derr != nil {
 			return derr
 		}
-		if _, rerr := qtx.RevokeAllSessions(ctx, store.RevokeAllSessionsParams{UserID: rt.UserID, RevokedAt: &now}); rerr != nil {
+		if _, rerr := qtx.RevokeAllSessions(ctx, store.RevokeAllSessionsParams{UserID: rt.UserID, RevokedAt: &lockedAt}); rerr != nil {
 			return rerr
 		}
-		return s.outbox.EnqueueTx(ctx, qtx, authmail.EnqueueRequest{
+		if enqueueErr := s.outbox.EnqueueTx(ctx, qtx, authmail.EnqueueRequest{
 			JobID:     jobID,
 			Kind:      authmail.KindPasswordChanged,
 			UserID:    &rt.UserID,
 			Payload:   newEmailPayload(user.Email, ""),
-			ExpiresAt: now.Add(passwordNotificationTTL),
-		})
+			ExpiresAt: lockedAt.Add(passwordNotificationTTL),
+		}); enqueueErr != nil {
+			return enqueueErr
+		}
+		s.sessions.AccountSessionsEndedLocked(user.ID)
+		return nil
 	})
 	if err != nil {
 		if errors.Is(err, errPasswordTokenInvalid) {

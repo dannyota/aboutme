@@ -60,9 +60,9 @@ renderer: titles, headings, labels, hints, options, errors, loading, empty,
 retry, confirmation, success, and live-region text, accessible names and
 descriptions, keyboard help, and image alternative text. On the resume workspace
 it covers the list, creation, editor, publish dialog, and owner PDF export. On
-settings it covers sessions, password, linked identities, privacy, and connected
-agents. On `/authorize` it covers the request explanation, permission labels,
-errors, and actions.
+settings it covers sessions, password, linked identities, privacy, connected
+agents, and GitHub evidence. On `/authorize` it covers the request explanation,
+permission labels, errors, and actions.
 
 The application shell shows the language control on the list, creation, Views,
 settings, and consent routes; the editor shows it in its own top bar. The

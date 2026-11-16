@@ -44,6 +44,14 @@ type AuthenticationSecurityEvent struct {
 	OccurredAt      time.Time
 }
 
+type GithubConnection struct {
+	UserID       uuid.UUID
+	GithubUserID *int64
+	Login        *string
+	ConnectedAt  *time.Time
+	Generation   int64
+}
+
 type IdempotencyRecord struct {
 	ID              uuid.UUID
 	UserID          uuid.UUID
@@ -145,20 +153,21 @@ type OAuthToken struct {
 }
 
 type OAuthTransaction struct {
-	ID            uuid.UUID
-	HandleHash    []byte
-	Provider      string
-	Purpose       string
-	LinkingUserID *uuid.UUID
-	State         string
-	PKCEVerifier  string
-	Nonce         *string
-	RedirectURI   string
-	CreatedAt     time.Time
-	ExpiresAt     time.Time
-	ConsumedAt    *time.Time
-	ReturnPath    string
-	ResumeID      *uuid.UUID
+	ID                 uuid.UUID
+	HandleHash         []byte
+	Provider           string
+	Purpose            string
+	LinkingUserID      *uuid.UUID
+	State              string
+	PKCEVerifier       string
+	Nonce              *string
+	RedirectURI        string
+	CreatedAt          time.Time
+	ExpiresAt          time.Time
+	ConsumedAt         *time.Time
+	ReturnPath         string
+	ResumeID           *uuid.UUID
+	EvidenceGeneration *int64
 }
 
 type PasswordCredential struct {

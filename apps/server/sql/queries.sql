@@ -114,9 +114,9 @@ SELECT * FROM sessions WHERE id = $1;
 
 -- name: CreateOAuthTransaction :one
 INSERT INTO oauth_transactions (
-    handle_hash, provider, purpose, linking_user_id, state, pkce_verifier, nonce, redirect_uri, return_path, expires_at, resume_id
+    handle_hash, provider, purpose, linking_user_id, state, pkce_verifier, nonce, redirect_uri, return_path, expires_at, resume_id, evidence_generation
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
 ) RETURNING *;
 
 -- name: ConsumeOAuthTransaction :one
@@ -819,6 +819,9 @@ DELETE FROM password_reset_tokens WHERE id = $1;
 
 -- name: GetSessionByIDForUpdate :one
 SELECT * FROM sessions WHERE id = $1 FOR UPDATE;
+
+-- name: GetSessionForUserForUpdate :one
+SELECT * FROM sessions WHERE id = sqlc.arg(id)::uuid AND user_id = sqlc.arg(user_id)::uuid FOR UPDATE;
 
 -- name: CreateAuthEmailJob :one
 INSERT INTO auth_email_jobs (

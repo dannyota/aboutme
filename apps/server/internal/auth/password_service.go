@@ -97,6 +97,10 @@ func NewPasswordService(opts PasswordServiceOptions) (*PasswordService, error) {
 	}, nil
 }
 
+func (s *PasswordService) SetSessionEndListener(listener SessionEndListener) {
+	s.sessions.SetEndListener(listener)
+}
+
 func (s *PasswordService) RegisterRoutes(mux *http.ServeMux) {
 	if !s.registrationOff {
 		mux.Handle(PasswordRegisterPath, route(http.MethodPost, s.handleRegister))

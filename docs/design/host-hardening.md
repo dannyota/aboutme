@@ -131,7 +131,7 @@ personal operation audit in its existing separate store. [Sudo] [ADR 0026]
 
 **Cores.** S:257-259 reports `core`, shell limit 0, and no discovered dump unit;
 that does not prove every service or container is covered. Set `LimitCORE=0` on
-sensitive services and `Ulimit=core:0:0` on all Quadlets, with equivalent
+sensitive services and `Ulimit=core=0:0` on all Quadlets, with equivalent
 job-run arguments. Set PAM hard/soft core 0 for interactive sessions; verify PAM
 applies it. If systemd-coredump is present, use `Storage=none` and
 `ProcessSizeMax=0`; check Apport/crash handlers separately. Retain

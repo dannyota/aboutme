@@ -66,9 +66,6 @@ release_read() {
   printf '%s' "$doc"
 }
 
-# flags.env as a JSON object. Each line is blank, a comment, or NAME=value
-# with no quotes or spaces, so Podman's env-file reader and this one read the
-# same values; anything else, or a repeated name, refuses.
 flags_json() {
   jq -Rn '
     [inputs | select(test("^[[:space:]]*(#|$)") | not)
@@ -119,7 +116,7 @@ flag() {
 }
 
 server_secrets() {
-  local active_slot previous_slot providers lines=()
+  local active_slot previous_slot providers name status lines=() absent=()
   active_slot=$(jq -r '.TOTP_ACTIVE_KEY_SLOT // ""' <<<"$flags")
   previous_slot=$(jq -r '.TOTP_PREVIOUS_KEY_SLOT // ""' <<<"$flags")
   [[ $active_slot == a || $active_slot == b ]] || die "TOTP_ACTIVE_KEY_SLOT must be a or b"
@@ -139,6 +136,19 @@ server_secrets() {
   if [[ ,$providers, == *,linkedin,* ]]; then
     lines+=("Secret=linkedin-client-id,type=env,target=LINKEDIN_CLIENT_ID" "Secret=linkedin-client-secret,type=env,target=LINKEDIN_CLIENT_SECRET")
   fi
+  for name in github-evidence-client-id github-evidence-client-secret; do
+    status=0
+    podman secret exists "$name" >/dev/null 2>&1 || status=$?
+    case $status in
+      0) ;;
+      1) absent+=("$name") ;;
+      *) die "could not check Podman secret $name" ;;
+    esac
+  done
+  case ${#absent[@]} in
+    0) lines+=("Secret=github-evidence-client-id,type=env,target=GITHUB_EVIDENCE_CLIENT_ID" "Secret=github-evidence-client-secret,type=env,target=GITHUB_EVIDENCE_CLIENT_SECRET") ;;
+    1) die "Podman secret ${absent[0]} is missing; GitHub evidence needs both its secrets or neither" ;;
+  esac
   printf '%s\n' "${lines[@]}"
 }
 
@@ -383,8 +393,9 @@ step_restore_previous() {
 }
 
 step_secrets_check() {
-  local name missing=0
+  local name block missing=0
   flags=$(flags_json)
+  block=$(server_secrets)
   while read -r name; do
     [[ $name =~ ^[a-z0-9-]+$ ]] || die "malformed secret name in a template"
     if ! podman secret exists "$name"; then
@@ -393,7 +404,7 @@ step_secrets_check() {
     fi
   done < <({
     cat "$templates"/*.container.in
-    server_secrets
+    printf '%s\n' "$block"
   } | sed -n 's/^Secret=\([^,]*\),.*/\1/p' | sort -u)
   ((!missing)) || die "create the missing secrets with secrets.sh, then rerun"
   say "every referenced secret exists"
@@ -456,7 +467,6 @@ cimd_env_mcp_flag() {
 cimd_effective_mcp_flag() {
   local unit=${1:-$templates/aboutme-server.container.in} files file value effective=absent inline
   [[ -r $unit ]] || return 1
-  # Refuse alternate environment mechanisms that this reader cannot prove.
   if grep -Eq '^(EnvironmentHost=|EnvironmentMerge=|UnsetEnvironment=)|^PodmanArgs=.*--(env|unsetenv)|^Secret=.*target=MCP_ENABLED([,[:space:]]|$)' "$unit"; then
     return 1
   fi
@@ -480,8 +490,6 @@ cimd_effective_mcp_flag() {
 }
 
 cimd_url_rows_exist() {
-  # to_jsonb also permits a database whose additive CIMD migration is absent.
-  # Only a Boolean existence result leaves PostgreSQL.
   runuser -u postgres -- psql -X -qAt -v ON_ERROR_STOP=1 -d aboutme \
     -c "SELECT EXISTS (SELECT 1 FROM public.oauth_clients AS client WHERE to_jsonb(client)->>'metadata_url' IS NOT NULL)" 2>/dev/null
 }

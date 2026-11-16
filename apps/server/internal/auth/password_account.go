@@ -113,9 +113,9 @@ func (s *PasswordService) reauthWithSecondFactor(ctx context.Context, sess store
 }
 
 func (s *PasswordService) change(ctx context.Context, sess store.Session, rawPassword, clientIP string) (string, error) {
-	now := s.clock()
+	admittedAt := s.clock()
 
-	if d := s.limits.AdmitAccountMutation(now, sess.UserID, clientAddrFromString(clientIP)); !d.Allowed {
+	if d := s.limits.AdmitAccountMutation(admittedAt, sess.UserID, clientAddrFromString(clientIP)); !d.Allowed {
 		return "", &passwordRateLimitedError{retryAfterSeconds: d.RetryAfterSeconds}
 	}
 	check, err := s.policy.CheckNew(ctx, rawPassword)
@@ -144,17 +144,21 @@ func (s *PasswordService) change(ctx context.Context, sess store.Session, rawPas
 		if s.userLockProbe != nil {
 			s.userLockProbe()
 		}
-		live, gateErr := lockSensitiveSession(ctx, qtx, user, sess.ID, now)
+		live, policy, gateErr := lockSensitiveRows(ctx, qtx, user, sess.ID)
 		if gateErr != nil {
 			return gateErr
 		}
 		current, cerr := qtx.GetPasswordCredentialForUpdate(ctx, sess.UserID)
-		if cerr != nil {
-			if errors.Is(cerr, pgx.ErrNoRows) {
-				current = store.PasswordCredential{CreatedAt: now, ChangedAt: now}
-			} else {
-				return cerr
-			}
+		missing := errors.Is(cerr, pgx.ErrNoRows)
+		if cerr != nil && !missing {
+			return cerr
+		}
+		now := s.clock()
+		if reauthErr := RequireRecentSecondFactorReauth(user, policy, live, now); reauthErr != nil {
+			return reauthErr
+		}
+		if missing {
+			current = store.PasswordCredential{CreatedAt: now, ChangedAt: now}
 		}
 		if _, uerr := qtx.UpsertPasswordCredential(ctx, store.UpsertPasswordCredentialParams{
 			UserID:      sess.UserID,
@@ -171,13 +175,17 @@ func (s *PasswordService) change(ctx context.Context, sess store.Session, rawPas
 		if err != nil {
 			return err
 		}
-		return s.outbox.EnqueueTx(ctx, qtx, authmail.EnqueueRequest{
+		if enqueueErr := s.outbox.EnqueueTx(ctx, qtx, authmail.EnqueueRequest{
 			JobID:     jobID,
 			Kind:      authmail.KindPasswordChanged,
 			UserID:    &sess.UserID,
 			Payload:   newEmailPayload(user.Email, ""),
 			ExpiresAt: now.Add(passwordNotificationTTL),
-		})
+		}); enqueueErr != nil {
+			return enqueueErr
+		}
+		s.sessions.AccountSessionsEndedLocked(user.ID)
+		return nil
 	})
 	if err != nil {
 		if errors.Is(err, errPasswordReauthRequired) || errors.Is(err, ErrSessionInvalid) || errors.Is(err, ErrReauthRequired) {
