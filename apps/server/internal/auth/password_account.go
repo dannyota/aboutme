@@ -144,17 +144,21 @@ func (s *PasswordService) change(ctx context.Context, sess store.Session, rawPas
 		if s.userLockProbe != nil {
 			s.userLockProbe()
 		}
-		live, now, gateErr := lockSensitiveSessionAt(ctx, qtx, user, sess.ID, s.clock)
+		live, policy, gateErr := lockSensitiveRows(ctx, qtx, user, sess.ID)
 		if gateErr != nil {
 			return gateErr
 		}
 		current, cerr := qtx.GetPasswordCredentialForUpdate(ctx, sess.UserID)
-		if cerr != nil {
-			if errors.Is(cerr, pgx.ErrNoRows) {
-				current = store.PasswordCredential{CreatedAt: now, ChangedAt: now}
-			} else {
-				return cerr
-			}
+		missing := errors.Is(cerr, pgx.ErrNoRows)
+		if cerr != nil && !missing {
+			return cerr
+		}
+		now := s.clock()
+		if reauthErr := RequireRecentSecondFactorReauth(user, policy, live, now); reauthErr != nil {
+			return reauthErr
+		}
+		if missing {
+			current = store.PasswordCredential{CreatedAt: now, ChangedAt: now}
 		}
 		if _, uerr := qtx.UpsertPasswordCredential(ctx, store.UpsertPasswordCredentialParams{
 			UserID:      sess.UserID,

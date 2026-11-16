@@ -200,12 +200,20 @@ func lockSensitiveSession(ctx context.Context, qtx *store.Queries, user store.Us
 	return sess, err
 }
 
-func lockSensitiveSessionAt(ctx context.Context, qtx *store.Queries, user store.User, sessionID uuid.UUID, clock func() time.Time) (store.Session, time.Time, error) {
+func lockSensitiveRows(ctx context.Context, qtx *store.Queries, user store.User, sessionID uuid.UUID) (store.Session, *store.SecondFactorPolicy, error) {
 	sess, err := lockCallerSessionRow(ctx, qtx, user, sessionID)
 	if err != nil {
-		return store.Session{}, time.Time{}, err
+		return store.Session{}, nil, err
 	}
 	policy, err := lockSecondFactorPolicy(ctx, qtx, user.ID)
+	if err != nil {
+		return store.Session{}, nil, err
+	}
+	return sess, policy, nil
+}
+
+func lockSensitiveSessionAt(ctx context.Context, qtx *store.Queries, user store.User, sessionID uuid.UUID, clock func() time.Time) (store.Session, time.Time, error) {
+	sess, policy, err := lockSensitiveRows(ctx, qtx, user, sessionID)
 	if err != nil {
 		return store.Session{}, time.Time{}, err
 	}

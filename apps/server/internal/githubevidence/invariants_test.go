@@ -419,6 +419,10 @@ func policyLock() lockStep {
 	return lockStep{waits: "getsecondfactorpolicyforupdate", sql: `SELECT 1 FROM second_factor_policies WHERE user_id = $1 FOR UPDATE`, key: accountUserID}
 }
 
+func passwordCredentialLock() lockStep {
+	return lockStep{waits: "getpasswordcredentialforupdate", sql: `SELECT 1 FROM password_credentials WHERE user_id = $1 FOR UPDATE`, key: accountUserID}
+}
+
 func connectionLock() lockStep {
 	return lockStep{waits: "getgithubconnectionforupdate", sql: `SELECT 1 FROM github_connections WHERE user_id = $1 FOR UPDATE`, key: accountUserID}
 }
@@ -491,7 +495,7 @@ func signOutCases() []callerCase {
 			return c.enableSecondFactor(0)
 		}, run: func(c *callerRun) error {
 			return statusAccepted(c.serve(http.MethodPut, auth.PasswordMePath, `{"password":"`+newPassword+`"}`), http.StatusNoContent)
-		}, invalidate: expire, lastLocks: []lockStep{policyLock()}, lapse: advanceClock(proofLapse)},
+		}, invalidate: expire, lastLocks: []lockStep{policyLock(), passwordCredentialLock()}, lapse: advanceClock(proofLapse)},
 		{name: "password reset", site: invariantSite{"internal/auth/password_reset.go", "PasswordService.reset"}, setup: func(c *callerRun) error {
 			if err := c.setPassword(); err != nil {
 				return err

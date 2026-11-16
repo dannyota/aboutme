@@ -43,6 +43,7 @@ Open items that outlived their shipped plans. One line each, with the evidence t
 - The ci-tools package still carries the `hashicorp/aws` OpenTofu provider (`.github/actions/ci-tools/action.yml`, `scripts/test/workflow-safety-test.sh`) that only the removed `deploy/aws` roots used. Drop it at the next package republish.
 - The ops tag and `/readyz` descriptions in `docs/api/openapi.yaml` (lines 57 and 307) still name ECS and CloudFront as health-check users, which production no longer has. Fix both descriptions with the regenerated web API client (`apps/web/app/api/generated/openapi.ts`) in one backend change.
 - `deploy/vn/scripts/cutover.sh` still calls the AWS CLI (`aws rds`, `aws ssm`, `aws ecs`) for the AWS-to-Vietnam cutover that finished on 2026-10-11 with v0.7.3. Remove the AWS steps, or the script with its tests (`deploy/vn/tests/cutover-ssh-failure-test.sh`, `workload-lock-test.sh`), in one devops change.
+- The GitHub evidence notification-site discovery test (`apps/server/internal/githubevidence/invariant_sites_test.go`) finds only direct `.AccountSessionsEndedLocked` and `.inAccount` selector calls. It does not follow a later call through an alias, a function value or a wrapper, and it records one site per function, so a second call in the same named function adds no invariant case. Trace wrappers and count each call position if the notification wiring grows.
 
 ## Production acceptance
 
