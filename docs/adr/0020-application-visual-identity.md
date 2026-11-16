@@ -1,4 +1,4 @@
-# 0020: Application visual identity: the seal, the aurora canvas, and the resume ground
+# 0020: Application visual identity: the seal, the canvas, and the resume ground
 
 Status: Accepted (2026-09-04, 2026-09-24, 2026-09-27, 2026-09-28, 2026-11-01,
 2026-11-15). The owner chose each direction, including the public page color
@@ -21,47 +21,26 @@ as an alert rather than a stamp on paper.
 
 ## Decision
 
-Colorful product UI, calm white resume, and one mark that means public.
-
-**The 2026-11-15 identity.** The owner chose a warmer, friendlier identity for
-the application chrome. It ships in two stages at most one release apart: the
-home page first, then every other chrome surface
-([home page spec](../design/ui/home-page.md#scope)). Where this paragraph and
-the rules below disagree, this paragraph wins on the home page now and
-everywhere after the second stage, which also rewrites the rules below.
-
-- **Ground and ink.** White `#FFFFFF` with indigo text `#1A1650`; dark theme
-  `#0F0D26` with `#F3F1FF`. No gradients and no glows.
-- **One brand fill.** Lotus pink-red `#DE1B5A` with white text, hover `#C7134D`,
-  is `--primary` and `--seal`. Pink words and thin strokes are `#C7134D` light
-  and `#FF7AA2` dark. Supporting surfaces are mist, blush, and sun tints, and a
-  coin yellow `#FFD23F` with indigo ink. The focus ring has its own token.
-- **One mark, one meaning** replaces "one red, one meaning". Public is the seal
-  ticket: its shape, tilt, uppercase word, and link. No other element takes that
-  shape, and only the Publish button carries the ring "a".
-- **Typeface.** Plus Jakarta Sans is the chrome typeface. Be Vietnam Pro stays
-  for the resume and the seal.
-- **Shape.** Large rounded panels and cards on the page, pill buttons; inputs
-  keep 10 px, dialogs 14 px, and the sheet 2 px.
-- **Logo.** The shapes are unchanged. The wordmark takes the text color, and the
-  mark and the dot before "vn" take the brand pink.
-- **The maker speaks.** The home page ends with the maker's first-person
-  introduction and his own picture.
-- **Unchanged.** State is a mark, the 8 px module, nothing animates on load, the
-  landing shows the product, renderer isolation, the public page color scheme,
-  and the destructive hue.
+Colorful product UI, calm white resume, and one mark that means public. The
+owner chose this identity on 2026-11-15. It reached the home page first; the
+other chrome surfaces follow in the order the
+[home page spec](../design/ui/home-page.md#scope) gives.
 
 **Principles.**
 
-- **One red, one meaning.** Seal red means "public at this link". Only the seal
-  (`AppSeal`), the logo (`AppLogo`), the public state mark, and the Publish
-  control use the seal tokens. Destructive actions use a separate hue.
+- **One brand fill.** Lotus pink-red fills every primary action. A selected
+  option and the current location use ink and a tint instead, so the fill keeps
+  one job.
+- **One mark, one meaning.** Public is the ticket: its shape, tilt, uppercase
+  word, and link. No other element takes that shape, and only the Publish
+  control carries the ring "a". Destructive actions are outlines in a separate
+  hue and never fills.
 - **State is a mark, not a hue.** Saved, saving, failed, draft, and public are a
   pencil tick, pencil text, destructive text, or the seal mark with the link
   (`StateMark`), never colored chips.
-- **One chrome typeface.** `'Be Vietnam Pro', 'Inter', system-ui, sans-serif`,
-  designed for Vietnamese diacritics and already shipped for the renderer.
-  Uppercase appears only inside the seal.
+- **One chrome typeface.** Plus Jakarta Sans, then Be Vietnam Pro, `system-ui`,
+  `sans-serif`. Be Vietnam Pro stays for the resume and the seal. Uppercase
+  appears only inside the seal.
 - **One module, whole sheet.** An 8 px module rules chrome alignment, exposed as
   `--space-*` custom properties with the named rhythms. The preview sheet is
   never cropped; chrome restacks around it, down to 390 px.
@@ -70,38 +49,39 @@ everywhere after the second stage, which also rewrites the rules below.
   in 120 ms. Nothing animates on load. Reduced motion disables all of it.
 - **The landing shows the product.** The home page renders one compiled-in
   sample resume through the shared renderer at server render, with its seal, and
-  performs no data fetch.
+  performs no data fetch. It ends with the maker's first-person introduction and
+  his own picture.
 
 **Canvas and color.**
 
-- The palette is keyed to the logo's two colors, navy ink `#101B3F` and seal
-  red. Application pages sit on warm paper (`#F9F8F5`) with large, soft, static
-  CSS glows in ink blue, indigo, jade, and ochre. Dark theme is ink black
-  (`#0C1020` ground, `#141A2E` cards, warm white text) with slightly stronger
-  glows.
-- Two ink blues: `--primary` fills (`#26409C` light; `#8FA6F0` with dark text in
-  dark theme) and `--link` colors blue text. `--brand-blue` and
-  `--brand-deep-blue` are aliases of those two. Indigo, jade, and ochre are
-  supporting accents; jade and ochre pair with seal red and sit far from it.
-  Pink, orange, cyan, and purple are not brand colors; `--surface-sand` tints
-  the third feature card.
-- `--seal` fills are `#CC2649`, keeping white Publish text above 4.5:1 including
-  hover. `--seal-text` colors words and thin strokes: `#CC2649` light, `#FF6B8A`
-  dark (6.9:1 on `#0C1020`).
-- `--destructive` is burnt orange, `#B54708` light and `#FD8A4B` dark, and the
-  destructive button is an outline, so Delete cannot be mistaken for Publish.
-- Text meets WCAG AA over the brightest point of the canvas.
+- White ground `#FFFFFF` with indigo ink `#1A1650`; the dark theme is `#0F0D26`
+  with `#F3F1FF`. No gradients and no glows.
+- One brand fill, lotus pink-red `#DE1B5A` with white text and hover `#C7134D`,
+  is `--primary` and `--seal` in both themes. Pink words and thin strokes are
+  `#C7134D` light and `#FF7AA2` dark.
+- Supporting surfaces are mist, blush, and sun tints, an indigo inverse panel,
+  and a coin yellow `#FFD23F` with indigo ink. The focus ring has its own token.
+- Links are ink made lighter, `#4336C9` light and `#B9B2FF` dark, never pink. A
+  link inside a sentence is underlined.
+- `--destructive` is burnt orange, `#B54708` light and `#FD8A4B` dark, always an
+  outline, so Delete cannot be mistaken for Publish under any color vision.
+- Text meets WCAG AA on every ground. The
+  [token page](../design/ui/typography-and-tokens.md) holds every value and
+  ratio.
 
-**Shape and type.** The standard radius is 10 px, dialogs 14 px, feature cards
-20 px; product surfaces take a soft blue-tinted shadow. `--text-sm` is 14 px,
-`--text-base` (chrome body) 15 px, `--text-3xl` 40 px, and `--text-4xl` 48 px.
-Headings take line height 1.3 (lg to 2xl), 1.25 (3xl, 4xl), and 1.2 (6xl).
+**Shape and type.** Buttons, toggles, chips, and tabs are pills. Inputs keep 10
+px, dialogs and menus 14 px, and the sheet 2 px. Standalone cards and page-level
+tinted panels take the larger card and panel radii. Surfaces are flat; only
+menus, floating controls, dialogs, and sheets carry a shadow. Headings take line
+height 1.3 or more, because the typeface's stacked Vietnamese marks are tall.
 
 **Logo.** The mark is a stamp: a thick outer ring, a hairline inner ring, and a
-single-story "a", tilted −8° like the public stamp, in seal red. The wordmark is
-stroked lowercase `aboutme.vn` in the text color, and only the dot before "vn"
-is seal red. The logo is inline SVG with no gradient, mask, id, font, or
-external asset. At 24 px and in the favicon, the hairline inner ring drops out.
+single-story "a", tilted −8° like the public stamp. The wordmark is stroked
+lowercase `aboutme.vn` in the text color. The mark and the dot before "vn" take
+the brand pink, `#FF7AA2` on dark and indigo grounds, and the whole logo is
+white on the brand fill. The logo is inline SVG with no gradient, mask, id,
+font, or external asset. At 24 px and in the favicon, the hairline inner ring
+drops out.
 
 **Seal.** `AppSeal` is a rounded ticket rotated −6°: the logo's seal mark (outer
 ring and "a") and the word PUBLIC (CÔNG KHAI in Vietnamese) on top, a hairline,
@@ -137,8 +117,8 @@ otherwise for the public page on screen.
 - The dark colors come from one pure rule over the resume's own five colors,
   followed by the unchanged role derivation and its contrast floors. No chrome
   token enters the document area, and no template has hand-picked dark colors.
-- The page bar takes the light or ink-black values of its scoped tokens to match
-  the page's scheme. Its mark is the logo's seal mark in `--seal-text`.
+- The page bar takes the light or dark values of its scoped tokens to match the
+  page's scheme. Its mark is the logo's seal mark in `--seal-text`.
 
 ## Alternatives rejected
 
@@ -167,15 +147,13 @@ otherwise for the public page on screen.
   gradient, radius, spacing, and shadow tokens. `base.css` paints the canvas on
   the application body only.
 - The button primitive's guarded edits (ADR 0019) follow these tokens.
-- Icons use versioned file names (`favicon-v3.svg`, `icon-*-v3.png`,
-  `apple-touch-icon-v3.png`, `site-v3.webmanifest`) and the Open Graph image is
-  `og-image-v7.jpg` and `og-image-v6-en.jpg`. A replaced icon or image set stays
-  in `public/`, unlinked, for one release so caches and crawlers get no 404. The
-  MCP server's `initialize` `serverInfo` names the same `favicon-v3.svg` and
-  `icon-*-v3.png` files by absolute URL; a future version bump renames both
-  together.
+- Icons and Open Graph images use versioned file names. A replaced icon or image
+  set stays in `public/`, unlinked, for one release so caches and crawlers get
+  no 404. The MCP server's `initialize` `serverInfo` names the same icon files
+  by absolute URL; a version bump renames both together.
 - The stored link-preview card (ADR 0014) draws `AppLogo` mark-only and pins it
-  to `#CC2649` in both themes; a logo change raises the card layout version.
+  to the brand fill in both themes; a logo or color change raises the card
+  layout version.
 - The production maintenance page (`deploy/caddy/production/maintenance.html`)
   carries its own copy of the tokens and an inline logo, and follows them; its
   CSP hashes are recomputed from the page at build.
@@ -197,6 +175,11 @@ indigo ink, one lotus pink-red brand fill that is also the seal color, Plus
 Jakarta Sans, rounded panels and pill buttons, and the maker's introduction with
 his picture. The home page takes it first; the rest of the chrome follows within
 one release.
+
+On 2026-11-16 the older principles, canvas, shape, and logo text in the Decision
+were rewritten to this identity, and the other surfaces follow one change at a
+time in the order the home page spec gives, because two releases shipped before
+the second stage was ready.
 
 ### Amendment: Display assertions (2026-11-01)
 

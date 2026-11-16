@@ -5,14 +5,23 @@ the [visual design](../../../DESIGN.md).
 
 ## Authenticated chrome and editor
 
-The shared application shell is a card-colored bar with a bottom border, its
-content held to a 76 rem column. It has the 24 px `AppLogo`, linked home, and a
-Library link for every visitor, then a Community link (“Cộng đồng”) to the
-[community showcase](showcase.md), then a link to the
-[MCP guide](../mcp-guide.md) (“Kết nối AI” or “Connect AI”) at `/guide/mcp`,
-public like the Library link. Below 64 rem the logo shows the mark alone, signed
-in or out. Below 64 rem the signed-out header is also compact, with VI and EN
-and an icon-only theme button, so every link and both account buttons fit
+The shared application shell is a bar on `--background` with a 1 px `--border`
+rule below, 56 px high and 64 px from 48 rem. Its content is held to a 1200 px
+column with 16, 24, and 32 px gutters, as on the home page. Header links are 15
+px, weight 600, in `--foreground`; hover and the current page fill a pill with
+`--accent`. The locale toggle is a `--surface-mist` pill track whose pressed
+option is an ink pill. The theme button is a 36 px circle with an icon and no
+visible label at any width; its name stays in `aria-label`. Sign in is a ghost
+pill and the create button a brand pill, both 40 px high. The account trigger is
+a 36 px circle, and its menu follows the
+[menu rule](typography-and-tokens.md#controls).
+
+It has the 24 px `AppLogo`, linked home, and a Library link for every visitor,
+then a Community link (“Cộng đồng”) to the [community showcase](showcase.md),
+then a link to the [MCP guide](../mcp-guide.md) (“Kết nối AI” or “Connect AI”)
+at `/guide/mcp`, public like the Library link. Below 64 rem the logo shows the
+mark alone, signed in or out. Below 64 rem the signed-out header is also
+compact, with VI and EN, so every link and both account buttons fit
 ([Navigation](landing-and-library.md#navigation)). Signed-out navigation adds an
 Open source link to the GitHub repository from 72 rem, the theme toggle, a ghost
 Sign in button, and a primary create button. The create button reads Create your
