@@ -30,6 +30,7 @@ import (
 	"danny.vn/aboutme/apps/server/internal/config"
 	"danny.vn/aboutme/apps/server/internal/media"
 	"danny.vn/aboutme/apps/server/internal/password"
+	"danny.vn/aboutme/apps/server/internal/project"
 	"danny.vn/aboutme/apps/server/internal/publicstate"
 	"danny.vn/aboutme/apps/server/internal/resume"
 	"danny.vn/aboutme/apps/server/internal/resume/docmigrate"
@@ -321,6 +322,7 @@ type callerRun struct {
 	passkeyID    uuid.UUID
 	enrollmentID string
 	totpSecret   string
+	project      uuid.UUID
 }
 
 func (c *callerRun) serve(method, path, body string) *httptest.ResponseRecorder {
@@ -582,6 +584,24 @@ func evidenceCases() []callerCase {
 		}, invalidate: expire, lastLocks: []lockStep{connectionLock()}, lapse: advanceClock(idleLapse)},
 		{name: "evidence disconnect", site: invariantSite{routes, "Service.handleDisconnect"}, run: func(c *callerRun) error {
 			return statusAccepted(c.serve(http.MethodDelete, StatusPath+"?keepLinks=true", ""), http.StatusNoContent)
+		}, invalidate: expire, lastLocks: []lockStep{connectionLock()}, lapse: advanceClock(idleLapse)},
+		{name: "evidence reader", site: invariantSite{"internal/githubevidence/evidence_session.go", "Service.openReader"}, setup: func(c *callerRun) error {
+			created, err := project.NewStore().CreateTx(context.Background(), c.ih.q, c.ih.user.ID, "reader",
+				project.Document{DefaultLanguage: "en", Text: map[string]project.Text{"en": {Name: "Reader"}}}, time.Now(), nil)
+			c.project = created.ID
+			return err
+		}, stale: func(c *callerRun) error {
+			_, err := c.ih.pool.Exec(context.Background(), `UPDATE github_connections SET generation = generation + 1 WHERE user_id = $1`, c.ih.user.ID)
+			return err
+		}, run: func(c *callerRun) error {
+			_, err := c.ih.svc.Candidates(context.Background(), c.session, c.project, project.EvidenceQuery{Kind: kindRepository, Page: 1})
+			if errors.Is(err, project.ErrEvidenceSessionRequired) {
+				return nil
+			}
+			if err == nil {
+				return errors.New("listed candidates under a stale generation")
+			}
+			return err
 		}, invalidate: expire, lastLocks: []lockStep{connectionLock()}, lapse: advanceClock(idleLapse)},
 		{name: "evidence callback", site: invariantSite{"internal/githubevidence/callback.go", "Service.handleCallback"}, setup: func(c *callerRun) error {
 			s, err := c.ih.startE(c.raw, c.session)

@@ -2,7 +2,9 @@ package githubevidence
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"time"
@@ -40,6 +42,7 @@ type Options struct {
 	Sessions     *auth.SessionManager
 	Logger       *slog.Logger
 	Clock        func() time.Time
+	Entropy      io.Reader
 }
 
 type Service struct {
@@ -55,6 +58,7 @@ type Service struct {
 	starts       *windowLimiter
 	logger       *slog.Logger
 	now          func() time.Time
+	entropy      io.Reader
 	hooks        serviceHooks
 }
 
@@ -89,6 +93,9 @@ func newService(opts Options, endpoint string, transport http.RoundTripper) (*Se
 	if opts.Clock == nil {
 		opts.Clock = time.Now
 	}
+	if opts.Entropy == nil {
+		opts.Entropy = rand.Reader
+	}
 	q := store.New(opts.Pool)
 	s := &Service{
 		enabled:      true,
@@ -101,6 +108,7 @@ func newService(opts Options, endpoint string, transport http.RoundTripper) (*Se
 		starts:       newWindowLimiter(startLimit, limitWindow),
 		logger:       opts.Logger,
 		now:          opts.Clock,
+		entropy:      opts.Entropy,
 	}
 	s.client = newClient(opts.Config.ClientID, opts.Config.ClientSecret, endpoint, transport,
 		newWindowLimiter(requestLimit, limitWindow), opts.Clock)

@@ -194,7 +194,7 @@ func run() error {
 		Sessions: sessionManager, Coordinator: coordinator, PrintQueue: printQueue, Showcase: showcaseService, Origin: runtime.PublicOrigin,
 	})
 	projectService := app.NewProjects(app.ProjectDependencies{
-		Config: cfg, Pool: pool, Sessions: sessionManager, Resumes: resumeService,
+		Config: cfg, Pool: pool, Sessions: sessionManager, Resumes: resumeService, Evidence: evidence,
 	})
 	agentRoutes, err := app.NewAgents(ctx, cfg, pool, queries, resumeService, projectService, sessionManager)
 	if err != nil {

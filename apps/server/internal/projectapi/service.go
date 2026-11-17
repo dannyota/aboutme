@@ -25,12 +25,14 @@ type Options struct {
 	AllowSlug    func(uuid.UUID, time.Time) bool
 	Clock        func() time.Time
 	Links        LinkedResumes
+	Evidence     EvidenceSource
 }
 
 type LinkedResumes interface {
 	LinkedResumeIDs(context.Context, *store.Queries, uuid.UUID) (map[uuid.UUID][]uuid.UUID, error)
 	ReplaceProject(context.Context, resumeapi.ProjectReplacement) (resume.ExecuteResult, error)
 	RemoveProject(context.Context, resumeapi.ProjectRemoval) (resume.ExecuteResult, error)
+	EditProjectEvidence(context.Context, resumeapi.ProjectEvidenceEdit) (resume.ExecuteResult, error)
 }
 
 type idempotencyStore interface {
@@ -49,19 +51,21 @@ type Service struct {
 	allowSlug   func(uuid.UUID, time.Time) bool
 	now         func() time.Time
 	links       LinkedResumes
+	evidence    EvidenceSource
 }
 
 func New(pool *store.Pool, idem *resume.IdempotencyStore, opts Options) *Service {
 	if opts.Clock == nil {
 		opts.Clock = time.Now
 	}
-	return &Service{q: store.New(pool), projects: project.NewStore(), idempotency: idem, sessions: opts.Sessions, origin: opts.PublicOrigin, readLimit: opts.ReadLimit, writeLimit: opts.WriteLimit, allowSlug: opts.AllowSlug, now: opts.Clock, links: opts.Links}
+	return &Service{q: store.New(pool), projects: project.NewStore(), idempotency: idem, sessions: opts.Sessions, origin: opts.PublicOrigin, readLimit: opts.ReadLimit, writeLimit: opts.WriteLimit, allowSlug: opts.AllowSlug, now: opts.Clock, links: opts.Links, evidence: opts.Evidence}
 }
 
 func (s *Service) RegisterRoutes(mux *http.ServeMux) {
 	for _, path := range []string{projectsPath, projectsPath + "/{id}"} {
 		mux.Handle(path, http.HandlerFunc(s.dispatch))
 	}
+	s.registerEvidence(mux)
 }
 
 func (s *Service) dispatch(w http.ResponseWriter, r *http.Request) {
@@ -98,7 +102,8 @@ func (s *Service) dispatch(w http.ResponseWriter, r *http.Request) {
 
 type resource struct {
 	project.Project
-	LinkedResumeIDs []uuid.UUID `json:"linkedResumeIds"`
+	LinkedResumeIDs []uuid.UUID         `json:"linkedResumeIds"`
+	Evidence        *[]project.Evidence `json:"evidence,omitempty"`
 }
 
 func resourceOf(p project.Project, links map[uuid.UUID][]uuid.UUID) resource {
@@ -150,6 +155,24 @@ func (s *Service) readFor(w http.ResponseWriter, r *http.Request, owner uuid.UUI
 		writeError(w, mapError(err))
 		return
 	}
+	one, err := s.single(r.Context(), s.q, owner, p, links)
+	if err != nil {
+		writeError(w, mapError(err))
+		return
+	}
 	w.Header().Set("ETag", revisionTag(p.Revision))
-	api.WriteData(w, 200, resourceOf(p, links))
+	api.WriteData(w, 200, one)
+}
+
+func (s *Service) single(ctx context.Context, q *store.Queries, owner uuid.UUID, p project.Project, links map[uuid.UUID][]uuid.UUID) (resource, error) {
+	one := resourceOf(p, links)
+	if !s.evidenceEnabled() {
+		return one, nil
+	}
+	items, err := s.projects.EvidenceTx(ctx, q, owner, p.ID)
+	if err != nil {
+		return resource{}, err
+	}
+	one.Evidence = &items
+	return one, nil
 }

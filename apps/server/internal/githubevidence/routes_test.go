@@ -49,6 +49,8 @@ type stubGitHub struct {
 	revokeStatus int
 	beforeToken  func()
 	tokenBody    func(token string) string
+	reads        map[string]http.HandlerFunc
+	readLog      []string
 }
 
 func newStubGitHub(t *testing.T) *stubGitHub {
@@ -59,6 +61,7 @@ func newStubGitHub(t *testing.T) *stubGitHub {
 	mux.HandleFunc("POST /login/oauth/access_token", gh.serveToken)
 	mux.HandleFunc("GET /user", gh.serveUser)
 	mux.HandleFunc("DELETE /applications/{client}/token", gh.serveRevoke)
+	mux.HandleFunc("GET /", gh.serveRead)
 	server := httptest.NewServer(mux)
 	t.Cleanup(server.Close)
 	gh.URL = server.URL
@@ -262,7 +265,12 @@ type call struct {
 
 func (h *harness) do(c call) *httptest.ResponseRecorder {
 	h.t.Helper()
-	r := httptest.NewRequestWithContext(h.t.Context(), c.method, c.path, strings.NewReader(c.body))
+	return h.doWith(h.t.Context(), c)
+}
+
+func (h *harness) doWith(ctx context.Context, c call) *httptest.ResponseRecorder {
+	h.t.Helper()
+	r := httptest.NewRequestWithContext(ctx, c.method, c.path, strings.NewReader(c.body))
 	r.RemoteAddr = "203.0.113.7:4000"
 	r.Header.Set("Origin", testOrigin)
 	if c.csrf != "" {

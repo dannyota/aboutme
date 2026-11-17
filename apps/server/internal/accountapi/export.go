@@ -17,7 +17,6 @@ import (
 
 	"danny.vn/aboutme/apps/server/internal/api"
 	"danny.vn/aboutme/apps/server/internal/auth"
-	"danny.vn/aboutme/apps/server/internal/project"
 	"danny.vn/aboutme/apps/server/internal/resume"
 	"danny.vn/aboutme/apps/server/internal/store"
 )
@@ -127,7 +126,7 @@ type exportData struct {
 	ExportedAt       time.Time               `json:"exportedAt"`
 	Account          exportProfile           `json:"account"`
 	Resumes          []exportResume          `json:"resumes"`
-	Projects         []project.Project       `json:"projects"`
+	Projects         []exportProject         `json:"projects"`
 	GitHubConnection *exportGitHubConnection `json:"githubConnection,omitempty"`
 }
 

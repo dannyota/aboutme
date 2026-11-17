@@ -108,25 +108,15 @@ func (s *Service) handleStatus(w http.ResponseWriter, r *http.Request) {
 
 func (s *Service) statusSnapshot(a account) statusBody {
 	var body statusBody
-	var generation int64
-	if row := a.connection; a.found {
-		generation = row.Generation
-		if row.GithubUserID != nil && row.Login != nil && row.ConnectedAt != nil {
-			body.Connection = &connectionBody{GitHubUserID: *row.GithubUserID, Login: *row.Login, ConnectedAt: row.ConnectedAt.UTC()}
-		}
+	if row := a.connection; a.connected() {
+		body.Connection = &connectionBody{GitHubUserID: *row.GithubUserID, Login: *row.Login, ConnectedAt: row.ConnectedAt.UTC()}
 	}
 	if s.hooks.statusRead != nil {
 		s.hooks.statusRead(a.tx)
 	}
-	live, isLive := s.registry.current(a.user.ID)
-	if !isLive {
-		return body
-	}
-	if body.Connection != nil && live.generation == generation && live.epoch == a.user.AuthEpoch && live.expiresAt.After(a.now) {
+	if live, isLive := s.currentSession(a); isLive {
 		body.Session = &sessionBody{ExpiresAt: live.expiresAt.UTC()}
-		return body
 	}
-	s.registry.endSession(a.user.ID, live)
 	return body
 }
 

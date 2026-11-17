@@ -14,12 +14,13 @@ type ProjectDependencies struct {
 	Pool     *store.Pool
 	Sessions *auth.SessionManager
 	Resumes  *resumeapi.Service
+	Evidence projectapi.EvidenceSource
 }
 
 func NewProjects(deps ProjectDependencies) *projectapi.Service {
 	return projectapi.New(deps.Pool, resume.NewIdempotencyStore(deps.Pool), projectapi.Options{
 		Sessions: deps.Sessions, PublicOrigin: deps.Config.PublicOrigin,
 		ReadLimit: deps.Resumes.ReadAdmission(), WriteLimit: deps.Resumes.WriteAdmission(),
-		AllowSlug: deps.Resumes.AllowSlugClaim, Links: deps.Resumes,
+		AllowSlug: deps.Resumes.AllowSlugClaim, Links: deps.Resumes, Evidence: deps.Evidence,
 	})
 }

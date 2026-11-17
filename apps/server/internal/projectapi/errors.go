@@ -68,6 +68,9 @@ func mapError(err error) *clientError {
 	if errors.Is(err, resumeapi.ErrPublicStateBusy) || errors.As(err, &drain) {
 		return &clientError{status: 503, code: "public_state_busy", message: "public state is busy", retryAfter: 1}
 	}
+	if e := evidenceError(err); e != nil {
+		return e
+	}
 	var capacity *resume.IdempotencyCapacityError
 	if errors.As(err, &capacity) {
 		return &clientError{status: 429, code: "rate_limited", message: "idempotency capacity exceeded", retryAfter: capacity.RetryAfterSeconds}

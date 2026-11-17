@@ -20,6 +20,7 @@ type Querier interface {
 	AddResumeViewDays(ctx context.Context, arg AddResumeViewDaysParams) error
 	AdvanceDiscoveryGeneration(ctx context.Context) (int64, error)
 	AdvancePrivacyNoticeCapture(ctx context.Context, arg AdvancePrivacyNoticeCaptureParams) (int64, error)
+	AdvanceProjectRevision(ctx context.Context, arg AdvanceProjectRevisionParams) (Project, error)
 	AdvanceResumeRevisionCAS(ctx context.Context, arg AdvanceResumeRevisionCASParams) (Resume, error)
 	AdvanceTOTPCredentialStep(ctx context.Context, arg AdvanceTOTPCredentialStepParams) (TotpCredential, error)
 	AdvanceUserAuthEpoch(ctx context.Context, id uuid.UUID) (User, error)
@@ -56,6 +57,7 @@ type Querier interface {
 	CountLivePrivacyNoticeJobs(ctx context.Context) (int64, error)
 	CountOwnedProjects(ctx context.Context, arg CountOwnedProjectsParams) (int64, error)
 	CountPrivacyNoticeRecovery(ctx context.Context, arg CountPrivacyNoticeRecoveryParams) (int64, error)
+	CountProjectEvidence(ctx context.Context, projectID uuid.UUID) (int32, error)
 	CountProjectsForUser(ctx context.Context, userID uuid.UUID) (int64, error)
 	CountResumesForUser(ctx context.Context, userID uuid.UUID) (int64, error)
 	CountSecondFactorRecoveryCodes(ctx context.Context, userID uuid.UUID) (int64, error)
@@ -122,6 +124,7 @@ type Querier interface {
 	DeletePasswordResetToken(ctx context.Context, id uuid.UUID) (int64, error)
 	DeletePrivacyNoticeRecipientUser(ctx context.Context, arg DeletePrivacyNoticeRecipientUserParams) (int64, error)
 	DeleteProjectCAS(ctx context.Context, arg DeleteProjectCASParams) (int64, error)
+	DeleteProjectEvidence(ctx context.Context, arg DeleteProjectEvidenceParams) (int64, error)
 	DeleteRecoveredPrivacyNoticeJob(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteResumeForUser(ctx context.Context, arg DeleteResumeForUserParams) (int64, error)
 	DeleteResumeForUserCAS(ctx context.Context, arg DeleteResumeForUserCASParams) (Resume, error)
@@ -142,6 +145,7 @@ type Querier interface {
 	// timestamps must never be used to reconstruct this lineage. The reverse
 	// direction is already present in a session row's rotated_from value.
 	FindLiveSuccessorSession(ctx context.Context, rotatedFrom *uuid.UUID) (Session, error)
+	FindProjectEvidenceItem(ctx context.Context, arg FindProjectEvidenceItemParams) (uuid.UUID, error)
 	GetAccountDeletedAuditEvent(ctx context.Context, id uuid.UUID) (LifecycleAuditEvent, error)
 	GetAccountDeletionSessionForUpdate(ctx context.Context, arg GetAccountDeletionSessionForUpdateParams) (Session, error)
 	GetAccountExportGitHubConnection(ctx context.Context, userID uuid.UUID) (GetAccountExportGitHubConnectionRow, error)
@@ -201,6 +205,7 @@ type Querier interface {
 	GetPrivacyNoticeJobForUpdate(ctx context.Context, id uuid.UUID) (AuthEmailJob, error)
 	GetPrivacyNoticeRecipient(ctx context.Context, jobID uuid.UUID) (PrivacyNoticeRecipient, error)
 	GetPrivacyNoticeRecipientForUpdate(ctx context.Context, jobID uuid.UUID) (PrivacyNoticeRecipient, error)
+	GetProjectEvidence(ctx context.Context, arg GetProjectEvidenceParams) (ProjectEvidence, error)
 	GetProjectForUser(ctx context.Context, arg GetProjectForUserParams) (Project, error)
 	GetProjectSlugClaim(ctx context.Context, arg GetProjectSlugClaimParams) (uuid.UUID, error)
 	GetProjectSlugHold(ctx context.Context, arg GetProjectSlugHoldParams) (time.Time, error)
@@ -245,6 +250,7 @@ type Querier interface {
 	InsertIdentityUnlinkedAuditEvent(ctx context.Context, occurredAt time.Time) error
 	InsertPasskeyCounterSecurityEvent(ctx context.Context, arg InsertPasskeyCounterSecurityEventParams) (AuthenticationSecurityEvent, error)
 	InsertPrivacyNoticeRecipient(ctx context.Context, arg InsertPrivacyNoticeRecipientParams) error
+	InsertProjectEvidence(ctx context.Context, arg InsertProjectEvidenceParams) (ProjectEvidence, error)
 	InsertResumeShowcase(ctx context.Context, arg InsertResumeShowcaseParams) error
 	InsertRotatedOAuthToken(ctx context.Context, arg InsertRotatedOAuthTokenParams) (OAuthToken, error)
 	InsertSlugTombstone(ctx context.Context, arg InsertSlugTombstoneParams) (SlugTombstone, error)
@@ -257,6 +263,7 @@ type Querier interface {
 	ListAccountExportResumes(ctx context.Context, userID uuid.UUID) ([]ListAccountExportResumesRow, error)
 	// COALESCE gives sqlc a non-null Go string instead of a pointer (sqlc nullability inference).
 	ListEligiblePublicSlugs(ctx context.Context) ([]string, error)
+	ListEvidenceForProjects(ctx context.Context, arg ListEvidenceForProjectsParams) ([]ListEvidenceForProjectsRow, error)
 	ListFailedPrivacyNoticeRecipients(ctx context.Context, failureCode *string) ([]PrivacyNoticeRecipient, error)
 	ListIdentitiesByUserID(ctx context.Context, userID uuid.UUID) ([]Identity, error)
 	// The bounded idle-client sweep: clients registered before
@@ -294,6 +301,7 @@ type Querier interface {
 	ListLiveSessionsForUser(ctx context.Context, arg ListLiveSessionsForUserParams) ([]Session, error)
 	ListPrivacyNoticeAbortCandidates(ctx context.Context) ([]PrivacyNoticeRecipient, error)
 	ListPrivacyNoticeCaptureUsers(ctx context.Context, captureCursor *uuid.UUID) ([]uuid.UUID, error)
+	ListProjectEvidence(ctx context.Context, arg ListProjectEvidenceParams) ([]ListProjectEvidenceRow, error)
 	// Callers hold LockUserForResumeWrite throughout mutations and replay storage.
 	ListProjectsForUser(ctx context.Context, userID uuid.UUID) ([]Project, error)
 	ListResumeIDsBelowSchemaVersion(ctx context.Context, arg ListResumeIDsBelowSchemaVersionParams) ([]uuid.UUID, error)
@@ -329,6 +337,7 @@ type Querier interface {
 	PrivacyNoticeTotals(ctx context.Context) (PrivacyNoticeTotalsRow, error)
 	ProjectBelongsToUser(ctx context.Context, arg ProjectBelongsToUserParams) (bool, error)
 	ProjectDocumentBytes(ctx context.Context, document json.RawMessage) (int32, error)
+	ProjectStoredDocumentBytes(ctx context.Context, arg ProjectStoredDocumentBytesParams) (int32, error)
 	ProjectStoredDocumentEquals(ctx context.Context, arg ProjectStoredDocumentEqualsParams) (bool, error)
 	ProposeProjectSlug(ctx context.Context, arg ProposeProjectSlugParams) (string, error)
 	// A single UPDATE evaluates its SET and FROM expressions against the pre-update row (PostgreSQL UPDATE).
@@ -344,6 +353,7 @@ type Querier interface {
 	ReencryptTOTPEnrollment(ctx context.Context, arg ReencryptTOTPEnrollmentParams) (int64, error)
 	ReleaseIdempotencyUsage(ctx context.Context, arg ReleaseIdempotencyUsageParams) (int64, error)
 	ReopenPrivacyNoticeCampaign(ctx context.Context, contentSha256 []byte) (int64, error)
+	ReorderProjectEvidence(ctx context.Context, arg ReorderProjectEvidenceParams) (int64, error)
 	ReplaceProjectCAS(ctx context.Context, arg ReplaceProjectCASParams) (Project, error)
 	ReplaceTOTPCredential(ctx context.Context, arg ReplaceTOTPCredentialParams) (TotpCredential, error)
 	RequeueAuthEmailJob(ctx context.Context, arg RequeueAuthEmailJobParams) (int64, error)
@@ -365,6 +375,7 @@ type Querier interface {
 	RevokeOAuthTokensForGrant(ctx context.Context, arg RevokeOAuthTokensForGrantParams) (int64, error)
 	RevokeSession(ctx context.Context, arg RevokeSessionParams) error
 	RevokeSessionForUser(ctx context.Context, arg RevokeSessionForUserParams) (int64, error)
+	RewriteProjectEvidence(ctx context.Context, arg RewriteProjectEvidenceParams) (ProjectEvidence, error)
 	SaveMediaOrphanSweepCursor(ctx context.Context, arg SaveMediaOrphanSweepCursorParams) (int64, error)
 	SealPrivacyNoticeCampaign(ctx context.Context, contentSha256 []byte) (int64, error)
 	StartSessionRotationGrace(ctx context.Context, arg StartSessionRotationGraceParams) error
