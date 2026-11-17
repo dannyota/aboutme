@@ -157,7 +157,7 @@ const previewEmoji = computed(() =>
           alt=""
           class="size-4"
           data-tab-icon-default
-          src="/favicon-v3.svg"
+          src="/favicon-v4.svg"
         >
         <span
           class="min-w-0 truncate"

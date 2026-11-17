@@ -4,8 +4,8 @@ import type { WorkspaceCopy } from './workspace';
 export const siteName = 'aboutme.vn';
 export const siteOrigin = 'https://aboutme.vn';
 export const ogImageUrl: Record<Locale, string> = {
-  vi: `${siteOrigin}/og-image-v7.jpg`,
-  en: `${siteOrigin}/og-image-v6-en.jpg`,
+  vi: `${siteOrigin}/og-image-v8.jpg`,
+  en: `${siteOrigin}/og-image-v7-en.jpg`,
 };
 
 const indexablePaths: ReadonlySet<string> = new Set([
