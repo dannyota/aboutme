@@ -881,7 +881,8 @@ test('proves a published resume hydrates in a real browser', async ({
     const download = publicPage.locator('a.public-download');
     await expect(download).toHaveCount(1);
     await expect(download).toHaveAttribute('href', `/api/v1/public/resumes/${publishedSlug}/pdf`);
-    await expect(download).toHaveText('Download PDF');
+    await expect(download).toHaveAccessibleName('Download PDF');
+    await expect(download.locator('.public-download-full')).toHaveText('Download PDF');
     const pdf = await publicPage.evaluate(async (href) => {
       const response = await fetch(href, { cache: 'no-store' });
       return {

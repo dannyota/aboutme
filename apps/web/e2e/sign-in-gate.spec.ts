@@ -382,10 +382,16 @@ async function openAndAssertInvite(
     : 'Make your own resume on aboutme.vn: free, open source, shared '
       + 'with one link.');
   await expect(region.getByRole('link'))
-    .toHaveCSS('background-color', 'rgb(26, 92, 235)');
+    .toHaveCSS('background-color', 'rgb(89, 75, 173)');
   await expect(region.getByRole('link'))
     .toHaveCSS('color', 'rgb(255, 255, 255)');
-  await expect(region).toHaveCSS('color', 'rgb(92, 97, 120)');
+  await expect(region.getByRole('link'))
+    .toHaveCSS('border-top-left-radius', '999px');
+  await expect(region).toHaveCSS('color', 'rgb(85, 81, 125)');
+  await expect(region).toHaveCSS('border-top-color', 'rgb(227, 224, 242)');
+  await expect(region).toHaveCSS('box-shadow', cell.placement === 'card'
+    ? 'rgba(26, 22, 80, 0.55) 0px 16px 24px -14px'
+    : 'none');
 }
 
 for (const [languageIndex, lng] of (['vi', 'en'] as const).entries()) {

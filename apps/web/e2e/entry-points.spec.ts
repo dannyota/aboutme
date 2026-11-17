@@ -23,6 +23,10 @@ const PARITY = 'Title link parity.';
 const ANNOTATIONS = 'Title link annotations.';
 const TARGETS = 'Bar target size.';
 const LEGIBLE = 'Bar legibility.';
+const ONE_ROW = 'Bar one row.';
+const DOWNLOAD_NAME = 'Bar download name.';
+const PHONE_GUTTER = 16;
+const TOUCH_BAR_HEIGHT = 56;
 
 const fixture = (lng: Lng) => (lng === 'vi' ? 'vn-full' : 'full');
 
@@ -263,8 +267,12 @@ async function measureBar(page: Page) {
         }
         return (near + far) / 2;
       };
+      const shown = [...element.querySelectorAll('span')].find((span) => {
+        const css = getComputedStyle(span);
+        return css.display !== 'none' && css.clipPath === 'none';
+      }) ?? element;
       const range = document.createRange();
-      range.selectNodeContents(element);
+      range.selectNodeContents(shown);
       const label = range.getBoundingClientRect();
       const x = rect.left + rect.width / 2;
       const y = rect.top + rect.height / 2;
@@ -382,5 +390,113 @@ test.describe('public bar at 320 px', () => {
     await proveMutation(() => expectBar(page, 'en'),
       () => applyStyleMutation(page.locator('.public-projects'),
         { order: '1' }), LEGIBLE);
+  });
+});
+
+async function measureRow(page: Page) {
+  return page.evaluate(() => {
+    const box = (selector: string) => {
+      const rect = document.querySelector(selector)!.getBoundingClientRect();
+      return {
+        left: rect.left, right: rect.right, top: rect.top,
+        bottom: rect.bottom, width: rect.width, height: rect.height,
+      };
+    };
+    const inner = document.querySelector('.public-toolbar-inner')!;
+    const innerBox = inner.getBoundingClientRect();
+    const innerStyle = getComputedStyle(inner);
+    const download = box('.public-download');
+    const short = document.createRange();
+    short.selectNodeContents(document.querySelector('.public-download-short')!);
+    const label = short.getBoundingClientRect();
+    const root = document.documentElement;
+    return {
+      coarse: matchMedia('(pointer: coarse)').matches,
+      overflow: root.scrollWidth > root.clientWidth,
+      viewport: innerWidth,
+      contentLeft: innerBox.left + parseFloat(innerStyle.paddingLeft),
+      contentRight: innerBox.right - parseFloat(innerStyle.paddingRight),
+      bar: box('.public-toolbar'),
+      brand: box('.public-brand'),
+      actions: box('.public-actions'),
+      projects: box('.public-projects'),
+      download,
+      full: box('.public-download-full'),
+      shortInside: label.width > 0 && label.left >= download.left
+        && label.right <= download.right && label.top >= download.top
+        && label.bottom <= download.bottom,
+    };
+  });
+}
+
+async function expectOneRow(page: Page, lng: Lng): Promise<void> {
+  const download = page.locator('.public-toolbar a.public-download');
+  await expect(page.locator('.public-toolbar a.public-projects'), ONE_ROW)
+    .toHaveText(lng === 'vi' ? 'Dự án' : 'Projects');
+  await expect(download, DOWNLOAD_NAME)
+    .toHaveAccessibleName(lng === 'vi' ? 'Tải PDF' : 'Download PDF');
+  await expect(download.locator('.public-download-short'), DOWNLOAD_NAME)
+    .toHaveText('PDF');
+  const row = await measureRow(page);
+  const middle = (box: { top: number; bottom: number }) =>
+    (box.top + box.bottom) / 2;
+  expect({
+    coarse: row.coarse,
+    overflow: row.overflow,
+    barHeight: Math.abs(row.bar.height - TOUCH_BAR_HEIGHT) <= 1,
+    oneRow: Math.abs(middle(row.brand) - middle(row.actions)) <= 1,
+    buttonsAligned: Math.abs(row.projects.top - row.download.top) <= 1,
+    order: row.brand.right + 8 <= row.actions.left + 1
+      && row.projects.right <= row.download.left,
+    gutter: Math.abs(row.contentLeft - PHONE_GUTTER) <= 1
+      && Math.abs(row.viewport - PHONE_GUTTER - row.contentRight) <= 1,
+    edges: Math.abs(row.brand.left - row.contentLeft) <= 1
+      && Math.abs(row.actions.right - row.contentRight) <= 1,
+    fullHidden: row.full.width <= 1 && row.full.height <= 1,
+    shortInside: row.shortInside,
+  }, ONE_ROW).toEqual({
+    coarse: true,
+    overflow: false,
+    barHeight: true,
+    oneRow: true,
+    buttonsAligned: true,
+    order: true,
+    gutter: true,
+    edges: true,
+    fullHidden: true,
+    shortInside: true,
+  });
+}
+
+test.describe('public bar at 360 px', () => {
+  test.use({ hasTouch: true });
+
+  for (const lng of ['vi', 'en'] as const) {
+    test(`credit, Projects and PDF share one row ${lng}`, async ({ page }) => {
+      await openScreen(page, 'modern-sidebar', lng, 360);
+      await expectOneRow(page, lng);
+    });
+  }
+
+  mutationTest('bar rejects the full download label on a phone', async ({
+    page,
+  }) => {
+    await openScreen(page, 'modern-sidebar', 'en', 360);
+    await proveMutation(() => expectOneRow(page, 'en'),
+      () => applyStyleMutation(page.locator('.public-download-full'), {
+        'position': 'static',
+        'width': ['auto', /px$/u],
+        'height': ['auto', /px$/u],
+        'clip-path': 'none',
+      }), ONE_ROW);
+  });
+
+  mutationTest('bar rejects a download link without its full name', async ({
+    page,
+  }) => {
+    await openScreen(page, 'modern-sidebar', 'vi', 360);
+    await proveMutation(() => expectOneRow(page, 'vi'),
+      () => mutateAttribute(page.locator('.public-download-full'),
+        'aria-hidden', 'true'), DOWNLOAD_NAME);
   });
 });

@@ -131,12 +131,12 @@ describe('JoinInvite', () => {
     }
 
     it.each([
-      ['dark', false, '#141A2E', '#A5ABBF', '#72A0FF', '#071126'],
-      ['dark', true, '#141A2E', '#A5ABBF', '#72A0FF', '#071126'],
-      ['system', true, '#141A2E', '#A5ABBF', '#72A0FF', '#071126'],
-      ['system', false, '#FFFFFF', '#5C6178', '#1A5CEB', '#FFFFFF'],
-      ['light', true, '#FFFFFF', '#5C6178', '#1A5CEB', '#FFFFFF'],
-      [null, true, '#FFFFFF', '#5C6178', '#1A5CEB', '#FFFFFF'],
+      ['dark', false, '#0E0A0D', '#A3959F', '#7267C0', '#FFFFFF'],
+      ['dark', true, '#0E0A0D', '#A3959F', '#7267C0', '#FFFFFF'],
+      ['system', true, '#0E0A0D', '#A3959F', '#7267C0', '#FFFFFF'],
+      ['system', false, '#FFFFFF', '#55517D', '#594BAD', '#FFFFFF'],
+      ['light', true, '#FFFFFF', '#55517D', '#594BAD', '#FFFFFF'],
+      [null, true, '#FFFFFF', '#55517D', '#594BAD', '#FFFFFF'],
     ] as const)(
       'follows a %s page when the device prefers dark: %s',
       async (scheme, prefersDark, ground, text, action, onAction) => {
@@ -151,6 +151,7 @@ describe('JoinInvite', () => {
         expect(create.style.background)
           .toBe(cssColor('background', action));
         expect(create.style.color).toBe(cssColor('color', onAction));
+        expect(create.style.borderRadius).toBe('999px');
       },
     );
   });
@@ -200,6 +201,8 @@ describe('JoinInvite', () => {
       await wrapper.vm.$nextTick();
       expect(wrapper.get('[role="region"]').attributes('data-placement'))
         .toBe('bar');
+      expect((wrapper.get('a').element as HTMLElement).style.borderRadius)
+        .toBe('999px');
     });
 
   it('places the card from the resume box, not the page root', async () => {

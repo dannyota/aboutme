@@ -9,6 +9,7 @@ import {
   applyStyleMutation, mutateAttribute, mutateText, proveMutation,
   screenMutationTests, mutationTest,
 } from './style-mutation';
+import { expectBarPaint } from './public-bar';
 import { expectRendererContent } from './renderer-content';
 import { rendererWidgetTests } from './renderer-widgets';
 import { expectRendererPaint, rendererTypeRules } from './renderer-details';
@@ -261,10 +262,7 @@ async function assertPublicPaint(
     .toHaveCSS('background-color', rgb(ground));
   await expect(article, 'Public foreground.')
     .toHaveCSS('color', rgb(foreground));
-  await expect(page.locator('.public-toolbar')).toHaveCSS(
-    'background-color',
-    dark ? 'rgb(12, 16, 32)' : 'rgb(249, 248, 245)',
-  );
+  await expectBarPaint(page, dark, 'Public bar paint.');
   const regionSelector = template === 'modern-sidebar'
     ? '.resume-sidebar'
     : '.resume-header';
@@ -430,6 +428,7 @@ for (const [name, selector, styles] of [
     'background-image': 'none',
   }],
   ['foreground', '.resume-document', { color: 'rgb(255, 0, 0)' }],
+  ['bar paint', '.public-toolbar', { 'background-color': 'rgb(255, 0, 0)' }],
 ] as const) {
   mutationTest(`public paint rejects changed ${name}`, async ({ page }) => {
     const response = await page.goto(

@@ -16,7 +16,8 @@ func publicBar(origin, slug, creditLabel string, download bool, downloadLabel st
 	downloadAnchor := ""
 	if download {
 		downloadAnchor = `<a class="public-download" href="/api/v1/public/resumes/` + slug + `/pdf">` +
-			publicDownloadSVG + `<span>` + downloadLabel + `</span></a>`
+			publicDownloadSVG + `<span class="public-download-full">` + downloadLabel + `</span>` +
+			`<span aria-hidden="true" class="public-download-short">PDF</span></a>`
 	}
 	return `<div class="public-toolbar"><div class="public-toolbar-inner"><span class="public-brand">` +
 		publicMarkSVG + `<a class="public-credit" href="` + origin + `/">` + creditLabel + `</a></span>` +

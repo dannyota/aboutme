@@ -315,9 +315,9 @@ describe('public page skip link focus colors', () => {
     'utf8',
   );
   const body = `{
-    background: #141a2e;
-    color: #a3b6f5;
-    outline-color: #8fa6f0;
+    background: #0e0a0d;
+    color: #b59bdb;
+    outline-color: #cdbcd9;
   }`;
 
   it.each([
