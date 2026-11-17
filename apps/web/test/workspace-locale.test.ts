@@ -1,5 +1,6 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime';
 import { describe, expect, it } from 'vitest';
+import { defineComponent, h } from 'vue';
 
 import LocaleToggle from '../app/components/app/LocaleToggle.vue';
 import {
@@ -12,6 +13,22 @@ import { workspaceCopy } from '../app/i18n/workspace';
 import { setSiteLocale } from './support/locale';
 
 describe('workspace locale', () => {
+  it('keeps a newly written cookie when another reader starts', async () => {
+    setSiteLocale(undefined);
+    const probe = defineComponent({
+      setup() {
+        useLocale();
+        document.cookie = `${localeCookie}=en; Path=/`;
+        useLocale();
+        return () => h('div');
+      },
+    });
+
+    const wrapper = await mountSuspended(probe);
+    expect(document.cookie).toContain(`${localeCookie}=en`);
+    wrapper.unmount();
+  });
+
   it.each([
     '/app/resumes',
     '/app/resumes/',

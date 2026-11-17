@@ -21,7 +21,7 @@ function onCopy(): void {
 
 function partClass(kind: CommandPart['kind']): string {
   if (kind === 'live') {
-    return 'rounded-sm bg-surface-blue font-bold text-foreground';
+    return 'rounded-sm bg-surface-sun font-bold text-foreground';
   }
   if (kind === 'placeholder') return 'italic text-muted-foreground';
   return '';
@@ -35,7 +35,7 @@ function partClass(kind: CommandPart['kind']): string {
   >
     <pre
       :aria-label="scrollLabel"
-      class="overflow-x-auto rounded-[10px] border bg-muted p-3.5 pr-[52px]
+      class="overflow-x-auto rounded-[10px] bg-muted p-3.5 pr-[52px]
         font-mono text-[13px] leading-[1.65]"
       tabindex="0"
     ><code><template
@@ -53,8 +53,8 @@ function partClass(kind: CommandPart['kind']): string {
     }}</template></code></pre>
     <button
       :aria-label="copyLabel"
-      class="absolute right-2 top-2 inline-flex h-8 w-8 items-center
-        justify-center rounded-md border bg-card"
+      class="absolute right-2 top-2 inline-flex size-8 items-center
+        justify-center rounded-full border bg-card"
       type="button"
       @click="onCopy"
     >

@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { Check, Copy } from '@lucide/vue';
+import { buttonVariants } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import { useClipboardCopy } from '@/components/verify/useClipboardCopy';
 import { shellPrompt } from '@/i18n/guide';
 
@@ -20,6 +22,11 @@ const { state, copy: copyToClipboard } = useClipboardCopy();
 function onCopy(): void {
   void copyToClipboard(props.text, props.copiedText, props.copyFailedText);
 }
+
+const copyButtonClass = cn(
+  buttonVariants({ variant: 'ghost', size: 'icon-sm' }),
+  'absolute right-2 top-2 hover:bg-card',
+);
 </script>
 
 <template>
@@ -29,7 +36,7 @@ function onCopy(): void {
   >
     <pre
       :aria-label="scrollLabel"
-      class="overflow-x-auto rounded-[10px] border bg-muted p-3.5 pr-[52px]
+      class="overflow-x-auto rounded-[10px] bg-muted p-3.5 pr-[52px]
         font-mono text-[13px] leading-[1.65]"
       tabindex="0"
     ><code
@@ -40,8 +47,7 @@ function onCopy(): void {
     >{{ shellPrompt }}</span>{{ text }}</code></pre>
     <button
       :aria-label="copyLabel"
-      class="absolute right-2 top-2 inline-flex h-8 w-8 items-center
-        justify-center rounded-md border bg-card"
+      :class="copyButtonClass"
       type="button"
       @click="onCopy"
     >

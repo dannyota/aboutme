@@ -277,7 +277,7 @@ for (const locale of ['vi', 'en'] as const) {
             await expect(openSource).toBeHidden();
           }
 
-          const guideLink = page.locator('nav a[href="/guide/mcp"]');
+          const guideLink = shell.locator('nav a[href="/guide/mcp"]');
           await expect(guideLink).toHaveCount(1);
           if (GUIDE_LINK_VISIBLE_AT[session].includes(width)) {
             await expect(guideLink).toBeVisible();
@@ -362,20 +362,20 @@ async function assertGuide(
   await expectGuideInstructionIcons(page, theme);
   const header = page.getByTestId('guide-header');
   await expect(header).toHaveCSS('background-color', theme === 'light'
-    ? 'rgb(241, 239, 250)'
-    : 'rgb(21, 16, 21)');
+    ? 'rgb(236, 226, 255)'
+    : 'rgb(28, 23, 47)');
   await expect(header).toHaveCSS('border-radius',
-    width < 768 ? '22px' : width < 1024 ? '26px' : '28px');
+    width < 768 ? '28px' : width < 1024 ? '36px' : '44px');
   await expect(header.locator('h1')).toHaveCSS('font-size',
-    width < 672 ? '24px' : '32px');
-  await expect(header.locator('h1')).toHaveCSS('font-weight', '700');
+    width < 768 ? '32px' : '40px');
+  await expect(header.locator('h1')).toHaveCSS('font-weight', '800');
   await expect(header.locator('h1')).toHaveCSS('font-family',
     '"Plus Jakarta Sans", "Be Vietnam Pro", system-ui, sans-serif');
   await expect(header.locator('h1')).toHaveCSS('line-height',
-    width < 672 ? '32.4px' : '41.6px');
+    width < 768 ? '41.6px' : '52px');
   for (const heading of await guide.locator('h2').all()) {
-    await expect(heading).toHaveCSS('font-size', '18px');
-    await expect(heading).toHaveCSS('font-weight', '600');
+    await expect(heading).toHaveCSS('font-size', '20px');
+    await expect(heading).toHaveCSS('font-weight', '700');
   }
   for (const section of await guide.locator(':scope > section').all()) {
     await expect(section).toHaveCSS('background-color', theme === 'light'
