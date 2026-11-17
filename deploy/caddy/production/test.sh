@@ -94,6 +94,14 @@ want_maintenance_tokens light '<style>' ground=#ffffff ink=#1a1650 card=#ffffff 
   border=#e3e0f2 ring=#1a1650 link=#4336c9 seal=#de1b5a mist=#f1effa
 want_maintenance_tokens dark 'prefers-color-scheme: dark' ground=#0e0a0d ink=#d3cad0 card=#1b1419 \
   muted=#a3959f border=#2e242c ring=#cdbcd9 link=#b59bdb seal=#e2788f mist=#151015
+want_maintenance_tokens base '<style>' radius-card=22px
+want_maintenance_tokens 48rem 'min-width: 48rem' radius-card=26px
+want_maintenance_tokens 64rem 'min-width: 64rem' radius-card=28px
+if ! awk 'index($0, ".box {") { on = 1; next } on && index($0, "}") { exit } on' "$maintenance_html" |
+  grep -qxE ' *border-radius: var\(--radius-card\);'; then
+  echo "maintenance.html: the card radius is not var(--radius-card)" >&2
+  exit 1
+fi
 for retired in --blue --indigo --jade --aurora --glow 'gradient(' '#26409c' '#4a4dbf' '#0f7c6e' \
   '#8f6f0d' '#cc2649' '#ff6b8a' '#8fa6f0' '#9a9cff' '#5fcfbb' '#e6c35f' '#101b3f'; do
   if grep -qiF -- "$retired" "$maintenance_html"; then
