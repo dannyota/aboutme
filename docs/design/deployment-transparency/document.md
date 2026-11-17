@@ -7,10 +7,10 @@ version rules. The [overview](README.md) covers the observer itself.
 
 ## Example
 
-A rollout of `web` from v0.6.4 to v0.6.5 on AWS, with `server` and `caddy`
-already on v0.6.5 and maintenance stopped. Digests and commits are shortened,
-and `"…"` stands for fields that repeat the `server` shape; the document always
-carries full values.
+A rollout of `web` from v0.6.4 to v0.6.5 on the GreenNode host, with `server`
+and `caddy` already on v0.6.5 and maintenance stopped. Digests and commits are
+shortened, and `"…"` stands for fields that repeat the `server` shape; the
+document always carries full values.
 
 ```json
 {
@@ -20,9 +20,9 @@ carries full values.
   "site": "https://aboutme.vn",
   "source_repository": "https://github.com/dannyota/aboutme",
   "platform": {
-    "provider": "aws",
-    "orchestrator": "ecs",
-    "region": "ap-southeast-1"
+    "provider": "greennode",
+    "orchestrator": "podman",
+    "region": "HCM03"
   },
   "observed_at": "2026-10-02T03:14:05Z",
   "stale_after": "2026-10-02T03:17:05Z",
@@ -51,7 +51,7 @@ carries full values.
             "release": "https://github.com/dannyota/aboutme/releases/tag/v0.6.5",
             "build": "https://github.com/dannyota/aboutme/actions/runs/36218940587/attempts/1",
             "provenance": "https://api.github.com/repos/dannyota/aboutme/attestations/sha256:9f2c…41ab?predicate_type=provenance",
-            "sbom": "https://github.com/dannyota/aboutme/releases/download/v0.6.5/aboutme-server.spdx.json",
+            "sbom": "https://github.com/dannyota/aboutme/releases/download/v0.6.5/aboutme-server-amd64.spdx.json",
             "transparency_log": "https://search.sigstore.dev/?logIndex=2965228543"
           }
         }
@@ -99,9 +99,9 @@ level. Readers ignore fields they do not know (see [versions](#versions)).
 | `environment`                      | `"production"`                                                                                          | Observer configuration                   |
 | `site`                             | `"https://aboutme.vn"`                                                                                  | Observer configuration                   |
 | `source_repository`                | `"https://github.com/dannyota/aboutme"`                                                                 | Constant                                 |
-| `platform.provider`                | `aws` or `greennode`                                                                                    | Observer platform adapter                |
-| `platform.orchestrator`            | `ecs`, `kubernetes`, or `podman`                                                                        | Observer platform adapter                |
-| `platform.region`                  | `ap-southeast-1`, or a GreenNode region code such as `HCM03`                                            | Observer configuration                   |
+| `platform.provider`                | `greennode`                                                                                             | Observer platform adapter                |
+| `platform.orchestrator`            | `podman`                                                                                                | Observer platform adapter                |
+| `platform.region`                  | A GreenNode region code such as `HCM03`                                                                 | Observer configuration                   |
 | `observed_at`, `stale_after`       | RFC 3339 UTC, whole seconds; `stale_after` is `observed_at` plus 180 s                                  | Podman reporter clock                    |
 | `summary`                          | `verified`, `rolling_out`, `unverified`, or `mismatch` (rules below)                                    | Computed from the components             |
 | `release`                          | Object or `null` (rules below)                                                                          | Computed from the components             |
@@ -216,9 +216,12 @@ The test `TestDocumentLeaksNothing` in `deploy/observer/internal/document`:
 
 ## Versions
 
-- Version 1's `podman` orchestrator is an additive enum value. Existing ECS and
-  Kubernetes documents remain valid. A reader that rejects Podman shows
-  Unavailable until the updated page loads; it never labels the host as ECS.
+- Version 1 accepts only the `greennode` provider, the `podman` orchestrator, a
+  GreenNode region code, and `-amd64` SBOM assets, since the AWS observer paths
+  were removed
+  ([ADR 0027](../../adr/0027-deployment-transparency-observer.md#history)).
+  Every document the narrowed schema accepts was valid before, so the version
+  stays 1.
 - A field added to version 1 must be optional for readers, and is added to the
   schema, the allowlist test, and the page in one change. Readers ignore unknown
   fields.

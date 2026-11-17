@@ -48,7 +48,7 @@ func release065() Input {
 	return Input{
 		Environment: "production",
 		Site:        "https://aboutme.vn",
-		Platform:    platform.Info{Provider: "aws", Orchestrator: "ecs", Region: "ap-southeast-1"},
+		Platform:    platform.Info{Provider: "greennode", Orchestrator: "podman", Region: "HCM03"},
 		ObservedAt:  observed,
 		Images: []platform.Image{
 			img(platform.Server, 1, t0.Add(2*time.Minute)),
@@ -96,7 +96,7 @@ func TestVerifiedRelease(t *testing.T) {
 		t.Errorf("components = %v, want server,web,caddy with maintenance absent", names)
 	}
 	ri := doc.Components[0].RunningImages[0]
-	if *ri.Links.SBOM != "https://github.com/dannyota/aboutme/releases/download/v0.6.5/aboutme-server.spdx.json" ||
+	if *ri.Links.SBOM != "https://github.com/dannyota/aboutme/releases/download/v0.6.5/aboutme-server-amd64.spdx.json" ||
 		*ri.Links.Release != "https://github.com/dannyota/aboutme/releases/tag/v0.6.5" ||
 		*ri.Links.TransparencyLog != "https://search.sigstore.dev/?logIndex=2965228543" ||
 		*ri.Links.Commit != "https://github.com/dannyota/aboutme/commit/"+commitOf(7) {
@@ -118,37 +118,22 @@ func TestMaintenanceUsesTheCaddyImageAndSkipsRelease(t *testing.T) {
 	}
 }
 
-func TestSBOMLinksMatchPlatform(t *testing.T) {
-	for _, tc := range []struct {
-		orchestrator string
-		suffix       string
-	}{
-		{orchestrator: "ecs"},
-		{orchestrator: "kubernetes"},
-		{orchestrator: "podman", suffix: "-amd64"},
-	} {
-		t.Run(tc.orchestrator, func(t *testing.T) {
-			in := release065()
-			in.Platform.Orchestrator = tc.orchestrator
-			if tc.orchestrator == "podman" {
-				in.Platform.Provider = "greennode"
-				in.Platform.Region = "HCM03"
-			}
-			in.Images = append(in.Images, img(platform.Maintenance, 4, observed.Add(-time.Hour)))
-			in.Evidence[digest(4)] = verified(caddyRepo, "v0.6.4", 6)
-			for _, c := range build(t, in).Components {
-				ri := c.RunningImages[0]
-				want := SourceRepository + "/releases/download/" + *ri.Version + "/" + imageBase(c.Image) + tc.suffix + ".spdx.json"
-				if ri.Links.SBOM == nil || *ri.Links.SBOM != want {
-					t.Errorf("%s SBOM = %v, want %s", c.Name, ri.Links.SBOM, want)
-				}
-			}
-		})
+func TestSBOMLinksNameAMD64Assets(t *testing.T) {
+	in := release065()
+	in.Images = append(in.Images, img(platform.Maintenance, 4, observed.Add(-time.Hour)))
+	in.Evidence[digest(4)] = verified(caddyRepo, "v0.6.4", 6)
+	for _, c := range build(t, in).Components {
+		ri := c.RunningImages[0]
+		want := SourceRepository + "/releases/download/" + *ri.Version + "/" + imageBase(c.Image) + "-amd64.spdx.json"
+		if ri.Links.SBOM == nil || *ri.Links.SBOM != want {
+			t.Errorf("%s SBOM = %v, want %s", c.Name, ri.Links.SBOM, want)
+		}
 	}
 }
 
 func TestSBOMLinksRefuseUnexpectedAssets(t *testing.T) {
 	for _, asset := range []string{
+		"aboutme-server.spdx.json",
 		"aboutme-server-arm64.spdx.json",
 		"aboutme-server-amd64.spdx.json?download=1",
 		"aboutme-observer-amd64.spdx.json",
@@ -284,6 +269,10 @@ func TestPatternFailureDropsTheWrite(t *testing.T) {
 		"zero replicas": func(in *Input) { in.Images[0].Replicas = 0 },
 		"65 replicas":   func(in *Input) { in.Images[0].Replicas = 65 },
 		"bad region":    func(in *Input) { in.Platform.Region = "ap-southeast-1b" },
+		"aws region":    func(in *Input) { in.Platform.Region = "ap-southeast-1" },
+		"aws provider":  func(in *Input) { in.Platform.Provider = "aws" },
+		"ecs":           func(in *Input) { in.Platform.Orchestrator = "ecs" },
+		"kubernetes":    func(in *Input) { in.Platform.Orchestrator = "kubernetes" },
 		"bad site":      func(in *Input) { in.Site = "https://evil.test" },
 	}
 	for name, mutate := range cases {

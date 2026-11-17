@@ -80,7 +80,7 @@ func exampleNotFoundEvidence(digest string, checkedAt time.Time) verify.Evidence
 	}
 }
 
-var examplePlatformAWS = platform.Info{Provider: "aws", Orchestrator: "ecs", Region: "ap-southeast-1"}
+var examplePlatform = platform.Info{Provider: "greennode", Orchestrator: "podman", Region: "HCM03"}
 
 func exampleImage(component, digest, since string, t *testing.T) platform.Image {
 	return platform.Image{Component: component, Digest: digest, Replicas: 1, RunningSince: exampleMustParse(t, since)}
@@ -107,7 +107,7 @@ func exampleScenarios(t *testing.T) map[string]Input {
 	scenarios["verified"] = Input{
 		Environment: "production",
 		Site:        "https://aboutme.vn",
-		Platform:    examplePlatformAWS,
+		Platform:    examplePlatform,
 		ObservedAt:  observedAt,
 		Images: []platform.Image{
 			exampleImage(platform.Server, exampleDigestServer, "2026-10-02T03:10:00Z", t),
@@ -136,7 +136,7 @@ func exampleScenarios(t *testing.T) map[string]Input {
 	scenarios["rolling-out"] = Input{
 		Environment: "production",
 		Site:        "https://aboutme.vn",
-		Platform:    examplePlatformAWS,
+		Platform:    examplePlatform,
 		ObservedAt:  observedAt,
 		Images: []platform.Image{
 			exampleImage(platform.Server, exampleDigestServer, "2026-10-02T03:10:00Z", t),
@@ -156,7 +156,7 @@ func exampleScenarios(t *testing.T) map[string]Input {
 	scenarios["unverified"] = Input{
 		Environment: "production",
 		Site:        "https://aboutme.vn",
-		Platform:    examplePlatformAWS,
+		Platform:    examplePlatform,
 		ObservedAt:  observedAt,
 		Images: []platform.Image{
 			exampleImage(platform.Server, exampleDigestServer, "2026-10-02T03:10:00Z", t),
@@ -173,7 +173,7 @@ func exampleScenarios(t *testing.T) map[string]Input {
 	scenarios["mismatch-not-found"] = Input{
 		Environment: "production",
 		Site:        "https://aboutme.vn",
-		Platform:    examplePlatformAWS,
+		Platform:    examplePlatform,
 		ObservedAt:  observedAt,
 		Images: []platform.Image{
 			exampleImage(platform.Server, exampleDigestServer, "2026-10-02T03:10:00Z", t),
@@ -191,7 +191,7 @@ func exampleScenarios(t *testing.T) map[string]Input {
 	scenarios["mismatch-invalid"] = Input{
 		Environment: "production",
 		Site:        "https://aboutme.vn",
-		Platform:    examplePlatformAWS,
+		Platform:    examplePlatform,
 		ObservedAt:  observedAt,
 		Images: []platform.Image{
 			exampleImage(platform.Server, exampleDigestServer, "2026-10-02T03:10:00Z", t),
@@ -213,7 +213,7 @@ func exampleScenarios(t *testing.T) map[string]Input {
 	scenarios["mismatch-missing-component"] = Input{
 		Environment: "production",
 		Site:        "https://aboutme.vn",
-		Platform:    examplePlatformAWS,
+		Platform:    examplePlatform,
 		ObservedAt:  observedAt,
 		Images: []platform.Image{
 			exampleImage(platform.Server, exampleDigestServer, "2026-10-02T03:10:00Z", t),
@@ -229,7 +229,7 @@ func exampleScenarios(t *testing.T) map[string]Input {
 	scenarios["sbom-not-found"] = Input{
 		Environment: "production",
 		Site:        "https://aboutme.vn",
-		Platform:    examplePlatformAWS,
+		Platform:    examplePlatform,
 		ObservedAt:  observedAt,
 		Images: []platform.Image{
 			exampleImage(platform.Server, exampleDigestSBOMMiss, "2026-10-02T03:10:00Z", t),
@@ -259,7 +259,7 @@ func exampleScenarios(t *testing.T) map[string]Input {
 	scenarios["stale"] = Input{
 		Environment: "production",
 		Site:        "https://aboutme.vn",
-		Platform:    examplePlatformAWS,
+		Platform:    examplePlatform,
 		ObservedAt:  exampleMustParse(t, "2026-01-01T00:15:00Z"),
 		Images: []platform.Image{
 			exampleImage(platform.Server, exampleDigestServer, "2026-01-01T00:00:00Z", t),

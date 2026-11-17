@@ -59,11 +59,8 @@ The `www` host keeps its apex redirect.
 ## Evidence and compatibility
 
 The document uses `platform.provider: greennode`,
-`platform.orchestrator: podman`, and region `HCM03`. These existing fields
-identify the host reporter without a new field. Version 1 adds the `podman` enum
-value without changing field meanings or accepting extra properties. Existing
-ECS and Kubernetes documents retain their schema and behavior. Older pages that
-reject the new enum need a reload after the updated web image ships.
+`platform.orchestrator: podman`, and region `HCM03`, the only platform values
+version 1 accepts. These fields identify the host reporter without a new field.
 
 The root reporter writes signatures and SBOMs as `unchecked` and leaves build
 claims null. The observer checks each running digest with the existing
@@ -73,7 +70,7 @@ fresh document whose signatures pass shows Verified; an unfinished check shows
 Unverified. Deploy-time checks and `release.json` are not runtime evidence. The
 independent commands use the same policy on every platform. Verified Podman
 images link to `aboutme-<name>-amd64.spdx.json` release assets. Maintenance uses
-the Caddy asset. ECS and Kubernetes keep the unsuffixed asset links.
+the Caddy asset.
 
 The page names the reporter in Vietnamese and English. It states that the host
 reports its own Podman state and an observer container on that host checks the
