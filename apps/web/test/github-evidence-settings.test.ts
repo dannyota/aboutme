@@ -53,10 +53,30 @@ const connection = {
   connectedAt: '2026-11-15T08:30:00Z',
 };
 const expiresAt = '2026-11-15T09:00:00Z';
-const notConnected = { generation: 0, connection: null, session: null };
-const connectedIdle = { generation: 3, connection, session: null };
-const connectedLive = { generation: 3, connection, session: { expiresAt } };
-const disconnected = { generation: 4, connection: null, session: null };
+const notConnected = {
+  generation: 0,
+  hasEvidence: false,
+  connection: null,
+  session: null,
+};
+const connectedIdle = {
+  generation: 3,
+  hasEvidence: false,
+  connection,
+  session: null,
+};
+const connectedLive = {
+  generation: 3,
+  hasEvidence: false,
+  connection,
+  session: { expiresAt },
+};
+const disconnected = {
+  generation: 4,
+  hasEvidence: false,
+  connection: null,
+  session: null,
+};
 const disconnectRoute = 'DELETE /api/v1/github-evidence?keepLinks=true'
   + '&generation=3';
 const disconnectedBody = {

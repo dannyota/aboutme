@@ -3,6 +3,7 @@ package githubevidence
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"math"
 	"net/http"
@@ -25,9 +26,10 @@ const (
 )
 
 type statusBody struct {
-	Generation int64           `json:"generation"`
-	Connection *connectionBody `json:"connection"`
-	Session    *sessionBody    `json:"session"`
+	Generation  int64           `json:"generation"`
+	HasEvidence bool            `json:"hasEvidence"`
+	Connection  *connectionBody `json:"connection"`
+	Session     *sessionBody    `json:"session"`
 }
 
 type connectionBody struct {
@@ -92,9 +94,10 @@ func (s *Service) handleStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body statusBody
-	err := s.inAccount(r.Context(), sess, func(_ context.Context, a account) error {
-		body = s.statusSnapshot(a)
-		return nil
+	err := s.inAccount(r.Context(), sess, func(ctx context.Context, a account) error {
+		var snapshotErr error
+		body, snapshotErr = s.statusSnapshot(ctx, a)
+		return snapshotErr
 	})
 	if errors.Is(err, auth.ErrSessionInvalid) {
 		writeSessionRequired(w)
@@ -107,7 +110,7 @@ func (s *Service) handleStatus(w http.ResponseWriter, r *http.Request) {
 	api.WriteData(w, http.StatusOK, body)
 }
 
-func (s *Service) statusSnapshot(a account) statusBody {
+func (s *Service) statusSnapshot(ctx context.Context, a account) (statusBody, error) {
 	var body statusBody
 	if a.found {
 		body.Generation = a.connection.Generation
@@ -115,13 +118,18 @@ func (s *Service) statusSnapshot(a account) statusBody {
 	if row := a.connection; a.connected() {
 		body.Connection = &connectionBody{GitHubUserID: *row.GithubUserID, Login: *row.Login, ConnectedAt: row.ConnectedAt.UTC()}
 	}
+	hasEvidence, err := a.q.AccountHasProjectEvidence(ctx, a.user.ID)
+	if err != nil {
+		return statusBody{}, fmt.Errorf("githubevidence: read evidence presence: %w", err)
+	}
+	body.HasEvidence = hasEvidence
 	if s.hooks.statusRead != nil {
 		s.hooks.statusRead(a.tx)
 	}
 	if live, isLive := s.currentSession(a); isLive {
 		body.Session = &sessionBody{ExpiresAt: live.expiresAt.UTC()}
 	}
-	return body
+	return body, nil
 }
 
 func (s *Service) handleSessionEnd(w http.ResponseWriter, r *http.Request) {

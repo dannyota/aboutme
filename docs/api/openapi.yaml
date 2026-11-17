@@ -1710,6 +1710,7 @@ paths:
               example:
                 data:
                   generation: 3
+                  hasEvidence: true
                   connection:
                     githubUserId: 583231
                     login: octocat
@@ -8497,7 +8498,7 @@ components:
     GitHubEvidenceStatus:
       type: object
       additionalProperties: false
-      required: [generation, connection, session]
+      required: [generation, hasEvidence, connection, session]
       properties:
         generation:
           type: integer
@@ -8507,6 +8508,12 @@ components:
             The connection generation, `0` when no connection row exists.
             Advances on every connect, replacement and disconnect and never
             repeats. Disconnect requires the current value.
+        hasEvidence:
+          type: boolean
+          description: >-
+            Whether any project of the account holds an evidence item,
+            connected or not. Settings asks keep or remove before
+            disconnecting only when it is true.
         connection:
           description: The connection, or `null` when none is connected.
           anyOf:

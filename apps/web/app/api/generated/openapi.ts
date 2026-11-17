@@ -2031,6 +2031,8 @@ export interface components {
              * @description The connection generation, `0` when no connection row exists. Advances on every connect, replacement and disconnect and never repeats. Disconnect requires the current value.
              */
             generation: number;
+            /** @description Whether any project of the account holds an evidence item, connected or not. Settings asks keep or remove before disconnecting only when it is true. */
+            hasEvidence: boolean;
             /** @description The connection, or `null` when none is connected. */
             connection: components["schemas"]["GitHubConnection"] | null;
             /** @description The live evidence session, or `null` when none is live. */
@@ -7480,6 +7482,7 @@ export interface operations {
                      * @example {
                      *       "data": {
                      *         "generation": 3,
+                     *         "hasEvidence": true,
                      *         "connection": {
                      *           "githubUserId": 583231,
                      *           "login": "octocat",

@@ -331,11 +331,17 @@ describe("GitHub evidence connection", () => {
 
   it("reports the connection generation", () => {
     const status = schemas.GitHubEvidenceStatus;
-    expect(status.required).toEqual(["generation", "connection", "session"]);
+    expect(status.required).toEqual([
+      "generation",
+      "hasEvidence",
+      "connection",
+      "session",
+    ]);
     expect(status.properties.generation).toMatchObject({
       type: "integer",
       minimum: 0,
     });
+    expect(status.properties.hasEvidence).toMatchObject({ type: "boolean" });
   });
 
   it("guards disconnect with the generation and an idempotency key", () => {
