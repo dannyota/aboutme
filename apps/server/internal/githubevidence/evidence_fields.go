@@ -4,6 +4,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"danny.vn/aboutme/apps/server/internal/project"
@@ -17,7 +18,12 @@ const (
 )
 
 func limitText(text string) string {
-	text = strings.ReplaceAll(text, "\x00", "")
+	text = strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return ' '
+		}
+		return r
+	}, text)
 	if utf8.RuneCountInString(text) <= maxTextCharacters {
 		return text
 	}
