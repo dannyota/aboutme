@@ -367,14 +367,28 @@ export async function expectLibraryFan(page: Page): Promise<void> {
         bottom: rect.bottom,
       };
     };
+    const painted = (node: Element) => {
+      let opacity = 1;
+      for (let up: Element | null = node; up; up = up.parentElement) {
+        opacity *= Number.parseFloat(getComputedStyle(up).opacity);
+        if (up === panel) {
+          break;
+        }
+      }
+      const rect = node.getBoundingClientRect();
+      return opacity === 1 && getComputedStyle(node).visibility === 'visible'
+        && rect.width > 0 && rect.height > 0;
+    };
     const art = panel.querySelector('[data-testid="gallery-fan"]')!;
+    const sheets = [...art.querySelectorAll('[data-fan-sheet]')];
     return {
       wide: innerWidth >= 1024,
       shown: getComputedStyle(art).display !== 'none',
       clipped: getComputedStyle(panel).overflowX === 'hidden'
         && getComputedStyle(panel).overflowY === 'hidden',
       panel: box(panel),
-      sheets: [...art.querySelectorAll('[data-fan-sheet]')].map(box),
+      sheets: sheets.map(box),
+      painted: sheets.map(painted),
       text: [...panel.querySelectorAll('h1, p')].map(box),
       overflow: document.documentElement.scrollWidth
         - document.documentElement.clientWidth,
@@ -388,6 +402,7 @@ export async function expectLibraryFan(page: Page): Promise<void> {
   expect(read.shown, message).toBe(true);
   expect(read.clipped, message).toBe(true);
   expect(read.sheets, message).toHaveLength(3);
+  expect(read.painted, message).toEqual([true, true, true]);
   expect(Math.max(...read.sheets.map((sheet) => sheet.right)), message)
     .toBeGreaterThan(read.panel.right + 1);
   for (const sheet of read.sheets) {

@@ -502,6 +502,7 @@ for (const locale of ['vi', 'en'] as const) {
 for (const [kind, width, target, styles] of [
   ['under the heading', 1024, 'gallery-header', { 'padding-right': '56px' }],
   ['inside the panel edge', 1024, 'gallery-fan', { right: '40px' }],
+  ['when transparent', 1024, 'gallery-fan', { opacity: '0' }],
   ['below 64rem', 1023, 'gallery-fan', { display: 'flex' }],
 ] as const) {
   mutationTest(`chrome rejects the Library fan ${kind}`, async ({ page }) => {
