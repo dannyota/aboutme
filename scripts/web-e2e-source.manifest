@@ -233,6 +233,7 @@ apps/web/app/components/showcase/ShowcaseFilters.vue
 apps/web/app/components/showcase/ShowcaseInvite.vue
 apps/web/app/components/showcase/ShowcasePager.vue
 apps/web/app/components/showcase/ShowcaseTile.vue
+apps/web/app/components/templates/LibraryFan.vue
 apps/web/app/components/templates/LibraryFilters.vue
 apps/web/app/components/templates/SheetThumbnail.vue
 apps/web/app/components/templates/TemplateCard.vue

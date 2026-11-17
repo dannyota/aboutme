@@ -13,6 +13,7 @@ import {
 import { locales } from '@/i18n/locale';
 import { pageTitle } from '@/i18n/meta';
 import { galleryCopy } from '@/i18n/templates';
+import { cn } from '@/lib/utils';
 import { atsText } from '@/templates/atsText';
 import { galleryTemplate, sampleRole } from '@/templates/catalog';
 import { galleryDocument } from '@/templates/documents';
@@ -71,6 +72,11 @@ const readingText = computed(() => shown.value === null
 const useSampleLink = computed(() =>
   `/app/new?sample=${template.id}&lng=${sampleLanguage.value}`);
 const useBlankLink = `/app/new?template=${template.id}`;
+const blankClass = cn(
+  buttonVariants({ variant: 'outline' }),
+  'h-auto min-h-10 max-w-full justify-self-start whitespace-normal',
+  'text-center',
+);
 
 useSiteSeo(() => ({
   path: `/templates/${template.id}`,
@@ -105,14 +111,15 @@ useHead(computed(() => ({
           class="text-sm text-muted-foreground"
         >
           <NuxtLink
-            class="underline-offset-4 hover:underline"
+            class="font-semibold text-link underline-offset-4 hover:underline
+              focus-visible:underline"
             to="/templates"
           >{{ detail.breadcrumb }}</NuxtLink>
           <span aria-hidden="true"> / </span>
           <span aria-current="page">{{ template.name }}</span>
         </nav>
         <div class="grid gap-2">
-          <h1 class="text-[34px] font-bold leading-tight tracking-[-0.02em]">
+          <h1 class="text-2xl font-extrabold tracking-[-0.02em]">
             {{ template.name }}
           </h1>
           <p class="text-base text-muted-foreground">
@@ -122,18 +129,23 @@ useHead(computed(() => ({
         <div
           v-if="languages.length > 1"
           :aria-label="detail.sampleToggle"
-          class="flex w-fit rounded-md border bg-background p-0.5"
+          class="flex w-fit gap-0.5 rounded-full bg-muted p-[3px]"
           role="group"
         >
           <Button
             v-for="lng in locales.filter((item) => languages.includes(item))"
             :key="lng"
             :aria-pressed="sampleLanguage === lng"
-            class="h-8"
+            class="h-8 px-3.5 font-semibold"
+            :class="sampleLanguage === lng
+              ? 'bg-foreground text-background hover:bg-foreground '
+                + 'hover:text-background'
+              : 'text-muted-foreground hover:bg-transparent '
+                + 'hover:text-foreground'"
             :data-sample-language="lng"
             size="sm"
             type="button"
-            :variant="sampleLanguage === lng ? 'default' : 'ghost'"
+            variant="ghost"
             @click="sampleLanguage = lng"
           >
             {{ detail.sampleLanguages[lng] }}
@@ -185,7 +197,7 @@ useHead(computed(() => ({
         </dl>
         <p
           v-if="template.columns === 2"
-          class="rounded-lg bg-surface-blue p-3 text-sm"
+          class="rounded-[var(--radius)] bg-surface-mist p-3 text-sm"
           data-two-column-note
         >
           {{ detail.twoColumnNote[0] }}<NuxtLink
@@ -217,8 +229,7 @@ useHead(computed(() => ({
         </p>
         <NuxtLink
           v-if="isSample"
-          class="justify-self-start text-sm text-link underline
-            underline-offset-4"
+          :class="blankClass"
           data-action="use-blank"
           :to="useBlankLink"
         >
@@ -326,7 +337,7 @@ useHead(computed(() => ({
 .template-paper {
   overflow: hidden;
   border-radius: var(--radius-sheet);
-  background: #fff;
+  background: var(--paper);
   box-shadow: var(--shadow-paper);
 }
 
@@ -337,7 +348,7 @@ useHead(computed(() => ({
     z-index: 10;
     padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
     border-top: 1px solid var(--border);
-    background: var(--card);
+    background: var(--background);
   }
 }
 

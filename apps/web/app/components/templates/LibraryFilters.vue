@@ -219,47 +219,43 @@ function onRole(value: unknown): void {
   gap: 8px;
   height: 36px;
   padding: 0 16px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--control);
   border-radius: 9999px;
-  background: var(--card);
+  background: transparent;
   color: var(--foreground);
   font-size: 14px;
   font-weight: 500;
   white-space: nowrap;
   transition:
     background-color 150ms,
-    border-color 150ms;
+    border-color 150ms,
+    color 150ms;
 }
 .library-filters
   :deep(
     .gallery-chip:not([aria-current='page']):not([aria-pressed='true']):hover
   ) {
-  background: var(--surface-indigo);
+  background: var(--accent);
 }
 .library-filters :deep(.gallery-chip[aria-current='page']),
 .library-filters :deep(.gallery-chip[aria-pressed='true']) {
-  border-color: var(--primary);
-  background: var(--primary);
-  color: var(--primary-foreground);
+  border-color: var(--foreground);
+  background: var(--foreground);
+  color: var(--background);
+  font-weight: 600;
 }
 .library-filters--sheet :deep(.gallery-chip) {
   height: 40px;
   padding-inline: 14px;
-}
-.library-filters--sheet :deep(.gallery-chip[aria-current='page']),
-.library-filters--sheet :deep(.gallery-chip[aria-pressed='true']) {
-  font-weight: 600;
 }
 .gallery-chip__dot {
   width: 8px;
   height: 8px;
   border-radius: 9999px;
 }
-[data-group='format'] .gallery-chip__dot {
-  background: var(--brand-jade);
-}
+[data-group='format'] .gallery-chip__dot,
 [data-group='audience'] .gallery-chip__dot {
-  background: var(--brand-ochre);
+  background: var(--muted-foreground);
 }
 [aria-current='page'] .gallery-chip__dot {
   background: currentColor;

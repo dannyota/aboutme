@@ -134,7 +134,7 @@ defineExpose({
   gap: 8px;
   padding: 0 14px;
   border: 1px solid var(--input);
-  border-radius: 10px;
+  border-radius: 9999px;
   background: transparent;
   color: var(--foreground);
   font-size: 0.875rem;
@@ -147,7 +147,7 @@ defineExpose({
 
 .showcase-filters-button.is-active {
   padding-right: 10px;
-  border-color: var(--primary);
+  border-color: var(--foreground);
 }
 
 .showcase-filters-badge {
@@ -159,8 +159,8 @@ defineExpose({
   height: 22px;
   padding: 0 6px;
   border-radius: 9999px;
-  background: var(--primary);
-  color: var(--primary-foreground);
+  background: var(--foreground);
+  color: var(--background);
   font-size: 0.75rem;
   font-weight: 700;
   line-height: 1;

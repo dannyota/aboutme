@@ -67,7 +67,7 @@ onBeforeUnmount(() => {
     ref="root"
     aria-hidden="true"
     class="sheet-thumbnail overflow-hidden rounded-[var(--radius-sheet)]
-      bg-white shadow-[var(--shadow-paper)]"
+      bg-paper shadow-[var(--shadow-paper)]"
     data-sheet-thumbnail
     inert
     :style="box"

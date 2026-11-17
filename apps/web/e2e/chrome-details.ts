@@ -354,3 +354,77 @@ export async function placeAuthArtworkOverPoints(
     });
   };
 }
+
+export async function expectLibraryFan(page: Page): Promise<void> {
+  const message = 'Library fan geometry.';
+  const layer = page.getByTestId('gallery-fan-layer');
+  await expect(layer, message).toHaveAttribute('aria-hidden', 'true');
+  const read = await page.getByTestId('gallery-header').evaluate((panel) => {
+    const box = (node: Element) => {
+      const rect = node.getBoundingClientRect();
+      return {
+        left: rect.left, right: rect.right, top: rect.top,
+        bottom: rect.bottom,
+      };
+    };
+    const painted = (node: Element) => {
+      let opacity = 1;
+      for (let up: Element | null = node; up; up = up.parentElement) {
+        opacity *= Number.parseFloat(getComputedStyle(up).opacity);
+        if (up === panel) {
+          break;
+        }
+      }
+      const rect = node.getBoundingClientRect();
+      return opacity === 1 && getComputedStyle(node).visibility === 'visible'
+        && rect.width > 0 && rect.height > 0;
+    };
+    const clip = panel.querySelector('[data-testid="gallery-fan-layer"]')!;
+    const art = clip.querySelector('[data-testid="gallery-fan"]')!;
+    const sheets = [...art.querySelectorAll('[data-fan-sheet]')];
+    const own = getComputedStyle(panel);
+    const layer = getComputedStyle(clip);
+    const bounds = clip.getBoundingClientRect();
+    const outer = panel.getBoundingClientRect();
+    return {
+      wide: innerWidth >= 1024,
+      shown: getComputedStyle(art).display !== 'none',
+      clipped: layer.overflowX === 'clip' && layer.overflowY === 'clip'
+        && layer.borderRadius === own.borderRadius
+        && Math.abs(bounds.left - outer.left) <= 1
+        && Math.abs(bounds.right - outer.right) <= 1
+        && Math.abs(bounds.top - outer.top) <= 1
+        && Math.abs(bounds.bottom - outer.bottom) <= 1,
+      open: own.overflowX === 'visible' && own.overflowY === 'visible'
+        && panel.scrollWidth <= panel.clientWidth + 1
+        && panel.scrollHeight <= panel.clientHeight + 1,
+      panel: box(panel),
+      sheets: sheets.map(box),
+      painted: sheets.map(painted),
+      text: [...panel.querySelectorAll('h1, p')].map(box),
+      overflow: document.documentElement.scrollWidth
+        - document.documentElement.clientWidth,
+    };
+  });
+  expect(read.overflow, message).toBeLessThanOrEqual(0);
+  expect(read.open, message).toBe(true);
+  if (!read.wide) {
+    expect(read.shown, message).toBe(false);
+    return;
+  }
+  expect(read.shown, message).toBe(true);
+  expect(read.clipped, message).toBe(true);
+  expect(read.sheets, message).toHaveLength(3);
+  expect(read.painted, message).toEqual([true, true, true]);
+  expect(Math.max(...read.sheets.map((sheet) => sheet.right)), message)
+    .toBeGreaterThan(read.panel.right + 1);
+  for (const sheet of read.sheets) {
+    expect(sheet.left, message).toBeGreaterThan(read.panel.left);
+    expect(sheet.top, message).toBeLessThan(read.panel.bottom - 1);
+    for (const text of read.text) {
+      const intersects = sheet.left < text.right && text.left < sheet.right
+        && sheet.top < text.bottom && text.top < sheet.bottom;
+      expect(intersects, message).toBe(false);
+    }
+  }
+}

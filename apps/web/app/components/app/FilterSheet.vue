@@ -21,7 +21,7 @@ const emit = defineEmits<{
 <template>
   <SheetContent
     :aria-describedby="undefined"
-    class="max-h-[85vh] gap-0 rounded-t-[var(--radius-feature)] border-border
+    class="max-h-[85vh] gap-0 rounded-t-[var(--radius-card)] border-border
       bg-popover supports-[height:1dvh]:max-h-[85dvh]
       min-[641px]:mx-auto min-[641px]:max-w-[40rem]"
     :data-testid="`${prefix}-filter-sheet`"

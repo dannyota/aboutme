@@ -35,17 +35,18 @@ bar, the rail, and the results area.
 ## Header
 
 The `header` (`data-testid="showcase-header"`) has no band, fill, border, or
-padding. It holds the h1, “CV từ cộng đồng” or “Community resumes”, bold with
--0.02em tracking, and under it the lead, “CV thật do người dùng aboutme.vn xuất
-bản và chọn hiện ở đây.” or “Real resumes that aboutme.vn users published and
-chose to show here.”, in `--muted-foreground`, at most 42 rem wide, 8 px under
-the h1. It holds no focusable element.
+padding. It holds the h1, “CV từ cộng đồng” or “Community resumes”, 32 px (40
+from 48 rem) at line height 1.3, weight 800, with -0.02em tracking, as on the
+Library, and under it the lead, “CV thật do người dùng aboutme.vn xuất bản và
+chọn hiện ở đây.” or “Real resumes that aboutme.vn users published and chose to
+show here.”, in `--muted-foreground`, at most 42 rem wide, 8 px under the h1. It
+holds no focusable element.
 
-| Width          | h1          | Lead        | Space under the header |
-| -------------- | ----------- | ----------- | ---------------------- |
-| Below 641 px   | 28 px, 1.3  | 15 px, 1.5  | 8 px to the bar        |
-| 641 to 1023 px | 32 px, 1.3  | 15 px, 1.5  | 8 px to the bar        |
-| From 1024 px   | 40 px, 1.25 | 16 px, 1.55 | 28 px grid row gap     |
+| Width          | h1                         | Lead        | Space under the header |
+| -------------- | -------------------------- | ----------- | ---------------------- |
+| Below 641 px   | 32 px, 1.3                 | 15 px, 1.5  | 8 px to the bar        |
+| 641 to 1023 px | 32 px, 40 from 768 px; 1.3 | 15 px, 1.5  | 8 px to the bar        |
+| From 1024 px   | 40 px, 1.3                 | 16 px, 1.55 | 28 px grid row gap     |
 
 ## Count line
 
@@ -144,10 +145,11 @@ filters, Show results.
 
 Text uses only pairs the theme tests check in both themes: `--foreground`,
 `--muted-foreground`, and `--link` on every ground the page uses, and
-`--primary-foreground` on `--primary`. The 13 px slug on `--card` is about 6.1:1
-light and 7.5:1 dark. The tests check `--input` on `--background` and `--card`;
-it measures about 3.8:1 and 3.4:1 on `--popover` and 3.3:1 and 3.6:1 on
-`--surface-sand` (light, dark). Focus rings use `--ring`, 3:1 on every ground.
+`--background` on `--foreground` for pressed options. The 13 px slug on `--card`
+is about 6.1:1 light and 7.5:1 dark. The tests check `--input` on `--background`
+and `--card`; it measures about 3.8:1 and 3.4:1 on `--popover` and 3.49:1 and
+3.90:1 on `--surface-mist` (light, dark). Focus rings use `--ring`, 3:1 on every
+ground.
 
 Every control's accessible name starts with its visible text (WCAG 2.5.3); the
 close button and Report are icon-only. Targets: Filters, the close button,

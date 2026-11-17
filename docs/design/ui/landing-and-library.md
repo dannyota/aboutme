@@ -13,10 +13,12 @@ and the staged change of identity.
 The template collection is labeled Library, or Thư viện in Vietnamese, in the
 shell, the page heading, and the breadcrumb. Its URL stays `/templates`.
 
-`/templates` opens with a header on the `--surface-blue` tint with a border and
-the 20 px feature radius, holding the h1 and a one-line lead. The page lists all
-20 templates: the nine tech role samples first, in role chip order, then the
-other four templates with a sample, then the rest by English preset name. The
+`/templates` opens with a header on a `--surface-blush` panel with
+`--radius-panel` and no border, holding the h1 (32 px, 40 from 48 rem,
+weight 800) and a one-line lead. From 64 rem a decorative fan of three sheets,
+`aria-hidden`, is cropped by the panel's right edge. The page lists all 20
+templates: the nine tech role samples first, in role chip order, then the other
+four templates with a sample, then the rest by English preset name. The
 surrounding copy, purpose, and sample tag follow the site language.
 
 Role and Style narrow the list together. The
@@ -27,22 +29,24 @@ desktop rows. Each role selects the template whose sample is for that role.
 Each card is a link to the template page. A template with a sample shows the
 stored image of the sample's first PDF page; the rest show a live render of the
 generic filler. Either way the card is a white 2 px sheet with `--shadow-paper`
-that lifts 4 px on hover unless reduced motion is set. Under it sit the name, a
-two-line purpose, and a tag: a `--surface-blue` pill naming the sample, or a
-muted pill reading “Nội dung minh họa” or “Illustrative content”. The grid has
-two columns below 641 px, three from 641 px, four from 900 px, and five from
-1180 px.
+that lifts 4 px on hover unless reduced motion is set. Under it sit the name at
+weight 700, a two-line purpose, and a tag: a `--surface-mist` pill naming the
+sample, or a pill outlined in `--border` reading “Nội dung minh họa” or
+“Illustrative content”. The grid has two columns below 641 px, three from 641
+px, four from 900 px, and five from 1180 px.
 
 At 900 px and wider, `/templates/{id}` shows the document beside a 360 px sticky
 info column with a 24 px top offset. Below 900 px, the info comes first and the
-primary action sits in a card-colored bar fixed to the bottom of the screen. The
-info column holds the Library breadcrumb, the template name as the h1, its
-purpose, the sample language toggle when both languages exist, and facts: sample
-persona marked fictional, page count, layout, paper size, and photo fit.
-Two-column templates add a `--surface-blue` note linking ATS Plain for online
-portals. Templates with a sample show “Use this sample”, a note that it makes a
-private copy, and a blank-resume link; templates without one show a filler note
-and the blank-resume action.
+primary action sits in a `--background` bar with a top `--border` rule and no
+shadow, fixed to the bottom of the screen. The primary action is a main pill and
+the blank-resume link an outline pill. The info column holds the Library
+breadcrumb, the template name as the h1, its purpose, the sample language toggle
+when both languages exist, and facts: sample persona marked fictional, page
+count, layout, paper size, and photo fit. Two-column templates add a
+`--surface-mist` note with a 10 px radius linking ATS Plain for online portals.
+Templates with a sample show “Use this sample”, a note that it makes a private
+copy, and a blank-resume link; templates without one show a filler note and the
+blank-resume action.
 
 A template with a sample shows three tabs over the document: Page (“Trang CV”),
 PDF, and “What an ATS reads” (“ATS đọc được gì”). Page shows the document on a

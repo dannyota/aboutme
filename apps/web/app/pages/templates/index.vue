@@ -17,6 +17,7 @@ import type { LocationQuery } from 'vue-router';
 import ActiveFilters from '@/components/app/ActiveFilters.vue';
 import FilterBar from '@/components/app/FilterBar.vue';
 import FilterSheet from '@/components/app/FilterSheet.vue';
+import LibraryFan from '@/components/templates/LibraryFan.vue';
 import LibraryFilters from '@/components/templates/LibraryFilters.vue';
 import TemplateCard from '@/components/templates/TemplateCard.vue';
 import { pageTitle } from '@/i18n/meta';
@@ -284,16 +285,17 @@ useHead(
     data-testid="template-gallery"
   >
     <header
-      class="rounded-[var(--radius-feature)] border border-border
-        bg-surface-blue px-5 py-8 sm:px-10 sm:py-12"
+      class="relative rounded-[var(--radius-panel)]
+        bg-surface-blush px-6 py-8 md:p-12 lg:p-14 lg:pr-[22rem]"
       data-testid="gallery-header"
     >
-      <h1 class="text-3xl font-bold tracking-[-0.02em] sm:text-5xl">
+      <h1 class="text-2xl font-extrabold tracking-[-0.02em] md:text-3xl">
         {{ copy.title }}
       </h1>
       <p class="mt-4 max-w-2xl text-md text-muted-foreground">
         {{ copy.lead }}
       </p>
+      <LibraryFan />
     </header>
     <div
       ref="desktop"
