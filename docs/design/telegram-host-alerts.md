@@ -2,8 +2,7 @@
 
 Status: accepted (2026-11-02), by the owner under the
 [ADR amendment](../adr/0026-vietnam-hosted-production.md#amendment-host-alerts-through-telegram-2026-11-02).
-Production cutover is not yet done. Mail remains current until cutover; app
-contracts do not change.
+Production cut over to Telegram on 2026-11-03; app contracts do not change.
 
 The owner accepted Telegram only, host SMTP removal after confirmed receipt, and
 the narrow transfer exception in the ADR amendment. Keep app SMTP. vMonitor
