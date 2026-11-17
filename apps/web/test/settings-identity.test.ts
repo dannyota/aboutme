@@ -46,7 +46,16 @@ registerEndpoint('/api/v1/sessions', () => ({
   ],
 }));
 registerEndpoint('/api/v1/me/second-factor', () => ({
-  data: { enabled: false, passkeys: [], recoveryCodesRemaining: 0 },
+  data: {
+    enabled: true,
+    passkeys: [{
+      id: 'passkey-1',
+      createdAt: '2026-11-01T00:00:00Z',
+      lastUsedAt: null,
+    }],
+    totpEnabled: true,
+    recoveryCodesRemaining: 8,
+  },
 }));
 registerEndpoint('/api/v1/me/agents', () => ({
   data: {
@@ -129,6 +138,15 @@ describe('settings page identity', () => {
       expect(wrapper.get('[data-testid="agent-revoke"]')
         .attributes('data-variant')).toBe('destructive');
     });
+
+  it('makes Remove passkey and Remove authenticator app destructive outline '
+    + 'pills', async () => {
+    const wrapper = await mountSettings();
+    for (const id of ['passkey-remove-passkey-1', 'totp-remove']) {
+      expect(wrapper.get(`[data-testid="${id}"]`).attributes('data-variant'),
+        id).toBe('destructive');
+    }
+  });
 
   it('makes Delete account a destructive outline pill', async () => {
     const wrapper = await mountSettings();

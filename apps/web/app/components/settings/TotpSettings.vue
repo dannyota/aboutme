@@ -261,7 +261,7 @@ async function confirmRemove(): Promise<void> {
         data-testid="totp-remove"
         :disabled="removePending"
         type="button"
-        variant="secondary"
+        variant="destructive"
         @click="requestRemove"
       >
         {{ copy.removeButton }}

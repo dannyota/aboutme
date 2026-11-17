@@ -437,7 +437,7 @@ function formatTimestamp(value: string): string {
             :data-testid="`passkey-remove-${passkey.id}`"
             :disabled="!actions || removePending"
             type="button"
-            variant="secondary"
+            variant="destructive"
             @click="requestRemove(passkey)"
           >
             {{ copy.removePasskey }}
