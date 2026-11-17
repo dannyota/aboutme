@@ -17,8 +17,9 @@ const COPY = {
       + 'về một địa chỉ riêng của ứng dụng thay vì https hay localhost '
       + 'thì chưa kết nối được.',
     ],
-    after: 'Mở CV trong trình chỉnh sửa để xem lại thay đổi, rồi tự xuất '
-      + 'bản khi bạn sẵn sàng.',
+    after: 'Mở CV trong trình chỉnh sửa để xem lại thay đổi. Thay đổi trên '
+      + 'CV đã xuất bản sẽ công khai ngay; với CV chưa xuất bản, hãy tự '
+      + 'xuất bản khi bạn sẵn sàng.',
     scope: 'Quyền áp dụng cho mọi CV trong tài khoản; không giới hạn được '
       + 'cho riêng một CV.',
     explainer: 'MCP (Model Context Protocol) là một chuẩn mở giúp trợ lý '
@@ -44,8 +45,9 @@ const COPY = {
       + 'return to an app-specific address instead of https or localhost '
       + 'cannot connect yet.',
     ],
-    after: 'Open the resume in the editor to review the changes, then '
-      + 'publish it yourself when you are ready.',
+    after: 'Open the resume in the editor to review the changes. Changes '
+      + 'to a published resume are public at once; publish an unpublished '
+      + 'one yourself when you are ready.',
     scope: 'Access covers every resume in your account; you cannot limit '
       + 'it to one resume.',
     explainer: 'MCP (Model Context Protocol) is an open standard that lets '
