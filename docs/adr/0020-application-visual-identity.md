@@ -104,28 +104,38 @@ language; Vietnamese is the default.
 reaches the resume renderer, the render harness, the print path, or the document
 area of a public page. Chrome tokens apply only under `html[data-ui="app"]`, and
 the public page bar carries its own copy scoped to `.public-toolbar`, as the
-maintenance page does. The sheet keeps its 2 px radius, neutral paper shadow,
-and white ground in both application themes; only the owner's dark scheme below
-changes its ground.
+maintenance page does. Outside the public page and the editor's Web preview the
+sheet keeps its 2 px radius, neutral paper shadow, and authored ground in both
+application themes. There the resume sits on paper sheets whose radius, shadow
+and colors are renderer values, as amended below.
 
-**Public page color scheme.** The resume stays white unless its owner picks
-otherwise for the public page on screen.
+**Public page color scheme.** On screen the public page and the editor's Web
+preview set the resume on warm paper sheets in Light and charcoal sheets in Dark
+([web layout](../design/public-web-layout.md)); everywhere else it keeps its
+authored ground.
 
 - The owner picks Light (the default), Dark, or Match device per resume, as the
   document field `customization.colorScheme` (ADR 0004). Match device follows
   each viewer's `prefers-color-scheme` through a CSS media query. Viewers get no
   toggle, and the page runs no script for it.
 - The scheme applies only to the public page on screen and the editor's Web
-  preview. The PDF, browser print, the print path, the link-preview card, the
-  sign-in gate, thumbnails, template pages, and the landing sample stay white.
+  preview. The PDF, the print path, the link-preview card, the sign-in gate,
+  thumbnails, template pages, and the landing sample stay light; browser print
+  flattens the sheets.
 - The dark colors come from one pure rule over the resume's own five colors,
-  followed by the unchanged role derivation and its contrast floors. No chrome
-  token enters the document area, and no template has hand-picked dark colors.
+  with the charcoal paper as the ground on the screen sheets, followed by the
+  unchanged role derivation and its contrast floors. No chrome token enters the
+  document area, and no template has hand-picked dark colors.
 - The page bar takes the light or dark values of its scoped tokens to match the
   page's scheme. Its mark is the logo's seal mark in `--seal-text`.
 
 ## Alternatives rejected
 
+- **One long sheet, sideways page turning, or large Call and Email buttons on
+  the public page.** Shown to the owner as mockups on 2026-11-18; separate
+  sheets keep the paper's edges in view while scrolling, page turning needs
+  horizontal gestures and script for page counts, and the buttons broke the
+  paper feel.
 - **The toolkit default, or the grey desk.** Consistent and cheap, but generic.
 - **Gradient everywhere, or a gradient logo.** Competes with the resume, weakens
   each color's meaning, and reads like other SaaS products.
@@ -171,6 +181,17 @@ otherwise for the public page on screen.
   the page bar, the scheme, and the dark palette rule.
 
 ## History
+
+### Amendment: paper sheets on screen (2026-11-18)
+
+Proposed with the [public web layout](../design/public-web-layout.md), from the
+owner's choice of the "separate sheets" mockup on 2026-11-18. On screen the
+public resume and the editor's Web preview set the resume on rounded paper
+sheets on a desk: warm paper (`#faf6ec`) in Light when the template's ground is
+white, charcoal (`#2a2723`) in Dark, an authored tinted or dark paper kept. The
+resume is one column there, with a 16 px body floor, the template's fonts,
+accents and heading styles, and contacts as rows. The PDF keeps every value
+exactly. The Decision text above takes effect when this amendment is accepted.
 
 ### Amendment: the 2026-11-15 identity
 

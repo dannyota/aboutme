@@ -83,6 +83,10 @@ That is a product size check, not a pixel comparison; keep it. Keep HTML
 goldens, corpus, offline fonts, sample content, CSP, and preview-gap assertions.
 The latter already uses PDF text and geometry. No PNG comparison exists there.
 
+When the [web layout](public-web-layout.md#validator-goldens-and-assertions)
+lands, its sheet assertions replace the public cells' measure, padding and
+column-stacking assertions above.
+
 ## Matrix and stable inputs
 
 Run applicable screen states in both interface locales (`vi`, `en`) and both
@@ -125,8 +129,9 @@ detail stacking), 1023/1024 (filter sheet/desktop rows or rail), 1179/1180
 (Library 4/5). Test showcase results-container widths 859/860 at viewport ≥1024
 for 2/3 columns. Preserve existing 360/375/390/414/430 hero checks and
 704/768/1024/1152 header checks. Public columns and header restack below a 36em
-container width: probe `36 × container fontSize` minus 1 px and exactly that
-width, using the fixture's independently specified font size.
+container width (in the sheets of the [web layout](public-web-layout.md), only
+the header photo restacks): probe `36 × container fontSize` minus 1 px and
+exactly that width, using the fixture's independently specified font size.
 
 Use the locked Playwright 1.64.0 and its bundled browsers, UTC, device scale 1,
 reduced motion, explicit locale (`vi-VN` or `en-US`), and fixed clocks/data.
