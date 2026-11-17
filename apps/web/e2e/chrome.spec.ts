@@ -143,15 +143,20 @@ test('the publish slug prefix sits in a mist cell inside the input', async ({
   await expectSlugPrefixCell(page);
 });
 
-mutationTest('the publish slug prefix rejects a cell moved off the input',
-  async ({ page }) => {
+for (const [kind, styles] of [
+  ['a cell moved off the input', {
+    transform: ['translateY(4px)', /matrix/u],
+  }],
+  ['a transparent cell', { opacity: ['0', '0'] }],
+] as const) {
+  mutationTest(`the publish slug prefix rejects ${kind}`, async ({ page }) => {
     test.setTimeout(60_000);
     await openPublishDialog(page);
     await proveMutation(() => expectSlugPrefixCell(page),
-      () => applyStyleMutation(page.getByTestId('publish-slug-prefix'), {
-        transform: ['translateY(4px)', /matrix/u],
-      }), 'Publish slug prefix cell.');
+      () => applyStyleMutation(page.getByTestId('publish-slug-prefix'),
+        styles), 'Publish slug prefix cell.');
   });
+}
 
 type ChromePage = typeof PAGES[number]['name'];
 type Locale = 'vi' | 'en';

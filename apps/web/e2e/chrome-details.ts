@@ -235,32 +235,52 @@ export async function leakChromeIntoResume(
 export async function expectSlugPrefixCell(page: Page): Promise<void> {
   const message = 'Publish slug prefix cell.';
   const field = page.getByTestId('publish-slug-field');
+  const cell = page.getByTestId('publish-slug-prefix');
   await expect(field, message).toBeVisible();
+  await expect(cell, message).toBeVisible();
   await expect.poll(() => field.evaluate((node) => {
     const input = node.querySelector('[data-action="publish-slug"]')!;
-    const cell = node.querySelector('[data-testid="publish-slug-prefix"]')!;
+    const prefix = node.querySelector<HTMLElement>(
+      '[data-testid="publish-slug-prefix"]',
+    )!;
     const outer = input.getBoundingClientRect();
-    const inner = cell.getBoundingClientRect();
+    const inner = prefix.getBoundingClientRect();
     const range = document.createRange();
-    range.selectNodeContents(cell);
+    range.selectNodeContents(prefix);
     const text = range.getBoundingClientRect();
     const near = (a: number, b: number) => Math.abs(a - b) <= 1;
     const textStart = outer.left
       + Number.parseFloat(getComputedStyle(input).paddingLeft);
+    let opacity = 1;
+    for (let element: Element | null = prefix; element !== null;
+      element = element === node ? null : element.parentElement) {
+      opacity *= Number.parseFloat(getComputedStyle(element).opacity);
+    }
+    const style = getComputedStyle(prefix);
     return {
       left: near(inner.left, outer.left + 1),
       top: near(inner.top, outer.top + 1),
       bottom: near(inner.bottom, outer.bottom - 1),
       clear: inner.right < textStart,
-      text: text.left >= inner.left && text.right <= inner.right - 1,
-      ground: getComputedStyle(cell).backgroundColor,
+      label: prefix.textContent,
+      text: text.width > 0 && text.height > 0
+        && text.left >= inner.left && text.right <= inner.right - 1
+        && text.top >= inner.top && text.bottom <= inner.bottom,
+      opacity,
+      visibility: style.visibility,
+      ink: style.color,
+      ground: style.backgroundColor,
     };
   }), message).toEqual({
     left: true,
     top: true,
     bottom: true,
     clear: true,
+    label: 'aboutme.vn/',
     text: true,
+    opacity: 1,
+    visibility: 'visible',
+    ink: 'rgb(85, 81, 125)',
     ground: 'rgb(241, 239, 250)',
   });
 }
