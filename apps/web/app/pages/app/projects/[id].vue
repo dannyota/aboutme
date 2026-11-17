@@ -265,7 +265,7 @@ function closeRelease(): void {
       @submit.prevent="save"
     >
       <h1
-        class="mb-6 text-2xl font-bold tracking-tight break-words"
+        class="mb-6 text-2xl font-extrabold tracking-[-0.02em] break-words"
         data-testid="project-title"
       >
         {{ title }}
@@ -310,7 +310,7 @@ function closeRelease(): void {
       >
         <h2
           id="project-text-title"
-          class="mb-4 text-lg font-semibold"
+          class="mb-4 text-lg font-bold"
         >
           {{ copy.textSection }}
         </h2>
@@ -395,7 +395,7 @@ function closeRelease(): void {
       >
         <h2
           id="project-details-title"
-          class="text-lg font-semibold"
+          class="text-lg font-bold"
         >
           {{ copy.detailsSection }}
         </h2>
@@ -449,7 +449,7 @@ function closeRelease(): void {
       >
         <h2
           id="project-address-title"
-          class="text-lg font-semibold"
+          class="text-lg font-bold"
         >
           {{ copy.addressSection }}
         </h2>
@@ -482,7 +482,7 @@ function closeRelease(): void {
       >
         <h2
           id="project-delete-title"
-          class="text-lg font-semibold"
+          class="text-lg font-bold"
         >
           {{ copy.deleteSection }}
         </h2>

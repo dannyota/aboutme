@@ -134,7 +134,7 @@ function asPrivacyFailure(error: unknown): PrivacySettingsFailure {
   >
     <h2
       id="privacy-title"
-      class="text-lg font-semibold"
+      class="text-lg font-bold"
     >
       {{ copy.title }}
     </h2>

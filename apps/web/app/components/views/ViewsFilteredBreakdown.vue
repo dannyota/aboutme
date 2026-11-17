@@ -36,7 +36,7 @@ const totals = computed(() => {
   >
     <h2
       id="views-filtered-heading"
-      class="text-lg font-semibold"
+      class="text-lg font-bold"
     >
       {{ props.copy.filteredHeading }}
     </h2>

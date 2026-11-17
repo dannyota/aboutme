@@ -35,7 +35,7 @@ describe('ImportPick', () => {
       expect(wrapper.find('[data-import-error]').exists()).toBe(false);
     });
 
-  it('uses an existing track token visible on the blue drop zone',
+  it('uses an existing track token visible on the mist drop zone',
     async () => {
       const wrapper = await mountSuspended(ImportPick, {
         props: { ...baseProps(), reading: true, fileName: 'profile.pdf' },

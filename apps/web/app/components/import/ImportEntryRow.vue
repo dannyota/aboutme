@@ -98,7 +98,7 @@ const describedBy = computed(() => {
       >
         <Info
           aria-hidden="true"
-          class="size-3.5 text-brand-indigo"
+          class="size-3.5 text-muted-foreground"
         />
         <span>{{
           indicator === 'noDates' ? copy.entryNoDates : copy.entryCut

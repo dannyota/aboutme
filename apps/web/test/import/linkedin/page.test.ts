@@ -267,6 +267,45 @@ describe('/app/import/linkedin', () => {
       .toContain('max-sm:-ml-4');
   });
 
+  it('sets the pick and review headings at 32 px, weight 800', async () => {
+    let n = 0;
+    const review = buildReview({
+      profile: { fullName: 'Sample Person', headline: 'Product Manager' },
+      contacts: [],
+      work: [],
+      education: [],
+      skills: ['Public Speaking'],
+      languages: [],
+      certificates: [],
+      dropped: [],
+    }, () => {
+      n += 1;
+      return `00000000-0000-4000-8000-${n.toString(16).padStart(12, '0')}`;
+    });
+    importLinkedInPdfMock.mockResolvedValue({ ok: true, review });
+    const heading = ['text-2xl', 'font-extrabold', 'tracking-[-0.02em]'];
+
+    const wrapper = await mountSuspended(LinkedinImportPage);
+    await flushPromises();
+    const pick = wrapper.get('h1');
+    expect(pick.text()).toBe('Import from LinkedIn');
+    expect(pick.classes()).toEqual(expect.arrayContaining(heading));
+    expect(pick.classes()).not.toContain('font-bold');
+
+    const input = wrapper
+      .find<HTMLInputElement>('[data-testid="import-file-input"]');
+    const file = new File(
+      ['%PDF-1.4'], 'profile.pdf', { type: 'application/pdf' },
+    );
+    Object.defineProperty(input.element, 'files', { value: [file] });
+    await input.trigger('change');
+    await flushPromises();
+
+    const reviewHeading = wrapper.get('#import-review-heading');
+    expect(reviewHeading.classes()).toEqual(expect.arrayContaining(heading));
+    expect(reviewHeading.classes()).not.toContain('font-bold');
+  });
+
   it(
     'blocks Create and focuses the first marked detail before any entry',
     async () => {

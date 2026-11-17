@@ -118,11 +118,7 @@ function handleFailure(
 }
 
 async function afterMutationSuccess(): Promise<void> {
-  try {
-    await refresh();
-  } catch {
-    // Ignored; the next visit re-reads current state.
-  }
+  await refresh().catch(() => undefined);
   emit('changed');
 }
 
@@ -324,7 +320,7 @@ function formatTimestamp(value: string): string {
   >
     <h2
       id="second-factor-title"
-      class="text-lg font-semibold"
+      class="text-lg font-bold"
     >
       {{ copy.title }}
     </h2>

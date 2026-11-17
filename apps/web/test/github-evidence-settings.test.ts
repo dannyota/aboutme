@@ -265,6 +265,20 @@ describe('GitHub evidence settings', () => {
     expect(wrapper.text()).not.toContain('583231');
   });
 
+  it('titles the section at 20 px, weight 700, and draws Disconnect as a '
+    + 'destructive outline pill', async () => {
+    state = connectedIdle;
+    const wrapper = await mountSection();
+
+    const title = wrapper.get('#github-evidence-title');
+    expect(title.classes()).toEqual(
+      expect.arrayContaining(['text-lg', 'font-bold']),
+    );
+    expect(title.classes()).not.toContain('font-semibold');
+    expect(wrapper.get('[data-testid="evidence-disconnect"]')
+      .attributes('data-variant')).toBe('destructive');
+  });
+
   it(
     'Connect posts start with the CSRF token and opens the GitHub URL',
     async () => {
