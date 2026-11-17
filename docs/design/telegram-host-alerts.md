@@ -48,7 +48,7 @@ or account data, credentials, chat ID, or hostname reach a message.
 
 Messages share one format with the owner's other products in the same group
 (owner, 2026-11-17): English, Telegram HTML parse mode, link previews off
-(`link_preview_options.is_disabled`), at most 1500 bytes:
+(`link_preview_options.is_disabled`):
 
 ```text
 <mark> <b>aboutme</b> · <title>
@@ -58,33 +58,37 @@ Action: <what Danny should do>   or   System: <what the host does next>
 ```
 
 - Marks: 🔴 failed or down, 🟠 degraded or still failing, 🟢 recovered.
-- `<title>` and the fixed parts of the sentence and the third line come from a
-  table in the sender keyed by the alert key or its prefix; callers never pass
-  markup. Dynamic values (counts, unit names, mount points, hours) are escaped
-  for `&`, `<`, and `>` and bounded; at most five unit names, then "and n more".
-- `<job>` is `aboutme-watch` for watcher checks and the failed unit's name for
-  unit failures. Times are the send time in UTC+7 and UTC.
+- `<title>`, the fixed words of the sentence, the third line, the severity, and
+  the runbook anchor come from a table in the sender keyed by the alert key or
+  its prefix; callers never pass markup. The table names each key's approved
+  fields; the sender fills them from the subject and detail it already receives.
+- Dynamic values (counts, unit names, mount points, hours) are filtered as
+  today, escaped for `&`, `<`, and `>`, and only ever placed in text, never in
+  an attribute. Unit names are listed until the line would pass 300 bytes, then
+  "and n more" with the exact count of the rest.
+- The whole message, as UTF-8 after escaping, is at most 1500 bytes. The sender
+  shortens only dynamic fields to fit and never cuts inside an entity or a tag;
+  the four lines are always present.
+- `<job>` is `aboutme-watch` for watcher checks, the failed unit's name for unit
+  failures, `aboutme-crowdsec-retention` or `aboutme-crowdsec-vacuum` for those
+  events, `alert-telegram` for the delivery test, and `aboutme-host` for an
+  unknown key.
+- Times are the send time in UTC+7 and UTC.
 - The runbook link is a fixed `https://github.com/dannyota/aboutme/blob/main/`
-  URL to the [Alarms](../runbooks/production.md#alarms) section or a narrower
-  anchor in the table; a key without one omits the link.
-- An unknown key still sends, with the title "host alert", its escaped subject
-  as the sentence, and "Action: read the journal on the host."
+  URL: the key's anchor in the table, else the
+  [Alarms](../runbooks/production.md#alarms) section. `coraza-log-invalid` keeps
+  its guidance: the third line says to read the Coraza metadata on the host, and
+  its runbook anchor holds the paths and the metadata-only rule.
+- An unknown key still sends, 🔴, with the title "host alert", its escaped
+  subject as the sentence, and "Action: read the journal on the host."
+- The delivery test sends "🟢 aboutme · alert delivery test" in this format,
+  with "System: no action needed." and no caller text.
 
-**State.** Watcher checks are conditions; unit failures and the CrowdSec
-retention and vacuum alerts are events.
-
-- A condition sends one message per state change: 🔴 or 🟠 when it first fails,
-  🟠 "still failing for {duration}" once every 24 hours while it stays failed,
-  and 🟢 when it clears, naming how long it lasted. The watcher reports each
-  checked condition on every tick as failing or clear; a clear report for a key
-  with no state sends nothing.
-- Condition state lives in `/var/lib/aboutme/alerts/state/<key>`: a private,
-  root-owned regular file holding the first-failure and last-sent UTC epochs,
-  written atomically after a confirmed send and removed after a confirmed
-  recovery send. A failed send leaves the state as it was, so the next tick
-  retries. Reject symlinks and wrong owners or modes, as for stamps.
-- Events keep the daily stamps below: one message per key per UTC day, and no
-  recovery message.
+**Repeats.** Every key keeps the daily stamps below: at most one message per key
+per UTC day. A watcher key whose stamp for the previous UTC day exists sends the
+🟠 "still failing" form of its message, naming the date of the earlier stamp the
+sender can see. There is no recovery message yet; a state-change design with 🟢
+recovery messages is a separate, later change.
 
 Keep atomic noclobber stamps at `/var/lib/aboutme/alerts/<key>.<UTC-date>`.
 Concurrent calls for one key/day send at most one in-flight request. Suppress
