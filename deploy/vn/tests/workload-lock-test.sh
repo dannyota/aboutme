@@ -2,6 +2,9 @@
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
+export ABOUTME_TEST_LIB=$repo_root/deploy/vn/tests/lib
+# shellcheck source=lib/wait.sh
+source "$ABOUTME_TEST_LIB/wait.sh"
 runner=$repo_root/deploy/vn/host/workload-lock.sh
 cutover=$repo_root/deploy/vn/scripts/cutover.sh
 deploy_host=$repo_root/deploy/vn/scripts/deploy-host.sh
@@ -20,7 +23,7 @@ grep -qF '/usr/local/lib/aboutme/workload-lock.sh 3600' "$deploy_host" || {
 ABOUTME_WORKLOAD_LOCK=$lock "$runner" 5 bash -c \
   'printf "first-start\n" >>"$1"; sleep 1; printf "first-end\n" >>"$1"' _ "$order" &
 first_pid=$!
-while [[ ! -s $order ]]; do sleep 0.05; done
+test_wait 'first workload start' "${ABOUTME_TEST_WAIT_SECONDS:-60}" 0.05 test -s "$order" || exit 1
 ABOUTME_WORKLOAD_LOCK=$lock "$runner" 5 bash -c \
   'printf "second\n" >>"$1"' _ "$order" &
 second_pid=$!
