@@ -73,13 +73,12 @@ holds unchanged.
 
 | Library mutation                           | Transition over the linking live resumes |
 | ------------------------------------------ | ---------------------------------------- |
-| Text or field edit                         | Non-draining                             |
+| Text, field or evidence edit               | Non-draining                             |
 | Slug rename, deletion                      | Revoking                                 |
 | Deletion, for each linking draft resume    | Non-draining over that resume            |
 | Any edit of a project no live resume links | None; an ordinary row write              |
 
-Link, unlink, hide, unpublish and sign in to view are existing resume writes and
-transitions.
+Link, unlink, hide, unpublish and sign in to view keep their resume transitions.
 
 A revision advanced this way reaches open editors and viewers as any other
 revision does: the editor reconciles, and a public page refetches. Stored
@@ -329,13 +328,14 @@ Go serves 503 for rendered HTML that breaks any of these rules:
 - One `main#public-project`, one `h1`, and one skip link to the main region.
 - The response's CSP is the resume page's with `style-src 'self'` and no
   `'unsafe-inline'`; the gate keeps its own.
-- Anchors: the credit once, as on the resume page; `a.public-back` once, to the
-  resume `url`, with the accessible name in the
-  [page design](ui/project-pages.md#shared-frame); internal links only to the
-  resume, the list and the requested projects, with only `href` and `class`, and
-  on the list each project once; `a.project-external` only for the request's
+- Anchors: the credit once; `a.public-back` once, to the resume `url`, named as
+  in the [page design](ui/project-pages.md#shared-frame); internal links only to
+  the resume, the list and the requested projects, with only `href` and `class`,
+  and on the list each project once; `a.project-external` only for the request's
   repository, demo and entry links, each at most once, with
-  `rel="noopener noreferrer nofollow"`; and the description's own links.
+  `rel="noopener noreferrer nofollow"`;
+  [evidence](github-evidence-picker.md#project-page) links; and the
+  description's own links.
 - `.project-description` appears once on a project page whose
   `project.description` is set, and nowhere else. Its content, parsed and with
   comments ignored, is the same tree as `project.description` parsed.
