@@ -28,25 +28,25 @@ at most 40 rem wide. Section headings are `h2` at 18 px, weight 600, 16 px above
 their content. A section hint sits on the heading's baseline at the right, 13 px
 `--muted-foreground`, and wraps under it on phones.
 
-Cards are `--card` with a border, the 20 px feature radius, and
-`--shadow-product`. Nothing on the page uses seal red, a gradient, or motion.
+Cards are `--card` with a `--border` edge, `--radius-card`, and no shadow.
+Nothing on the page uses seal red, a gradient, or motion.
 
 ## Tokens
 
 The page defines these on its root element, never in `theme.css`, except
 `--surface-destructive`, which the build adds beside the other surface tokens.
 
-| Token                   | Light and dark value                                    | Use                     |
-| ----------------------- | ------------------------------------------------------- | ----------------------- |
-| `--verify-verified`     | `--link`                                                | Verified mark and chips |
-| `--verify-rolling`      | `--brand-indigo`                                        | Rollout mark and rail   |
-| `--verify-neutral`      | `--muted-foreground`                                    | Stale and unknown marks |
-| `--verify-bad`          | `--destructive`                                         | Mismatch mark and text  |
-| `--surface-destructive` | `--destructive` mixed into `--card`: 7% light, 12% dark | Mismatch tint           |
+| Token                   | Light and dark value                                       | Use                     |
+| ----------------------- | ---------------------------------------------------------- | ----------------------- |
+| `--verify-verified`     | `--link`                                                   | Verified mark and chips |
+| `--verify-rolling`      | `--coin`, with `--coin-ink` icons and a `--coin-edge` rail | Rollout mark and rail   |
+| `--verify-neutral`      | `--muted-foreground`                                       | Stale and unknown marks |
+| `--verify-bad`          | `--destructive`                                            | Mismatch mark and text  |
+| `--surface-destructive` | `--destructive` mixed into `--card`: 7% light, 8% dark     | Mismatch tint           |
 
 Measured contrast: `--destructive` on `--surface-destructive` is 5.9:1 light and
-5.2:1 dark; `--muted-foreground` on every card tint is at least 5.1:1; the white
-icon on the indigo disk is 5.0:1 and the dark icon 5.9:1.
+5.2:1 dark; `--muted-foreground` on every card tint is at least 5.1:1; the
+`--coin-ink` icon on the coin disk is 11.4:1 in both themes.
 
 ## Status card
 
@@ -62,16 +62,16 @@ sits at the top right.
   minute", 12 px apart and wrapping.
 - Pill: 28 px high, card fill, border, 13 px weight 600.
 
-| State         | Mark (Lucide)            | Mark color                                       | Card fill               |
-| ------------- | ------------------------ | ------------------------------------------------ | ----------------------- |
-| Loading       | None                     | None                                             | `--muted`               |
-| Unavailable   | `info`, ring             | `--verify-neutral` ring and icon                 | `--muted`               |
-| Outdated page | `refresh-cw`, ring       | `--verify-neutral` ring and icon                 | `--muted`               |
-| Stale         | `clock`, ring            | `--verify-neutral` ring and icon                 | `--muted`               |
-| Mismatch      | `shield-alert`, filled   | `--verify-bad` disk, white or `--background`     | `--surface-destructive` |
-| Unverified    | `circle-dashed`, ring    | `--verify-neutral` ring and icon                 | `--muted`               |
-| Rolling out   | `arrow-right-left`, fill | `--verify-rolling` disk, white or `--background` | `--surface-indigo`      |
-| Verified      | `shield-check`, filled   | `--verify-verified` disk, `--card` icon          | `--surface-blue`        |
+| State         | Mark (Lucide)            | Mark color                                   | Card fill               |
+| ------------- | ------------------------ | -------------------------------------------- | ----------------------- |
+| Loading       | None                     | None                                         | `--muted`               |
+| Unavailable   | `info`, ring             | `--verify-neutral` ring and icon             | `--muted`               |
+| Outdated page | `refresh-cw`, ring       | `--verify-neutral` ring and icon             | `--muted`               |
+| Stale         | `clock`, ring            | `--verify-neutral` ring and icon             | `--muted`               |
+| Mismatch      | `shield-alert`, filled   | `--verify-bad` disk, white or `--background` | `--surface-destructive` |
+| Unverified    | `circle-dashed`, ring    | `--verify-neutral` ring and icon             | `--muted`               |
+| Rolling out   | `arrow-right-left`, fill | `--verify-rolling` disk, `--coin-ink` icon   | `--muted`               |
+| Verified      | `shield-check`, filled   | `--foreground` disk, `--background` icon     | `--muted`               |
 
 A ring is a 2 px `--muted-foreground` border on a transparent disk. The filled
 icon is white in light theme and `--background` in dark theme. The mismatch card
@@ -126,13 +126,13 @@ commit is 7 characters in monospace.
 
 Chips are 24 px pills, 12 px weight 600, with a 14 px icon:
 
-| Chip          | Vietnamese        | English       | Look                                                  |
-| ------------- | ----------------- | ------------- | ----------------------------------------------------- |
-| Match         | Khớp              | Matches       | `check`, `--link` on `--surface-blue`                 |
-| Updating      | Đang cập nhật     | Updating      | `arrow-right-left` indigo, text on `--surface-indigo` |
-| Not rechecked | Chưa kiểm tra lại | Not rechecked | `minus`, muted text, border                           |
-| Not verified  | Chưa kiểm chứng   | Not verified  | `minus`, muted text, border                           |
-| Failed        | {cause}           | {cause}       | `x`, `--destructive` on `--surface-destructive`       |
+| Chip          | Vietnamese        | English       | Look                                            |
+| ------------- | ----------------- | ------------- | ----------------------------------------------- |
+| Match         | Khớp              | Matches       | `check`, `--link` on `--surface-mist`           |
+| Updating      | Đang cập nhật     | Updating      | `arrow-right-left`, `--coin-ink` on `--coin`    |
+| Not rechecked | Chưa kiểm tra lại | Not rechecked | `minus`, muted text, border                     |
+| Not verified  | Chưa kiểm chứng   | Not verified  | `minus`, muted text, border                     |
+| Failed        | {cause}           | {cause}       | `x`, `--destructive` on `--surface-destructive` |
 
 A failed chip names the cause in few words: "web không có chữ ký" / "No
 signature for web", "Chữ ký sai" / "Invalid signature", or "caddy không chạy" /
@@ -142,12 +142,12 @@ icon.
 Connectors join each disk to the next. A connector is a 2 px line with a 20 px
 card-colored dot in the middle holding a 12 px icon:
 
-| Connector | Line                      | Dot                             |
-| --------- | ------------------------- | ------------------------------- |
-| Agree     | Solid `--link`            | `check` in a `--link` ring      |
-| Updating  | Solid `--brand-indigo`    | `arrow-right-left`, indigo ring |
-| Unknown   | Dashed `--input`, 4 px on | None                            |
-| Disagree  | Dashed `--destructive`    | `x` in a `--destructive` ring   |
+| Connector | Line                      | Dot                           |
+| --------- | ------------------------- | ----------------------------- |
+| Agree     | Solid `--link`            | `check` in a `--link` ring    |
+| Updating  | Solid `--coin-edge`       | `arrow-right-left`, coin ring |
+| Unknown   | Dashed `--input`, 4 px on | None                          |
+| Disagree  | Dashed `--destructive`    | `x` in a `--destructive` ring |
 
 From 42 rem the four steps are equal columns 40 px apart; a connector runs from
 the previous disk's right edge to the next disk's left edge at the disks' center
@@ -196,7 +196,7 @@ Facts, 13 px, 14 px apart:
 - Version in weight 600, or an en dash with the accessible text "Chưa rõ phiên
   bản" / "Version unknown" when it is `null`.
 - During a rollout, a tag: "Cũ hơn" / "Older" in `--muted` or "Mới nhất" /
-  "Newest" in `--surface-indigo`, 11 px weight 700 pill.
+  "Newest" in `--coin` with `--coin-ink`, 11 px weight 700 pill.
 - Replicas: one 8 px square per replica, 3 px apart, up to eight, then the text
   "{n} bản sao" / "{n} replica" or "{n} replicas". Squares are `--brand-blue`,
   `--input` for the older image, and hidden from screen readers.
@@ -213,8 +213,8 @@ SBOM uses the same icons with "SBOM", "Không có SBOM" / "No SBOM", "SBOM sai" 
 "Invalid SBOM", and "Chưa kiểm tra SBOM" / "SBOM not checked". In the stale
 state every mark shows `minus` and muted text.
 
-A component in rollout carries a 3 px `--brand-indigo` rail on the card's left
-edge beside its row; a failing component carries a `--destructive` rail, and its
+A component in rollout carries a 3 px `--coin-edge` rail on the card's left edge
+beside its row; a failing component carries a `--destructive` rail, and its
 failing digest chip takes a `--destructive` border. The rail is decorative; the
 tag and mark text carry the state.
 
@@ -253,18 +253,18 @@ or Space selects. A component with two images appears once per image as "web
 v0.5.21" and "web v0.6.0". It starts on `server`, or on the failing component in
 the mismatch state.
 
-Two numbered steps follow, 20 px apart. Each has a 22 px `--surface-blue` number
+Two numbered steps follow, 20 px apart. Each has a 22 px `--surface-mist` number
 disk with `--link` digits and a weight 600 label:
 
 1. "Đọc các mã băm đang chạy" / "Read the running digests".
 2. "Kiểm chứng cách image được dựng (GitHub CLI cần đăng nhập)" / "Verify how
    the image was built (the GitHub CLI must be signed in)".
 
-A command block is a `pre` on `--muted` with a border and the 10 px radius, 13
+A command block is a `pre` on `--muted` with no border and the 10 px radius, 13
 px monospace at 1.65 line height, with 14 px padding and 52 px on the right for
 the copy button. The `$` prompt and its space are muted and not copied. Live
 values (component, digest, version) are weight 700 foreground on a
-`--surface-blue` highlight. The block scrolls sideways inside the card, has
+`--surface-sun` highlight. The block scrolls sideways inside the card, has
 `tabindex="0"` and the name of its step so keyboard users can scroll it, and
 never widens the page at 360 px.
 

@@ -39,6 +39,16 @@ Resumes, Views, and Settings. On localized routes, the shell adds the Vietnamese
 and English toggle. Below 640 px its visible labels shorten to VI and EN while
 their accessible names remain complete.
 
+Public pages end with the home page's footer band: the Library, template pages,
+the showcase, the MCP guide, the legal pages, the verify page, the account
+pages, and the error page. The workspace, the editor, and the public resume page
+have no footer.
+
+The legal pages sit on the plain ground with a 44 rem measure: the h1 at 32/1.3,
+section headings at 24/1.35, body text at 16/1.6, and links underlined in
+`--link`. The error page shows a `--surface-mist` panel with `--radius-panel`
+holding the h1 and one main pill back home, with no illustration.
+
 The six account pages (sign in, second factor, create account, forgot password,
 reset password, and verify email) share `AuthLayout`. Below 1024 px they are a
 single 26 rem column with the form alone on the page ground. From 1024 px a
