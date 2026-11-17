@@ -96,11 +96,12 @@ items:
    cũng được.” or “When you publish, turn on Show in the community showcase. You
    can turn it off any time.”, 15 px/1.5 `--muted-foreground`. The switch name
    matches the publish dialog's label exactly.
-3. The button (`data-action="showcase-invite-create"`), the default primary
-   `Button` rendered as a `NuxtLink`, 44 px high, 16 px side padding, 15 px
-   weight 600, left-aligned: “Tạo CV miễn phí” or “Create a free resume” in
-   every case. Its target is the empty action's: `/app/resumes` signed in,
-   `/register` signed out with password registration on, otherwise `/login`.
+3. The button (`data-action="showcase-invite-create"`), an outline pill `Button`
+   rendered as a `NuxtLink`, whose hover fill on the mist card is `--card`, 44
+   px high, 16 px side padding, 15 px weight 600, left-aligned: “Tạo CV miễn
+   phí” or “Create a free resume” in every case. Its target is the empty
+   action's: `/app/resumes` signed in, `/register` signed out with password
+   registration on, otherwise `/login`.
 
 ## Pager
 

@@ -26,7 +26,7 @@ under the bar (WCAG 2.4.11).
 ### Filters button
 
 A 44 px outline button (`data-action="showcase-filters-open"`): 1 px `--input`
-border, transparent fill, 10 px radius, 14 px side padding, an 8 px gap, the
+border, transparent fill, a pill radius, 14 px side padding, an 8 px gap, the
 lucide `ListFilter` icon at 18 px (`aria-hidden`), then “Bộ lọc” or “Filters” in
 14 px weight 500 `--foreground`, with `aria-haspopup="dialog"` and
 `aria-expanded`.

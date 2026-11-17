@@ -35,11 +35,12 @@ bar, the rail, and the results area.
 ## Header
 
 The `header` (`data-testid="showcase-header"`) has no band, fill, border, or
-padding. It holds the h1, “CV từ cộng đồng” or “Community resumes”, bold with
--0.02em tracking, and under it the lead, “CV thật do người dùng aboutme.vn xuất
-bản và chọn hiện ở đây.” or “Real resumes that aboutme.vn users published and
-chose to show here.”, in `--muted-foreground`, at most 42 rem wide, 8 px under
-the h1. It holds no focusable element.
+padding. It holds the h1, “CV từ cộng đồng” or “Community resumes”, 32 px (40
+from 48 rem) at line height 1.3, weight 800, with -0.02em tracking, as on the
+Library, and under it the lead, “CV thật do người dùng aboutme.vn xuất bản và
+chọn hiện ở đây.” or “Real resumes that aboutme.vn users published and chose to
+show here.”, in `--muted-foreground`, at most 42 rem wide, 8 px under the h1. It
+holds no focusable element.
 
 | Width          | h1          | Lead        | Space under the header |
 | -------------- | ----------- | ----------- | ---------------------- |

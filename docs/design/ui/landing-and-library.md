@@ -37,16 +37,16 @@ px, four from 900 px, and five from 1180 px.
 
 At 900 px and wider, `/templates/{id}` shows the document beside a 360 px sticky
 info column with a 24 px top offset. Below 900 px, the info comes first and the
-primary action sits in a `--background` bar with a top `--border` rule and
-`--shadow-float`, fixed to the bottom of the screen. The primary action is a
-main pill and the blank-resume link an outline pill. The info column holds the
-Library breadcrumb, the template name as the h1, its purpose, the sample
-language toggle when both languages exist, and facts: sample persona marked
-fictional, page count, layout, paper size, and photo fit. Two-column templates
-add a `--surface-mist` note with a 10 px radius linking ATS Plain for online
-portals. Templates with a sample show “Use this sample”, a note that it makes a
-private copy, and a blank-resume link; templates without one show a filler note
-and the blank-resume action.
+primary action sits in a `--background` bar with a top `--border` rule and no
+shadow, fixed to the bottom of the screen. The primary action is a main pill and
+the blank-resume link an outline pill. The info column holds the Library
+breadcrumb, the template name as the h1, its purpose, the sample language toggle
+when both languages exist, and facts: sample persona marked fictional, page
+count, layout, paper size, and photo fit. Two-column templates add a
+`--surface-mist` note with a 10 px radius linking ATS Plain for online portals.
+Templates with a sample show “Use this sample”, a note that it makes a private
+copy, and a blank-resume link; templates without one show a filler note and the
+blank-resume action.
 
 A template with a sample shows three tabs over the document: Page (“Trang CV”),
 PDF, and “What an ATS reads” (“ATS đọc được gì”). Page shows the document on a

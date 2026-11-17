@@ -131,11 +131,12 @@ option stays pressed. Wrap order follows DOM order.
 
 Style (`data-testid="gallery-styles"`) uses `data-filter` for each option,
 including `all`. All has no dot. The four format choices use
-`data-group="format"` and an 8 px `--brand-jade` dot, 8 px before the text. The
-three audience choices use `data-group="audience"` and `--brand-ochre`. Dots are
-`aria-hidden` and use `currentColor` when selected. Before First job, a
-decorative divider is 1 × 24 px, `--border`, with 4 px side margins and no Tab
-stop. It stays with the First job chip when rows wrap.
+`data-group="format"` and an 8 px `--muted-foreground` dot, 8 px before the
+text. The three audience choices use `data-group="audience"` and the same dot;
+the divider below separates the groups. Dots are `aria-hidden` and use
+`currentColor` when selected. Before First job, a decorative divider is 1 × 24
+px, `--border`, with 4 px side margins and no Tab stop. It stays with the First
+job chip when rows wrap.
 
 ### Phone bar and sheet
 
