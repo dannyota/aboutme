@@ -227,4 +227,23 @@ describe('linked entry note', () => {
     }
     expect(note.classes()).not.toContain('rounded-md');
   });
+
+  it('hovers both note buttons to the card', async () => {
+    const wrapper = await mountSuspended(ProjectLinkNote, {
+      props: {
+        projectId: 'project-1',
+        name: 'Shop site',
+        fallbackLanguage: null,
+        refreshing: false,
+        copy: editorFieldsCopy.en.projectLinks,
+        cancelLabel: 'Cancel',
+      },
+    });
+    mounted.push(wrapper);
+    for (const action of ['refresh-project-entry', 'open-project']) {
+      const classes = wrapper.get(`[data-action="${action}"]`).classes();
+      expect(classes, action).toContain('hover:bg-card');
+      expect(classes, action).not.toContain('hover:bg-accent');
+    }
+  });
 });

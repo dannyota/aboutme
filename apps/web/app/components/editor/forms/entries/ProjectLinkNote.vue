@@ -60,6 +60,7 @@ watch(() => props.refreshing, async (refreshing) => {
       <Button
         ref="refreshButton"
         data-action="refresh-project-entry"
+        class="hover:bg-card"
         :disabled="refreshing"
         size="sm"
         type="button"
