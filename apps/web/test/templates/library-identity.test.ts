@@ -50,14 +50,15 @@ describe('Library header', () => {
     const wrapper = await mountGallery();
     const header = wrapper.get('[data-testid="gallery-header"]');
     for (const name of [
-      'relative', 'overflow-hidden', 'rounded-[var(--radius-panel)]',
-      'bg-surface-blush',
+      'relative', 'rounded-[var(--radius-panel)]', 'bg-surface-blush',
     ]) {
       expect(header.classes(), name).toContain(name);
     }
     expect(header.classes().join(' ')).not.toMatch(
       /(?:^|\s)(?:border|border-border|bg-surface-blue)(?:\s|$)/u,
     );
+    expect(header.classes().filter((name) => /overflow/u.test(name)))
+      .toEqual([]);
   });
 
   it('sets the h1 at 32 px, 40 px from 48rem, weight 800', async () => {
@@ -72,18 +73,35 @@ describe('Library header', () => {
     expect(title.classes().join(' ')).not.toMatch(/sm:text-5xl|font-bold/u);
   });
 
+  it('clips the fan in its own layer, not in the header', async () => {
+    const wrapper = await mountGallery();
+    const header = wrapper.get('[data-testid="gallery-header"]');
+    const layer = header.get('[data-testid="gallery-fan-layer"]');
+    expect(layer.attributes('aria-hidden')).toBe('true');
+    for (const name of [
+      'pointer-events-none', 'absolute', 'inset-0', 'overflow-hidden',
+      'rounded-[inherit]',
+    ]) {
+      expect(layer.classes(), name).toContain(name);
+    }
+    expect(layer.element.parentElement).toBe(header.element);
+    expect(layer.element.previousElementSibling?.tagName).toBe('P');
+    expect(layer.element.nextElementSibling).toBeNull();
+    const fan = layer.get('[data-testid="gallery-fan"]');
+    expect(fan.element.parentElement).toBe(layer.element);
+    const title = header.get('h1').element;
+    expect(title.closest('[data-testid="gallery-fan-layer"]')).toBeNull();
+  });
+
   it('adds a decorative fan of three paper sheets from 64rem', async () => {
     const wrapper = await mountGallery();
     const header = wrapper.get('[data-testid="gallery-header"]');
     const fan = header.get('[data-testid="gallery-fan"]');
-    expect(fan.attributes('aria-hidden')).toBe('true');
     expect(fan.text()).toBe('');
     for (const name of ['absolute', 'hidden', 'lg:flex']) {
       expect(fan.classes(), name).toContain(name);
     }
     expect(fan.classes().some((name) => /^-right-/u.test(name))).toBe(true);
-    expect(fan.element.previousElementSibling?.tagName).toBe('P');
-    expect(fan.element.nextElementSibling).toBeNull();
     const sheets = fan.findAll('[data-fan-sheet]');
     expect(sheets).toHaveLength(3);
     for (const sheet of sheets) {

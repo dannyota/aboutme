@@ -357,8 +357,8 @@ export async function placeAuthArtworkOverPoints(
 
 export async function expectLibraryFan(page: Page): Promise<void> {
   const message = 'Library fan geometry.';
-  const fan = page.getByTestId('gallery-fan');
-  await expect(fan, message).toHaveAttribute('aria-hidden', 'true');
+  const layer = page.getByTestId('gallery-fan-layer');
+  await expect(layer, message).toHaveAttribute('aria-hidden', 'true');
   const read = await page.getByTestId('gallery-header').evaluate((panel) => {
     const box = (node: Element) => {
       const rect = node.getBoundingClientRect();
@@ -379,13 +379,25 @@ export async function expectLibraryFan(page: Page): Promise<void> {
       return opacity === 1 && getComputedStyle(node).visibility === 'visible'
         && rect.width > 0 && rect.height > 0;
     };
-    const art = panel.querySelector('[data-testid="gallery-fan"]')!;
+    const clip = panel.querySelector('[data-testid="gallery-fan-layer"]')!;
+    const art = clip.querySelector('[data-testid="gallery-fan"]')!;
     const sheets = [...art.querySelectorAll('[data-fan-sheet]')];
+    const own = getComputedStyle(panel);
+    const layer = getComputedStyle(clip);
+    const bounds = clip.getBoundingClientRect();
+    const outer = panel.getBoundingClientRect();
     return {
       wide: innerWidth >= 1024,
       shown: getComputedStyle(art).display !== 'none',
-      clipped: getComputedStyle(panel).overflowX === 'hidden'
-        && getComputedStyle(panel).overflowY === 'hidden',
+      clipped: layer.overflowX === 'hidden' && layer.overflowY === 'hidden'
+        && layer.borderRadius === own.borderRadius
+        && Math.abs(bounds.left - outer.left) <= 1
+        && Math.abs(bounds.right - outer.right) <= 1
+        && Math.abs(bounds.top - outer.top) <= 1
+        && Math.abs(bounds.bottom - outer.bottom) <= 1,
+      open: own.overflowX === 'visible' && own.overflowY === 'visible'
+        && panel.scrollWidth <= panel.clientWidth + 1
+        && panel.scrollHeight <= panel.clientHeight + 1,
       panel: box(panel),
       sheets: sheets.map(box),
       painted: sheets.map(painted),
@@ -395,6 +407,7 @@ export async function expectLibraryFan(page: Page): Promise<void> {
     };
   });
   expect(read.overflow, message).toBeLessThanOrEqual(0);
+  expect(read.open, message).toBe(true);
   if (!read.wide) {
     expect(read.shown, message).toBe(false);
     return;

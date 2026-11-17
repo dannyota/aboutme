@@ -285,7 +285,7 @@ useHead(
     data-testid="template-gallery"
   >
     <header
-      class="relative overflow-hidden rounded-[var(--radius-panel)]
+      class="relative rounded-[var(--radius-panel)]
         bg-surface-blush px-6 py-8 md:p-12 lg:p-14 lg:pr-[22rem]"
       data-testid="gallery-header"
     >
