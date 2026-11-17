@@ -94,6 +94,9 @@ set -euo pipefail
 printf '%s\n' "$*" >>"$DEPLOY_TEST_DIR/external.log"
 args=" $* "
 [[ $args == *" -p $EXPECTED_SSH_PORT "* ]] || { echo "SSH port missing" >&2; exit 1; }
+printf '%s\n' "$args" >>"$DEPLOY_TEST_DIR/ssh-calls.log"
+[[ $args == *" -o ServerAliveInterval=15 "* && $args == *" -o ServerAliveCountMax=4 "* ]] ||
+  printf '%s\n' "$args" >>"$DEPLOY_TEST_DIR/keepalive-missing.log"
 case $args in
   *' -O exit '*) exit 0 ;;
   *' sha256sum '*) printf '%064d  remote\n' 0 | tr 0 c; exit 0 ;;
@@ -708,6 +711,13 @@ for prune_case in smoke render activate; do
     prune_fail "the $prune_case case pruned images"
   fi
 done
+
+[[ -s $work/ssh-calls.log ]] || { echo "deploy.sh reached no SSH call" >&2; exit 1; }
+if [[ -s $work/keepalive-missing.log ]]; then
+  echo "SSH calls without ServerAliveInterval=15 and ServerAliveCountMax=4:" >&2
+  sed -n '1,5p' "$work/keepalive-missing.log" >&2
+  exit 1
+fi
 
 ((edge_failures == 0 && egress_failures == 0 && floor_failures == 0 && prune_failures == 0)) || exit 1
 echo "deployment failure test passed"
