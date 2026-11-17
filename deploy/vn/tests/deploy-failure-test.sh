@@ -127,8 +127,20 @@ fi
 if [[ $args == *' /usr/local/lib/aboutme/fence.sh raise '* && ${FAIL_RAISE:-0} == 1 ]]; then exit 1; fi
 if [[ $args == *' /usr/local/lib/aboutme/deploy-host.sh '* ]]; then
   printf '%s\n' "$args" >>"$DEPLOY_TEST_DIR/host.log"
+  if [[ $args == *' migration-state '* ]]; then
+    reads=$(grep -c ' migration-state ' "$DEPLOY_TEST_DIR/host.log")
+    case ${MIGRATION_CASE:-unknown}:$reads in
+      unchanged:*) echo 10:10 ;;
+      changed:1) echo 10:10 ;;
+      changed:*) echo 11:11 ;;
+      before-fails:1 | after-fails:2 | unknown:*) exit 1 ;;
+      *) echo 10:10 ;;
+    esac
+    exit 0
+  fi
   if [[ $args == *' release-json '* ]]; then printf '%s\n' '{"release_tag":"v0.1.0","maintenance_image":"previous-caddy"}'; fi
   if [[ $args == *' running-release '* ]]; then printf '1001\n'; fi
+  if [[ ${MIGRATION_CASE:-} == migrate-fails && $args == *' migrate '* ]]; then exit 1; fi
   if [[ ${FAIL_RENDER:-0} == 1 && $args == *' render '* ]]; then exit 255; fi
   if [[ ${FAIL_CIMD:-} == render && $args == *' render '* ]] ||
      [[ ${FAIL_CIMD:-} == render && $args == *' restore-previous '* ]] ||
@@ -292,6 +304,52 @@ if grep -q 'recovery did not finish' "$work/out"; then
   echo "deploy reported a failed recovery after enforcing fail closed" >&2
   exit 1
 fi
+
+migration_failures=0
+for migration_case in unchanged changed before-fails after-fails migrate-fails floor first success; do
+  : >"$work/host.log"
+  rm -f "$work/edge-count" "$work/ban-count"
+  state_case=$migration_case
+  [[ $migration_case != floor && $migration_case != first && $migration_case != success ]] || state_case=unchanged
+  floor_value='' fence_value=1000 edge_value=''
+  [[ $migration_case != floor ]] || floor_value=$'v0.1.1\n'
+  [[ $migration_case != success ]] || edge_value=delayed
+  status=0
+  args=(v0.1.1)
+  [[ $migration_case != first ]] || args+=(--first-deploy)
+  if [[ $migration_case == floor ]]; then
+    MIGRATION_CASE=$state_case SCHEMA_FLOOR=$floor_value FENCE_MINIMUM=$fence_value EDGE_CASE=$edge_value \
+      "$repo_root/deploy/vn/scripts/deploy.sh" "${args[@]}" >"$work/migration-$migration_case.out" 2>&1 || status=$?
+  else
+    MIGRATION_CASE=$state_case EDGE_CASE=$edge_value \
+      "$repo_root/deploy/vn/scripts/deploy.sh" "${args[@]}" >"$work/migration-$migration_case.out" 2>&1 || status=$?
+  fi
+  case $migration_case in
+    changed) message='migrate applied migrations' ;;
+    before-fails | after-fails) message='migration state unknown' ;;
+    migrate-fails) message='' ;;
+    *) message='migrate applied no migration' ;;
+  esac
+  if [[ -n $message ]] && ! grep -q "$message" "$work/migration-$migration_case.out"; then
+    echo "$migration_case migration did not report its state" >&2; migration_failures=1
+  fi
+  if [[ $migration_case == success ]]; then
+    if [[ $status != 0 ]] || ! grep -q 'migrate applied no migration' "$work/migration-$migration_case.out"; then
+      echo 'unchanged migration success did not report no migration' >&2; migration_failures=1
+    fi
+  elif [[ $migration_case == unchanged ]]; then
+    recovery=$(sed -n '/ restore-previous /,$p' "$work/host.log")
+    if [[ $status == 0 ]] || [[ $recovery != *' restore-previous '* || $recovery != *' app-up '* ||
+       $recovery != *' maintenance-down '* ]] ||
+       grep -q ' fail-closed ' "$work/host.log"; then
+      echo 'unchanged migration did not restore after smoke failure' >&2; migration_failures=1
+    fi
+  elif [[ $status == 0 ]] || ! grep -q ' fail-closed ' "$work/host.log" ||
+       grep -q ' restore-previous ' "$work/host.log"; then
+    echo "$migration_case migration did not fail closed" >&2; migration_failures=1
+  fi
+done
+((migration_failures == 0)) || exit 1
 
 export SSH_PORT=23000 EXPECTED_SSH_PORT=23000
 : >"$work/host.log"
