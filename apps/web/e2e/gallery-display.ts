@@ -158,8 +158,8 @@ export async function assertLibrary(
     await expect(fields.locator('[data-role="'
       + (filtered ? 'backend' : 'all') + '"]')).toHaveCSS(
       'background-color', theme === 'light'
-        ? 'rgb(89, 75, 173)'
-        : 'rgb(114, 103, 192)',
+        ? 'rgb(26, 22, 80)'
+        : 'rgb(211, 202, 208)',
     );
   }
   const cards = page.locator('[data-template]:visible');

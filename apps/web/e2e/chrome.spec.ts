@@ -26,9 +26,9 @@ import {
 } from './style-mutation';
 import {
   expectChromeDecoration, expectChromeFan, expectChromeList,
-  expectAuthArtworkClear, expectChromeNavigation, expectRendererBoundary,
-  expectSampleIsolation, expectSlugPrefixCell, leakChromeIntoResume,
-  placeAuthArtworkOverPoints,
+  expectAuthArtworkClear, expectChromeNavigation, expectLibraryFan,
+  expectRendererBoundary, expectSampleIsolation, expectSlugPrefixCell,
+  leakChromeIntoResume, placeAuthArtworkOverPoints,
 } from './chrome-details';
 
 import type { ScreenContract } from './screen-contract';
@@ -249,10 +249,10 @@ async function expectChrome(
   await expect(title).toMatchAriaSnapshot(
     `- heading "${titleText}" [level=1]`,
   );
-  await expect(title).toHaveCSS('font-weight', home ? '800' : '700');
+  await expect(title).toHaveCSS('font-weight', '800');
   await expect(title).toHaveCSS('font-size', home
     ? (width < 768 ? '40px' : width < 1280 ? '48px' : '60px')
-    : (width < 640 ? '40px' : '48px'));
+    : (width < 768 ? '32px' : '40px'));
   await expect.poll(() => title.evaluate((node) => {
     const css = getComputedStyle(node);
     const line = parseFloat(css.lineHeight) || parseFloat(css.fontSize);
@@ -317,10 +317,11 @@ async function expectChrome(
   } else {
     const galleryHeader = page.getByTestId('gallery-header');
     await expect(galleryHeader).toHaveCSS('background-color', theme === 'light'
-      ? 'rgb(241, 239, 250)'
-      : 'rgb(21, 16, 21)');
+      ? 'rgb(236, 226, 255)'
+      : 'rgb(28, 23, 47)');
     await expect(galleryHeader).toHaveCSS('border-radius',
-      width < 768 ? '22px' : width < 1024 ? '26px' : '28px');
+      width < 768 ? '28px' : width < 1024 ? '36px' : '44px');
+    await expectLibraryFan(page);
     const grid = page.locator('.gallery-grid');
     await expect(grid.locator(':scope > li')).toHaveCount(TEMPLATES.length);
     await expect.poll(() => measureChromeGrid(grid), 'Chrome grid geometry.')
@@ -481,6 +482,36 @@ for (const locale of ['vi', 'en'] as const) {
       }
     });
   }
+}
+
+for (const locale of ['vi', 'en'] as const) {
+  for (const width of [1023, 1024] as const) {
+    test(`the Library fan shows from 64rem and clears the heading at ${width} `
+      + `px (${locale})`, async ({ page, baseURL }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await page.context().addCookies([
+        { name: 'aboutme-locale', value: locale, url: baseURL! },
+      ]);
+      expect((await page.goto('/templates'))?.status()).toBe(200);
+      await page.evaluate(() => document.fonts.ready);
+      await expectLibraryFan(page);
+    });
+  }
+}
+
+for (const [kind, width, target, styles] of [
+  ['under the heading', 1024, 'gallery-header', { 'padding-right': '56px' }],
+  ['inside the panel edge', 1024, 'gallery-fan', { right: '40px' }],
+  ['below 64rem', 1023, 'gallery-fan', { display: 'flex' }],
+] as const) {
+  mutationTest(`chrome rejects the Library fan ${kind}`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    expect((await page.goto('/templates'))?.status()).toBe(200);
+    await page.evaluate(() => document.fonts.ready);
+    await proveMutation(() => expectLibraryFan(page),
+      () => applyStyleMutation(page.getByTestId(target), styles),
+      'Library fan geometry.');
+  });
 }
 
 const MUTATION_MESSAGES = {

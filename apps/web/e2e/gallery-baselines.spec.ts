@@ -105,8 +105,8 @@ async function assertLibrarySheet(
     : 'rgb(27, 20, 25)');
   await expect(sheet.locator('[data-role="all"]')).toHaveCSS(
     'background-color', theme === 'light'
-      ? 'rgb(89, 75, 173)'
-      : 'rgb(114, 103, 192)',
+      ? 'rgb(26, 22, 80)'
+      : 'rgb(211, 202, 208)',
   );
   await expect(sheet).toMatchAriaSnapshot(`- dialog "${heading}":
   - heading "${heading}" [level=2]`);
@@ -310,9 +310,11 @@ for (const theme of ['light', 'dark'] as const) {
         }
         const colors = {
           background: theme === 'light'
-            ? 'rgb(89, 75, 173)'
-            : 'rgb(114, 103, 192)',
-          text: 'rgb(255, 255, 255)',
+            ? 'rgb(26, 22, 80)'
+            : 'rgb(211, 202, 208)',
+          text: theme === 'light'
+            ? 'rgb(255, 255, 255)'
+            : 'rgb(14, 10, 13)',
         };
         for (const role of ['backend', 'frontend']) {
           const selected = fields.locator(`[data-role="${role}"]`);
@@ -327,9 +329,7 @@ for (const theme of ['light', 'dark'] as const) {
             'border-top-color', colors.background,
           );
           await expect(selected).toHaveCSS('color', colors.text);
-          await expect(selected).toHaveCSS(
-            'font-weight', width === 390 ? '600' : '500',
-          );
+          await expect(selected).toHaveCSS('font-weight', '600');
         }
         if (width === 1440) {
           const divider = fields.locator('.library-divider');

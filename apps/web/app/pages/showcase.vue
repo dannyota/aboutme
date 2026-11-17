@@ -378,7 +378,6 @@ useHead(computed(() => ({
   border: 1px solid var(--border);
   border-radius: var(--radius-dialog);
   background: var(--card);
-  box-shadow: var(--shadow-product);
 }
 
 .showcase-skeleton__image {

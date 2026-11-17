@@ -108,7 +108,6 @@ const imageFailed = ref(false);
   border: 1px solid var(--border);
   border-radius: var(--radius-dialog);
   background: var(--card);
-  box-shadow: var(--shadow-product);
   transition: transform 200ms ease-out;
 }
 
@@ -177,7 +176,7 @@ const imageFailed = ref(false);
   height: 24px;
   padding: 0 10px;
   border-radius: 9999px;
-  background: var(--surface-blue);
+  background: var(--surface-mist);
   color: var(--foreground);
   font-size: 0.75rem;
   font-weight: 600;

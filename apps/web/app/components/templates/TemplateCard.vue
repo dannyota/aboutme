@@ -42,7 +42,7 @@ watch(() => props.locale, load);
   >
     <img
       v-if="image !== undefined"
-      class="block h-auto w-full rounded-[var(--radius-sheet)] bg-white
+      class="block h-auto w-full rounded-[var(--radius-sheet)] bg-paper
         shadow-[var(--shadow-paper)] transition-transform duration-200
         ease-out group-hover:-translate-y-1 motion-reduce:transition-none
         motion-reduce:group-hover:translate-y-0"
@@ -63,7 +63,7 @@ watch(() => props.locale, load);
       :lng="locale"
     />
     <span class="grid gap-1">
-      <span class="text-base font-semibold text-foreground">
+      <span class="text-md font-bold text-foreground">
         {{ template.name }}
       </span>
       <span class="line-clamp-2 text-sm text-muted-foreground">
@@ -72,11 +72,11 @@ watch(() => props.locale, load);
     </span>
     <span
       :class="template.sampleTags
-        ? 'rounded-full bg-surface-blue px-2.5 py-0.5 text-xs font-medium '
-          + 'text-foreground'
-        : 'rounded-full bg-muted px-2.5 py-0.5 text-xs text-muted-foreground'"
+        ? 'border-transparent bg-surface-mist text-foreground'
+        : 'border-border bg-transparent text-muted-foreground'"
       :data-tag-kind="template.sampleTags ? 'sample' : 'illustrative'"
-      class="justify-self-start"
+      class="justify-self-start rounded-full border px-2.5 py-0.5 text-xs
+        font-semibold"
       data-template-tag
     >{{ template.sampleTags?.[locale]?.[locale] ?? illustrative }}</span>
   </NuxtLink>

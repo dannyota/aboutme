@@ -180,24 +180,24 @@ function onTemplate(value: string): void {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--border);
-  background: var(--card);
+  border: 1px solid var(--control);
+  background: transparent;
   color: var(--foreground);
   font-size: 0.875rem;
   font-weight: 500;
   white-space: nowrap;
-  transition: background-color 150ms, border-color 150ms;
+  transition: background-color 150ms, border-color 150ms, color 150ms;
 }
 
 .showcase-filters :deep(.showcase-option:not([data-state="on"]):hover) {
-  background: var(--surface-indigo);
+  background: var(--accent);
 }
 
 .showcase-filters :deep(.showcase-option[aria-pressed="true"]),
 .showcase-filters :deep(.showcase-option[data-state="on"]) {
-  border-color: var(--primary);
-  background: var(--primary);
-  color: var(--primary-foreground);
+  border-color: var(--foreground);
+  background: var(--foreground);
+  color: var(--background);
   font-weight: 600;
 }
 
@@ -264,7 +264,7 @@ function onTemplate(value: string): void {
   height: 8px;
   margin-left: auto;
   border-radius: 9999px;
-  background: var(--primary);
+  background: var(--foreground);
 }
 
 .showcase-template {

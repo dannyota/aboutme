@@ -354,3 +354,49 @@ export async function placeAuthArtworkOverPoints(
     });
   };
 }
+
+export async function expectLibraryFan(page: Page): Promise<void> {
+  const message = 'Library fan geometry.';
+  const fan = page.getByTestId('gallery-fan');
+  await expect(fan, message).toHaveAttribute('aria-hidden', 'true');
+  const read = await page.getByTestId('gallery-header').evaluate((panel) => {
+    const box = (node: Element) => {
+      const rect = node.getBoundingClientRect();
+      return {
+        left: rect.left, right: rect.right, top: rect.top,
+        bottom: rect.bottom,
+      };
+    };
+    const art = panel.querySelector('[data-testid="gallery-fan"]')!;
+    return {
+      wide: innerWidth >= 1024,
+      shown: getComputedStyle(art).display !== 'none',
+      clipped: getComputedStyle(panel).overflowX === 'hidden'
+        && getComputedStyle(panel).overflowY === 'hidden',
+      panel: box(panel),
+      sheets: [...art.querySelectorAll('[data-fan-sheet]')].map(box),
+      text: [...panel.querySelectorAll('h1, p')].map(box),
+      overflow: document.documentElement.scrollWidth
+        - document.documentElement.clientWidth,
+    };
+  });
+  expect(read.overflow, message).toBeLessThanOrEqual(0);
+  if (!read.wide) {
+    expect(read.shown, message).toBe(false);
+    return;
+  }
+  expect(read.shown, message).toBe(true);
+  expect(read.clipped, message).toBe(true);
+  expect(read.sheets, message).toHaveLength(3);
+  expect(Math.max(...read.sheets.map((sheet) => sheet.right)), message)
+    .toBeGreaterThan(read.panel.right + 1);
+  for (const sheet of read.sheets) {
+    expect(sheet.left, message).toBeGreaterThan(read.panel.left);
+    expect(sheet.top, message).toBeLessThan(read.panel.bottom - 1);
+    for (const text of read.text) {
+      const intersects = sheet.left < text.right && text.left < sheet.right
+        && sheet.top < text.bottom && text.top < sheet.bottom;
+      expect(intersects, message).toBe(false);
+    }
+  }
+}

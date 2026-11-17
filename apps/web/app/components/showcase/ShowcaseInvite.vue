@@ -12,7 +12,7 @@ const props = defineProps<{
 }>();
 const copy = computed(() => showcaseCopy[props.locale]);
 const buttonClass = cn(
-  buttonVariants({ variant: 'default' }),
+  buttonVariants({ variant: 'outline' }),
   'h-11 justify-self-start px-4 text-[15px] font-semibold',
 );
 </script>
@@ -44,9 +44,8 @@ const buttonClass = cn(
   align-content: center;
   gap: 12px;
   padding: 20px 16px;
-  border: 1px dashed var(--input);
-  border-radius: var(--radius-dialog);
-  background: var(--surface-sand);
+  border-radius: var(--radius-card);
+  background: var(--surface-mist);
 }
 
 @media (width >= 641px) {
