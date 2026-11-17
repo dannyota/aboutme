@@ -19,7 +19,7 @@ export function homeStructuredData(description: string): string {
         '@id': `${url}#organization`,
         'name': siteName,
         url,
-        'logo': `${siteOrigin}/apple-touch-icon-v3.png`,
+        'logo': `${siteOrigin}/apple-touch-icon-v4.png`,
         'sameAs': [repositoryUrl],
       },
       {

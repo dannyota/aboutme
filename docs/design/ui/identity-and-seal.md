@@ -5,22 +5,47 @@ The logo, the public seal, and the state marks. Part of the
 
 ## Logo
 
-The logo is the seal. The mark is a stamp in seal red: a thick outer ring, a
-hairline inner ring, and a single-story `a`, tilted −8° like the public stamp.
-The wordmark is lowercase `aboutme.vn` in the text color, and only the dot
-before `vn` is seal red. Strokes and a filled-circle dot draw the letters
-without a font, and nothing uses a gradient or an id.
+The logo is the seal. The mark is a stamp in the lotus red, the color that means
+public: a thick outer ring, a hairline inner ring, and a single-story `a`,
+tilted −8° like the public stamp. The wordmark is lowercase `aboutme.vn` in the
+text color, and only the dot before `vn` is red. Strokes and a filled-circle dot
+draw the letters without a font, and nothing uses a gradient or an id.
 
 `AppLogo` renders it inline at 24, 32, or 48 px high, or as the mark alone, as
 one image named “aboutme.vn”. At 24 px the hairline inner ring drops out. The
-mark and the dot take `--seal-text`, so they lift to `#FF6B8A` in dark theme;
-the link-preview card pins them to `#CC2649` on its white ground. Under
-`forced-colors: active`, they use the text color. `public/favicon-v3.svg` is the
-mark with the inner ring dropped, and it follows the system color scheme.
-Home-screen and install icons are the mark on a white square; icon file names
-carry a version so browsers fetch a changed icon. Brand files, banners, and the
-Open Graph images, with where each is used and how to re-render them, are in
-[`docs/brand/`](../../brand/README.md).
+mark and the dot take `--logo-mark` (`#DE1B5A` light, `#E2788F` dark) and
+`--logo-mark-inverse` (`#FF7AA2`) on indigo grounds; on the home hero the whole
+logo is white. The link-preview card pins them to `#DE1B5A` on its white ground.
+Under `forced-colors: active`, they use the text color.
+
+Brand files carry a version in their names so browsers and crawlers fetch a
+changed file; the previous set stays in `public/`, unlinked, for one release.
+The current set:
+
+- `favicon-v4.svg`: the mark with the inner ring dropped, `#DE1B5A`, and
+  `#E2788F` under `prefers-color-scheme: dark`.
+- `icon-32-v4.png`, `icon-192-v4.png`, `icon-512-v4.png`,
+  `apple-touch-icon-v4.png`: the red mark on a white square (owner, 2026-11-17).
+  `site-v4.webmanifest` sets `theme_color` and `background_color` to `#ffffff`.
+  The MCP server's `serverInfo` names the same files.
+- `og-image-v8.jpg` (Vietnamese) and `og-image-v7-en.jpg`: white ground, the
+  logo, the headline in indigo ink in Plus Jakarta Sans 800 at line height 1.3,
+  and a chàm (`#594BAD`) panel holding a tilted white sheet with the red CÔNG
+  KHAI or PUBLIC ticket and a coin. No blue.
+- README banners and the repository social preview use the same parts: the light
+  banner on white, the dark banner on `#0E0A0D` with `#D3CAD0` text and the mark
+  in `#E2788F`. Logo, stamp, wordmark and icon files take `#DE1B5A` for strokes
+  on white and `#C7134D` for stamp words; `#26409C` and `#CC2649` leave the
+  brand files.
+
+The link-preview card's pin change raises the card layout version from 2 to 3,
+in `cardLayout.ts` and `previewcard/card.go` together; the bounded background
+sweep then rebuilds every live card. Account emails take `#DE1B5A` for the mark
+and dot. The production maintenance page carries its own copy of the tokens
+(ground, ink, card, muted, border, ring, link, seal, mist; light and dark) from
+the [token page](typography-and-tokens.md#color), and its CSP hashes are
+recomputed from the page at build. Brand sources, where each is used, and how to
+re-render them are in [`docs/brand/`](../../brand/README.md).
 
 ## Seal and state marks
 

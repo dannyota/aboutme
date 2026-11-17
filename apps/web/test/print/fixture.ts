@@ -24,13 +24,12 @@ export const printEnvelope = (): PrintEnvelope => ({
   )),
 });
 
-/** A valid link-preview card envelope, as Go's printsnapshot emits it. */
 export const cardEnvelope = (): PrintCardEnvelope => ({
   version: 1,
   kind: 'card',
   resumeId: RESUME_ID,
   card: {
-    layoutVersion: 2,
+    layoutVersion: 3,
     lng: 'vi',
     slug: 'nguyen-an',
     name: 'Nguyễn Văn An',

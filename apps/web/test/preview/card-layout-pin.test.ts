@@ -18,6 +18,7 @@ const LAYOUT_FILES = [
 const PINNED: Record<number, string> = {
   1: 'f2c881e2aa99b538f000099b19845cc00badae743c96cffb69d4ee736cfb2991',
   2: 'c514fd4f26c163997bdbaf2c33f2c01a1c03254caca69621ee77fe07b26a0890',
+  3: '415c9de2fce9fd10fa209f640648dceddc86355cc74e764c59bc205fca979439',
 };
 
 describe('card layout pin', () => {

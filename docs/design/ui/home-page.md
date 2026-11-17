@@ -23,7 +23,7 @@ alone and leaves a coherent look.
 | 6     | A footer shared by the public pages, the MCP guide, the legal pages, the verify page, and the error page | Next               |
 | 7     | Settings, views, the projects workspace, LinkedIn import, and removing the retired token aliases         | After 6            |
 | 8     | The public page bar and public project pages                                                             | After 2            |
-| 9     | Icons, Open Graph images, brand art, the link-preview card pin, the maintenance page, and the mail color | After 2            |
+| 9     | Icons, Open Graph images, brand art, the link-preview card pin, the maintenance page, and the mail color | Next               |
 
 Until change 2 ships, the home route scopes its tokens and the chrome typeface
 on the root element, and leaving the home page changes ground, ink, primary
@@ -105,7 +105,8 @@ Shapes are unchanged (`AppLogo`, `favicon-v3.svg` geometry).
 | Indigo footer or panel `#1A1650` | `#FFFFFF`          | `#FF7AA2` (6.71:1)           |
 
 On the hero panel the whole logo is white. Favicon stroke: `#DE1B5A`, `#E2788F`
-under `prefers-color-scheme: dark`.
+under `prefers-color-scheme: dark`; the [brand files](identity-and-seal.md#logo)
+list the current set.
 
 ## Layout
 

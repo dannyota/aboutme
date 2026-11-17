@@ -130,8 +130,8 @@ describe('site page search metadata', () => {
         );
         expect(meta('meta[property="og:image"]')).toBe(
           locale === 'vi'
-            ? 'https://aboutme.vn/og-image-v7.jpg'
-            : 'https://aboutme.vn/og-image-v6-en.jpg',
+            ? 'https://aboutme.vn/og-image-v8.jpg'
+            : 'https://aboutme.vn/og-image-v7-en.jpg',
         );
         expect(meta('meta[name="twitter:card"]')).toBe('summary_large_image');
         expect(document.head.querySelector('meta[name="robots"]')).toBeNull();
@@ -167,7 +167,7 @@ describe('site page search metadata', () => {
       inLanguage: ['vi', 'en'],
     });
     expect(graph[1]).toMatchObject({
-      logo: 'https://aboutme.vn/apple-touch-icon-v3.png',
+      logo: 'https://aboutme.vn/apple-touch-icon-v4.png',
       sameAs: ['https://github.com/dannyota/aboutme'],
     });
     expect(graph[2]).toMatchObject({

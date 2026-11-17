@@ -1,4 +1,4 @@
-export const CARD_LAYOUT_VERSION = 2;
+export const CARD_LAYOUT_VERSION = 3;
 
 export const CARD_WIDTH = 1200;
 

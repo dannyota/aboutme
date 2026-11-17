@@ -52,3 +52,17 @@ func TestAuthMailFooterByMode(t *testing.T) {
 		})
 	}
 }
+
+func TestWordmarkDotTakesTheLogoRed(t *testing.T) {
+	const dot = `aboutme<span style="color:#DE1B5A;">.</span>vn`
+	for kind := range templates() {
+		payload := Payload{To: "alice@example.com", Link: verifyLinkPrefix + "token", OccurredAt: "2026-10-11T09:00:00Z"}
+		message := buildMessage(kind, payload, "")
+		if !strings.Contains(message.HTMLBody, dot) {
+			t.Errorf("%s: wordmark dot is not #DE1B5A", kind)
+		}
+		if strings.Contains(strings.ToUpper(message.HTMLBody), "#CC2649") {
+			t.Errorf("%s: retired seal red remains", kind)
+		}
+	}
+}

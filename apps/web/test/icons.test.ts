@@ -44,19 +44,19 @@ describe('application icon links', () => {
         }))).toEqual([
           {
             rel: 'icon', type: 'image/png', sizes: '32x32',
-            href: '/icon-32-v3.png',
+            href: '/icon-32-v4.png',
           },
           {
             rel: 'icon', type: 'image/svg+xml', sizes: null,
-            href: '/favicon-v3.svg',
+            href: '/favicon-v4.svg',
           },
           {
             rel: 'apple-touch-icon', type: null, sizes: '180x180',
-            href: '/apple-touch-icon-v3.png',
+            href: '/apple-touch-icon-v4.png',
           },
           {
             rel: 'manifest', type: null, sizes: null,
-            href: '/site-v3.webmanifest',
+            href: '/site-v4.webmanifest',
           },
         ]);
       });
@@ -82,8 +82,8 @@ describe('application icon links', () => {
     });
 });
 
-describe('site-v3.webmanifest', () => {
-  const manifestPath = join(publicDir, 'site-v3.webmanifest');
+describe('site-v4.webmanifest', () => {
+  const manifestPath = join(publicDir, 'site-v4.webmanifest');
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as {
     name: string;
     short_name: string;
@@ -102,8 +102,8 @@ describe('site-v3.webmanifest', () => {
   it('names the app and matches the brand colors', () => {
     expect(manifest.name).toBe('aboutme.vn');
     expect(manifest.short_name).toBe('aboutme.vn');
-    expect(manifest.theme_color).toBe('#26409c');
-    expect(manifest.background_color).toBe('#f9f8f5');
+    expect(manifest.theme_color).toBe('#ffffff');
+    expect(manifest.background_color).toBe('#ffffff');
     expect(manifest.display).toBe('browser');
     expect(manifest.start_url).toBe('/');
   });
@@ -126,9 +126,9 @@ describe('site-v3.webmanifest', () => {
     });
 });
 
-describe('apple-touch-icon-v3.png', () => {
+describe('apple-touch-icon-v4.png', () => {
   it('is a 180x180 truecolor PNG with no palette and no alpha', () => {
-    const bytes = readFileSync(join(publicDir, 'apple-touch-icon-v3.png'));
+    const bytes = readFileSync(join(publicDir, 'apple-touch-icon-v4.png'));
     expect(bytes.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a');
     expect(bytes.subarray(12, 16).toString('ascii')).toBe('IHDR');
     expect(bytes.readUInt32BE(16)).toBe(180);
@@ -138,6 +138,18 @@ describe('apple-touch-icon-v3.png', () => {
     // PNG spec: color type 2 is truecolor RGB, with no alpha or palette.
     expect(bitDepth).toBe(8);
     expect(colorType).toBe(2);
+  });
+});
+
+describe('favicon-v4.svg', () => {
+  it('strokes the mark in the logo red, lighter under a dark scheme', () => {
+    const svg = readFileSync(join(publicDir, 'favicon-v4.svg'), 'utf8')
+      .toLowerCase();
+    expect(svg).toMatch(/(?:^|[>}])\s*g\s*\{\s*stroke:\s*#de1b5a/u);
+    expect(svg).toMatch(
+      /prefers-color-scheme:\s*dark\)\s*\{\s*g\s*\{\s*stroke:\s*#e2788f/u,
+    );
+    expect(svg).not.toMatch(/#26409c|#cc2649|#ff6b8a/u);
   });
 });
 

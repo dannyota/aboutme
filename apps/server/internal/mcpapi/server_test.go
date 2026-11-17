@@ -138,9 +138,9 @@ func TestServer_InitializeResultCarriesBrandedServerInfo(t *testing.T) {
 		t.Fatalf("serverInfo websiteUrl = %q, want %q", info.WebsiteURL, bearerPublicOrigin)
 	}
 	want := []mcp.Icon{
-		{Source: bearerPublicOrigin + "/icon-192-v3.png", MIMEType: "image/png", Sizes: []string{"192x192"}},
-		{Source: bearerPublicOrigin + "/icon-512-v3.png", MIMEType: "image/png", Sizes: []string{"512x512"}},
-		{Source: bearerPublicOrigin + "/favicon-v3.svg", MIMEType: "image/svg+xml", Sizes: []string{"any"}},
+		{Source: bearerPublicOrigin + "/icon-192-v4.png", MIMEType: "image/png", Sizes: []string{"192x192"}},
+		{Source: bearerPublicOrigin + "/icon-512-v4.png", MIMEType: "image/png", Sizes: []string{"512x512"}},
+		{Source: bearerPublicOrigin + "/favicon-v4.svg", MIMEType: "image/svg+xml", Sizes: []string{"any"}},
 	}
 	if !reflect.DeepEqual(info.Icons, want) {
 		t.Fatalf("serverInfo icons = %#v, want %#v", info.Icons, want)

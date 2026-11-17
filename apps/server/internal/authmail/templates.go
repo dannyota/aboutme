@@ -8,7 +8,7 @@ import (
 
 const (
 	colorInk    = "#192024"
-	colorSeal   = "#CC2649"
+	colorSeal   = "#DE1B5A"
 	colorDesk   = "#EDEFEB"
 	colorMuted  = "#5B6470"
 	colorRule   = "#DADDD6"

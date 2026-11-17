@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	LayoutVersion  = 2
+	LayoutVersion  = 3
 	MaxPNGBytes    = 524_288
 	VersionLength  = 16
 	fallbackAccent = "#000000"

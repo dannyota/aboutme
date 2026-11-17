@@ -72,6 +72,36 @@ bash "$maintenance_render" "$maintenance_html" >/dev/null ||
 want_csp=$(bash "$maintenance_render" "$maintenance_html" |
   grep '^header Content-Security-Policy' | sed -E 's/^header Content-Security-Policy "(.*)"$/\1/')
 
+maintenance_tokens() {
+  awk -v from="$1" 'index($0, from) { armed = 1 }
+    armed && !on && index($0, ":root {") { on = 1; next }
+    on && index($0, "}") { exit }
+    on' "$maintenance_html"
+}
+want_maintenance_tokens() {
+  local scheme=$1 block pair name
+  block=$(maintenance_tokens "$2")
+  shift 2
+  for pair in "$@"; do
+    name=${pair%%=*}
+    if [[ $(grep -cE -- "^ *--$name:" <<<"$block") != 1 ]] || ! grep -qixE -- " *--$name: ${pair#*=};" <<<"$block"; then
+      echo "maintenance.html: $scheme --$name is not ${pair#*=}" >&2
+      exit 1
+    fi
+  done
+}
+want_maintenance_tokens light '<style>' ground=#ffffff ink=#1a1650 card=#ffffff muted=#55517d \
+  border=#e3e0f2 ring=#1a1650 link=#4336c9 seal=#de1b5a mist=#f1effa
+want_maintenance_tokens dark 'prefers-color-scheme: dark' ground=#0e0a0d ink=#d3cad0 card=#1b1419 \
+  muted=#a3959f border=#2e242c ring=#cdbcd9 link=#b59bdb seal=#e2788f mist=#151015
+for retired in --blue --indigo --jade --aurora --glow 'gradient(' '#26409c' '#4a4dbf' '#0f7c6e' \
+  '#8f6f0d' '#cc2649' '#ff6b8a' '#8fa6f0' '#9a9cff' '#5fcfbb' '#e6c35f' '#101b3f'; do
+  if grep -qiF -- "$retired" "$maintenance_html"; then
+    echo "maintenance.html still uses the retired $retired" >&2
+    exit 1
+  fi
+done
+
 python3 -B "$root/deploy/caddy/production/test/module_download_test.py"
 python3 -B "$root/deploy/caddy/production/test/waf_stderr_diagnostic_test.py"
 (cd "$root/deploy/caddy/production/build" && go test ./...)

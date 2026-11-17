@@ -192,6 +192,7 @@ html[data-theme="dark"] {
   --color-coin: var(--coin);
   --color-coin-edge: var(--coin-edge);
   --color-coin-ink: var(--coin-ink);
+  --color-logo-mark: var(--logo-mark);
   --color-chart-bar: var(--chart-bar);
   --color-overlay: var(--overlay);
   --color-paper: var(--paper);

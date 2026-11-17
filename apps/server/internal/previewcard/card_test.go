@@ -131,3 +131,10 @@ func TestNameWithContactDataIsLeftOff(t *testing.T) {
 		t.Fatalf("card name, headline = %q, %q, want both left off", card.Name, card.Headline)
 	}
 }
+
+func TestLayoutVersionMatchesTheWebCard(t *testing.T) {
+	t.Parallel()
+	if LayoutVersion != 3 {
+		t.Fatalf("LayoutVersion = %d, want 3", LayoutVersion)
+	}
+}

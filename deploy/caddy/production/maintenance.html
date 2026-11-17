@@ -10,61 +10,33 @@
     <noscript><meta http-equiv="refresh" content="60" /></noscript>
     <title>Đang cập nhật · aboutme.vn</title>
     <style>
-      /* Application tokens (DESIGN.md, ADR 0020), copied
-         because this page cannot load the app's CSS. */
       :root {
-        --bg: #f9f8f5;
-        --fg: #101b3f;
-        --card: #fff;
-        --muted: #5c6178;
-        --border: #e5e1d6;
-        --ring: #26409c;
-        --link: #23399a;
-        --blue: #26409c;
-        --indigo: #4a4dbf;
-        --jade: #0f7c6e;
-        --seal: #cc2649;
-        --surface: #eceef7;
+        --ground: #ffffff;
+        --ink: #1a1650;
+        --card: #ffffff;
+        --muted: #55517d;
+        --border: #e3e0f2;
+        --ring: #1a1650;
+        --link: #4336c9;
+        --seal: #de1b5a;
+        --mist: #f1effa;
         --paper: #fff;
         --paper-line: #e4e7e5;
         --paper-ink: #171a18;
-        --shadow: 0 1px 2px #101b3f0f, 0 12px 40px #282c5017;
         --shadow-paper: 0 1px 2px #171a180f, 0 12px 32px #171a181a;
-        --aurora:
-          radial-gradient(44rem 30rem at 8% -4rem, #26409c14, #0000 70%),
-          radial-gradient(38rem 28rem at 96% 0, #4a4dbf0d, #0000 70%),
-          radial-gradient(40rem 28rem at 0% 40rem, #0f7c6e0d, #0000 70%),
-          radial-gradient(34rem 24rem at 100% 44rem, #8f6f0d0f, #0000 70%);
-        --glow:
-          radial-gradient(closest-side at 30% 34%, #0f7c6e29, #0000),
-          radial-gradient(closest-side at 70% 40%, #26409c2e, #0000),
-          radial-gradient(closest-side at 50% 72%, #8f6f0d29, #0000);
       }
       @media (prefers-color-scheme: dark) {
         :root {
-          --bg: #0c1020;
-          --fg: #f3f1ec;
-          --card: #141a2e;
-          --muted: #a5abbf;
-          --border: #e6e1d221;
-          --ring: #8fa6f0;
-          --link: #a3b6f5;
-          --blue: #8fa6f0;
-          --indigo: #9a9cff;
-          --jade: #5fcfbb;
-          --seal: #ff6b8a;
-          --surface: #151d36;
-          --shadow: 0 1px 2px #0006, 0 12px 40px #00000073;
+          --ground: #0e0a0d;
+          --ink: #d3cad0;
+          --card: #1b1419;
+          --muted: #a3959f;
+          --border: #2e242c;
+          --ring: #cdbcd9;
+          --link: #b59bdb;
+          --seal: #e2788f;
+          --mist: #151015;
           --shadow-paper: 0 1px 2px #0006, 0 12px 32px #00000080;
-          --aurora:
-            radial-gradient(44rem 30rem at 8% -4rem, #3c5ac82e, #0000 70%),
-            radial-gradient(38rem 28rem at 96% 0, #5a5cdc1f, #0000 70%),
-            radial-gradient(40rem 28rem at 0% 40rem, #28aa9614, #0000 70%),
-            radial-gradient(34rem 24rem at 100% 44rem, #d2963c12, #0000 70%);
-          --glow:
-            radial-gradient(closest-side at 30% 34%, #5fcfbb24, #0000),
-            radial-gradient(closest-side at 70% 40%, #8fa6f038, #0000),
-            radial-gradient(closest-side at 50% 72%, #e6c35f1f, #0000);
         }
       }
       * {
@@ -76,9 +48,8 @@
         flex-direction: column;
         min-height: 100vh;
         min-height: 100dvh;
-        background: var(--bg) no-repeat;
-        background-image: var(--aurora);
-        color: var(--fg);
+        background: var(--ground);
+        color: var(--ink);
         font:
           1rem/1.6 "Be Vietnam Pro",
           Inter,
@@ -87,7 +58,6 @@
         -webkit-font-smoothing: antialiased;
         overflow-x: hidden;
       }
-      /* Only the active language shows; without JavaScript that is Vietnamese. */
       html[lang="en"] .vi,
       html:not([lang="en"]) .en {
         display: none;
@@ -142,7 +112,7 @@
       }
       button:hover,
       button[aria-pressed="true"] {
-        color: var(--fg);
+        color: var(--ink);
       }
       button[aria-pressed="true"] {
         text-decoration: underline 2px;
@@ -165,7 +135,7 @@
         gap: 0.5rem;
         padding: 0.25rem 0.75rem;
         border-radius: 999px;
-        background: var(--surface);
+        background: var(--mist);
         color: var(--link);
         font-size: 0.8125rem;
         font-weight: 600;
@@ -175,7 +145,7 @@
         width: 0.5rem;
         height: 0.5rem;
         border-radius: 50%;
-        background: var(--blue);
+        background: var(--link);
       }
       h1 {
         margin-top: 1.25rem;
@@ -187,10 +157,7 @@
       }
       h1 em {
         font-style: normal;
-        background: linear-gradient(90deg, var(--blue), var(--indigo));
-        -webkit-background-clip: text;
-        background-clip: text;
-        color: transparent;
+        color: var(--link);
       }
       .lead {
         max-width: 32rem;
@@ -205,7 +172,6 @@
         border: 1px solid var(--border);
         border-radius: 14px;
         background: var(--card);
-        box-shadow: var(--shadow);
       }
       .status {
         display: flex;
@@ -216,12 +182,11 @@
       }
       .status i {
         flex: none;
-        background: var(--jade);
-        box-shadow: 0 0 0 4px color-mix(in srgb, var(--jade) 20%, transparent);
+        background: var(--muted);
+        box-shadow: 0 0 0 4px var(--mist);
       }
       .done .status i {
-        background: var(--blue);
-        box-shadow: 0 0 0 4px var(--surface);
+        background: var(--link);
       }
       .slow {
         margin-top: 0.75rem;
@@ -239,12 +204,6 @@
         width: 8rem;
         aspect-ratio: 210 / 297;
         pointer-events: none;
-      }
-      .art::before {
-        content: "";
-        position: absolute;
-        inset: -25% -40%;
-        background: var(--glow);
       }
       .sheet {
         position: absolute;
@@ -316,10 +275,6 @@
         }
       }
       @media (forced-colors: active) {
-        h1 em {
-          background: none;
-          color: CanvasText;
-        }
         .seal {
           color: CanvasText;
         }
@@ -430,8 +385,6 @@
       <p class="sr" id="live" role="status" aria-live="polite"></p>
     </main>
     <script>
-      // Poll /readyz on this origin and reload only after a 200. The noscript
-      // refresh covers visitors without JavaScript.
       (() => {
         const d = document;
         const $ = (id) => d.getElementById(id);
@@ -451,11 +404,9 @@
             back: "aboutme.vn is back. Reloading…",
           },
         };
-        // The app's locale cookie: only "vi" and "en" count, else Vietnamese.
         const saved = /(?:^|;\s*)aboutme-locale=(vi|en)(?:;|$)/.exec(d.cookie);
         let lang = saved ? saved[1] : "vi";
 
-        // sessionStorage keeps the start time across reloads.
         const ss = (k, v) => {
           try {
             if (v === undefined) return sessionStorage.getItem(k);
@@ -474,7 +425,6 @@
         let busy = false;
         let done = false;
 
-        // Every 10s for two minutes, then slower up to 60s, with jitter.
         const gap = () => {
           const e = Date.now() - start;
           const g = e < 12e4 ? 1e4 : e < 3e5 ? 2e4 : e < 6e5 ? 3e4 : 6e4;
@@ -505,7 +455,6 @@
           d.querySelectorAll("[data-l]").forEach((b) =>
             b.setAttribute("aria-pressed", String(b.dataset.l === l)),
           );
-          // Same attributes the app writes, so it opens in this language.
           if (save)
             d.cookie = `aboutme-locale=${l}; Path=/; Max-Age=31536000; SameSite=Lax`;
           if (done) $("live").textContent = T[l].back;
