@@ -23,6 +23,13 @@ Read this file for TypeScript, Nuxt, renderer, source-manifest, or display-check
   the exact-commit candidate artifact before copying assets and manifest.
   Source/output hashes detect stale assets without pixel comparison. Product
   images must not be deleted with test baselines.
+- An OpenAPI change regenerates the client and refreshes the template-pages
+  manifest in the same change: copy a hosted `template-pages.yml` candidate, or
+  run `scripts/validate-template-pages.mts --refresh-hashes` only when the
+  change cannot reach rendered output (paths, operations or descriptions); a
+  change to a schema the renderer reads needs the hosted run. The source
+  closure includes `app/api/generated/openapi.ts` on purpose, because SFC
+  macros such as `defineProps` compile imported types.
 - Eight optional sanitized review images are non-blocking and retained for 14
   days under the display design. Failed cases use a closed fixture allowlist and
   result attachments for bounded diagnostics. Preserve source/browser metadata;
