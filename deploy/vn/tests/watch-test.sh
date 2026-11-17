@@ -5,9 +5,10 @@ repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 watch_source=$repo_root/deploy/vn/host/bin/watch.sh
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
-export WATCH_TEST_REAL_SLEEP
+export WATCH_TEST_REAL_SLEEP WATCH_TEST_REAL_DATE WATCH_TEST_PID=$$ WATCH_TEST_CLOCK=$work
 WATCH_TEST_REAL_SLEEP=$(command -v sleep)
-mkdir -p "$work/bin" "$work/lib"
+WATCH_TEST_REAL_DATE=$(command -v date)
+mkdir -p "$work/bin" "$work/lib" "$work/clock-reads"
 sed -e "s|/var/lib/aboutme/fence.lock|$work/fence.lock|g" \
   -e "s|/run/aboutme/crowdsec-retention.lock|$work/retention.lock|g" \
   -e 's/flock -s -w 30 /flock -s -w 0 /' \
@@ -110,8 +111,23 @@ esac
 STUB
 cat >"$work/bin/date" <<'STUB'
 #!/usr/bin/env bash
+if ! [[ $# -ge 3 && $1 == -u && $2 == -d && $3 =~ ^@[0-9]+$ ]]; then
+  sender='' pid=$PPID
+  while ((pid > 1 && pid != WATCH_TEST_PID)) && stat=$(<"/proc/$pid/stat"); do
+    read -r -a fields <<<"${stat##*) }"
+    mapfile -d '' -t args <"/proc/$pid/cmdline"
+    for arg in "${args[@]}"; do [[ $arg != */alert-telegram.sh ]] || sender=$pid-${fields[19]}; done
+    pid=${fields[1]}
+  done
+  if [[ -n $sender ]] && ! (set -o noclobber; : >"$WATCH_TEST_CLOCK/clock-reads/$sender") 2>/dev/null; then
+    printf '%s\n' "$*" >>"$WATCH_TEST_CLOCK/clock-read-twice"
+    echo 'the sender read the clock twice' >&2; exit 1
+  fi
+fi
 case $* in
   +%s) printf '2000000000\n' ;;
+  '-u +%s') printf '%s\n' "${WATCH_TEST_NOW:-1893553445}" ;;
+  '-u -d @'[0-9]*' +%F') exec "$WATCH_TEST_REAL_DATE" "$@" ;;
   '-u +%F') printf '2030-01-02\n' ;;
   '-u +%FT%TZ') printf '2030-01-02T03:04:05Z\n' ;;
   -R) printf 'Wed, 02 Jan 2030 03:04:05 +0000\n' ;;
@@ -251,8 +267,60 @@ ABOUTME_ALERT_TEST_ROOT=$work/alert-state \
 cp "$work/alert-state/alert-transport" "$work/lib/alert-transport"
 ABOUTME_ALERT_TEST_ROOT=$work/alert-state WATCH_TEST_MESSAGE=$work/telegram-message \
   WATCH_TEST_FAILED_UNITS=$work/failed-units run_watch "$work/host-checks.log" "$work/telegram.alerts"
-grep -qF 'failed units: 101' "$work/telegram-message"
-grep -qF 'omitted units: 81' "$work/telegram-message"
+telegram_text() {
+  python3 -I - "$1" <<'PY'
+import json, re, sys
+for line in open(sys.argv[1], encoding="utf-8"):
+    if line.startswith('data = "'):
+        body = json.loads(re.sub(r'\\(.)', r'\1', line[len('data = "'):].rstrip("\n")[:-1]))
+        assert body["parse_mode"] == "HTML" and body["link_preview_options"] == {"is_disabled": True}
+        sys.stdout.buffer.write(body["text"].encode())
+        break
+else:
+    sys.exit("no Telegram request body")
+PY
+}
+listed=
+for ((i=0; i<7; i++)); do printf -v listed '%s%saboutme-long-failed-unit-%03d.service' "$listed" "${listed:+, }" "$i"; done
+units_message() {
+  printf '%s <b>aboutme</b> · %s\n101 units failed: %s and 94 more.\n%s\n<i>%s · aboutme-watch · <a href="%s">runbook</a></i>' \
+    "$1" "$2" "$listed" "Action: read each failed unit's journal on the host." "${3:-10:04 ICT · 03:04 UTC}" \
+    https://github.com/dannyota/aboutme/blob/main/docs/runbooks/production.md#host-watcher
+}
+[[ $(telegram_text "$work/telegram-message") == "$(units_message 🔴 'units failed')" ]] || {
+  echo 'watcher failed-units Telegram message changed' >&2; exit 1;
+}
+rm -f "$work/alert-state/alerts/failed-units."*
+: >"$work/alert-state/alerts/failed-units.2030-01-01"
+chmod 0600 "$work/alert-state/alerts/failed-units.2030-01-01"
+ABOUTME_ALERT_TEST_ROOT=$work/alert-state WATCH_TEST_MESSAGE=$work/telegram-repeat \
+  WATCH_TEST_FAILED_UNITS=$work/failed-units run_watch "$work/host-checks.log" "$work/telegram-repeat.alerts"
+[[ $(telegram_text "$work/telegram-repeat") == \
+  "$(units_message 🟠 'units failed, still failing since the alert on 2030-01-01 UTC')" ]] || {
+  echo 'watcher still-failing Telegram message changed' >&2; exit 1;
+}
+
+stamps=$work/alert-state/alerts
+watch_clock() {
+  ABOUTME_ALERT_TEST_ROOT=$work/alert-state WATCH_TEST_MESSAGE=$work/clock-$1 WATCH_TEST_NOW=$1 \
+    WATCH_TEST_FAILED_UNITS=$work/failed-units run_watch "$work/host-checks.log" "$work/clock-$1.alerts"
+  [[ $(telegram_text "$work/clock-$1") == "$(units_message "$2" "$3" "$4")" ]] || {
+    echo "watcher Telegram clock at $1 changed" >&2; exit 1;
+  }
+  [[ -e $stamps/failed-units.$5 && ! -e $stamps/failed-units.$6 ]] || {
+    echo "watcher stamp at $1 did not use the UTC day" >&2; exit 1;
+  }
+}
+rm -f "$stamps/failed-units."*
+: >"$stamps/failed-units.2030-12-30"
+chmod 0600 "$stamps/failed-units.2030-12-30"
+watch_clock 1924966800 🟠 'units failed, still failing since the alert on 2030-12-30 UTC' \
+  '00:00 ICT · 17:00 UTC' 2030-12-31 2031-01-01
+rm -f "$stamps/failed-units."*
+watch_clock 1924991999 🔴 'units failed' '06:59 ICT · 23:59 UTC' 2030-12-31 2031-01-01
+watch_clock 1924992000 🟠 'units failed, still failing since the alert on 2030-12-31 UTC' \
+  '07:00 ICT · 00:00 UTC' 2031-01-01 2031-01-02
+[[ ! -e $work/clock-read-twice ]] || { echo 'the sender read the clock more than once' >&2; exit 1; }
 
 rm -f "$work/alert-state/alerts/failed-units."*
 : >"$work/transport-attempts"
@@ -528,4 +596,6 @@ grep -qxF 'retention failure' "$work/stuck.failures" || {
 }
 flock -u "$stuck_guard"
 exec {stuck_guard}>&-
+[[ ! -e $work/clock-read-twice ]] || { echo 'the sender read the clock more than once' >&2; exit 1; }
+compgen -G "$work/clock-reads/*" >/dev/null || { echo 'the clock-read counter saw no sender' >&2; exit 1; }
 echo "watch tests passed"
