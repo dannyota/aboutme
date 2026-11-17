@@ -44,20 +44,20 @@ provide(verifyAnnounceKey, (message: string) => {
     </p>
 
     <header
-      class="rounded-[var(--radius-feature)] border bg-surface-blue p-5
-        min-[42rem]:p-7"
+      class="rounded-[var(--radius-panel)] bg-surface-blush px-6 py-8
+        md:p-12"
       data-testid="guide-header"
     >
       <h1
-        class="text-xl font-bold min-[42rem]:text-2xl"
+        class="text-2xl font-extrabold tracking-[-0.02em] md:text-3xl"
         data-page-title
       >
         {{ copy.header.h1 }}
       </h1>
-      <p class="mt-2 max-w-[40rem] text-md text-muted-foreground">
+      <p class="mt-4 max-w-[40rem] text-md text-muted-foreground">
         {{ copy.header.lead }}
       </p>
-      <p class="mt-3 max-w-[40rem] text-[15px]">
+      <p class="mt-3 max-w-[40rem] text-md">
         {{ copy.header.explainer }}
       </p>
       <p class="mt-4 text-[13px] font-medium text-muted-foreground">
@@ -87,13 +87,13 @@ provide(verifyAnnounceKey, (message: string) => {
 
     <section
       aria-labelledby="guide-try-heading"
-      class="rounded-[var(--radius-feature)] border bg-card p-5
-        shadow-[var(--shadow-product)] min-[42rem]:p-7"
+      class="rounded-[var(--radius-card)] border bg-card p-5
+        min-[42rem]:p-7"
       data-testid="guide-try-request"
     >
       <h2
         id="guide-try-heading"
-        class="text-[18px] font-semibold"
+        class="text-lg font-bold"
       >
         {{ copy.tryRequest.heading }}
       </h2>
@@ -101,7 +101,7 @@ provide(verifyAnnounceKey, (message: string) => {
         <li
           v-for="(example, index) in copy.tryRequest.examples"
           :key="index"
-          class="border-l-2 border-brand-indigo bg-muted p-3 text-[15px]"
+          class="rounded-[10px] bg-muted p-3 text-md"
         >
           {{ example }}
         </li>
@@ -113,13 +113,13 @@ provide(verifyAnnounceKey, (message: string) => {
 
     <section
       aria-labelledby="guide-privacy-heading"
-      class="rounded-[var(--radius-feature)] border bg-card p-5
-        shadow-[var(--shadow-product)] min-[42rem]:p-7"
+      class="rounded-[var(--radius-card)] border bg-card p-5
+        min-[42rem]:p-7"
       data-testid="guide-privacy"
     >
       <h2
         id="guide-privacy-heading"
-        class="text-[18px] font-semibold"
+        class="text-lg font-bold"
       >
         {{ copy.privacy.heading }}
       </h2>
@@ -127,7 +127,7 @@ provide(verifyAnnounceKey, (message: string) => {
         <li
           v-for="(point, index) in copy.privacy.points"
           :key="index"
-          class="text-[15px]"
+          class="text-md"
         >
           <GuideRichText :line="point" />
         </li>
@@ -136,20 +136,20 @@ provide(verifyAnnounceKey, (message: string) => {
 
     <section
       aria-labelledby="guide-other-apps-heading"
-      class="rounded-[var(--radius-feature)] border bg-card p-5
-        shadow-[var(--shadow-product)] min-[42rem]:p-7"
+      class="rounded-[var(--radius-card)] border bg-card p-5
+        min-[42rem]:p-7"
       data-testid="guide-other-apps"
     >
       <h2
         id="guide-other-apps-heading"
-        class="text-[18px] font-semibold"
+        class="text-lg font-bold"
       >
         {{ copy.otherApps.heading }}
       </h2>
-      <p class="mt-2 text-[15px]">
+      <p class="mt-2 text-md">
         <GuideRichText :line="copy.otherApps.requirements" />
       </p>
-      <p class="mt-2 text-[15px] text-muted-foreground">
+      <p class="mt-2 text-md text-muted-foreground">
         <GuideRichText :line="copy.otherApps.limits" />
       </p>
     </section>

@@ -3,11 +3,14 @@
     <AppShell v-if="showAppChrome" />
     <NuxtRouteAnnouncer v-if="isAppSurface" />
     <NuxtPage />
+    <SiteFooter v-if="showFooter" />
   </div>
 </template>
 
 <script setup lang="ts">
 import AppShell from './components/app/AppShell.vue';
+import SiteFooter from './components/app/SiteFooter.vue';
+import { hasSiteFooter } from './components/app/footerRoutes';
 import { themeColorMeta, useStoredTheme } from './composables/useTheme';
 import { isIndexablePath } from './i18n/meta';
 import plusJakartaSansUrl
@@ -17,6 +20,9 @@ const route = useRoute();
 const isAppSurface = computed(() => !route.path.startsWith('/_harness'));
 const showAppChrome = computed(
   () => isAppSurface.value && !/^\/app\/resumes\/[^/]+$/.test(route.path),
+);
+const showFooter = computed(
+  () => isAppSurface.value && hasSiteFooter(route.path),
 );
 const theme = useStoredTheme();
 

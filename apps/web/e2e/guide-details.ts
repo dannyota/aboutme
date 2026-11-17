@@ -130,9 +130,19 @@ export const GUIDE_DETAILS = {
 
 export const GUIDE_TYPE: readonly StyleRule[] = [
   {
-    selector: '[data-testid="guide-claude"] li p, '
-      + '[data-testid="guide-troubleshooting"] dd',
+    selector: '[data-testid="guide-claude"] li p',
     message: 'Guide body typography',
+    css: {
+      'font-family':
+        '"Plus Jakarta Sans", "Be Vietnam Pro", system-ui, sans-serif',
+      'font-size': '16px', 'font-weight': '500', 'line-height': '25.6px',
+      'letter-spacing': 'normal', 'text-align': 'start',
+      'text-transform': 'none',
+    },
+  },
+  {
+    selector: '[data-testid="guide-troubleshooting"] dd',
+    message: 'Guide answer typography',
     css: {
       'font-family':
         '"Plus Jakarta Sans", "Be Vietnam Pro", system-ui, sans-serif',
