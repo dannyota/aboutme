@@ -219,8 +219,9 @@ export const guideCopy: WorkspaceCopy<GuideCopy> = {
         'Viết lại các gạch đầu dòng ở công việc gần nhất để nêu kết quả '
         + 'trước, nhưng không thêm điều tôi chưa làm.',
       ],
-      after: 'Mở CV trong trình chỉnh sửa để xem lại thay đổi, rồi tự xuất '
-        + 'bản khi bạn sẵn sàng.',
+      after: 'Mở CV trong trình chỉnh sửa để xem lại thay đổi. Thay đổi trên '
+        + 'CV đã xuất bản sẽ công khai ngay; với CV chưa xuất bản, hãy tự '
+        + 'xuất bản khi bạn sẵn sàng.',
     },
     privacy: {
       heading: 'Quyền riêng tư và quyền kiểm soát',
@@ -404,8 +405,9 @@ export const guideCopy: WorkspaceCopy<GuideCopy> = {
         'Rewrite the bullets in my latest job to lead with results, '
         + 'without adding anything I did not do.',
       ],
-      after: 'Open the resume in the editor to review the changes, then '
-        + 'publish it yourself when you are ready.',
+      after: 'Open the resume in the editor to review the changes. Changes '
+        + 'to a published resume are public at once; publish an unpublished '
+        + 'one yourself when you are ready.',
     },
     privacy: {
       heading: 'Privacy and control',

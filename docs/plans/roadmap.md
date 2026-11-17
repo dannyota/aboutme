@@ -166,11 +166,3 @@ Decided on 2026-11-15:
 3. UI design and frontend work go to Claude subagents, not `gpt-6-astra`.
 4. The undeployed AWS code is removed; dependencies move to pnpm with a one-day minimum release age; release images carry third-party licences, with a written source offer for base-layer GPL software.
 5. v1.x follows v1.0 with the mobile app, knowledge, tracks and shared review, as [above](#v1x-a-place-to-build-a-career).
-
-## Document conflicts found
-
-Fix these in their own change; they do not block this plan.
-
-- `PRODUCT.md:75` says production enables Google; `docs/design/product.md:9-10` says production can enable Google and LinkedIn. Confirm which is deployed and align the wording.
-- `PRODUCT.md:91` lists analytics as out of v1; `docs/design/product.md:37` includes owner-only view counts.
-- `docs/design/mcp-guide-copy.md:205-206` tells the user to review and then publish, which holds only for unpublished resumes.
