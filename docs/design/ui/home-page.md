@@ -96,7 +96,7 @@ primary button can never read as the seal.
 
 ## Logo
 
-Shapes are unchanged (`AppLogo`, `favicon-v3.svg` geometry).
+Shapes are unchanged (`AppLogo`, `favicon-v4.svg` geometry).
 
 | Ground                           | Wordmark           | Mark and the dot before "vn" |
 | -------------------------------- | ------------------ | ---------------------------- |
