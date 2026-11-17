@@ -25,6 +25,7 @@ const (
 )
 
 type statusBody struct {
+	Generation int64           `json:"generation"`
 	Connection *connectionBody `json:"connection"`
 	Session    *sessionBody    `json:"session"`
 }
@@ -108,6 +109,9 @@ func (s *Service) handleStatus(w http.ResponseWriter, r *http.Request) {
 
 func (s *Service) statusSnapshot(a account) statusBody {
 	var body statusBody
+	if a.found {
+		body.Generation = a.connection.Generation
+	}
 	if row := a.connection; a.connected() {
 		body.Connection = &connectionBody{GitHubUserID: *row.GithubUserID, Login: *row.Login, ConnectedAt: row.ConnectedAt.UTC()}
 	}
@@ -118,34 +122,6 @@ func (s *Service) statusSnapshot(a account) statusBody {
 		body.Session = &sessionBody{ExpiresAt: live.expiresAt.UTC()}
 	}
 	return body
-}
-
-func (s *Service) handleDisconnect(w http.ResponseWriter, r *http.Request) {
-	sess, ok := auth.SessionFromContext(r.Context())
-	if !ok {
-		writeSessionRequired(w)
-		return
-	}
-	if _, valid := keepLinksParam(r); !valid || !emptyBody(r) {
-		writeRequestInvalid(w, "keepLinks must be given once as true or false")
-		return
-	}
-	err := s.inAccount(r.Context(), sess, func(ctx context.Context, a account) error {
-		if _, clearErr := a.q.ClearGitHubConnection(ctx, a.user.ID); clearErr != nil {
-			return clearErr
-		}
-		s.registry.end(a.user.ID)
-		return nil
-	})
-	if errors.Is(err, auth.ErrSessionInvalid) {
-		writeSessionRequired(w)
-		return
-	}
-	if err != nil {
-		s.writeInternal(w, r, "clear_connection", err)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Service) handleSessionEnd(w http.ResponseWriter, r *http.Request) {
@@ -187,25 +163,6 @@ func (s *Service) connection(r *http.Request, userID uuid.UUID) (store.GithubCon
 		return store.GithubConnection{}, false, err
 	}
 	return row, true, nil
-}
-
-func keepLinksParam(r *http.Request) (bool, bool) {
-	if r.URL.ForceQuery || r.URL.RawQuery == "" {
-		return false, false
-	}
-	query := r.URL.Query()
-	values, ok := query["keepLinks"]
-	if !ok || len(query) != 1 || len(values) != 1 {
-		return false, false
-	}
-	switch values[0] {
-	case "true":
-		return true, true
-	case "false":
-		return false, true
-	default:
-		return false, false
-	}
 }
 
 func plainRequest(r *http.Request) bool {

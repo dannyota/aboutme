@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"danny.vn/aboutme/apps/server/internal/project"
 	"danny.vn/aboutme/apps/server/internal/publicstate"
 	"danny.vn/aboutme/apps/server/internal/resume"
 )
@@ -44,16 +45,38 @@ func TestEvidenceOrder_NamesEveryItemOnce(t *testing.T) {
 		t.Fatalf("stored order = %v", stored)
 	}
 	revision := eh.revision()
+	eleven := make([]string, project.MaxEvidence+1)
+	for i := range eleven {
+		eleven[i] = uuid.NewString()
+	}
 	for name, order := range map[string][]string{
 		"missing":  {ids[0], ids[1]},
 		"repeated": {ids[0], ids[1], ids[1]},
-		"unknown":  {ids[0], ids[1], ids[2], uuid.NewString()},
-		"replaced": {ids[0], ids[1], uuid.NewString()},
+		"eleven":   eleven,
 	} {
 		requireError(t, eh.reorder(order...), http.StatusBadRequest, "request_invalid")
 		if eh.revision() != revision {
 			t.Fatalf("%s order changed the project", name)
 		}
+	}
+	other := eh.project
+	eh.project = eh.createProject("other")
+	eh.seedEvidence(1)
+	foreign := eh.storedIDs()[0]
+	eh.project = other
+	for name, order := range map[string][]string{
+		"unknown":  {ids[0], ids[1], ids[2], uuid.NewString()},
+		"replaced": {ids[0], ids[1], uuid.NewString()},
+		"foreign":  {ids[0], ids[1], foreign},
+		"added":    {ids[0], ids[1], ids[2], foreign},
+	} {
+		requireError(t, eh.reorder(order...), http.StatusNotFound, "evidence_not_found")
+		if eh.revision() != revision {
+			t.Fatalf("%s order changed the project", name)
+		}
+	}
+	if stored := eh.storedIDs(); stored[0] != ids[2] || stored[1] != ids[0] || stored[2] != ids[1] {
+		t.Fatalf("stored order after refused orders = %v", stored)
 	}
 }
 

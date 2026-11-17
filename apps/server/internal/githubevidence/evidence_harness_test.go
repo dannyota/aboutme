@@ -17,6 +17,7 @@ import (
 	schema "danny.vn/aboutme/packages/schema/gen/go"
 
 	"danny.vn/aboutme/apps/server/internal/api"
+	"danny.vn/aboutme/apps/server/internal/auth"
 	"danny.vn/aboutme/apps/server/internal/project"
 	"danny.vn/aboutme/apps/server/internal/projectapi"
 	"danny.vn/aboutme/apps/server/internal/publicstate"
@@ -79,9 +80,9 @@ func newEvidenceHarness(t *testing.T) *evidenceHarness {
 	return eh
 }
 
-func wireEvidence(t *testing.T, h *harness, source projectapi.EvidenceSource) *evidenceHarness {
+func newLibrary(t *testing.T, pool *store.Pool, sessions *auth.SessionManager) (*resumeapi.Service, *publicstate.Coordinator) {
 	t.Helper()
-	public, err := h.q.GetPublicState(t.Context())
+	public, err := store.New(pool).GetPublicState(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,21 +91,26 @@ func wireEvidence(t *testing.T, h *harness, source projectapi.EvidenceSource) *e
 		t.Fatal(err)
 	}
 	projector := docmigrate.NewIdentityProjector()
-	idempotency := resume.NewIdempotencyStore(h.pool)
-	links := resumeapi.New(resume.NewStore(h.pool, projector), idempotency, projector, nil, resumeapi.Options{
-		SessionManager: h.sessions, PublicOrigin: testOrigin, Coordinator: coordinator, RecoveryPool: h.pool,
+	library := resumeapi.New(resume.NewStore(pool, projector), resume.NewIdempotencyStore(pool), projector, nil, resumeapi.Options{
+		SessionManager: sessions, PublicOrigin: testOrigin, Coordinator: coordinator, RecoveryPool: pool,
 	})
+	return library, coordinator
+}
+
+func wireEvidence(t *testing.T, h *harness, source projectapi.EvidenceSource) *evidenceHarness {
+	t.Helper()
+	projector := docmigrate.NewIdentityProjector()
 	pass := func(next http.Handler) http.Handler { return next }
-	projects := projectapi.New(h.pool, idempotency, projectapi.Options{
+	projects := projectapi.New(h.pool, resume.NewIdempotencyStore(h.pool), projectapi.Options{
 		Sessions: h.sessions, PublicOrigin: testOrigin, ReadLimit: pass, WriteLimit: pass,
-		AllowSlug: func(uuid.UUID, time.Time) bool { return true }, Links: links, Evidence: source,
+		AllowSlug: func(uuid.UUID, time.Time) bool { return true }, Links: h.library, Evidence: source,
 	})
 	register := []func(*http.ServeMux){h.auth.RegisterRoutes, projects.RegisterRoutes}
 	if svc, ok := source.(*Service); ok {
 		register = append(register, svc.RegisterRoutes)
 	}
 	h.handler = api.New(slog.New(slog.NewJSONHandler(io.Discard, nil)), noopPinger{}, api.Options{}, nil, register...)
-	return &evidenceHarness{harness: h, projects: projects, resumes: resume.NewStore(h.pool, projector), coordinator: coordinator}
+	return &evidenceHarness{harness: h, projects: projects, resumes: resume.NewStore(h.pool, projector), coordinator: h.coordinator}
 }
 
 func (eh *evidenceHarness) createProject(slug string) project.Project {

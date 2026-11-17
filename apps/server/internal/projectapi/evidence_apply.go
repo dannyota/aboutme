@@ -162,17 +162,17 @@ func reorderTx(ctx context.Context, q *store.Queries, call *evidenceCall) error 
 	if err != nil {
 		return fmt.Errorf("projectapi: list evidence: %w", err)
 	}
-	named := make(map[uuid.UUID]bool, len(call.order))
+	stored := make(map[uuid.UUID]bool, len(rows))
+	for _, row := range rows {
+		stored[row.ID] = true
+	}
 	for _, id := range call.order {
-		named[id] = true
+		if !stored[id] {
+			return project.ErrEvidenceNotFound
+		}
 	}
 	if len(rows) != len(call.order) {
 		return project.ErrEvidenceRequest
-	}
-	for _, row := range rows {
-		if !named[row.ID] {
-			return project.ErrEvidenceRequest
-		}
 	}
 	n, err := q.ReorderProjectEvidence(ctx, store.ReorderProjectEvidenceParams{Ids: call.order, ProjectID: call.project})
 	if err != nil {

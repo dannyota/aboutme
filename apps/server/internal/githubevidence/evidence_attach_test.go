@@ -40,13 +40,15 @@ func TestEvidenceAttach_DisconnectBetweenTheReadAndTheTransactionAttachesNothing
 	eh.gh.readJSON("/repos/octocat/hello", http.StatusOK, repositoryJSON)
 	var disconnected int
 	eh.gh.read("/repos/octocat/hello/pulls/42", func(w http.ResponseWriter, r *http.Request) {
-		disconnected = eh.doWith(r.Context(), eh.as(http.MethodDelete, StatusPath+"?keepLinks=true")).Code
+		c := eh.as(http.MethodDelete, StatusPath+disconnectQuery(true, 1))
+		c.header = http.Header{"Idempotency-Key": {uuid.NewString()}}
+		disconnected = eh.doWith(r.Context(), c).Code
 		w.Header().Set("Content-Type", "application/json")
 		eh.gh.write(w, pullRequestJSON)
 	})
 	before := eh.revision()
 	requireError(t, eh.attach(pullRequestLink), http.StatusConflict, "evidence_session_required")
-	if disconnected != http.StatusNoContent {
+	if disconnected != http.StatusOK {
 		t.Fatalf("disconnect during the read = %d", disconnected)
 	}
 	if rows := eh.stored(); len(rows) != 0 || eh.revision() != before {

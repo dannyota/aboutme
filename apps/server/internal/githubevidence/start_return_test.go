@@ -253,9 +253,7 @@ func TestEvidence_ConnectingAfterADisconnectAdvancesTheBinding(t *testing.T) {
 	h := newHarness(t)
 	h.attachEvidence(h.newProject(h.user.ID))
 	requireOutcome(t, h.connect(h.raw, h.session), outcomeConnected)
-	if rec := h.do(h.as(http.MethodDelete, StatusPath+"?keepLinks=true")); rec.Code != http.StatusNoContent {
-		t.Fatalf("disconnect = %d %s", rec.Code, rec.Body.String())
-	}
+	requireDisconnected(t, h.disconnect(true))
 	if got := h.binding(h.user.ID); got != 2 {
 		t.Fatalf("binding after disconnect = %d, want 2", got)
 	}

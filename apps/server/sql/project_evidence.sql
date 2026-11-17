@@ -70,3 +70,23 @@ RETURNING *;
 
 -- name: ProjectStoredDocumentBytes :one
 SELECT octet_length(document::text)::int AS bytes FROM projects WHERE id = sqlc.arg(id) AND user_id = sqlc.arg(user_id);
+
+-- name: ListProjectsWithEvidence :many
+SELECT p.id
+FROM projects AS p
+WHERE p.user_id = sqlc.arg(user_id) AND EXISTS (SELECT 1 FROM project_evidence AS e WHERE e.project_id = p.id)
+ORDER BY p.id;
+
+-- name: DeleteAccountEvidence :many
+WITH removed AS (
+    DELETE FROM project_evidence AS e
+    USING projects AS p
+    WHERE p.id = e.project_id AND p.user_id = sqlc.arg(user_id)
+    RETURNING e.project_id
+), advanced AS (
+    UPDATE projects
+    SET revision = revision + 1, updated_at = sqlc.arg(updated_at)
+    WHERE user_id = sqlc.arg(user_id) AND id IN (SELECT project_id FROM removed)
+    RETURNING id, revision
+)
+SELECT id, revision FROM advanced ORDER BY id;

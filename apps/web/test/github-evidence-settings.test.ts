@@ -53,9 +53,23 @@ const connection = {
   connectedAt: '2026-11-15T08:30:00Z',
 };
 const expiresAt = '2026-11-15T09:00:00Z';
-const notConnected = { connection: null, session: null };
-const connectedIdle = { connection, session: null };
-const connectedLive = { connection, session: { expiresAt } };
+const notConnected = { generation: 0, connection: null, session: null };
+const connectedIdle = { generation: 3, connection, session: null };
+const connectedLive = { generation: 3, connection, session: { expiresAt } };
+const disconnected = { generation: 4, connection: null, session: null };
+const disconnectRoute = 'DELETE /api/v1/github-evidence?keepLinks=true'
+  + '&generation=3';
+const disconnectedBody = {
+  data: {
+    generation: 4,
+    projectRevisions: [],
+    resumeRevisions: [
+      { id: '0f6e7d4c-1b2a-4c3d-8e9f-0a1b2c3d4e5f', revision: '8' },
+    ],
+  },
+};
+const uuidPattern
+  = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 
 let state: unknown = notConnected;
 let csrfTokens: string[] = [];
@@ -361,12 +375,43 @@ describe('GitHub evidence settings', () => {
       .toEqual(['Continue with GitHub', 'Disconnect']);
   });
 
-  it('Disconnect sends keepLinks=true and reads the state again', async () => {
-    state = connectedLive;
+  it(
+    'Disconnect sends keepLinks=true, the generation it read and a fresh '
+    + 'Idempotency-Key, accepts the 200 and reads the state again',
+    async () => {
+      state = connectedLive;
+      serve({
+        [disconnectRoute]: () => {
+          state = disconnected;
+          return json(200, disconnectedBody);
+        },
+      });
+      const wrapper = await mountSection();
+
+      await click(wrapper, 'evidence-disconnect');
+
+      expect(routes()).toEqual([
+        'GET /api/v1/github-evidence',
+        disconnectRoute,
+        'GET /api/v1/github-evidence',
+      ]);
+      expect(net.requests[1]?.headers.get('X-CSRF-Token')).toBe('csrf-1');
+      expect(net.requests[1]?.headers.get('Idempotency-Key'))
+        .toMatch(uuidPattern);
+      expect(wrapper.find('[data-testid="evidence-error"]').exists())
+        .toBe(false);
+      expect(buttonLabels(wrapper)).toEqual(['Connect GitHub']);
+    },
+  );
+
+  it('sends the generation of the last status read', async () => {
+    state = { ...connectedIdle, generation: 12 };
     serve({
-      'DELETE /api/v1/github-evidence?keepLinks=true': () => {
-        state = notConnected;
-        return noContent();
+      'DELETE /api/v1/github-evidence?keepLinks=true&generation=12': () => {
+        state = { ...disconnected, generation: 13 };
+        return json(200, {
+          data: { ...disconnectedBody.data, generation: 13 },
+        });
       },
     });
     const wrapper = await mountSection();
@@ -375,11 +420,97 @@ describe('GitHub evidence settings', () => {
 
     expect(routes()).toEqual([
       'GET /api/v1/github-evidence',
-      'DELETE /api/v1/github-evidence?keepLinks=true',
+      'DELETE /api/v1/github-evidence?keepLinks=true&generation=12',
       'GET /api/v1/github-evidence',
     ]);
-    expect(net.requests[1]?.headers.get('X-CSRF-Token')).toBe('csrf-1');
     expect(buttonLabels(wrapper)).toEqual(['Connect GitHub']);
+  });
+
+  it(
+    'keeps one Idempotency-Key across a CSRF retry and makes a new one for '
+    + 'the next Disconnect',
+    async () => {
+      state = connectedIdle;
+      csrfTokens = ['csrf-1', 'csrf-2'];
+      let attempts = 0;
+      serve({
+        [disconnectRoute]: () => {
+          attempts += 1;
+          return attempts === 1
+            ? problem(403, 'csrf_rejected')
+            : problem(500, 'internal');
+        },
+      });
+      const wrapper = await mountSection();
+
+      await click(wrapper, 'evidence-disconnect');
+      await vi.waitFor(() =>
+        expect(wrapper.find('[data-testid="evidence-error"]').exists())
+          .toBe(true));
+      await click(wrapper, 'evidence-disconnect');
+      await vi.waitFor(() => expect(attempts).toBe(3));
+
+      const sent = net.requests.filter((request) =>
+        route(request) === disconnectRoute);
+      expect(sent.map((request) => request.headers.get('X-CSRF-Token')))
+        .toEqual(['csrf-1', 'csrf-2', 'csrf-2']);
+      const keys = sent.map((request) =>
+        request.headers.get('Idempotency-Key'));
+      for (const key of keys) expect(key).toMatch(uuidPattern);
+      expect(keys[1]).toBe(keys[0]);
+      expect(keys[2]).not.toBe(keys[0]);
+    },
+  );
+
+  it(
+    'reads the state again when the connection changed before Disconnect',
+    async () => {
+      state = connectedIdle;
+      serve({
+        [disconnectRoute]: () => {
+          state = { ...connectedIdle, generation: 5 };
+          return problem(409, 'evidence_connection_changed');
+        },
+      });
+      const wrapper = await mountSection();
+
+      await click(wrapper, 'evidence-disconnect');
+
+      expect(routes()).toEqual([
+        'GET /api/v1/github-evidence',
+        disconnectRoute,
+        'GET /api/v1/github-evidence',
+      ]);
+      expect(wrapper.get('[data-testid="evidence-error"]').text())
+        .toBe('Something went wrong. Please try again.');
+      expect(wrapper.text()).not.toContain('raw server detail');
+
+      serve({
+        'DELETE /api/v1/github-evidence?keepLinks=true&generation=5': () => {
+          state = disconnected;
+          return json(200, disconnectedBody);
+        },
+      });
+      await click(wrapper, 'evidence-disconnect');
+
+      expect(routes()).toContain(
+        'DELETE /api/v1/github-evidence?keepLinks=true&generation=5',
+      );
+      expect(buttonLabels(wrapper)).toEqual(['Connect GitHub']);
+    },
+  );
+
+  it.each([
+    ['no generation', { connection: null, session: null }],
+    ['a negative generation', { ...notConnected, generation: -1 }],
+    ['a fractional generation', { ...notConnected, generation: 1.5 }],
+    ['a string generation', { ...notConnected, generation: '3' }],
+  ])('treats a status with %s as a failed load', async (_name, body) => {
+    state = body;
+    const wrapper = await mountSection();
+
+    expect(wrapper.get('[data-testid="evidence-load-error"]').text())
+      .toBe('GitHub evidence could not load. Try again.');
   });
 
   it(
@@ -534,8 +665,7 @@ describe('GitHub evidence settings', () => {
   it('maps a Disconnect failure to fixed copy', async () => {
     state = connectedIdle;
     serve({
-      'DELETE /api/v1/github-evidence?keepLinks=true': () =>
-        problem(404, 'evidence_unavailable'),
+      [disconnectRoute]: () => problem(404, 'evidence_unavailable'),
     });
     const wrapper = await mountSection();
 

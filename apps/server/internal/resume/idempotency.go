@@ -34,9 +34,10 @@ const (
 )
 
 type StoredResponse struct {
-	Status  int
-	Body    json.RawMessage
-	Headers map[string]string
+	Status       int
+	Body         json.RawMessage
+	Headers      map[string]string
+	BeforeCommit func()
 }
 
 type CommitOutcome uint8

@@ -56,6 +56,51 @@ func (q *Queries) CountProjectEvidence(ctx context.Context, projectID uuid.UUID)
 	return items, err
 }
 
+const deleteAccountEvidence = `-- name: DeleteAccountEvidence :many
+WITH removed AS (
+    DELETE FROM project_evidence AS e
+    USING projects AS p
+    WHERE p.id = e.project_id AND p.user_id = $1
+    RETURNING e.project_id
+), advanced AS (
+    UPDATE projects
+    SET revision = revision + 1, updated_at = $2
+    WHERE user_id = $1 AND id IN (SELECT project_id FROM removed)
+    RETURNING id, revision
+)
+SELECT id, revision FROM advanced ORDER BY id
+`
+
+type DeleteAccountEvidenceParams struct {
+	UserID    uuid.UUID
+	UpdatedAt time.Time
+}
+
+type DeleteAccountEvidenceRow struct {
+	ID       uuid.UUID
+	Revision int64
+}
+
+func (q *Queries) DeleteAccountEvidence(ctx context.Context, arg DeleteAccountEvidenceParams) ([]DeleteAccountEvidenceRow, error) {
+	rows, err := q.db.Query(ctx, deleteAccountEvidence, arg.UserID, arg.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DeleteAccountEvidenceRow
+	for rows.Next() {
+		var i DeleteAccountEvidenceRow
+		if err := rows.Scan(&i.ID, &i.Revision); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const deleteProjectEvidence = `-- name: DeleteProjectEvidence :execrows
 DELETE FROM project_evidence WHERE id = $1 AND project_id = $2
 `
@@ -340,6 +385,33 @@ func (q *Queries) ListProjectEvidence(ctx context.Context, arg ListProjectEviden
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProjectsWithEvidence = `-- name: ListProjectsWithEvidence :many
+SELECT p.id
+FROM projects AS p
+WHERE p.user_id = $1 AND EXISTS (SELECT 1 FROM project_evidence AS e WHERE e.project_id = p.id)
+ORDER BY p.id
+`
+
+func (q *Queries) ListProjectsWithEvidence(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listProjectsWithEvidence, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

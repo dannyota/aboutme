@@ -34,6 +34,7 @@ import (
 	"danny.vn/aboutme/apps/server/internal/publicstate"
 	"danny.vn/aboutme/apps/server/internal/resume"
 	"danny.vn/aboutme/apps/server/internal/resume/docmigrate"
+	"danny.vn/aboutme/apps/server/internal/resumeapi"
 	"danny.vn/aboutme/apps/server/internal/secondfactor"
 	"danny.vn/aboutme/apps/server/internal/store"
 	"danny.vn/aboutme/apps/server/internal/testutil"
@@ -289,13 +290,17 @@ func newInvariantHarness(t *testing.T) *invHarness {
 	if err != nil {
 		t.Fatal(err)
 	}
+	projector := docmigrate.NewIdentityProjector()
+	svc.SetLibrary(resumeapi.New(resume.NewStore(pool, projector), resume.NewIdempotencyStore(pool), projector, nil, resumeapi.Options{
+		SessionManager: sessions, PublicOrigin: testOrigin, Coordinator: coordinator, RecoveryPool: pool,
+	}))
 	backend, err := media.NewFS(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
 	accounts, err := accountapi.New(accountapi.Dependencies{
 		Pool: pool, Sessions: sessions, Coordinator: coordinator, Media: backend,
-		Projector: docmigrate.NewIdentityProjector(), Logger: logger, PublicOrigin: testOrigin, Now: clock.now,
+		Projector: projector, Logger: logger, PublicOrigin: testOrigin, Now: clock.now,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -326,7 +331,14 @@ type callerRun struct {
 }
 
 func (c *callerRun) serve(method, path, body string) *httptest.ResponseRecorder {
+	return c.serveWith(method, path, body, nil)
+}
+
+func (c *callerRun) serveWith(method, path, body string, header http.Header) *httptest.ResponseRecorder {
 	r := httptest.NewRequestWithContext(context.Background(), method, path, strings.NewReader(body))
+	for name, values := range header {
+		r.Header[name] = values
+	}
 	r.RemoteAddr = "203.0.113.7:4000"
 	r.Header.Set("Origin", testOrigin)
 	if body != "" {
@@ -582,8 +594,9 @@ func evidenceCases() []callerCase {
 		{name: "evidence done", site: invariantSite{routes, "Service.handleSessionEnd"}, run: func(c *callerRun) error {
 			return statusAccepted(c.serve(http.MethodPost, SessionEndPath, ""), http.StatusNoContent)
 		}, invalidate: expire, lastLocks: []lockStep{connectionLock()}, lapse: advanceClock(idleLapse)},
-		{name: "evidence disconnect", site: invariantSite{routes, "Service.handleDisconnect"}, run: func(c *callerRun) error {
-			return statusAccepted(c.serve(http.MethodDelete, StatusPath+"?keepLinks=true", ""), http.StatusNoContent)
+		{name: "evidence disconnect", site: invariantSite{"internal/githubevidence/disconnect.go", "Service.authorizeDisconnect"}, run: func(c *callerRun) error {
+			key := http.Header{"Idempotency-Key": {uuid.NewString()}}
+			return statusAccepted(c.serveWith(http.MethodDelete, StatusPath+disconnectQuery(true, 1), "", key), http.StatusOK)
 		}, invalidate: expire, lastLocks: []lockStep{connectionLock()}, lapse: advanceClock(idleLapse)},
 		{name: "evidence reader", site: invariantSite{"internal/githubevidence/evidence_session.go", "Service.openReader"}, setup: func(c *callerRun) error {
 			created, err := project.NewStore().CreateTx(context.Background(), c.ih.q, c.ih.user.ID, "reader",

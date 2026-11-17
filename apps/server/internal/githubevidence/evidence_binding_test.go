@@ -1,9 +1,6 @@
 package githubevidence
 
-import (
-	"net/http"
-	"testing"
-)
+import "testing"
 
 func TestEvidenceBinding_ContinueKeepsTheMarkAndANewBindingDropsIt(t *testing.T) {
 	eh := newEvidenceHarness(t)
@@ -12,9 +9,7 @@ func TestEvidenceBinding_ContinueKeepsTheMarkAndANewBindingDropsIt(t *testing.T)
 	if items := eh.projectEvidence(); len(items) != 1 || !items[0].Confirmed {
 		t.Fatalf("after Continue with the same account = %+v, want confirmed", items)
 	}
-	if rec := eh.do(eh.as(http.MethodDelete, StatusPath+"?keepLinks=true")); rec.Code != http.StatusNoContent {
-		t.Fatalf("disconnect = %d %s", rec.Code, rec.Body.String())
-	}
+	requireDisconnected(t, eh.disconnect(true))
 	if items := eh.projectEvidence(); len(items) != 1 || items[0].Confirmed {
 		t.Fatalf("after disconnect = %+v, want a plain link", items)
 	}

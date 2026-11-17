@@ -14,6 +14,8 @@ import (
 
 	"danny.vn/aboutme/apps/server/internal/auth"
 	"danny.vn/aboutme/apps/server/internal/config"
+	"danny.vn/aboutme/apps/server/internal/resume"
+	"danny.vn/aboutme/apps/server/internal/resumeapi"
 	"danny.vn/aboutme/apps/server/internal/store"
 )
 
@@ -45,6 +47,10 @@ type Options struct {
 	Entropy      io.Reader
 }
 
+type Library interface {
+	DisconnectEvidence(context.Context, resumeapi.EvidenceDisconnect) (resume.ExecuteResult, error)
+}
+
 type Service struct {
 	enabled      bool
 	publicOrigin string
@@ -55,6 +61,8 @@ type Service struct {
 	sessions     *auth.SessionManager
 	client       *client
 	registry     *registry
+	idempotency  *resume.IdempotencyStore
+	library      Library
 	starts       *windowLimiter
 	logger       *slog.Logger
 	now          func() time.Time
@@ -105,6 +113,7 @@ func newService(opts Options, endpoint string, transport http.RoundTripper) (*Se
 		q:            q,
 		transactions: auth.NewTransactionStore(q),
 		sessions:     opts.Sessions,
+		idempotency:  resume.NewIdempotencyStore(opts.Pool),
 		starts:       newWindowLimiter(startLimit, limitWindow),
 		logger:       opts.Logger,
 		now:          opts.Clock,
@@ -128,25 +137,32 @@ type account struct {
 
 func (s *Service) inAccount(ctx context.Context, sess store.Session, change func(context.Context, account) error) error {
 	return pgx.BeginFunc(ctx, s.pool, func(dbTx pgx.Tx) error {
-		qtx := s.q.WithTx(dbTx)
-		user, current, err := auth.LockSessionAccount(ctx, qtx, sess)
+		a, err := s.lockAccount(ctx, dbTx, s.q.WithTx(dbTx), sess)
 		if err != nil {
-			return err
-		}
-		a := account{tx: dbTx, q: qtx, user: user}
-		a.connection, err = qtx.GetGitHubConnectionForUpdate(ctx, user.ID)
-		switch {
-		case err == nil:
-			a.found = true
-		case !errors.Is(err, pgx.ErrNoRows):
-			return err
-		}
-		a.now = s.now()
-		if err = auth.RequireLiveSession(current, a.now); err != nil {
 			return err
 		}
 		return change(ctx, a)
 	})
+}
+
+func (s *Service) lockAccount(ctx context.Context, dbTx pgx.Tx, qtx *store.Queries, sess store.Session) (account, error) {
+	user, current, err := auth.LockSessionAccount(ctx, qtx, sess)
+	if err != nil {
+		return account{}, err
+	}
+	a := account{tx: dbTx, q: qtx, user: user}
+	a.connection, err = qtx.GetGitHubConnectionForUpdate(ctx, user.ID)
+	switch {
+	case err == nil:
+		a.found = true
+	case !errors.Is(err, pgx.ErrNoRows):
+		return account{}, err
+	}
+	a.now = s.now()
+	if err = auth.RequireLiveSession(current, a.now); err != nil {
+		return account{}, err
+	}
+	return a, nil
 }
 
 func (s *Service) issueToken(ctx context.Context, account uuid.UUID, code, verifier string) (*heldToken, bool, error) {
@@ -161,6 +177,10 @@ func (s *Service) issueToken(ctx context.Context, account uuid.UUID, code, verif
 
 func (s *Service) Enabled() bool {
 	return s.enabled
+}
+
+func (s *Service) SetLibrary(library Library) {
+	s.library = library
 }
 
 func (s *Service) AccountSessionsEndedLocked(userID uuid.UUID) {

@@ -86,6 +86,7 @@ type Querier interface {
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	CreateWebAuthnCeremony(ctx context.Context, arg CreateWebAuthnCeremonyParams) (WebauthnCeremony, error)
 	CreateWebAuthnCredential(ctx context.Context, arg CreateWebAuthnCredentialParams) (WebauthnCredential, error)
+	DeleteAccountEvidence(ctx context.Context, arg DeleteAccountEvidenceParams) ([]DeleteAccountEvidenceRow, error)
 	DeleteAccountProjectSlugHolds(ctx context.Context, userID uuid.UUID) (int64, error)
 	DeleteAccountUser(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteAuthenticationSecurityEventsPage(ctx context.Context, arg DeleteAuthenticationSecurityEventsPageParams) (int64, error)
@@ -304,6 +305,7 @@ type Querier interface {
 	ListProjectEvidence(ctx context.Context, arg ListProjectEvidenceParams) ([]ListProjectEvidenceRow, error)
 	// Callers hold LockUserForResumeWrite throughout mutations and replay storage.
 	ListProjectsForUser(ctx context.Context, userID uuid.UUID) ([]Project, error)
+	ListProjectsWithEvidence(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error)
 	ListResumeIDsBelowSchemaVersion(ctx context.Context, arg ListResumeIDsBelowSchemaVersionParams) ([]uuid.UUID, error)
 	ListResumeShareSignals(ctx context.Context, arg ListResumeShareSignalsParams) ([]ListResumeShareSignalsRow, error)
 	ListResumeShowcaseIDs(ctx context.Context) ([]uuid.UUID, error)

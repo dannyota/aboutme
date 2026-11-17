@@ -159,6 +159,9 @@ func (s *IdempotencyStore) executeMutation(ctx context.Context, userID uuid.UUID
 	if respErr != nil {
 		return rolledBack(respErr)
 	}
+	if stored.BeforeCommit != nil {
+		stored.BeforeCommit()
+	}
 
 	if commitErr := s.commit(ctx, tx); commitErr != nil {
 		var pgErr *pgconn.PgError
