@@ -135,9 +135,14 @@ Session cookie and CSRF only. `kind` is `repository`, `pullRequest` or
   a numeric GitHub repository id from a repository listing, is required for
   releases. It answers
   `{items: [{candidateId, kind, title, repository: {id, fullName}, date, attached}], nextPage, incomplete}`.
-  Repository listings drop forks and private repositories after fetching, so a
-  page may hold fewer than 30 rows; `nextPage` is `page + 1` when GitHub
-  returned 30 rows and `page` is below 10, else `null`.
+  `repository.id` is `null` for pull requests, whose search result carries no
+  repository id. Repository listings drop forks and private repositories, and
+  release listings drop drafts and releases by another author, after fetching,
+  so a page may hold fewer than 30 rows. A release listing for a repository id
+  the live session did not list answers `evidence_session_required`. A pull
+  request's candidate date is `closed_at`; attach stores `merged_at`. "Attached"
+  matches a pull request by repository full name and number; `nextPage` is
+  `page + 1` when GitHub returned 30 rows and `page` is below 10, else `null`.
 - `POST /api/v1/projects/{id}/evidence` with `{kind, link}` or
   `{kind, candidateId}`; `POST .../{evidenceId}/recheck`;
   `PUT .../evidence/order` with `{order: [evidenceId]}` naming every item once;
@@ -167,7 +172,7 @@ project write check the document plus 1 KiB per item, and a write over it gets
 the existing project size error.
 
 When the capability is off, stored evidence is kept, exported and deleted with
-the account, but neither returned on project reads nor rendered.
+the account, but project reads omit the `evidence` field and nothing renders.
 
 ## Storage
 
@@ -186,10 +191,10 @@ transient failure rewrites nothing.
 `DELETE /api/v1/github-evidence?keepLinks=&generation=` becomes a guarded write
 under [ADR 0006](../adr/0006-transactional-idempotency.md):
 
-- `generation` is required: the value `GET /api/v1/github-evidence` reports, 0
-  when no connection row exists. A different current value answers 409
-  `evidence_connection_changed`, so a lost response cannot remove evidence
-  attached after a reconnect. No ETag is involved.
+- `generation` is required: the top-level integer `GET /api/v1/github-evidence`
+  now reports, 0 when no connection row exists. A different current value
+  answers 409 `evidence_connection_changed`, so a lost response cannot remove
+  evidence attached after a reconnect. No ETag is involved.
 - `Idempotency-Key` is required. The fingerprint covers the route, `keepLinks`
   and `generation`. A stored replay for the key is answered before the
   generation check; the same key with a different fingerprint answers the
