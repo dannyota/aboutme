@@ -981,7 +981,7 @@ printf 'PASS actual-consumer-cache-and-both-family-kernel-rebuild\nPASS actual-d
 
 echo "CrowdSec 1.8.2 integration tests passed"
 }
-export -f integration_body sql retention_fixture_sql retention_fixture_admin \
+export -f integration_body test_wait sql retention_fixture_sql retention_fixture_admin \
   retention_fixture_time retention_fixture_stream_proxy \
   crowdsec_admitted_cli crowdsec_assert_postgresql retention_fixture_diagnostics retention_fixture_report_failure
 export repo_root edge feed retention_fixture retention_fixture_now PATH
