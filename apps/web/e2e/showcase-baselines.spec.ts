@@ -210,13 +210,13 @@ async function assertShowcase(
   await expect.poll(() => measureTextContainment(header))
     .toEqual({ visible: true, contained: true });
   await expectShowcaseHeading(page, 'color', theme);
-  await expect(header.locator('h1')).toHaveCSS('font-weight', '700');
+  await expect(header.locator('h1')).toHaveCSS('font-weight', '800');
   await expect(header.locator('h1')).toHaveCSS(
-    'font-size', width >= 1024 ? '40px' : width >= 641 ? '32px' : '28px',
+    'font-size', width >= 768 ? '40px' : '32px',
   );
   await expectShowcaseHeading(page, 'font-family', theme);
   expect(await page.evaluate(() => (
-    document.fonts.check('700 28px "Plus Jakarta Sans"', 'CV từ cộng đồng')
+    document.fonts.check('800 32px "Plus Jakarta Sans"', 'CV từ cộng đồng')
     && Array.from(document.fonts).some((face) =>
       face.family === 'Plus Jakarta Sans' && face.status === 'loaded')
   ))).toBe(true);

@@ -65,6 +65,16 @@ describe('showcase filter identity', () => {
     });
   });
 
+  it('rounds the shared Filters button into a pill', () => {
+    expect(declared(sfcRules(BAR), '.showcase-filters-button')).toMatchObject({
+      'height': '44px',
+      'padding': '0 14px',
+      'border': '1px solid var(--input)',
+      'border-radius': '9999px',
+      'background': 'transparent',
+    });
+  });
+
   it('turns the active Filters edge and badge ink', () => {
     const rules = sfcRules(BAR);
     expect(declared(rules, '.showcase-filters-button.is-active')).toEqual({
@@ -86,6 +96,23 @@ describe('showcase filter identity', () => {
     const source = webSource(SHEET);
     expect(source).toContain('rounded-t-[var(--radius-card)]');
     expect(source).not.toContain('radius-feature');
+  });
+});
+
+describe('showcase heading identity', () => {
+  it('sets the h1 as on the Library: 32 px, 40 from 48rem, 1.3, 800', () => {
+    const rules = sfcRules(PAGE);
+    expect(declared(rules, '.showcase-header h1')).toMatchObject({
+      'font-size': '2rem',
+      'font-weight': '800',
+      'line-height': '1.3',
+      'letter-spacing': '-0.02em',
+    });
+    expect(declared(rules, '.showcase-header h1', ['@media (width >= 48rem)']))
+      .toEqual({ 'font-size': '2.5rem' });
+    for (const at of ['@media (width >= 641px)', '@media (width >= 1024px)']) {
+      expect(declared(rules, '.showcase-header h1', [at]), at).toEqual({});
+    }
   });
 });
 
@@ -134,10 +161,12 @@ describe('showcase results identity', () => {
     for (const name of [
       'rounded-full', 'border-[1.5px]', 'border-foreground', 'bg-transparent',
       'h-11', 'px-4', 'text-[15px]', 'font-semibold', 'justify-self-start',
+      'hover:bg-card',
     ]) {
       expect(action.classes(), name).toContain(name);
     }
     expect(action.classes()).not.toContain('bg-primary');
+    expect(action.classes()).not.toContain('hover:bg-accent');
   });
 
   it('keeps removed tokens, the main fill and hex out of the showcase', () => {

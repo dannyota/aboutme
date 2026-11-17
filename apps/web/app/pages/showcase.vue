@@ -333,8 +333,8 @@ useHead(computed(() => ({
 
 .showcase-header h1 {
   margin: 0;
-  font-size: 1.75rem;
-  font-weight: 700;
+  font-size: 2rem;
+  font-weight: 800;
   line-height: 1.3;
   letter-spacing: -0.02em;
 }
@@ -401,13 +401,15 @@ useHead(computed(() => ({
     padding-bottom: 56px;
   }
 
-  .showcase-header h1 {
-    font-size: 2rem;
-  }
-
   .showcase-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 24px;
+  }
+}
+
+@media (width >= 48rem) {
+  .showcase-header h1 {
+    font-size: 2.5rem;
   }
 }
 
@@ -428,11 +430,6 @@ useHead(computed(() => ({
 
   .showcase-header {
     grid-area: header;
-  }
-
-  .showcase-header h1 {
-    font-size: 2.5rem;
-    line-height: 1.25;
   }
 
   .showcase-header p {

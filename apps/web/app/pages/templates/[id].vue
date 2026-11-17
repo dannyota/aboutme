@@ -349,7 +349,6 @@ useHead(computed(() => ({
     padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
     border-top: 1px solid var(--border);
     background: var(--background);
-    box-shadow: var(--shadow-float);
   }
 }
 

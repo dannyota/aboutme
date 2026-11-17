@@ -104,15 +104,17 @@ describe('template page identity', () => {
     expect(link.classes()).toContain('underline');
   });
 
-  it('floats the phone action bar on the page ground with a top rule', () => {
-    expect(declared(sfcRules(PAGE), '.template-detail__actions',
-      ['@media (width < 900px)'])).toMatchObject({
-      'position': 'fixed',
-      'border-top': '1px solid var(--border)',
-      'background': 'var(--background)',
-      'box-shadow': 'var(--shadow-float)',
+  it('fixes the phone action bar on the page ground with a top rule only',
+    () => {
+      const bar = declared(sfcRules(PAGE), '.template-detail__actions',
+        ['@media (width < 900px)']);
+      expect(bar).toMatchObject({
+        'position': 'fixed',
+        'border-top': '1px solid var(--border)',
+        'background': 'var(--background)',
+      });
+      expect(bar['box-shadow']).toBeUndefined();
     });
-  });
 
   it('paints the sheet on the paper token, with no hex or removed token',
     () => {

@@ -703,8 +703,8 @@ test('at 1440 px the rail filters and chips hand focus to the rail',
   });
 
 const LAYOUTS = [
-  { width: 390, rail: false, columns: 1, h1: '28px' },
-  { width: 768, rail: false, columns: 2, h1: '32px' },
+  { width: 390, rail: false, columns: 1, h1: '32px' },
+  { width: 768, rail: false, columns: 2, h1: '40px' },
   { width: 1024, rail: true, columns: 2, h1: '40px' },
   { width: 1440, rail: true, columns: 3, h1: '40px' },
 ] as const;

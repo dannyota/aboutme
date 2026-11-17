@@ -13,7 +13,7 @@ const props = defineProps<{
 const copy = computed(() => showcaseCopy[props.locale]);
 const buttonClass = cn(
   buttonVariants({ variant: 'outline' }),
-  'h-11 justify-self-start px-4 text-[15px] font-semibold',
+  'h-11 justify-self-start px-4 text-[15px] font-semibold hover:bg-card',
 );
 </script>
 
