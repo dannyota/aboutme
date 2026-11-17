@@ -175,7 +175,8 @@ trap 'exit 143' TERM
 
 work=$(mktemp -d)
 ssh_dir=$(mktemp -d /tmp/aboutme-ssh.XXXXXX)
-ssh_opts=(-p "$SSH_PORT" -o BatchMode=yes -o ControlMaster=auto -o "ControlPath=$ssh_dir/ssh-%C" -o ControlPersist=10m)
+ssh_opts=(-p "$SSH_PORT" -o BatchMode=yes -o ControlMaster=auto -o "ControlPath=$ssh_dir/ssh-%C" -o ControlPersist=10m
+  -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
 
 for f in fence.sh deploy-host.sh deploy-safety.sh; do
   want=$(sha256sum "$here/$f" | cut -d' ' -f1)

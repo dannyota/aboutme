@@ -421,10 +421,10 @@ server_private_ip() {
 # cloud-init, pinned under a fixed alias in a per-run known_hosts file, with
 # strict checking: a server that presents any other key is refused.
 prod_opts=(-p "$SSH_PORT" -o ControlMaster=auto -o "ControlPath=$ssh_dir/prod.sock" -o ControlPersist=15m
-  -o ConnectTimeout=15)
+  -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
 drill_opts=(-p "$SSH_PORT" -o ControlMaster=auto -o "ControlPath=$ssh_dir/drill.sock" -o ControlPersist=15m
   -o ConnectTimeout=15 -o StrictHostKeyChecking=yes -o "HostKeyAlias=$SERVER_NAME" -o LogLevel=ERROR
-  -o "UserKnownHostsFile=$run/known_hosts" -o ServerAliveInterval=30)
+  -o "UserKnownHostsFile=$run/known_hosts" -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
 
 hostkey_state=${XDG_STATE_HOME:-$HOME/.local/state}/aboutme/restore-drill-hostkey.pub
 new_host_key() {
