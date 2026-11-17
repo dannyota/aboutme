@@ -3,6 +3,7 @@ package githubevidence
 import (
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -176,5 +177,37 @@ func TestEvidenceWrites_AProjectNoLiveResumeLinksChangesOnlyItsRow(t *testing.T)
 	}
 	if got := eh.resumeRevision(draft.ID); got != draft.Revision {
 		t.Fatalf("draft resume revision = %d, want %d", got, draft.Revision)
+	}
+}
+
+func TestEvidenceWrites_AProjectPutLeavesEvidenceUnchanged(t *testing.T) {
+	eh := newEvidenceHarness(t)
+	requireOutcome(t, eh.connect(eh.raw, eh.session), outcomeConnected)
+	eh.servePullRequest()
+	requireWrite(t, eh.attach(pullRequestLink))
+	eh.seedEvidence(2)
+	before := eh.stored()
+	listed := eh.projectEvidence()
+
+	renamed := project.Document{DefaultLanguage: "en", Text: map[string]project.Text{"en": {Name: "Atlas renamed", Summary: "New summary"}}}
+	if rec := eh.putDocument(renamed); rec.Code != http.StatusOK {
+		t.Fatalf("PUT = %d %s", rec.Code, rec.Body.String())
+	}
+	if after := eh.stored(); !reflect.DeepEqual(after, before) {
+		t.Fatalf("evidence rows after PUT = %+v, want unchanged %+v", after, before)
+	}
+	if got := eh.projectEvidence(); !reflect.DeepEqual(got, listed) {
+		t.Fatalf("project read after PUT = %+v, want %+v", got, listed)
+	}
+
+	carried := eh.as(http.MethodPut, evidenceRoot+eh.project.ID.String())
+	carried.body = `{"slug":"` + eh.project.Slug + `","defaultLanguage":"en","text":{"en":{"name":"Atlas"}},"evidence":[]}`
+	carried.header = http.Header{"Idempotency-Key": {uuid.NewString()}, "If-Match": {`"r` + strconv.FormatInt(eh.revision(), 10) + `"`}, "Content-Type": {"application/json"}}
+	revision := eh.revision()
+	if rec := eh.do(carried); rec.Code != http.StatusBadRequest {
+		t.Fatalf("PUT carrying evidence = %d %s, want 400", rec.Code, rec.Body.String())
+	}
+	if after := eh.stored(); !reflect.DeepEqual(after, before) || eh.revision() != revision {
+		t.Fatalf("a refused PUT changed evidence or the revision: %+v at r%d", after, eh.revision())
 	}
 }
