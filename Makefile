@@ -67,6 +67,7 @@ operational-test-fast: ## operational-test's sub-second-to-low-single-digit-seco
 	bash scripts/check-path-case.sh
 	bash scripts/test/check-lengths-test.sh
 	bash scripts/test/render-topology-test.sh
+	bash scripts/test/apt-retry-test.sh
 	bash -n scripts/test/db-setup-wiring-test.sh
 	bash scripts/test/db-setup-wiring-test.sh
 	bash scripts/test/test-media-s3-test.sh
