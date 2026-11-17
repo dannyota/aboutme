@@ -39,15 +39,16 @@ ARG DEBIAN_FRONTEND=noninteractive
 ARG UBUNTU_SNAPSHOT=20261114T000000Z
 # snapshot.ubuntu.com redirects HTTP to HTTPS, and ubuntu:noble has no CA bundle until ca-certificates installs.
 RUN --mount=type=bind,from=chromium,source=/etc/ssl/certs/ca-certificates.crt,target=/run/bootstrap-ca.crt \
+    --mount=type=bind,source=deploy/apt-retry.sh,target=/run/apt-retry.sh \
     printf '%s\n' 'Types: deb' 'URIs: https://snapshot.ubuntu.com/ubuntu/'"${UBUNTU_SNAPSHOT}"/ \
         'Suites: noble noble-updates noble-backports noble-security' \
         'Components: main universe restricted multiverse' \
         'Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg' \
         > /etc/apt/sources.list.d/ubuntu.sources \
     && apt="apt-get -o Acquire::Retries=5 -o Acquire::https::CAInfo=/run/bootstrap-ca.crt" \
-    && $apt update \
-    && $apt -y --no-install-recommends upgrade \
-    && $apt -y --no-install-recommends install \
+    && sh /run/apt-retry.sh $apt update \
+    && sh /run/apt-retry.sh $apt -y --no-install-recommends upgrade \
+    && sh /run/apt-retry.sh $apt -y --no-install-recommends install \
         ca-certificates fonts-freefont-ttf fonts-ipafont-gothic fonts-liberation fonts-noto-color-emoji \
         fonts-tlwg-loma-otf fonts-unifont fonts-wqy-zenhei libasound2t64 libatk-bridge2.0-0t64 \
         libatk1.0-0t64 libatspi2.0-0t64 libcairo2 libcups2t64 libdbus-1-3 libdrm2 libfontconfig1 \
