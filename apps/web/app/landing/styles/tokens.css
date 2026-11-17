@@ -1,6 +1,0 @@
-@media (forced-colors: none) {
-  html[data-page="home"] [data-logo-part="mark"],
-  html[data-page="home"] [data-logo-part="dot"] {
-    color: var(--logo-mark);
-  }
-}
