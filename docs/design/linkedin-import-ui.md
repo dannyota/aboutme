@@ -44,10 +44,10 @@ localized routes, so the shell shows the language toggle.
 
 Every page starts with the same header: a `text-sm` back link to `/app/resumes`
 with an `ArrowLeft` 16 px icon (`--link` text, underline on hover), 16 px above
-`PageHeader`. The `h1` is `text-2xl font-bold`, and the lead is
-`text-muted-foreground`, 8 px under it. Cards are
-`rounded-lg border bg-card shadow-product` with 24 px between cards. At 390 px
-nothing scrolls sideways; long values wrap with `break-words`.
+`PageHeader`. The `h1` is 32/1.3 weight 800, and the lead is
+`text-muted-foreground`, 8 px under it. Cards are `--card` with a `--border`
+edge, `--radius-card` and no shadow, with 24 px between cards. At 390 px nothing
+scrolls sideways; long values wrap with `break-words`.
 
 ## Entry link in the create dialog
 
@@ -68,32 +68,32 @@ Top to bottom, below the header (`heading`, `lead`):
 
 1. **Steps card.** `h2` `stepsHeading` (`text-base font-semibold`), then an `ol`
    of `step1` to `step4`, 12 px apart. Each item starts with a 24 px circle on
-   `--surface-blue` with its number in `--link`, `text-sm font-semibold`,
+   `--surface-mist` with its number in `--foreground`, `text-sm font-semibold`,
    `aria-hidden="true"`; the list numbering stays in the `ol`. Under the list,
    16 px down, the `englishOnly` note: a `Languages` 16 px icon in
-   `--brand-indigo` and `text-sm` foreground text. The LinkedIn words "More" and
-   "Save to PDF" stay in English in both languages, because LinkedIn shows them
-   in English.
+   `--muted-foreground` and `text-sm` foreground text. The LinkedIn words "More"
+   and "Save to PDF" stay in English in both languages, because LinkedIn shows
+   them in English.
 2. **Drop zone.** A `section` labeled by its visually hidden `h2` `pickHeading`.
-   It is a 2 px dashed `--input` border, `rounded-lg`, on `--surface-blue`,
+   It is a 2 px dashed `--control` border, `--radius-card`, on `--surface-mist`,
    `p-8` (`p-6` below 640 px), content centered in a column with 12 px gaps: a
-   `FileUp` 32 px icon in `--brand-blue`, `dropPrompt` (`font-medium`) and `or`
-   (muted), the `default` `Button` `choose` (its visible text is its name), and
-   `limits` (`text-xs` muted). Below 640 px the prompt and `or` are hidden and
-   the button is full width. The border is decorative; the button carries the
-   control contrast.
+   `FileUp` 32 px icon in `--muted-foreground`, `dropPrompt` (`font-medium`) and
+   `or` (muted), the `default` `Button` `choose` (its visible text is its name),
+   and `limits` (`text-xs` muted). Below 640 px the prompt and `or` are hidden
+   and the button is full width. The border is decorative; the button carries
+   the control contrast.
 3. **Privacy note.** 16 px under the zone: a `LockKeyhole` 16 px icon in
-   `--brand-blue`, then `privacy` and `ownProfile` as two `text-sm` muted
+   `--muted-foreground`, then `privacy` and `ownProfile` as two `text-sm` muted
    sentences in one paragraph.
 
 The file input is `<input type="file" accept="application/pdf,.pdf">`, visually
 hidden, `tabindex="-1"`, and `aria-hidden="true"`; only the button opens it. It
 is a custom-widget exception to the raw-control rule, like the crop stage.
 Dropping is a pointer extra: the whole zone takes drops. While a file is dragged
-over it, the border turns solid `--primary`, the fill `--surface-indigo`, and
-the prompt reads `dropActive`, with a 150 ms color transition (none under
-reduced motion). A drop of more than one file reads nothing and shows `dropOne`
-as an error banner.
+over it, the border turns solid `--foreground`, the fill `--accent`, and the
+prompt reads `dropActive`, with a 150 ms color transition (none under reduced
+motion). A drop of more than one file reads nothing and shows `dropOne` as an
+error banner.
 
 After a failure the page keeps the steps card and privacy note, shows the error
 `StatusBanner` 16 px above the zone, and the button reads `chooseAnother`.
@@ -179,18 +179,18 @@ Entry rows show plain text only, never HTML:
 | Certifications | Title                         | None                                                    |
 
 Dates show as the editor shows them, with `present` for an open end. An entry
-with a notice adds a third line: an `Info` 14 px icon in `--brand-indigo` and a
-`text-xs` foreground mark, `entryNoDates` or `entryCut`. An entry that fails the
-schema check instead gets a `CircleAlert` 14 px icon and `entryInvalid` in
-`--destructive`. Entries past 64 in a section start unchecked.
+with a notice adds a third line: an `Info` 14 px icon in `--muted-foreground`
+and a `text-xs` foreground mark, `entryNoDates` or `entryCut`. An entry that
+fails the schema check instead gets a `CircleAlert` 14 px icon and
+`entryInvalid` in `--destructive`. Entries past 64 in a section start unchecked.
 
 ### Action panel
 
-The panel is a `bg-card` card. From 900 px it is the aside:
-`rounded-lg border shadow-product p-6`, sticky at `top-6`. Below 900 px it is
-the last child of the form, `position: sticky; bottom: 0`, full bleed (`-mx-4`,
-`-mx-6` from 640 px), `border-t`, `shadow-product`, `px-4 pt-3`, bottom padding
-`max(12px, env(safe-area-inset-bottom))`. It holds, in order:
+The panel is a `bg-card` card. From 900 px it is the aside: a `--radius-card`
+card with a `--border` edge and no shadow, `p-6`, sticky at `top-6`. Below 900
+px it is the last child of the form, `position: sticky; bottom: 0`, full bleed
+(`-mx-4`, `-mx-6` from 640 px), `border-t`, no shadow, `px-4 pt-3`, bottom
+padding `max(12px, env(safe-area-inset-bottom))`. It holds, in order:
 
 1. `h2` `panelHeading` (from 900 px only; visually hidden below it).
 2. `selectedCount` (`text-sm`; `text-xs` below 900 px).
@@ -233,13 +233,12 @@ After the request:
 Every color is a semantic or brand token, so light and dark switch with the
 theme. Points to check in both themes at 390 and 1280 px:
 
-- The drop zone is `--surface-blue` (`#ECEEF7`, dark `#151D36`) with the
-  `--input` dashed border; drag-over is `--surface-indigo` with a `--primary`
-  border.
-- Cards are `--card` (`#FFFFFF`, dark `#141A2E`); the step circles and the drop
-  zone use `--surface-blue`; muted text stays AA on both.
-- Meter and progress fills are `--primary` on `--muted`; over the limit the fill
-  and reason are `--destructive` (`#B54708`, dark `#FD8A4B`).
+- The drop zone is `--surface-mist` with the `--control` dashed border;
+  drag-over is `--accent` with a `--foreground` border.
+- Cards are `--card`; the step circles and the drop zone use `--surface-mist`;
+  muted text stays AA on both.
+- Meter and progress fills are `--chart-bar` on `--muted`; over the limit the
+  fill and reason are `--destructive`.
 - No seal red, gradient, or paper token appears: nothing on this page is public
   or a resume sheet.
 

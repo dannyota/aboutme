@@ -19,16 +19,19 @@ to it; opening it signed out goes to sign in and returns.
 `/app/projects` uses the shell's 76 rem column. The page header holds the h1 “Dự
 án” or “Projects”, a one-line lead (“Viết mỗi dự án một lần, rồi chọn CV nào
 hiển thị nó.” or “Write each project once, then choose which resumes show it.”),
-the count as “3 / 30”, and New project, a primary button with a plus icon. At 30
+the count as “3 / 30”, and New project, a main pill with a plus icon. At 30
 projects the button is disabled and a line under the header says the limit is
 reached.
 
-Projects are rows in one bordered card, newest update first, not paper cards:
-the list holds up to 30. A row is a link to the project's editor and shows:
+Projects are rows in one `--card` card with a `--border` edge and
+`--radius-card`, separated by `--hairline` rules, newest update first, not paper
+cards: the list holds up to 30. A row is a link to the project's editor and
+shows:
 
 - the name in the project's default language, semibold, truncated to one line;
 - the role, muted, when present;
-- up to three technology chips and a “+n” chip for the rest;
+- up to three technology chips (`--surface-mist` tags) and a “+n” chip for the
+  rest;
 - a chip for each language with text, the default one marked;
 - the relative updated time;
 - an overflow menu with Change address and Delete.
@@ -142,10 +145,10 @@ this resume by name, with a link to Projects when the library is empty. Choosing
 one inserts the prefilled entry and selects it.
 
 A linked entry's card shows a library mark and the project name under its title,
-in muted text. Its form shows, above the fields, a `--surface-blue` note: “Mục
-này lấy từ dự án {name}. Nội dung ở đây là của riêng CV này.” or “This entry
-comes from the project {name}. The text here belongs to this resume.”, with two
-actions:
+in muted text. Its form shows, above the fields, a `--surface-mist` note with a
+10 px radius: “Mục này lấy từ dự án {name}. Nội dung ở đây là của riêng CV này.”
+or “This entry comes from the project {name}. The text here belongs to this
+resume.”, with two actions:
 
 - Refresh from library, which asks first (“Thay nội dung mục bằng nội dung hiện
   tại của dự án?” or “Replace this entry's text with the project's current
