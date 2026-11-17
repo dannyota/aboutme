@@ -173,7 +173,7 @@ const mutedColor = computed(() => joinInvitePalette(dark.value).text);
       <a
         :href="href"
         style="display:block;width:100%;height:40px;line-height:40px;
-          text-align:center;border-radius:10px;
+          text-align:center;border-radius:999px;
           text-decoration:none;font-weight:500;box-sizing:border-box;"
         :style="actionStyle"
         @click="onFollow"
@@ -191,7 +191,7 @@ const mutedColor = computed(() => joinInvitePalette(dark.value).text);
       <a
         :href="href"
         style="flex-shrink:0;display:inline-flex;align-items:center;
-          margin-left:auto;height:36px;padding:0 12px;border-radius:10px;
+          margin-left:auto;height:36px;padding:0 12px;border-radius:999px;
           text-decoration:none;font-weight:500;font-size:14px;"
         :style="actionStyle"
         @click="onFollow"

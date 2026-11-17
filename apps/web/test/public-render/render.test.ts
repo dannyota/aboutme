@@ -2,6 +2,7 @@
 
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { JSDOM } from 'jsdom';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -218,11 +219,22 @@ describe('public page measure and PDF download', () => {
     const anchor = /<a class="public-download" href="([^"]*)">(.*?)<\/a>/su
       .exec(html);
     if (anchor === null) return null;
+    const span = '<span[^>]*>[^<]*</span>';
+    const labels = new RegExp(`</svg>(${span})(${span})$`, 'su')
+      .exec(anchor[2]);
     return {
       href: anchor[1],
-      label: /<span>([^<]*)<\/span>$/su.exec(anchor[2])?.[1] ?? null,
+      full: labels?.[1] ?? null,
+      short: labels?.[2] ?? null,
       icon: /^<svg[^>]*aria-hidden="true"[^>]*>/su.test(anchor[2]),
     };
+  };
+
+  const accessibleText = (node: Node): string => {
+    if (node.nodeType === node.TEXT_NODE) return node.textContent ?? '';
+    const hidden = node.nodeType === node.ELEMENT_NODE
+      && (node as Element).getAttribute('aria-hidden') === 'true';
+    return hidden ? '' : [...node.childNodes].map(accessibleText).join('');
   };
 
   it('links the public PDF only while download is enabled', async () => {
@@ -235,9 +247,13 @@ describe('public page measure and PDF download', () => {
     const html = await renderPublicResume(value, VERSIONS);
     const link = downloadLink(html);
     expect(link?.href).toBe('/api/v1/public/resumes/ada1/pdf');
-    expect(link?.label).toBe('Download PDF');
+    expect(link?.full)
+      .toBe('<span class="public-download-full">Download PDF</span>');
+    expect(link?.short).toBe(
+      '<span aria-hidden="true" class="public-download-short">PDF</span>',
+    );
     expect(link?.icon).toBe(true);
-    expect(html.match(/public-download/gu)).toHaveLength(1);
+    expect(html.match(/class="public-download"/gu)).toHaveLength(1);
   });
 
   it('labels the link in the resume language', async () => {
@@ -251,9 +267,34 @@ describe('public page measure and PDF download', () => {
       value.publicResume.downloadEnabled = true;
       value.publicResume.lng = lng;
       const html = await renderPublicResume(value, VERSIONS);
-      expect(downloadLink(html)?.label, lng).toBe(label);
+      const link = downloadLink(html);
+      expect(link?.full, lng)
+        .toBe(`<span class="public-download-full">${label}</span>`);
+      expect(link?.short, lng).toBe(
+        '<span aria-hidden="true" class="public-download-short">PDF</span>',
+      );
     }
   });
+
+  it('names the download link by its full label in both languages',
+    async () => {
+      for (const [lng, label] of [
+        ['vi', 'Tải PDF'],
+        ['en', 'Download PDF'],
+      ] as const) {
+        const value = request();
+        value.publicResume.downloadEnabled = true;
+        value.publicResume.lng = lng;
+        const html = await renderPublicResume(value, VERSIONS);
+        const anchor = new JSDOM(html).window.document
+          .querySelector('a.public-download')!;
+        expect(anchor.hasAttribute('aria-label'), lng).toBe(false);
+        expect(anchor.hasAttribute('aria-labelledby'), lng).toBe(false);
+        expect(accessibleText(anchor), lng).toBe(label);
+        expect(anchor.querySelector('.public-download-full')
+          ?.getAttribute('aria-hidden'), lng).toBeNull();
+      }
+    });
 
   it('draws the brand mark beside the credit, plain and accessible',
     async () => {

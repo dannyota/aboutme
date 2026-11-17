@@ -2,14 +2,18 @@ import { expect, test, type Page } from '@playwright/test';
 
 import { expectScreen } from './display-assertions';
 import {
+  expectProjectBarRow,
   expectProjectColors,
   expectProjectColumns,
   expectProjectMeasure,
+  expectProjectShapes,
   expectProjectStructure,
   expectProjectStylesheet,
   expectRowMeta,
   type Lng,
   openProjectPage,
+  PROJECT_BAR_ROW,
+  PROJECT_SHAPES,
   projectContract,
   type ProjectPageKind,
   type Scheme,
@@ -25,12 +29,12 @@ const WIDTHS = [320, 768, 1280] as const;
 
 async function assertProjectPage(
   page: Page, kind: ProjectPageKind, lng: Lng, scheme: Scheme,
-  external: readonly string[],
+  external: readonly string[], width: number,
 ): Promise<void> {
   expect(external).toEqual([]);
   await expect(page.locator('html')).toHaveAttribute('lang', lng);
   await expectProjectStylesheet(page);
-  await expectScreen(page, projectContract(kind, lng, scheme));
+  await expectScreen(page, projectContract(kind, lng, scheme, width));
   await expectProjectMeasure(page, kind);
   if (kind === 'project') {
     await expectProjectColumns(page);
@@ -38,6 +42,7 @@ async function assertProjectPage(
     await expectRowMeta(page);
   }
   await expectProjectColors(page, kind, scheme);
+  await expectProjectShapes(page, kind);
 }
 
 for (const [kindIndex, kind] of KINDS.entries()) {
@@ -52,7 +57,7 @@ for (const [kindIndex, kind] of KINDS.entries()) {
         const external = await openProjectPage(page, kind, lng, scheme);
         await expect(page.locator('html'))
           .toHaveAttribute('data-scheme', scheme);
-        await assertProjectPage(page, kind, lng, scheme, external);
+        await assertProjectPage(page, kind, lng, scheme, external, width);
       });
     }
   }
@@ -68,7 +73,7 @@ for (const [kindIndex, kind] of KINDS.entries()) {
       const external = await openProjectPage(page, kind, lng, 'system');
       await expect(page.locator('html'))
         .toHaveAttribute('data-scheme', 'system');
-      await assertProjectPage(page, kind, lng, viewer, external);
+      await assertProjectPage(page, kind, lng, viewer, external, 768);
     });
   }
 }
@@ -120,6 +125,13 @@ mutationTest('project page rejects a color outside its scheme', async ({
       { 'background-color': 'rgb(255, 0, 0)' }), 'Project scheme colors.');
 });
 
+mutationTest('project page rejects a squared card', async ({ page }) => {
+  await openWide('project')(page);
+  await proveMutation(() => expectProjectShapes(page, 'project'),
+    () => applyStyleMutation(page.locator('.project-facts'),
+      { 'border-radius': '10px' }), PROJECT_SHAPES);
+});
+
 mutationTest('project page rejects a style attribute', async ({ page }) => {
   await openWide('project')(page);
   await proveMutation(() => expectProjectStylesheet(page),
@@ -151,4 +163,27 @@ mutationTest('project page rejects an unnamed text section', async ({
   await proveMutation(() => expectProjectStructure(page, 'project', 'vi'),
     () => mutateAttribute(page.locator('.project-outcome'),
       'aria-labelledby', 'missing-title'), 'Project page structure.');
+});
+
+test.describe('project bar at 360 px', () => {
+  test.use({ hasTouch: true });
+
+  for (const [kind, lng] of [
+    ['project-list', 'vi'], ['project', 'en'],
+  ] as const) {
+    test(`${kind} keeps the credit and back link on one row ${lng}`,
+      async ({ page }) => {
+        await page.setViewportSize({ width: 360, height: 900 });
+        await openProjectPage(page, kind, lng, 'light');
+        await expectProjectBarRow(page);
+      });
+  }
+
+  mutationTest('project bar rejects a wrapped row', async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 900 });
+    await openProjectPage(page, 'project', 'vi', 'light');
+    await proveMutation(() => expectProjectBarRow(page),
+      () => applyStyleMutation(page.locator('.public-toolbar-inner'),
+        { 'column-gap': '200px' }), PROJECT_BAR_ROW);
+  });
 });

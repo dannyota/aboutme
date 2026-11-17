@@ -10,54 +10,96 @@ interface ProjectPageTokens {
   readonly chip: string;
   readonly hover: string;
   readonly focus: string;
-  readonly mark: string;
   readonly border: string;
-  readonly shadow: string;
+  readonly hairline: string;
 }
 
 export const PROJECT_PAGE_TOKENS: Readonly<
   Record<'light' | 'dark', ProjectPageTokens>
 > = {
   light: {
-    ground: '#f9f8f5',
+    ground: '#ffffff',
     card: '#ffffff',
-    ink: '#101b3f',
-    muted: '#5c6178',
-    link: '#23399a',
-    primary: '#26409c',
-    primaryHover: '#1e3483',
+    ink: '#1a1650',
+    muted: '#55517d',
+    link: '#4336c9',
+    primary: '#594bad',
+    primaryHover: '#4c3c9c',
     onPrimary: '#ffffff',
-    chip: '#efede6',
-    hover: '#eceef6',
-    focus: '#26409c',
-    mark: '#cc2649',
-    border: '#e5e1d6',
-    shadow: '0 1px 2px rgba(16, 27, 63, 0.06)',
+    chip: '#f1effa',
+    hover: '#f1effa',
+    focus: '#1a1650',
+    border: '#e3e0f2',
+    hairline: 'rgba(26, 22, 80, 0.14)',
   },
   dark: {
-    ground: '#0c1020',
-    card: '#141a2e',
-    ink: '#f3f1ec',
-    muted: '#a5abbf',
-    link: '#a3b6f5',
-    primary: '#8fa6f0',
-    primaryHover: '#a3b6f5',
-    onPrimary: '#0c1020',
-    chip: '#1a2138',
-    hover: '#1a2138',
-    focus: '#8fa6f0',
-    mark: '#ff6b8a',
-    border: 'rgba(230, 225, 210, 0.13)',
-    shadow: 'none',
+    ground: '#0e0a0d',
+    card: '#1b1419',
+    ink: '#d3cad0',
+    muted: '#a3959f',
+    link: '#b59bdb',
+    primary: '#7267c0',
+    primaryHover: '#675bb3',
+    onPrimary: '#ffffff',
+    chip: '#151015',
+    hover: '#251b23',
+    focus: '#cdbcd9',
+    border: '#2e242c',
+    hairline: 'rgba(211, 202, 208, 0.14)',
   },
 };
 
-const tokenDeclarations = (tokens: ProjectPageTokens): string =>
+interface BarTokens {
+  readonly ground: string;
+  readonly border: string;
+  readonly mark: string;
+  readonly credit: string;
+  readonly creditHover: string;
+  readonly buttonBorder: string;
+  readonly buttonLabel: string;
+  readonly buttonHoverFill: string;
+  readonly focusRing: string;
+}
+
+const BAR_TOKENS: Readonly<Record<'light' | 'dark', BarTokens>> = {
+  light: {
+    ground: '#ffffff',
+    border: '#e3e0f2',
+    mark: '#de1b5a',
+    credit: '#55517d',
+    creditHover: '#4336c9',
+    buttonBorder: '#1a1650',
+    buttonLabel: '#1a1650',
+    buttonHoverFill: '#f1effa',
+    focusRing: '#1a1650',
+  },
+  dark: {
+    ground: '#0e0a0d',
+    border: '#2e242c',
+    mark: '#e2788f',
+    credit: '#a3959f',
+    creditHover: '#b59bdb',
+    buttonBorder: '#d3cad0',
+    buttonLabel: '#d3cad0',
+    buttonHoverFill: '#251b23',
+    focusRing: '#cdbcd9',
+  },
+};
+
+const customProperties = (
+  prefix: string, tokens: ProjectPageTokens | BarTokens,
+): string =>
   Object.entries(tokens)
     .map(([role, value]) =>
-      `--project-${role.replaceAll(/[A-Z]/gu, (letter) =>
+      `--${prefix}-${role.replaceAll(/[A-Z]/gu, (letter) =>
         `-${letter.toLowerCase()}`)}:${value};`)
     .join('');
+
+const tokenDeclarations = (tokens: ProjectPageTokens): string =>
+  customProperties('project', tokens);
+
+const barDeclarations = (tokens: BarTokens): string =>
+  customProperties('toolbar', tokens);
 
 const FONT = '"Be Vietnam Pro",Inter,system-ui,sans-serif';
 const PAGE = '.public-project-page';
@@ -79,11 +121,17 @@ const media = (query: string, ...blocks: string[]): string =>
 const SCHEME = [
   rule(':root', 'color-scheme:light;background:var(--project-ground);',
     tokenDeclarations(PROJECT_PAGE_TOKENS.light)),
-  media('screen', rule(':root[data-scheme="dark"]', 'color-scheme:dark;',
-    tokenDeclarations(PROJECT_PAGE_TOKENS.dark))),
+  rules('.public-toolbar', barDeclarations(BAR_TOKENS.light)),
+  media('screen',
+    rule(':root[data-scheme="dark"]', 'color-scheme:dark;',
+      tokenDeclarations(PROJECT_PAGE_TOKENS.dark)),
+    rule(':root[data-scheme="dark"] .public-toolbar',
+      barDeclarations(BAR_TOKENS.dark))),
   media('screen and (prefers-color-scheme:dark)',
     rule(':root[data-scheme="system"]', 'color-scheme:dark;',
-      tokenDeclarations(PROJECT_PAGE_TOKENS.dark))),
+      tokenDeclarations(PROJECT_PAGE_TOKENS.dark)),
+    rule(':root[data-scheme="system"] .public-toolbar',
+      barDeclarations(BAR_TOKENS.dark))),
 ];
 
 const FRAME = [
@@ -91,7 +139,8 @@ const FRAME = [
   rule(PAGE, 'box-sizing:border-box;min-height:100vh;',
     'background:var(--project-ground);color:var(--project-ink);',
     `font-family:${FONT};font-size:15px;line-height:1.6;`,
-    'overflow-wrap:anywhere;--project-gutter:16px;'),
+    'overflow-wrap:anywhere;--project-gutter:16px;',
+    '--project-radius-card:22px;'),
   rule(`${PAGE}-list`, '--project-measure:44rem;'),
   rule(`${PAGE}-detail`, '--project-measure:59rem;'),
   rules('*,*::before,*::after', 'box-sizing:border-box;'),
@@ -118,14 +167,16 @@ const FRAME = [
     rules('.public-measure', 'padding-top:32px;padding-bottom:64px;'),
     rules('h1', 'font-size:32px;')),
   media('(min-width:56rem)', rule(PAGE, '--project-gutter:32px;')),
+  media('(min-width:48rem)', rule(PAGE, '--project-radius-card:26px;')),
+  media('(min-width:64rem)', rule(PAGE, '--project-radius-card:28px;')),
 ];
 
 const BAR = [
   rules('.public-toolbar', 'padding-block:8px 7px;',
-    'background:var(--project-ground);',
-    'border-bottom:1px solid var(--project-border);'),
+    'background:var(--toolbar-ground);',
+    'border-bottom:1px solid var(--toolbar-border);'),
   rules('.public-toolbar-inner', 'display:flex;flex-wrap:wrap;',
-    'align-items:center;justify-content:space-between;column-gap:12px;',
+    'align-items:center;justify-content:space-between;column-gap:8px;',
     'row-gap:8px;min-height:32px;max-width:calc(var(--project-measure) + ',
     '2 * var(--project-gutter));margin-inline:auto;',
     'padding-inline:var(--project-gutter);font-size:15px;'),
@@ -134,30 +185,33 @@ const BAR = [
   rules('.public-brand', 'display:inline-flex;align-items:center;gap:8px;',
     'min-width:0;'),
   rules('.public-mark', 'display:block;flex-shrink:0;',
-    'color:var(--project-mark);'),
+    'color:var(--toolbar-mark);'),
   rules('.public-credit', `font:500 13px/20px ${FONT};`,
-    'color:var(--project-muted);text-decoration:none;'),
+    'color:var(--toolbar-credit);text-decoration:none;'),
   rules('.public-back', 'display:inline-flex;align-items:center;',
     'min-height:32px;max-width:100%;padding:5px 12px 5px 10px;',
-    'border:1px solid var(--project-border);border-radius:10px;',
-    'background:var(--project-card);color:var(--project-link);',
-    `font:500 14px/20px ${FONT};text-decoration:none;`,
-    'box-shadow:var(--project-shadow);'),
+    'border:1.5px solid var(--toolbar-button-border);border-radius:999px;',
+    'background:transparent;color:var(--toolbar-button-label);',
+    `font:500 14px/20px ${FONT};text-decoration:none;`),
+  rules('.public-toolbar a:focus-visible',
+    'outline-color:var(--toolbar-focus-ring);'),
   media('(hover:hover)',
-    rules('.public-credit:hover', 'color:var(--project-link);',
+    rules('.public-credit:hover', 'color:var(--toolbar-credit-hover);',
       'text-decoration:underline;text-underline-offset:3px;'),
-    rules('.public-back:hover', 'background:var(--project-hover);')),
+    rules('.public-back:hover',
+      'background:var(--toolbar-button-hover-fill);')),
   media('(pointer:coarse)', rules('.public-toolbar-inner', 'min-height:40px;'),
     rules('.public-credit', 'display:inline-block;padding-block:10px;',
       'margin-block:-10px;'),
     rules('.public-back', 'min-height:40px;')),
+  media('(width < 30rem)', rules('.public-credit', 'font-size:12px;'),
+    rules('.public-back', 'padding-inline:8px 10px;')),
   media('print', rules('.public-toolbar', 'display:none;')),
 ];
 
 const CHIPS = [
   rules('.project-chips', 'display:flex;flex-wrap:wrap;gap:6px;margin:0;',
     'padding:0;list-style:none;'),
-  // Forced colors mode drops backgrounds; the border keeps the chip shape.
   rules('.project-chips li', 'display:inline-flex;align-items:center;',
     'min-height:24px;padding:2px 10px;border:1px solid transparent;',
     'border-radius:999px;background:var(--project-chip);',
@@ -171,11 +225,12 @@ const LIST = [
   rules('.project-owner a', 'color:var(--project-muted);'),
   rules('.project-rows', 'margin:24px 0 0;padding:0;list-style:none;',
     'background:var(--project-card);',
-    'border:1px solid var(--project-border);border-radius:10px;'),
+    'border:1px solid var(--project-border);',
+    'border-radius:var(--project-radius-card);'),
   rules('.project-row', 'display:flex;flex-wrap:wrap;align-items:baseline;',
     'column-gap:12px;row-gap:4px;padding:16px;'),
   rules('.project-row + .project-row',
-    'border-top:1px solid var(--project-border);'),
+    'border-top:1px solid var(--project-hairline);'),
   rules('.project-row-name', 'min-width:0;font-size:16px;line-height:24px;',
     'font-weight:600;'),
   rules('.project-row-name a', 'color:var(--project-link);',
@@ -204,15 +259,15 @@ const DETAIL = [
   rules('.project-columns', 'display:grid;gap:24px;'),
   rules('.project-facts', 'display:flex;flex-direction:column;gap:20px;',
     'min-width:0;padding:20px;background:var(--project-card);',
-    'border:1px solid var(--project-border);border-radius:10px;'),
+    'border:1px solid var(--project-border);',
+    'border-radius:var(--project-radius-card);'),
   rules('.project-links', 'display:flex;flex-wrap:wrap;gap:8px;'),
   rules('.project-external', 'display:inline-flex;flex:1 1 10rem;',
     'align-items:center;justify-content:center;gap:8px;min-height:40px;',
-    'padding:9px 16px;border:1px solid var(--project-border);',
-    'border-radius:10px;background:var(--project-card);',
-    `color:var(--project-link);font:500 14px/20px ${FONT};`,
-    'text-align:center;text-decoration:none;',
-    'box-shadow:var(--project-shadow);'),
+    'padding:8px 16px;border:1.5px solid var(--project-ink);',
+    'border-radius:999px;background:transparent;',
+    `color:var(--project-ink);font:500 14px/20px ${FONT};`,
+    'text-align:center;text-decoration:none;'),
   rules('.project-external svg', 'display:block;flex-shrink:0;'),
   rules('.project-external-primary', 'border-color:var(--project-primary);',
     'background:var(--project-primary);color:var(--project-on-primary);'),
@@ -232,7 +287,8 @@ const DETAIL = [
     'min-width:0;'),
   rules('.project-text h2', 'margin-bottom:12px;'),
   rules('.project-outcome', 'padding:20px;background:var(--project-card);',
-    'border:1px solid var(--project-border);border-radius:10px;'),
+    'border:1px solid var(--project-border);',
+    'border-radius:var(--project-radius-card);'),
   rules('.project-description', 'line-height:1.7;'),
   rules(['.project-description p', '.project-description ul',
     '.project-description ol'], 'margin:0 0 12px;'),

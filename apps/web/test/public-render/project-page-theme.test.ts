@@ -7,6 +7,7 @@ import {
   PROJECT_PAGE_STYLE,
   PROJECT_PAGE_TOKENS,
 } from '../../server/workers/public-render/project-style';
+import { lastIndex, parseCss, style } from './css-rules';
 
 const luminance = (hex: string): number => {
   const channels = [1, 3, 5].map((start) =>
@@ -25,26 +26,25 @@ const contrast = (foreground: string, background: string): number => {
 
 const EXPECTED = {
   light: {
-    ground: '#f9f8f5', card: '#ffffff', ink: '#101b3f', muted: '#5c6178',
-    link: '#23399a', primary: '#26409c', primaryHover: '#1e3483',
-    onPrimary: '#ffffff', chip: '#efede6', hover: '#eceef6',
-    focus: '#26409c', mark: '#cc2649',
+    ground: '#ffffff', card: '#ffffff', ink: '#1a1650', muted: '#55517d',
+    link: '#4336c9', primary: '#594bad', primaryHover: '#4c3c9c',
+    onPrimary: '#ffffff', chip: '#f1effa', hover: '#f1effa',
+    focus: '#1a1650', border: '#e3e0f2',
+    hairline: 'rgba(26, 22, 80, 0.14)',
   },
   dark: {
-    ground: '#0c1020', card: '#141a2e', ink: '#f3f1ec', muted: '#a5abbf',
-    link: '#a3b6f5', primary: '#8fa6f0', primaryHover: '#a3b6f5',
-    onPrimary: '#0c1020', chip: '#1a2138', hover: '#1a2138',
-    focus: '#8fa6f0', mark: '#ff6b8a',
+    ground: '#0e0a0d', card: '#1b1419', ink: '#d3cad0', muted: '#a3959f',
+    link: '#b59bdb', primary: '#7267c0', primaryHover: '#675bb3',
+    onPrimary: '#ffffff', chip: '#151015', hover: '#251b23',
+    focus: '#cdbcd9', border: '#2e242c',
+    hairline: 'rgba(211, 202, 208, 0.14)',
   },
 } as const;
 
 describe('project page tokens', () => {
   it.each(['light', 'dark'] as const)('take the %s application tokens',
     (scheme) => {
-      const tokens = PROJECT_PAGE_TOKENS[scheme];
-      for (const [role, value] of Object.entries(EXPECTED[scheme])) {
-        expect(tokens[role as keyof typeof tokens], role).toBe(value);
-      }
+      expect(PROJECT_PAGE_TOKENS[scheme]).toEqual(EXPECTED[scheme]);
     });
 
   it.each(['light', 'dark'] as const)('meet text contrast in %s', (scheme) => {
@@ -54,7 +54,7 @@ describe('project page tokens', () => {
       ['ink', 'chip', tokens.ink], ['muted', 'ground', tokens.muted],
       ['muted', 'card', tokens.muted], ['muted', 'chip', tokens.muted],
       ['link', 'ground', tokens.link], ['link', 'card', tokens.link],
-      ['link', 'hover', tokens.link],
+      ['link', 'hover', tokens.link], ['ink', 'hover', tokens.ink],
       ['onPrimary', 'primary', tokens.onPrimary],
       ['onPrimary', 'primaryHover', tokens.onPrimary],
     ];
@@ -68,8 +68,42 @@ describe('project page tokens', () => {
         .toBeGreaterThanOrEqual(3);
       expect(contrast(tokens.primary, tokens[background]),
         `button ${background}`).toBeGreaterThanOrEqual(3);
-      expect(contrast(tokens.mark, tokens[background]), `mark ${background}`)
-        .toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  it('draws flat surfaces with hairline rows and outline links', () => {
+    expect(PROJECT_PAGE_STYLE).not.toMatch(/box-shadow|--project-shadow/u);
+    expect(PROJECT_PAGE_STYLE).toContain(
+      '.public-project-page .project-row + .project-row'
+      + '{border-top:1px solid var(--project-hairline);}',
+    );
+    expect(PROJECT_PAGE_STYLE).toContain(
+      'padding:8px 16px;border:1.5px solid var(--project-ink);'
+      + 'border-radius:999px;background:transparent;'
+      + 'color:var(--project-ink);',
+    );
+    expect(PROJECT_PAGE_STYLE).toContain(
+      '.public-project-page .project-external-primary'
+      + '{border-color:var(--project-primary);'
+      + 'background:var(--project-primary);'
+      + 'color:var(--project-on-primary);}',
+    );
+  });
+
+  it('rounds standalone cards with the card radius', () => {
+    const rules = parseCss(PROJECT_PAGE_STYLE);
+    const page = '.public-project-page';
+    expect(style(rules, page)['--project-radius-card']).toBe('22px');
+    expect(style(rules, page, '@media (min-width:48rem)'))
+      .toEqual({ '--project-radius-card': '26px' });
+    expect(style(rules, page, '@media (min-width:64rem)'))
+      .toEqual({ '--project-radius-card': '28px' });
+    expect(lastIndex(rules, page, '@media (min-width:64rem)'))
+      .toBeGreaterThan(lastIndex(rules, page, '@media (min-width:48rem)'));
+    for (const card of ['.project-rows', '.project-facts',
+      '.project-outcome']) {
+      expect(style(rules, `${page} ${card}`)['border-radius'], card)
+        .toBe('var(--project-radius-card)');
     }
   });
 

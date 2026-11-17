@@ -5,8 +5,9 @@ This page specifies the page bar of the
 owner decisions, the color scheme, and the display checks.
 
 The bar is aboutme chrome, not part of the resume. It uses the application
-tokens and the chrome typeface, and it stays quiet next to the resume: a pale
-strip, muted credit text, and one small outlined button.
+tokens and the chrome typeface, and it stays quiet next to the resume: a strip
+on the page ground, muted credit text, and small outline pills. It keeps one row
+on a phone.
 
 ## Structure
 
@@ -25,7 +26,8 @@ resume text.
     </span>
     <a class="public-download" href="/api/v1/public/resumes/{slug}/pdf">
       <svg aria-hidden="true" focusable="false">…</svg>
-      <span>Download PDF</span>
+      <span class="public-download-full">Download PDF</span>
+      <span class="public-download-short" aria-hidden="true">PDF</span>
     </a>
   </div>
 </div>
@@ -44,7 +46,10 @@ resume text.
   render it; the mark geometry moves into a module that `AppLogo` and the public
   mark both import, so a logo change reaches both.
 - The download icon is Lucide `download` at 16 px with `currentColor` stroke.
-- The download anchor's accessible name is its visible label.
+- The download anchor's accessible name is always the full label. Below 30 rem
+  the full label is visually hidden and the short label `PDF` shows instead, so
+  the visible text stays inside the name; from 30 rem the short label is not
+  displayed.
 - When the resume links at least one available project
   ([project entry points](project-entry-points.md)), `a.public-projects` sits
   left of the download anchor, 8 px apart, both inside `span.public-actions`, so
@@ -70,46 +75,45 @@ which builds into `print.css`, declares them as custom properties scoped to
 `.public-toolbar`. The bar takes the dark column when the page's scheme is dark,
 and under Match device when the viewer prefers dark.
 
-| Role                  | Light                              | Dark                        | Source           |
-| --------------------- | ---------------------------------- | --------------------------- | ---------------- |
-| Bar ground            | `#F9F8F5`                          | `#0C1020`                   | Page background  |
-| Bar bottom rule       | `#E5E1D6`                          | `rgba(230, 225, 210, 0.13)` | Border           |
-| Mark                  | `#CC2649`                          | `#FF6B8A`                   | Seal text        |
-| Credit text           | `#5C6178`                          | `#A5ABBF`                   | Muted foreground |
-| Credit hover          | `#23399A`                          | `#A3B6F5`                   | Link             |
-| Button fill           | `#FFFFFF`                          | `#141A2E`                   | Card             |
-| Button border         | `#E5E1D6`                          | `rgba(230, 225, 210, 0.13)` | Border           |
-| Button label and icon | `#23399A`                          | `#A3B6F5`                   | Link             |
-| Button hover fill     | `#ECEEF6`                          | `#1A2138`                   | Secondary        |
-| Focus ring            | `#26409C`                          | `#8FA6F0`                   | Ring             |
-| Button shadow         | `0 1px 2px rgba(16, 27, 63, 0.06)` | none                        | Shadow xs        |
+| Role                  | Light     | Dark      | Source           |
+| --------------------- | --------- | --------- | ---------------- |
+| Bar ground            | `#FFFFFF` | `#0E0A0D` | Page background  |
+| Bar bottom rule       | `#E3E0F2` | `#2E242C` | Border           |
+| Mark                  | `#DE1B5A` | `#E2788F` | Logo mark        |
+| Credit text           | `#55517D` | `#A3959F` | Muted foreground |
+| Credit hover          | `#4336C9` | `#B59BDB` | Link             |
+| Button fill           | none      | none      |                  |
+| Button border         | `#1A1650` | `#D3CAD0` | Foreground       |
+| Button label and icon | `#1A1650` | `#D3CAD0` | Foreground       |
+| Button hover fill     | `#F1EFFA` | `#251B23` | Accent           |
+| Focus ring            | `#1A1650` | `#CDBCD9` | Ring             |
+| Button shadow         | none      | none      |                  |
 
-Measured contrast: the mark 5.0:1 light and 6.9:1 dark; credit text 5.7:1 and
-8.3:1; the button label 9.9:1 on white, 8.5:1 on the hover fill, 8.7:1 dark, and
-7.1:1 on the dark hover fill.
+Measured contrast: the mark 4.76:1 light and 6.85:1 dark; credit text 7.34:1 and
+6.89:1; the button label 16.48:1 light and 12.29:1 dark, 14.49:1 and 10.42:1 on
+the hover fill; the button border is the label color.
 
 ## Size and placement
 
-| Property               | Value                                                   |
-| ---------------------- | ------------------------------------------------------- |
-| Bar height             | 48 px, or 56 px on a touch screen; 8 px block padding   |
-| Inner row width        | the resume measure plus both page margins, centered     |
-| Inner inline padding   | the resume's inline padding, `--screen-margin-x`        |
-| Row layout             | brand left, download right; 16 px gap, 12 px on phones  |
-| Wrap                   | the row wraps with an 8 px row gap; download goes last  |
-| Credit type            | Be Vietnam Pro 500, 13 px on 20 px                      |
-| Mark                   | 20 px high, 19 px wide, 8 px before the credit text     |
-| Button                 | 32 px high, 10 px radius, 1 px border                   |
-| Button padding         | 10 px left, 12 px right                                 |
-| Button type            | Be Vietnam Pro 500, 14 px on 20 px; icon 16 px, gap 6px |
-| Button, coarse pointer | 40 px high, same padding                                |
-| Projects button        | the button's style without an icon; 12 px each side     |
-| Touch target           | 44 px high on a coarse pointer; buttons stay 40 px      |
-| Credit hover           | link color and underline with a 3 px offset             |
-| Focus                  | 2 px ring, 2 px offset, on the credit and the button    |
+| Property               | Value                                                                                         |
+| ---------------------- | --------------------------------------------------------------------------------------------- |
+| Bar height             | 48 px, or 56 px on a touch screen; 8 px block padding                                         |
+| Inner row width        | the resume measure plus both page margins, centered                                           |
+| Inner inline padding   | the resume's inline padding, `--screen-margin-x`                                              |
+| Row layout             | brand left, actions right; 16 px gap, 8 px on phones                                          |
+| Wrap                   | one row down to 360 px; below that the row wraps with an 8 px row gap and the actions go last |
+| Credit type            | Be Vietnam Pro 500, 13 px on 20 px; 12 px below 30 rem                                        |
+| Mark                   | 20 px high, 19 px wide, 8 px before the credit text                                           |
+| Button                 | 32 px high, pill radius, 1.5 px border                                                        |
+| Button padding         | 10 px left, 12 px right; 8 px and 10 px below 30 rem                                          |
+| Button type            | Be Vietnam Pro 500, 14 px on 20 px; icon 16 px, gap 6px                                       |
+| Button, coarse pointer | 40 px high, same padding                                                                      |
+| Projects button        | the button's style without an icon; 12 px each side, 10 px below 30 rem                       |
+| Touch target           | 44 px high on a coarse pointer; buttons stay 40 px                                            |
+| Credit hover           | link color and underline with a 3 px offset                                                   |
+| Focus                  | 2 px ring, 2 px offset, on the credit and the button                                          |
 
-The button matches the application `outline` button at size `sm`. It replaces
-today's filled button, 2.75em high (about 35 px) in the template's link color.
+The buttons match the application `outline` pill at size `sm`.
 
 The padding is `clamp(16px, (page width - measure) / 2, var(--page-margin-x))`,
 the same value as the resume's own inline padding (see
@@ -119,8 +123,8 @@ one left edge at every width.
 
 At 1440 px the brand sits on the resume's left text edge and the button's right
 edge on the resume's right text edge. On a phone the bar keeps a 16 px gutter.
-Both languages fit one row at 360 px on a touch screen. At 320 px the English
-row wraps and the button sits under the credit; the Vietnamese row still fits.
+Both languages fit one row at 360 px on a touch screen with both buttons. At 320
+px the row may wrap, and the actions sit under the credit.
 
 ## Behavior
 
@@ -132,7 +136,7 @@ row wraps and the button sits under the credit; the Vietnamese row still fits.
   the same height. With no available project, the brand stands alone on the
   left.
 - Print hides the bar, as today.
-- Under `forced-colors: active`, the mark strokes in `CanvasText` and the button
-  shows a `ButtonBorder` border.
+- Under `forced-colors: active`, the mark strokes in `CanvasText` and the
+  buttons show a `ButtonBorder` border.
 - On a sign-in resume the join invite sits at the bottom edge and the bar at the
   top, so they never overlap.

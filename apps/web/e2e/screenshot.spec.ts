@@ -5,6 +5,7 @@ import {
   expectScreen, measureTextContainment, resumeContract,
 } from './display-assertions';
 
+import { BAR_COLORS, expectBarPaint } from './public-bar';
 import { applyStyleMutation, mutationTest } from './style-mutation';
 import {
   denyExternalRequests,
@@ -373,13 +374,20 @@ test.describe('public page measure', () => {
       await page.emulateMedia({ media: 'screen' });
       const dark = cell.scheme === 'dark'
         || (cell.scheme === 'system' && cell.colorPreference === 'dark');
-      await expect(page.locator('.public-toolbar')).toHaveCSS(
-        'background-color',
-        dark ? 'rgb(12, 16, 32)' : 'rgb(249, 248, 245)',
-      );
+      await expectBarPaint(page, dark, 'Public bar paint.');
       await expect(page.locator('.public-credit'))
         .toHaveText('Tạo bằng aboutme.vn');
-      await expect(page.locator('.public-download')).toHaveText('Tải PDF');
+      const download = page.locator('.public-download');
+      await expect(download).toHaveAccessibleName('Tải PDF');
+      await expect(download.locator('.public-download-full'))
+        .toHaveText('Tải PDF');
+      const short = download.locator('.public-download-short');
+      if (cell.width < 480) {
+        await expect(short).toBeVisible();
+        await expect(short).toHaveText('PDF');
+      } else {
+        await expect(short).toBeHidden();
+      }
       await expect(page.locator('.resume-name'))
         .toHaveText('Nguyễn Thị Minh Châu');
       const paragraphs = page.locator('.resume-document .entry-body p');
@@ -501,8 +509,8 @@ test.describe('public page color scheme', () => {
         if (template === 'executive-band') {
           expect(dark.header).not.toBe(light.header);
         }
-        expect(light.bar).toBe('rgb(249, 248, 245)');
-        expect(dark.bar).toBe('rgb(12, 16, 32)');
+        expect(light.bar).toBe(BAR_COLORS.light.ground);
+        expect(dark.bar).toBe(BAR_COLORS.dark.ground);
         expect(dark.rootScheme).toBe('dark');
 
         await page.emulateMedia({ media: 'print' });

@@ -231,8 +231,14 @@ describe('resume page entry points', () => {
     expect(actions).toEqual([
       'public-credit', 'public-projects', 'public-download',
     ]);
-    expect(page.querySelector('.public-toolbar')?.textContent)
-      .toBe('Built with aboutme.vnProjectsDownload PDF');
+    expect([...page.querySelectorAll('.public-toolbar a')]
+      .map((anchor) => [...anchor.childNodes]
+        .filter((node) => node.nodeType !== node.ELEMENT_NODE
+          || (node as Element).getAttribute('aria-hidden') !== 'true')
+        .map((node) => node.textContent).join('')))
+      .toEqual(['Built with aboutme.vn', 'Projects', 'Download PDF']);
+    expect(page.querySelector('.public-download-short')?.textContent)
+      .toBe('PDF');
   });
 
   it('labels the Projects link in Vietnamese without Download PDF',
