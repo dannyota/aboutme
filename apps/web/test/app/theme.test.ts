@@ -401,7 +401,7 @@ describe('application theme', () => {
       'surface-sun', 'surface-destructive', 'panel', 'panel-foreground',
       'panel-muted', 'footer', 'hairline', 'control', 'coin', 'coin-ink',
       'chart-bar', 'overlay', 'editor-canvas', 'primary-hover', 'paper',
-      'paper-ink', 'paper-muted', 'paper-hover',
+      'paper-ink', 'paper-muted', 'paper-hover', 'logo-mark',
     ]) {
       expect(theme[`--color-${name}`], name).toBe(`var(--${name})`);
     }
@@ -451,7 +451,6 @@ describe('application theme', () => {
         .sort();
 
       expect(consumers).toEqual([
-        'app/components/app/AppLogo.vue',
         'app/components/app/AppSeal.vue',
         'app/components/ui/button/index.ts',
       ]);

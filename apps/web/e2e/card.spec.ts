@@ -366,7 +366,7 @@ async function expectCardDisplay(
   await expect(logo).toHaveAttribute('viewBox', '0 0 30 32');
   await expect(logo.locator('[data-logo-ring]')).toHaveCount(2);
   await expect(logo.locator('[data-logo-part="mark"]')).toHaveCSS(
-    'color', 'rgb(204, 38, 73)');
+    'color', 'rgb(222, 27, 90)');
   const tints: Record<string, readonly [number, number, number]> = {
     '#1a5ceb': [20.9, 1.7, 46.4],
     '#2f855a': [22, 1.8, 48.9],

@@ -29,7 +29,7 @@ export function cardType(name: string, headline: boolean): StyleRule[] {
 
 export async function expectCardLogo(page: Page): Promise<void> {
   const logo = page.getByRole('img', { name: 'aboutme.vn', exact: true });
-  const stroke = 'rgb(204, 38, 73)';
+  const stroke = 'rgb(222, 27, 90)';
   const fill = 'none';
   await expectSvg(logo, {
     viewBox: '0 0 30 32',

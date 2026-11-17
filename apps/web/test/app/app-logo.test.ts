@@ -68,9 +68,9 @@ describe('AppLogo', () => {
       }
     });
 
-  it('draws the seal mark in seal red and only the dot of .vn in red', () => {
+  it('draws the mark and only the dot of .vn in the logo red', () => {
     const svg = svgOf(mount(AppLogo));
-    const red = Array.from(svg.querySelectorAll('.text-seal-text'))
+    const red = Array.from(svg.querySelectorAll('.text-logo-mark'))
       .map((element) => element.getAttribute('data-logo-part'));
 
     expect(red).toEqual(['mark', 'dot']);
