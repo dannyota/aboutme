@@ -110,9 +110,9 @@ func serverImplementation(publicOrigin string) *mcp.Implementation {
 		Title:      "aboutme.vn",
 		WebsiteURL: publicOrigin,
 		Icons: []mcp.Icon{
-			{Source: publicOrigin + "/icon-192-v3.png", MIMEType: "image/png", Sizes: []string{"192x192"}},
-			{Source: publicOrigin + "/icon-512-v3.png", MIMEType: "image/png", Sizes: []string{"512x512"}},
-			{Source: publicOrigin + "/favicon-v3.svg", MIMEType: "image/svg+xml", Sizes: []string{"any"}},
+			{Source: publicOrigin + "/icon-192-v4.png", MIMEType: "image/png", Sizes: []string{"192x192"}},
+			{Source: publicOrigin + "/icon-512-v4.png", MIMEType: "image/png", Sizes: []string{"512x512"}},
+			{Source: publicOrigin + "/favicon-v4.svg", MIMEType: "image/svg+xml", Sizes: []string{"any"}},
 		},
 	}
 }
