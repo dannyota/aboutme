@@ -59,19 +59,128 @@ for script in deploy.sh restore-drill.sh; do
     [[ $line =~ $control_path ]] ||
       fail "$script: ControlPath must use a short name in the SSH socket directory"
   done < <(grep 'ControlPath=' "$path")
+done
+
+# Every ssh in command position that can open a connection carries both
+# keepalive options, written out or through a *_opts array whose every
+# non-empty assignment carries them.
+ssh_keepalive_scan() {
   awk '
-    /^[a-z_]+_opts=\(/ { block = ""; open = 1 }
-    open { block = block " " $0 }
-    open && /\)$/ {
-      open = 0
-      if (block ~ /ControlMaster=auto/) {
-        masters++
-        if (block !~ /-o ServerAliveInterval=15[ )]/ || block !~ /-o ServerAliveCountMax=4[ )]/) bad = 1
+    function report(message) { printf "%s:%d: %s\n", FILENAME, start, message; found = 1 }
+    function keepalive(text) {
+      return text ~ /-o[[:space:]]+"?ServerAliveInterval=15[[:space:]")]/ &&
+        text ~ /-o[[:space:]]+"?ServerAliveCountMax=4[[:space:]")]/
+    }
+    function arrays(line,   rest, name, body) {
+      rest = line
+      while (match(rest, /[A-Za-z_][A-Za-z0-9_]*_opts=\(/)) {
+        name = substr(rest, RSTART, RLENGTH - 2)
+        rest = substr(rest, RSTART + RLENGTH)
+        body = rest
+        sub(/\).*/, "", body)
+        if (body ~ /^[[:space:]]*$/) continue
+        if (keepalive(body " ")) {
+          if (!(name in bad)) good[name] = 1
+        } else {
+          bad[name] = 1
+          report(name " is assigned without both keepalive options")
+        }
       }
     }
-    END { exit (masters == 0 || bad) }
-  ' "$path" || fail "$script: every SSH ControlMaster needs ServerAliveInterval=15 and ServerAliveCountMax=4"
-done
+    function calls(line,   rest, segment, name) {
+      rest = ";" line
+      while (match(rest, /([;{(|&!=]|[[:space:]](then|do|else|exec))[[:space:]]*ssh[[:space:]]+/)) {
+        rest = substr(rest, RSTART + RLENGTH)
+        segment = rest
+        if (match(rest, /([;{(|&!=]|[[:space:]](then|do|else|exec))[[:space:]]*ssh[[:space:]]+/)) segment = substr(rest, 1, RSTART - 1)
+        segment = segment " "
+        count++
+        if (segment ~ /^-O[[:space:]]/ || segment ~ /[[:space:]]-O[[:space:]]/ || keepalive(segment)) continue
+        if (segment ~ /^"\$\{[A-Za-z_][A-Za-z0-9_]*_opts\[@\]\}"/) {
+          name = segment
+          sub(/^"\$\{/, "", name)
+          sub(/\[@\].*/, "", name)
+          if ((name in good) && !(name in bad)) continue
+        }
+        report("ssh without both keepalive options: " substr(segment, 1, 70))
+      }
+    }
+    FNR == 1 { pass++; pending = "" }
+    {
+      if (pending == "") start = FNR
+      piece = $0
+      continued = sub(/\\$/, "", piece)
+      pending = pending " " piece
+      if (continued) next
+      if (pending ~ /_opts=\(/ && pending !~ /_opts=\([^)]*\)/) next
+      line = pending
+      pending = ""
+      if (line ~ /^[[:space:]]*#/) next
+      if (pass == 1) arrays(line)
+      else calls(line)
+    }
+    END { printf "calls=%d\n", count; exit found }
+  ' "$1" "$1"
+}
+
+ssh_scripts=0
+while IFS= read -r path; do
+  report=$(ssh_keepalive_scan "$path") || fail "SSH keepalive: ${report%$'\n'calls=*}"
+  [[ ${report##*calls=} == 0 ]] || ssh_scripts=$((ssh_scripts + 1))
+done < <(find "$root/deploy/vn" -name '*.sh' -not -path '*/tests/*' | sort)
+((ssh_scripts >= 5)) || fail "SSH keepalive scan found ssh calls in $ssh_scripts scripts, expected at least 5"
+
+expect_keepalive_scan() {
+  local expected=$1 fixture=$work/ssh-fixture.sh report status=0
+  cat >"$fixture"
+  report=$(ssh_keepalive_scan "$fixture") || status=$?
+  case $expected in
+    clean) ((status == 0)) || fail "SSH keepalive scan rejected a valid fixture: $report" ;;
+    violation) ((status != 0)) || fail "SSH keepalive scan accepted: $(head -n 3 "$fixture")" ;;
+  esac
+}
+expect_keepalive_scan violation <<'FIXTURE'
+remote() { ssh -p "$SSH_PORT" -o BatchMode=yes "$admin@$host" "$@"; }
+FIXTURE
+expect_keepalive_scan violation <<'FIXTURE'
+ssh_opts=(-p 1 -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
+remote() { ssh "${ssh_opts[@]}" host "$@"; }
+if true; then
+  ssh_opts=(-p 1 -o BatchMode=yes)
+fi
+FIXTURE
+expect_keepalive_scan violation <<'FIXTURE'
+opts=(-p 1 -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
+remote() { ssh "${opts[@]}" host "$@"; }
+FIXTURE
+expect_keepalive_scan violation <<'FIXTURE'
+jump_opts=(-p 1 -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
+jump_opts+=(-o "ProxyCommand=ssh -p 1 -o ControlPath=/tmp/s -W %h:%p host")
+FIXTURE
+expect_keepalive_scan violation <<'FIXTURE'
+remote() {
+  ssh -p 1 -o ServerAliveInterval=15 host \
+    "true" && ssh -p 1 -o ServerAliveCountMax=4 host true
+}
+FIXTURE
+expect_keepalive_scan clean <<'FIXTURE'
+x_opts=()
+x_opts=(-p 1 -o ControlMaster=auto
+  -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
+remote() { ssh "${x_opts[@]}" host "$@"; }
+ssh -p 1 \
+  -o ServerAliveInterval=15 -o ServerAliveCountMax=4 host true
+ssh -p 1 -S /tmp/s -O exit host
+for tool in ssh tar ssh-keygen; do :; done
+journalctl -u ssh -u ssh.socket
+# ssh -p 1 host
+FIXTURE
+expect_keepalive_scan violation <<'FIXTURE'
+if true; then ssh -p 1 host true; fi
+FIXTURE
+expect_keepalive_scan violation <<'FIXTURE'
+out=$(ssh "${unknown_opts[@]}" host true)
+FIXTURE
 
 expect_mcp_flag() {
   local expected=$1 context=$2 actual
