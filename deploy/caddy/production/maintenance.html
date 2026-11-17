@@ -385,8 +385,6 @@
       <p class="sr" id="live" role="status" aria-live="polite"></p>
     </main>
     <script>
-      // Poll /readyz on this origin and reload only after a 200. The noscript
-      // refresh covers visitors without JavaScript.
       (() => {
         const d = document;
         const $ = (id) => d.getElementById(id);
@@ -406,11 +404,9 @@
             back: "aboutme.vn is back. Reloading…",
           },
         };
-        // The app's locale cookie: only "vi" and "en" count, else Vietnamese.
         const saved = /(?:^|;\s*)aboutme-locale=(vi|en)(?:;|$)/.exec(d.cookie);
         let lang = saved ? saved[1] : "vi";
 
-        // sessionStorage keeps the start time across reloads.
         const ss = (k, v) => {
           try {
             if (v === undefined) return sessionStorage.getItem(k);
@@ -429,7 +425,6 @@
         let busy = false;
         let done = false;
 
-        // Every 10s for two minutes, then slower up to 60s, with jitter.
         const gap = () => {
           const e = Date.now() - start;
           const g = e < 12e4 ? 1e4 : e < 3e5 ? 2e4 : e < 6e5 ? 3e4 : 6e4;
@@ -460,7 +455,6 @@
           d.querySelectorAll("[data-l]").forEach((b) =>
             b.setAttribute("aria-pressed", String(b.dataset.l === l)),
           );
-          // Same attributes the app writes, so it opens in this language.
           if (save)
             d.cookie = `aboutme-locale=${l}; Path=/; Max-Age=31536000; SameSite=Lax`;
           if (done) $("live").textContent = T[l].back;

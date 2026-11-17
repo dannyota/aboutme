@@ -1,9 +1,3 @@
-/*
- * The 1200 by 630 link-preview card (docs/design/link-preview-card.md). Every
- * rule is scoped to the card, because this stylesheet ships both in the print
- * stylesheet, where no base styles apply, and in the app, where Tailwind's
- * base styles do.
- */
 body.preview-card-print {
   margin: 0;
   background: #fff;
@@ -145,13 +139,10 @@ body.preview-card-print main {
   word-break: normal;
 }
 
-/* Padding keeps stacked Vietnamese marks inside the clip; equal negative
-   margins cancel it in the layout. */
 .preview-card-name {
   margin: -0.2em 0 -0.05em;
   padding: 0.2em 0 0.05em;
   font-weight: 700;
-  /* A CJK fallback face without a bold weight still sets the name bold. */
   font-synthesis-weight: auto;
   letter-spacing: -0.01em;
   line-height: 1.2;

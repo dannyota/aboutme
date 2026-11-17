@@ -24,7 +24,6 @@ export const printEnvelope = (): PrintEnvelope => ({
   )),
 });
 
-/** A valid link-preview card envelope, as Go's printsnapshot emits it. */
 export const cardEnvelope = (): PrintCardEnvelope => ({
   version: 1,
   kind: 'card',
