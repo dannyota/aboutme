@@ -96,9 +96,9 @@ export interface paths {
         /**
          * Readiness probe
          * @description Returns `200` when the server is ready to accept traffic (database
-         *     reachable, render queue not saturated). CloudFront/Caddy and ECS use
-         *     this to gate traffic admission; a `503` here should stop new
-         *     requests from being routed to this task.
+         *     reachable, render queue not saturated). The deployer waits for it
+         *     before admitting traffic, and the maintenance page polls it; a `503`
+         *     here should stop new requests from being routed to this server.
          *
          *     Responses use the standard JSON envelope on success
          *     (`{"data":{"status":"ready"}}`) and the standard error envelope on
