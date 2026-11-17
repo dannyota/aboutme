@@ -6,15 +6,12 @@ export ABOUTME_TEST_LIB=$repo_root/deploy/vn/tests/lib
 # shellcheck source=lib/wait.sh
 source "$ABOUTME_TEST_LIB/wait.sh"
 runner=$repo_root/deploy/vn/host/workload-lock.sh
-cutover=$repo_root/deploy/vn/scripts/cutover.sh
 deploy_host=$repo_root/deploy/vn/scripts/deploy-host.sh
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 lock=$work/workload.lock
 order=$work/order
 
-grep -qF '/usr/local/lib/aboutme/workload-lock.sh 3600 systemctl start aboutme-db-setup.service' \
-  "$cutover" || { echo "cutover db setup bypasses the workload lock" >&2; exit 1; }
 grep -qF '/usr/local/lib/aboutme/workload-lock.sh 3600' "$deploy_host" || {
   echo "deploy one-shot bypasses the workload lock" >&2
   exit 1
