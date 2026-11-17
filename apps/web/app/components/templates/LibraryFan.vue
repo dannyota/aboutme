@@ -10,7 +10,7 @@ const LINES = ['w-full', 'w-11/12', 'w-4/5', 'w-full', 'w-2/3'] as const;
 <template>
   <div
     aria-hidden="true"
-    class="pointer-events-none absolute inset-0 overflow-hidden
+    class="pointer-events-none absolute inset-0 overflow-clip
       rounded-[inherit]"
     data-testid="gallery-fan-layer"
   >

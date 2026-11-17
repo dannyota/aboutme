@@ -79,7 +79,7 @@ describe('Library header', () => {
     const layer = header.get('[data-testid="gallery-fan-layer"]');
     expect(layer.attributes('aria-hidden')).toBe('true');
     for (const name of [
-      'pointer-events-none', 'absolute', 'inset-0', 'overflow-hidden',
+      'pointer-events-none', 'absolute', 'inset-0', 'overflow-clip',
       'rounded-[inherit]',
     ]) {
       expect(layer.classes(), name).toContain(name);

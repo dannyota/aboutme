@@ -389,7 +389,7 @@ export async function expectLibraryFan(page: Page): Promise<void> {
     return {
       wide: innerWidth >= 1024,
       shown: getComputedStyle(art).display !== 'none',
-      clipped: layer.overflowX === 'hidden' && layer.overflowY === 'hidden'
+      clipped: layer.overflowX === 'clip' && layer.overflowY === 'clip'
         && layer.borderRadius === own.borderRadius
         && Math.abs(bounds.left - outer.left) <= 1
         && Math.abs(bounds.right - outer.right) <= 1
