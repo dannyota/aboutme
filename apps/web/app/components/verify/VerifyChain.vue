@@ -61,8 +61,8 @@ const chipIcons: Record<ChipKind, typeof Check> = {
 };
 
 const chipClass: Record<ChipKind, string> = {
-  match: 'border-transparent bg-surface-blue text-link',
-  updating: 'border-transparent bg-surface-indigo text-foreground',
+  match: 'border-transparent bg-surface-mist text-link',
+  updating: 'border-transparent bg-coin text-coin-ink',
   not_rechecked: 'border-border text-muted-foreground',
   not_verified: 'border-border text-muted-foreground',
   failed: 'border-transparent bg-surface-destructive text-destructive',
@@ -110,8 +110,7 @@ const buildLink = computed(() => release.value?.image.links.build ?? null);
 <template>
   <section
     aria-labelledby="verify-chain-heading"
-    class="rounded-[20px] border bg-card p-5 shadow-[var(--shadow-product)]
-      min-[42rem]:p-7"
+    class="rounded-[var(--radius-card)] border bg-card p-5 min-[42rem]:p-7"
     data-testid="verify-chain"
   >
     <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
@@ -250,10 +249,7 @@ const buildLink = computed(() => release.value?.image.links.build ?? null);
               <component
                 :is="chipIcons[chip(index)]"
                 aria-hidden="true"
-                :class="cn(
-                  'size-3.5',
-                  chip(index) === 'updating' && 'text-brand-indigo',
-                )"
+                class="size-3.5"
               />
               {{ chipLabel(index) }}
             </span>
@@ -313,7 +309,13 @@ const buildLink = computed(() => release.value?.image.links.build ?? null);
 }
 
 .verify-connector[data-connector="updating"] {
-  --line: var(--brand-indigo);
+  --line: var(--coin-edge);
+}
+
+@media (forced-colors: none) {
+  .verify-connector[data-connector="updating"] .verify-connector-dot {
+    color: var(--coin-ink);
+  }
 }
 
 .verify-connector[data-connector="unknown"],

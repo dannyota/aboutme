@@ -56,11 +56,13 @@ apps/web/app/components/app/LoadingState.vue
 apps/web/app/components/app/LocaleToggle.vue
 apps/web/app/components/app/PageHeader.vue
 apps/web/app/components/app/SelectField.vue
+apps/web/app/components/app/SiteFooter.vue
 apps/web/app/components/app/StateMark.vue
 apps/web/app/components/app/StatusBanner.vue
 apps/web/app/components/app/SwitchField.vue
 apps/web/app/components/app/TextField.vue
 apps/web/app/components/app/ThemeToggle.vue
+apps/web/app/components/app/footerRoutes.ts
 apps/web/app/components/app/sealLayout.ts
 apps/web/app/components/app/sealMark.ts
 apps/web/app/components/auth/AuthLayout.vue

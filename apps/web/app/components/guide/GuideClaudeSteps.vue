@@ -13,17 +13,17 @@ defineProps<{
 <template>
   <section
     aria-labelledby="guide-claude-heading"
-    class="rounded-[var(--radius-feature)] border bg-card p-5
-      shadow-[var(--shadow-product)] min-[42rem]:p-7"
+    class="rounded-[var(--radius-card)] border bg-card p-5
+      min-[42rem]:p-7"
     data-testid="guide-claude"
   >
     <h2
       id="guide-claude-heading"
-      class="text-[18px] font-semibold"
+      class="text-lg font-bold"
     >
       {{ copy.heading }}
     </h2>
-    <p class="mt-1 max-w-[40rem] text-[15px] text-muted-foreground">
+    <p class="mt-1 max-w-[40rem] text-md text-muted-foreground">
       {{ copy.intro }}
     </p>
 
@@ -38,11 +38,11 @@ defineProps<{
       >
         <span
           class="guide-disk flex size-6 flex-none items-center justify-center
-            rounded-full border border-border bg-surface-blue text-[13px]
-            font-semibold text-foreground"
+            rounded-full bg-surface-mist text-[13px] font-bold
+            text-foreground"
           data-testid="guide-claude-web-disk"
         >{{ index + 1 }}</span>
-        <p class="min-w-0 flex-1 text-[15px]">
+        <p class="min-w-0 flex-1 text-md">
           <GuideRichText :line="step" />
         </p>
       </li>
@@ -61,11 +61,11 @@ defineProps<{
       <li class="flex gap-3">
         <span
           class="guide-disk flex size-6 flex-none items-center justify-center
-            rounded-full border border-border bg-surface-blue text-[13px]
-            font-semibold text-foreground"
+            rounded-full bg-surface-mist text-[13px] font-bold
+            text-foreground"
         >{{ 1 }}</span>
         <div class="min-w-0 flex-1">
-          <p class="text-[15px]">
+          <p class="text-md">
             <GuideRichText :line="copy.addStep.line" />
           </p>
           <GuideCopyBlock
@@ -83,11 +83,11 @@ defineProps<{
       <li class="flex gap-3">
         <span
           class="guide-disk flex size-6 flex-none items-center justify-center
-            rounded-full border border-border bg-surface-blue text-[13px]
-            font-semibold text-foreground"
+            rounded-full bg-surface-mist text-[13px] font-bold
+            text-foreground"
         >{{ 2 }}</span>
         <div class="min-w-0 flex-1">
-          <p class="text-[15px]">
+          <p class="text-md">
             <GuideRichText :line="copy.loginStep.line" />
           </p>
           <GuideCopyBlock
@@ -105,10 +105,10 @@ defineProps<{
       <li class="flex gap-3">
         <span
           class="guide-disk flex size-6 flex-none items-center justify-center
-            rounded-full border border-border bg-surface-blue text-[13px]
-            font-semibold text-foreground"
+            rounded-full bg-surface-mist text-[13px] font-bold
+            text-foreground"
         >{{ 3 }}</span>
-        <p class="min-w-0 flex-1 text-[15px]">
+        <p class="min-w-0 flex-1 text-md">
           <GuideRichText :line="copy.removeStep" />
         </p>
       </li>
@@ -119,7 +119,7 @@ defineProps<{
 <style scoped>
 @media (forced-colors: active) {
   .guide-disk {
-    border-color: CanvasText;
+    border: 1px solid CanvasText;
   }
 }
 </style>

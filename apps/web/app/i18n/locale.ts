@@ -8,6 +8,13 @@ export const localeCookie = 'aboutme-locale';
 
 export const localeCookieMaxAgeSeconds = 60 * 60 * 24 * 365;
 
+export function writeLocaleCookie(value: Locale): void {
+  if (import.meta.client) {
+    document.cookie = `${localeCookie}=${value}; Path=/; `
+      + `Max-Age=${localeCookieMaxAgeSeconds}; SameSite=Lax`;
+  }
+}
+
 export const localeNames: Record<Locale, string> = {
   vi: 'Tiếng Việt',
   en: 'English',

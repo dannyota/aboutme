@@ -10,13 +10,13 @@ defineProps<{
 <template>
   <section
     aria-labelledby="guide-can-cannot-heading"
-    class="rounded-[var(--radius-feature)] border bg-card p-5
-      shadow-[var(--shadow-product)] min-[42rem]:p-7"
+    class="rounded-[var(--radius-card)] border bg-card p-5
+      min-[42rem]:p-7"
     data-testid="guide-can-cannot"
   >
     <h2
       id="guide-can-cannot-heading"
-      class="text-[18px] font-semibold"
+      class="text-lg font-bold"
     >
       {{ copy.heading }}
     </h2>
@@ -32,7 +32,7 @@ defineProps<{
           <li
             v-for="(item, index) in copy.can"
             :key="index"
-            class="flex items-start gap-2 text-[15px]"
+            class="flex items-start gap-2 text-md"
           >
             <Check
               aria-hidden="true"
@@ -50,7 +50,7 @@ defineProps<{
           <li
             v-for="(item, index) in copy.cannot"
             :key="index"
-            class="flex items-start gap-2 text-[15px]"
+            class="flex items-start gap-2 text-md"
           >
             <Minus
               aria-hidden="true"

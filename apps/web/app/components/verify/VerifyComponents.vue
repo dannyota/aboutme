@@ -46,8 +46,7 @@ function statusClass(status: CheckStatus): string {
 <template>
   <section
     aria-labelledby="verify-components-heading"
-    class="rounded-[20px] border bg-card p-5 shadow-[var(--shadow-product)]
-      min-[42rem]:p-7"
+    class="rounded-[var(--radius-card)] border bg-card p-5 min-[42rem]:p-7"
     data-testid="verify-components"
   >
     <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
@@ -138,7 +137,7 @@ function statusClass(status: CheckStatus): string {
                 :class="cn(
                   'rounded-full px-1.5 py-0.5 text-[11px] font-bold',
                   line.age === 'newest'
-                    ? 'bg-surface-indigo'
+                    ? 'bg-coin text-coin-ink'
                     : 'bg-muted text-muted-foreground',
                 )"
               >{{ line.age === 'newest' ? copy.components.newest
@@ -153,7 +152,7 @@ function statusClass(status: CheckStatus): string {
                     :key="square"
                     :class="cn(
                       'verify-replica size-2',
-                      line.age === 'older' ? 'bg-input' : 'bg-brand-blue',
+                      line.age === 'older' ? 'bg-input' : 'bg-chart-bar',
                     )"
                   />
                 </span>
@@ -220,7 +219,7 @@ function statusClass(status: CheckStatus): string {
 }
 
 .verify-rail-rolling::before {
-  background: var(--brand-indigo);
+  background: var(--coin-edge);
 }
 
 .verify-rail-bad::before {

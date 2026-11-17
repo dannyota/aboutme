@@ -142,8 +142,8 @@ const cardClass: Record<PageStateKind, string> = {
   stale: 'bg-muted',
   unverified: 'bg-muted',
   mismatch: 'verify-status-mismatch bg-surface-destructive',
-  rolling_out: 'bg-surface-indigo',
-  verified: 'bg-surface-blue',
+  rolling_out: 'bg-muted',
+  verified: 'bg-muted',
 };
 
 const diskClass: Record<PageStateKind, string> = {
@@ -153,8 +153,8 @@ const diskClass: Record<PageStateKind, string> = {
   stale: 'verify-ring',
   unverified: 'verify-ring',
   mismatch: 'verify-disk bg-destructive text-white dark:text-background',
-  rolling_out: 'verify-disk bg-brand-indigo text-white dark:text-background',
-  verified: 'verify-disk bg-link text-card',
+  rolling_out: 'verify-disk bg-[var(--verify-rolling)] text-coin-ink',
+  verified: 'verify-disk bg-foreground text-background',
 };
 
 function reload(): void {
@@ -165,8 +165,8 @@ function reload(): void {
 <template>
   <div
     :class="cn(
-      'verify-status grid items-start rounded-[20px] border p-5',
-      'shadow-[var(--shadow-product)] min-[42rem]:p-7',
+      'verify-status grid items-start rounded-[var(--radius-card)] border',
+      'p-5 min-[42rem]:p-7',
       mark ? 'verify-status-marked' : '',
       cardClass[state.kind],
     )"
