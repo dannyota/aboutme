@@ -59,6 +59,18 @@ for script in deploy.sh restore-drill.sh; do
     [[ $line =~ $control_path ]] ||
       fail "$script: ControlPath must use a short name in the SSH socket directory"
   done < <(grep 'ControlPath=' "$path")
+  awk '
+    /^[a-z_]+_opts=\(/ { block = ""; open = 1 }
+    open { block = block " " $0 }
+    open && /\)$/ {
+      open = 0
+      if (block ~ /ControlMaster=auto/) {
+        masters++
+        if (block !~ /-o ServerAliveInterval=15[ )]/ || block !~ /-o ServerAliveCountMax=4[ )]/) bad = 1
+      }
+    }
+    END { exit (masters == 0 || bad) }
+  ' "$path" || fail "$script: every SSH ControlMaster needs ServerAliveInterval=15 and ServerAliveCountMax=4"
 done
 
 expect_mcp_flag() {
