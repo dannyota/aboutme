@@ -3847,23 +3847,6 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description `evidence_not_confirmed`: GitHub answered 404 or 410 for the listing. */
-        ProjectEvidenceListingGone: {
-            headers: {
-                [name: string]: unknown;
-            };
-            content: {
-                /**
-                 * @example {
-                 *       "error": {
-                 *         "code": "evidence_not_confirmed",
-                 *         "message": "GitHub does not confirm this item"
-                 *       }
-                 *     }
-                 */
-                "application/json": components["schemas"]["Error"];
-            };
-        };
         /** @description `rate_limited`: the route's request limiter, the 120 GitHub requests per account per hour, GitHub's own limit, or the account's idempotency capacity. For GitHub's limit, `Retry-After` is GitHub's `retry-after`, else the time to `x-ratelimit-reset` when `x-ratelimit-remaining` is 0, else 60. Nothing changes. */
         ProjectEvidenceRateLimited: {
             headers: {
@@ -3886,7 +3869,7 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description `evidence_upstream`: any other GitHub status, a timeout, an oversized or unparsable body, or a `Location` other than the one controlled rename hop. Nothing stored changes. */
+        /** @description `evidence_upstream`: any other GitHub status, a 404 or 410 on a candidate listing, a timeout, an oversized or unparsable body, or a `Location` other than the one controlled rename hop. Nothing stored changes. */
         ProjectEvidenceUpstream: {
             headers: {
                 [name: string]: unknown;
@@ -8394,7 +8377,6 @@ export interface operations {
             404: components["responses"]["ProjectEvidenceProjectNotFound"];
             405: components["responses"]["ProjectMethodNotAllowed"];
             409: components["responses"]["ProjectEvidenceSessionRequired"];
-            422: components["responses"]["ProjectEvidenceListingGone"];
             429: components["responses"]["ProjectEvidenceRateLimited"];
             500: components["responses"]["ResumeInternalError"];
             502: components["responses"]["ProjectEvidenceUpstream"];

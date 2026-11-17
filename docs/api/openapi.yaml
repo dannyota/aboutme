@@ -2674,8 +2674,6 @@ paths:
           $ref: "#/components/responses/ProjectMethodNotAllowed"
         "409":
           $ref: "#/components/responses/ProjectEvidenceSessionRequired"
-        "422":
-          $ref: "#/components/responses/ProjectEvidenceListingGone"
         "429":
           $ref: "#/components/responses/ProjectEvidenceRateLimited"
         "500":
@@ -6187,18 +6185,6 @@ components:
             error:
               code: evidence_not_confirmed
               message: GitHub does not confirm this item
-    ProjectEvidenceListingGone:
-      description: >-
-        `evidence_not_confirmed`: GitHub answered 404 or 410 for the
-        listing.
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/Error"
-          example:
-            error:
-              code: evidence_not_confirmed
-              message: GitHub does not confirm this item
     ProjectEvidenceRateLimited:
       description: >-
         `rate_limited`: the route's request limiter, the 120 GitHub requests
@@ -6223,9 +6209,10 @@ components:
               message: too many requests; retry later
     ProjectEvidenceUpstream:
       description: >-
-        `evidence_upstream`: any other GitHub status, a timeout, an
-        oversized or unparsable body, or a `Location` other than the one
-        controlled rename hop. Nothing stored changes.
+        `evidence_upstream`: any other GitHub status, a 404 or 410 on a
+        candidate listing, a timeout, an oversized or unparsable body, or a
+        `Location` other than the one controlled rename hop. Nothing stored
+        changes.
       content:
         application/json:
           schema:

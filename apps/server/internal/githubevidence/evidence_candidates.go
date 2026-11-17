@@ -2,6 +2,7 @@ package githubevidence
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -39,6 +40,9 @@ func (s *Service) Candidates(ctx context.Context, sess store.Session, projectID 
 			return project.EvidenceCandidates{}, project.ErrEvidenceSessionRequired
 		}
 		page, err = opened.reader.listReleases(ctx, repo, opened.githubUserID, query.Page)
+	}
+	if errors.Is(err, errGone) {
+		return project.EvidenceCandidates{}, project.ErrEvidenceUpstream
 	}
 	if err != nil {
 		return project.EvidenceCandidates{}, readError(err)

@@ -41,7 +41,6 @@ const STATUSES: Record<string, string[]> = {
     "404",
     "405",
     "409",
-    "422",
     "429",
     "500",
     "502",

@@ -167,3 +167,16 @@ func TestEvidenceCandidates_WithoutASessionNeedsOne(t *testing.T) {
 	eh := newEvidenceHarness(t)
 	requireError(t, eh.candidates("kind=repository&page=1"), http.StatusConflict, "evidence_session_required")
 }
+
+func TestEvidenceCandidates_AListingGitHubReportsGoneIsUpstream(t *testing.T) {
+	for _, status := range []int{http.StatusNotFound, http.StatusGone} {
+		eh := newEvidenceHarness(t)
+		requireOutcome(t, eh.connect(eh.raw, eh.session), outcomeConnected)
+		eh.gh.readJSON("/user/repos", http.StatusOK, `[`+repositoryJSON+`]`)
+		eh.listed("kind=repository&page=1")
+		eh.gh.readJSON("/repos/octocat/hello/releases", status, `{"message":"Not Found"}`)
+		requireError(t, eh.candidates("kind=release&page=1&repository=101"), http.StatusBadGateway, "evidence_upstream")
+		eh.gh.readJSON("/user/repos", status, `{"message":"Not Found"}`)
+		requireError(t, eh.candidates("kind=repository&page=2"), http.StatusBadGateway, "evidence_upstream")
+	}
+}

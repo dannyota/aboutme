@@ -87,7 +87,7 @@ after a rename). Each counts toward the 120 calls per account per hour.
 | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | 401                                                                                | The session ends and its token is revoked; `evidence_session_required`                                                                     |
 | 429, or 403 with `retry-after`, `x-ratelimit-remaining: 0` or a rate-limit message | `rate_limited`; `Retry-After` is GitHub's `retry-after`; else, when `x-ratelimit-remaining` is 0, the time to `x-ratelimit-reset`; else 60 |
-| 404 or 410 for the item or its repository                                          | Attach: `evidence_not_confirmed`. Check again: flagged `gone`                                                                              |
+| 404 or 410 for the item or its repository                                          | Attach: `evidence_not_confirmed`. Check again: flagged `gone`. On a listing: `evidence_upstream`                                           |
 | Any other 4xx or 5xx, a timeout, an oversized or unparsable body                   | `evidence_upstream`; nothing stored changes                                                                                                |
 
 A pasted link is parsed, never fetched as given. Accepted after trimming:
@@ -154,17 +154,18 @@ Session cookie and CSRF only. `kind` is `repository`, `pullRequest` or
   `flagReason` being `rule_failed`, `gone` or `null`. Export stays version 2;
   the record carries no generation, binding or account id.
 
-| Code                          | Status | When                                                                      |
-| ----------------------------- | ------ | ------------------------------------------------------------------------- |
-| `evidence_unavailable`        | 404    | Capability off, on every evidence route including the project-nested ones |
-| `evidence_session_required`   | 409    | No live session, a candidate from an ended session, or GitHub's 401       |
-| `evidence_not_confirmed`      | 422    | The item fails its rule, or GitHub reports it gone, on attach             |
-| `evidence_duplicate`          | 409    | The same kind and item id are already on this project                     |
-| `evidence_limit`              | 422    | An eleventh item                                                          |
-| `evidence_unsupported_link`   | 422    | A link outside the accepted grammar                                       |
-| `evidence_upstream`           | 502    | Any GitHub failure not listed above                                       |
-| `rate_limited`                | 429    | The hourly budget or GitHub's limit; `Retry-After` gives the seconds      |
-| `evidence_connection_changed` | 409    | Disconnect named a generation that is no longer current                   |
+| Code                          | Status | When                                                                                  |
+| ----------------------------- | ------ | ------------------------------------------------------------------------------------- |
+| `evidence_unavailable`        | 404    | Capability off, on every evidence route including the project-nested ones             |
+| `evidence_session_required`   | 409    | No live session, a candidate from an ended session, or GitHub's 401                   |
+| `evidence_not_confirmed`      | 422    | The item fails its rule, or GitHub reports it gone, on attach                         |
+| `evidence_duplicate`          | 409    | The same kind and item id are already on this project                                 |
+| `evidence_limit`              | 422    | An eleventh item                                                                      |
+| `evidence_unsupported_link`   | 422    | A link outside the accepted grammar                                                   |
+| `evidence_upstream`           | 502    | Any GitHub failure not listed above, and a 404 or 410 on a listing                    |
+| `rate_limited`                | 429    | The hourly budget or GitHub's limit; `Retry-After` gives the seconds                  |
+| `evidence_connection_changed` | 409    | Disconnect named a generation that is no longer current                               |
+| `evidence_not_found`          | 404    | An evidence id that is not an item of this project, on check again, remove or reorder |
 
 **Size.** Each stored item counts as 1 KiB toward the 96 KiB project bound,
 whatever its content and whether or not the capability is on. Attach and every
