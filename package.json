@@ -9,9 +9,9 @@
     "docs:fmt": "prettier --write \"**/*.md\" \"!**/AGENTS.md\" \"!**/CLAUDE.md\" \"!instructions/**\" \"!docs/plans/**\" \"!.claude/**\" \"!.codex/**\" \"!.worktrees/**\" \"!apps/web/.nuxt/**\" \"!**/.terraform/**\" && markdownlint-cli2 --fix \"**/*.md\" \"#**/node_modules\" \"#.superpowers\" \"#.claude\" \"#.codex\" \"#**/AGENTS.md\" \"#**/CLAUDE.md\" \"#instructions\" \"#docs/plans\" \"#.worktrees\" \"#apps/web/public/font-licenses\" \"#apps/web/.nuxt\" \"#apps/web/.output\" \"#**/.terraform\""
   },
   "devDependencies": {
-    "@redocly/cli": "2.77.0",
+    "@redocly/cli": "2.79.0",
     "markdownlint-cli2": "0.24.1",
-    "prettier": "3.10.0",
+    "prettier": "3.10.1",
     "vitest": "5.1.0",
     "yaml": "2.9.1"
   }
