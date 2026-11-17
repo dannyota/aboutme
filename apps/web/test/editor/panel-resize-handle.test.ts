@@ -251,7 +251,7 @@ describe('PanelResizeHandle', () => {
   });
 
   it(
-    'widens to a 3px primary bar on hover, drag, and focus-visible',
+    'widens to a 3px control bar on hover, drag, and focus-visible',
     async () => {
       const wrapper = mount(PanelResizeHandle);
       await wrapper.vm.$nextTick();
@@ -259,12 +259,13 @@ describe('PanelResizeHandle', () => {
 
       expect(bar.classes()).toEqual(expect.arrayContaining([
         'group-hover:w-[3px]',
-        'group-hover:bg-primary',
+        'group-hover:bg-control',
         'group-active:w-[3px]',
-        'group-active:bg-primary',
+        'group-active:bg-control',
         'group-focus-visible:w-[3px]',
-        'group-focus-visible:bg-primary',
+        'group-focus-visible:bg-control',
       ]));
+      expect(bar.classes().join(' ')).not.toMatch(/bg-primary/u);
       wrapper.unmount();
     },
   );

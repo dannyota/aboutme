@@ -18,7 +18,7 @@ alone and leaves a coherent look.
 | 1     | The home page                                                                                                                        | Shipped in v0.9.12 |
 | 2     | Tokens, type, primitives, and the shell header                                                                                       | Shipped in v0.9.16 |
 | 3     | Sign-in, registration, password reset, email verification, second factor, and consent                                                | Next               |
-| 4     | The editor shell, the publish dialog, and the resumes list                                                                           | After 2            |
+| 4     | The editor shell, the publish dialog, and the resumes list                                                                           | Next               |
 | 5     | The Library, template pages, and the showcase                                                                                        | After 2            |
 | 6     | A footer shared by the public pages, the MCP guide, legal pages, verify, views, settings, the projects workspace, and the error page | After 2            |
 | 7     | The public page bar and public project pages                                                                                         | After 2            |

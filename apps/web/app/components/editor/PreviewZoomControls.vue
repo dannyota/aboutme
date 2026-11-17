@@ -53,8 +53,8 @@ watch(() => props.zoomInDisabled, (disabled) => {
 <template>
   <div
     ref="root"
-    class="flex items-center gap-0.5 rounded-md border bg-card p-1
-      shadow-[var(--shadow-paper)]"
+    class="flex items-center gap-0.5 rounded-full bg-card p-1
+      shadow-[var(--shadow-float)]"
     data-testid="preview-zoom-controls"
   >
     <IconButton
@@ -102,11 +102,11 @@ watch(() => props.zoomInDisabled, (disabled) => {
       />
     </IconButton>
     <IconButton
+      class="aria-pressed:bg-foreground aria-pressed:text-background"
       data-testid="zoom-fit"
       :label="fitLabel"
       :pressed="isFit"
       size="icon-sm"
-      :variant="isFit ? 'default' : 'ghost'"
       @click="$emit('setFit')"
     >
       <Scan

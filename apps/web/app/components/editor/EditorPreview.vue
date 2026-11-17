@@ -31,6 +31,10 @@ import { editorShellCopy } from '../../i18n/editor-shell';
 
 type PreviewMode = 'pdf' | 'web';
 const PREVIEW_MODE_STORAGE_KEY = 'aboutme.editorPreviewMode';
+const modeClass = 'h-[30px] rounded-full px-3 text-[13px] font-semibold '
+  + 'text-muted-foreground aria-[pressed=false]:hover:text-foreground '
+  + 'hover:no-underline focus-visible:no-underline '
+  + 'aria-pressed:bg-foreground aria-pressed:text-background';
 
 function readStoredPreviewMode(): PreviewMode {
   try {
@@ -296,34 +300,33 @@ onBeforeUnmount(() => {
     @keydown="onPreviewKeydown"
   >
     <div
-      class="flex items-center justify-end border-b border-border bg-card
-        px-4 py-2 max-[42rem]:px-2"
+      class="flex items-center justify-end px-4 py-2 max-[42rem]:px-2"
       data-testid="preview-toolbar"
     >
       <div
         :aria-label="copy.previewMode"
-        class="flex w-fit rounded-md border bg-background p-0.5"
+        class="flex w-fit items-center gap-0.5 rounded-full bg-card p-[3px]"
         data-testid="preview-mode-switch"
         role="group"
       >
         <Button
           :aria-pressed="previewMode === 'pdf'"
-          class="h-8"
+          :class="modeClass"
           data-mode="pdf"
           size="sm"
           type="button"
-          :variant="previewMode === 'pdf' ? 'default' : 'ghost'"
+          variant="link"
           @click="previewMode = 'pdf'"
         >
           {{ copy.previewModePdf }}
         </Button>
         <Button
           :aria-pressed="previewMode === 'web'"
-          class="h-8"
+          :class="modeClass"
           data-mode="web"
           size="sm"
           type="button"
-          :variant="previewMode === 'web' ? 'default' : 'ghost'"
+          variant="link"
           @click="previewMode = 'web'"
         >
           {{ copy.previewModeWeb }}

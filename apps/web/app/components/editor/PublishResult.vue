@@ -86,19 +86,28 @@ onBeforeUnmount(resetCopyState);
         :locale="locale"
         size="stamp"
       />
-      <a
-        :href="publicHref"
-        class="text-link underline underline-offset-4"
-        data-action="view-public-resume"
-      >aboutme.vn{{ publicHref }}</a>
-      <Button
-        data-action="copy-link"
-        type="button"
-        variant="secondary"
-        @click="copyLink"
+      <div
+        class="flex max-w-full items-center gap-2 rounded-full bg-surface-mist
+          py-1.5 pr-1.5 pl-4 text-sm"
+        data-testid="publish-link-pill"
       >
-        {{ copyState === 'copied' ? copy.copied : copy.copyLink }}
-      </Button>
+        <a
+          :href="publicHref"
+          class="-mt-[0.3em] min-w-0 truncate pt-[0.3em] font-semibold
+            text-link underline-offset-4 hover:underline
+            focus-visible:underline"
+          data-action="view-public-resume"
+        >aboutme.vn{{ publicHref }}</a>
+        <Button
+          data-action="copy-link"
+          size="sm"
+          type="button"
+          variant="outline"
+          @click="copyLink"
+        >
+          {{ copyState === 'copied' ? copy.copied : copy.copyLink }}
+        </Button>
+      </div>
       <p
         v-if="copyState === 'failed'"
         data-testid="copy-link-error"

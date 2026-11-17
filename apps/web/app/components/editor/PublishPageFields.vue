@@ -117,7 +117,7 @@ const previewEmoji = computed(() =>
           :key="item"
           :aria-label="copy.useIcon(item)"
           :aria-pressed="emoji.trim() === item"
-          class="text-base"
+          class="text-base aria-pressed:bg-foreground"
           data-action="publish-favicon-pick"
           :disabled="disabled"
           size="icon-sm"

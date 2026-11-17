@@ -180,19 +180,23 @@ function persona(templateId: string): string {
     <template v-else>
       <div
         :aria-label="copy.startFrom"
-        class="flex w-fit rounded-md border p-0.5"
+        class="flex w-fit items-center gap-0.5 rounded-full bg-surface-mist
+          p-[3px]"
         role="group"
       >
         <Button
           v-for="option in (['blank', 'sample'] as const)"
           :key="option"
           :aria-pressed="mode === option"
-          class="h-8"
+          class="h-[30px] rounded-full px-3 text-[13px] font-semibold
+            text-muted-foreground hover:no-underline focus-visible:no-underline
+            aria-[pressed=false]:hover:text-foreground
+            aria-pressed:bg-foreground aria-pressed:text-background"
           :data-create-mode="option"
           :disabled="busy"
           size="sm"
           type="button"
-          :variant="mode === option ? 'default' : 'ghost'"
+          variant="link"
           @click="mode = option"
         >
           {{ option === 'blank' ? copy.blank : copy.fromSample }}
@@ -208,7 +212,9 @@ function persona(templateId: string): string {
           v-for="template in samples"
           :key="template.id"
           :aria-pressed="selected === template.id"
-          class="create-resume-sample h-auto whitespace-normal p-2 text-left"
+          class="create-resume-sample h-auto whitespace-normal p-2 text-left
+            aria-pressed:border-foreground
+            aria-pressed:shadow-[0_0_0_1px_var(--foreground)]"
           :data-sample="template.id"
           :disabled="busy"
           type="button"
@@ -352,11 +358,6 @@ function persona(templateId: string): string {
   grid-template-columns: 56px minmax(0, 1fr);
   align-items: center;
   gap: 12px;
-}
-
-.create-resume-sample[aria-pressed="true"] {
-  border-color: var(--primary);
-  box-shadow: 0 0 0 1px var(--primary);
 }
 
 .create-resume-sample__sheet {

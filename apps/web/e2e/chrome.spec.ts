@@ -27,7 +27,8 @@ import {
 import {
   expectChromeDecoration, expectChromeFan, expectChromeList,
   expectAuthArtworkClear, expectChromeNavigation, expectRendererBoundary,
-  expectSampleIsolation, leakChromeIntoResume, placeAuthArtworkOverPoints,
+  expectSampleIsolation, expectSlugPrefixCell, leakChromeIntoResume,
+  placeAuthArtworkOverPoints,
 } from './chrome-details';
 
 import type { ScreenContract } from './screen-contract';
@@ -127,6 +128,34 @@ for (const surface of ['template page', 'editor preview'] as const) {
       expect(response?.status()).toBe(200);
     }
     await expectRendererBoundary(page);
+  });
+}
+
+async function openPublishDialog(page: Page): Promise<void> {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openEditorPreview(page);
+  await page.locator('[data-action="publish"]').click();
+}
+
+test('the publish slug prefix sits in a mist cell inside the input', async ({
+  page,
+}) => {
+  await openPublishDialog(page);
+  await expectSlugPrefixCell(page);
+});
+
+for (const [kind, styles] of [
+  ['a cell moved off the input', {
+    transform: ['translateY(4px)', /matrix/u],
+  }],
+  ['a transparent cell', { opacity: ['0', '0'] }],
+] as const) {
+  mutationTest(`the publish slug prefix rejects ${kind}`, async ({ page }) => {
+    test.setTimeout(60_000);
+    await openPublishDialog(page);
+    await proveMutation(() => expectSlugPrefixCell(page),
+      () => applyStyleMutation(page.getByTestId('publish-slug-prefix'),
+        styles), 'Publish slug prefix cell.');
   });
 }
 

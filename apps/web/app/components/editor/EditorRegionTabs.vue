@@ -15,9 +15,9 @@ const tabs = computed(() => [
 <template>
   <div
     :aria-label="copy.editorView"
-    class="fixed inset-x-0 bottom-0 z-40 grid grid-cols-2 border-t
-      bg-card p-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))]
-      min-[72rem]:hidden"
+    class="fixed inset-x-0 bottom-0 z-40 grid grid-cols-2 gap-1 border-t
+      border-border bg-background p-2
+      pb-[calc(0.5rem+env(safe-area-inset-bottom))] min-[72rem]:hidden"
     role="tablist"
   >
     <Button
@@ -25,11 +25,13 @@ const tabs = computed(() => [
       :key="tab.region"
       :aria-pressed="region === tab.region"
       :aria-selected="region === tab.region"
-      class="aria-selected:text-link aria-selected:font-semibold"
+      class="rounded-full font-semibold text-muted-foreground
+        aria-selected:bg-foreground aria-selected:font-bold
+        aria-selected:text-background"
       :data-action="tab.action"
       role="tab"
       type="button"
-      :variant="region === tab.region ? 'secondary' : 'ghost'"
+      variant="ghost"
       @click="region = tab.region"
     >
       {{ tab.label }}

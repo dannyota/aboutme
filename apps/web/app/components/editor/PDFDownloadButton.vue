@@ -57,7 +57,7 @@ onBeforeUnmount(() => props.controller.dispose());
     <span
       v-if="pageFormat !== undefined"
       aria-hidden="true"
-      class="font-normal text-muted-foreground"
+      class="font-normal text-muted-foreground max-[42rem]:hidden"
       data-download-pdf-size
     >{{ pageSizeShort }}</span>
   </Button>

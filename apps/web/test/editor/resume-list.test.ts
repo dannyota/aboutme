@@ -847,7 +847,41 @@ describe('useResumeList', () => {
       global: { stubs: { NuxtLink: true } },
     });
     expect(wrapper.findAll('[data-testid^="resume-row-"]')).toHaveLength(1);
-    expect(wrapper.findAll('[data-testid^="resume-slot-"]')).toHaveLength(2);
+    const slots = wrapper.findAll('[data-testid^="resume-slot-"]');
+    expect(slots).toHaveLength(2);
+    for (const slot of slots) {
+      expect(slot.classes()).toEqual(expect.arrayContaining([
+        'rounded-[var(--radius-sheet)]',
+        'border-2',
+        'border-dashed',
+        'border-control',
+        'bg-transparent',
+      ]));
+      expect(slot.classes()).not.toContain('border-border');
+      expect(slot.classes()).not.toContain('bg-card/50');
+    }
+    wrapper.unmount();
+  });
+
+  it('draws Create resume as a large main pill with a plus icon', () => {
+    const wrapper = mount(ResumeList, {
+      props: {
+        items: [],
+        busyIds: [],
+        removalFocusId: null,
+        removalFocusVersion: 0,
+      },
+    });
+    const create = wrapper.get('[data-testid="create-resume"]');
+
+    expect(create.classes()).toEqual(expect.arrayContaining([
+      'rounded-full',
+      'bg-primary',
+      'text-primary-foreground',
+      'h-12',
+    ]));
+    expect(create.element.firstElementChild?.localName).toBe('svg');
+    expect(create.text()).toBe('Create resume');
     wrapper.unmount();
   });
 
@@ -1374,6 +1408,43 @@ describe('useResumeList', () => {
     expect(wrapper.emitted('submit')).toEqual([['', 'zh-Hant']]);
     wrapper.unmount();
   });
+
+  it('selects the start mode and a sample with ink, never the main fill',
+    async () => {
+      const wrapper = mount(CreateResumeDialog, {
+        attachTo: document.body,
+        props: { open: true, busy: false, retained: null },
+      });
+      await nextTick();
+      const group = document.body.querySelector<HTMLElement>(
+        '[role="dialog"] [data-create-mode]',
+      )!.parentElement!;
+      expect([...group.classList]).toEqual(expect.arrayContaining([
+        'rounded-full',
+        'bg-surface-mist',
+        'p-[3px]',
+      ]));
+      expect(group.classList.contains('rounded-md')).toBe(false);
+      for (const mode of group.querySelectorAll('[data-create-mode]')) {
+        expect(mode.getAttribute('data-variant')).toBe('link');
+        expect([...mode.classList]).toEqual(expect.arrayContaining([
+          'aria-pressed:bg-foreground',
+          'aria-pressed:text-background',
+        ]));
+      }
+      document.body.querySelector<HTMLElement>(
+        '[data-create-mode="sample"]',
+      )!.click();
+      await nextTick();
+      expect(document.body.querySelector('[data-create-mode="sample"]')
+        ?.getAttribute('data-variant')).toBe('link');
+      const sample = document.body.querySelector('[data-sample]')!;
+      expect([...sample.classList]).toEqual(expect.arrayContaining([
+        'aria-pressed:border-foreground',
+        'aria-pressed:shadow-[0_0_0_1px_var(--foreground)]',
+      ]));
+      wrapper.unmount();
+    });
 
   it('spaces dialog fields and actions on one rhythm', async () => {
     const wrapper = mount(CreateResumeDialog, {

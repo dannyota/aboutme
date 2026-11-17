@@ -216,7 +216,7 @@ watch(
         :data-testid="`resume-slot-${n}`"
         class="sheet sheet--empty flex min-h-40 flex-col justify-center
           gap-1 rounded-[var(--radius-sheet)] border-2 border-dashed
-          border-border bg-card/50 p-6 text-sm text-muted-foreground"
+          border-control bg-transparent p-6 text-sm text-muted-foreground"
       >
         <template v-if="items.length === 0 && n === 1">
           <span
