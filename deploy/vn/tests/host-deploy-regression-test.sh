@@ -80,8 +80,15 @@ for release_case in same-absent same-present different; do
   esac
 done
 ((release_failures == 0)) || echo 'same-tag render replaced previous release' >&2
-runuser() {
-  [[ $# == 12 && $1 == -u && $2 == postgres && $3 == -- && $4 == psql && $5 == -X && $6 == -qAt && $7 == -v && $8 == ON_ERROR_STOP=1 && $9 == -d && ${10} == aboutme && ${11} == -c && ${12} == "SELECT coalesce(max(id), 0) || ':' || count(*) FROM public.goose_db_version" ]] || return 2
+secrets=$work/secrets
+mkdir -m 700 "$secrets"
+printf '%s' 'synthetic:password\value' >"$secrets/db-migrator-password"
+runuser() { echo 'runuser must not be used for migration state' >&2; return 1; }
+psql() {
+  [[ $# == 7 && $1 == -X && $2 == -qAt && $3 == -v && $4 == ON_ERROR_STOP=1 && $5 == 'host=/run/postgresql dbname=aboutme user=aboutme_migrator' && $6 == -c && $7 == "SELECT coalesce(max(id), 0) || ':' || count(*) FROM public.goose_db_version" ]] || return 2
+  [[ -f ${PGPASSFILE:-} && $(stat -c %a "$PGPASSFILE") == 600 ]] || return 2
+  [[ $(cat "$PGPASSFILE") == '/run/postgresql:5432:aboutme:aboutme_migrator:synthetic\:password\\value' ]] || return 2
+  printf '%s\n' "$PGPASSFILE" >"$work/pgpass-path"
   case $MIGRATION_OUTPUT in
     valid) printf '42:7\n' ;;
     malformed) printf '42:7\nextra\n' ;;
@@ -91,13 +98,18 @@ runuser() {
 grep -qxF '  migration-state:0) step_migration_state ;;' "$host" || release_failures=1
 for MIGRATION_OUTPUT in valid malformed failed; do
   status=0
+  rm -f "$work/pgpass-path"
   (step_migration_state) >"$work/migration-state.out" 2>&1 || status=$?
   if [[ $MIGRATION_OUTPUT == valid ]]; then
     [[ $status == 0 && $(cat "$work/migration-state.out") == 42:7 ]] || release_failures=1
   else
     [[ $status != 0 ]] || release_failures=1
   fi
+  [[ -f $work/pgpass-path && ! -e $(cat "$work/pgpass-path") ]] || release_failures=1
 done
+rm "$secrets/db-migrator-password"
+if (step_migration_state) >"$work/migration-state.out" 2>&1; then release_failures=1; fi
+grep -q 'cannot read migrator password' "$work/migration-state.out" || release_failures=1
 ((release_failures == 0)) || { echo 'release or migration-state regression failed' >&2; exit 1; }
 sed -n '/^render_observer() {/,/^}/p; /^image_ok() {/,/^}/p' "$host" >"$work/observer-functions"
 # shellcheck disable=SC1091

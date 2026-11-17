@@ -28,7 +28,17 @@ case $1 in
     esac
     ;;
   rev-parse)
-    if [[ $* == *HEAD && ${CHECKOUT_CASE:-} == stale ]]; then
+    if [[ $* == *' v0.1.0^{commit}' ]]; then
+      [[ ${DOCUMENT_CASE:-} != tag-fails ]] || exit 1
+      printf '%040d\n' 0 | tr 0 b
+    elif [[ $* == *:packages/schema/released-versions.json ]]; then
+      [[ ${DOCUMENT_CASE:-} != read-fails ]] || exit 1
+      if [[ $* == *' b'*:packages/* && ${DOCUMENT_CASE:-} == changed ]]; then
+        printf '%040d\n' 0 | tr 0 d
+      else
+        printf '%040d\n' 0 | tr 0 c
+      fi
+    elif [[ $* == *HEAD && ${CHECKOUT_CASE:-} == stale ]]; then
       printf '%040d\n' 0 | tr 0 b
     else
       printf '%040d\n' 0 | tr 0 a
@@ -41,6 +51,11 @@ case $1 in
   # subdirectory resolves there unless --full-tree is passed.
   ls-tree)
     printf '%s\n' "$*" >>"$DEPLOY_TEST_DIR/git.log"
+    if [[ $* == *packages/schema/released-versions.json* ]]; then
+      [[ ${DOCUMENT_CASE:-} != tree-fails ]] || exit 1
+      [[ ${DOCUMENT_CASE:-} == missing-file && $* == *' --full-tree b'* ]] || printf '100644 blob %040d\t%s\n' 0 packages/schema/released-versions.json
+      exit 0
+    fi
     [[ ${SCHEMA_TREE:-} != fail ]] || { echo 'fatal: not a tree object' >&2; exit 128; }
     if [[ -n ${SCHEMA_FLOOR+set} && " $* " == *' --full-tree '* ]]; then
       printf '%s %040d\t%s\n' "${SCHEMA_ENTRY:-100644 blob}" 0 apps/server/migrations/schema-floor
@@ -138,7 +153,9 @@ if [[ $args == *' /usr/local/lib/aboutme/deploy-host.sh '* ]]; then
     esac
     exit 0
   fi
-  if [[ $args == *' release-json '* ]]; then printf '%s\n' '{"release_tag":"v0.1.0","maintenance_image":"previous-caddy"}'; fi
+  if [[ $args == *' release-json '* ]]; then
+    if [[ ${DOCUMENT_CASE:-} == missing-tag ]]; then printf '%s\n' '{"maintenance_image":"previous-caddy"}'; else printf '%s\n' '{"release_tag":"v0.1.0","maintenance_image":"previous-caddy"}'; fi
+  fi
   if [[ $args == *' running-release '* ]]; then printf '1001\n'; fi
   if [[ ${MIGRATION_CASE:-} == migrate-fails && $args == *' migrate '* ]]; then exit 1; fi
   if [[ ${FAIL_RENDER:-0} == 1 && $args == *' render '* ]]; then exit 255; fi
@@ -350,6 +367,24 @@ for migration_case in unchanged changed before-fails after-fails migrate-fails f
   fi
 done
 ((migration_failures == 0)) || exit 1
+
+for DOCUMENT_CASE in changed missing-file missing-tag tag-fails tree-fails read-fails; do
+  export DOCUMENT_CASE
+  : >"$work/host.log"
+  status=0
+  MIGRATION_CASE=unchanged "$repo_root/deploy/vn/scripts/deploy.sh" v0.1.1 >"$work/document-$DOCUMENT_CASE.out" 2>&1 || status=$?
+  message=unknown
+  [[ $DOCUMENT_CASE != changed && $DOCUMENT_CASE != missing-file ]] || message=changed
+  if [[ $status == 0 ]] || ! grep -q ' fail-closed ' "$work/host.log" ||
+     grep -q ' restore-previous ' "$work/host.log" ||
+     [[ $(grep -c 'document versions ' "$work/document-$DOCUMENT_CASE.out") != 1 ]] ||
+     ! grep -q "document versions $message" "$work/document-$DOCUMENT_CASE.out"; then
+    echo "$DOCUMENT_CASE document versions did not fail closed" >&2; exit 1
+  fi
+done
+unset DOCUMENT_CASE
+grep -q 'document versions unchanged' "$work/migration-unchanged.out"
+[[ $(grep -c 'document versions ' "$work/migration-unchanged.out") == 1 ]]
 
 export SSH_PORT=23000 EXPECTED_SSH_PORT=23000
 : >"$work/host.log"
