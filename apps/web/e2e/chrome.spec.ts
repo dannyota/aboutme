@@ -522,16 +522,18 @@ mutationTest('style mutations restore without animating back', async ({
   await page.setViewportSize({ width: 1024, height: 900 });
   expect((await page.goto('/templates'))?.status()).toBe(200);
   await page.evaluate(() => document.fonts.ready);
-  const slow = await page.addStyleTag({
-    content: '[data-testid="gallery-fan"] { transition: right 5s linear; }',
+  const fan = page.getByTestId('gallery-fan');
+  await fan.evaluate((node) => {
+    node.style.setProperty('transition', 'right 5s linear', 'important');
   });
+  expect(await fan.evaluate((node) => getComputedStyle(node)
+    .transitionDuration)).toBe('5s');
   try {
     await proveMutation(() => expectLibraryFan(page),
-      () => applyStyleMutation(page.getByTestId('gallery-fan'),
-        { right: '40px' }),
+      () => applyStyleMutation(fan, { right: '40px' }),
       'Library fan geometry.');
   } finally {
-    await slow.evaluate((node) => node.remove());
+    await fan.evaluate((node) => node.style.removeProperty('transition'));
   }
 });
 
