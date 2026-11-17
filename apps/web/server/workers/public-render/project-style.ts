@@ -212,7 +212,6 @@ const BAR = [
 const CHIPS = [
   rules('.project-chips', 'display:flex;flex-wrap:wrap;gap:6px;margin:0;',
     'padding:0;list-style:none;'),
-  // Forced colors mode drops backgrounds; the border keeps the chip shape.
   rules('.project-chips li', 'display:inline-flex;align-items:center;',
     'min-height:24px;padding:2px 10px;border:1px solid transparent;',
     'border-radius:999px;background:var(--project-chip);',
