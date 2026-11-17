@@ -186,8 +186,10 @@ describe('GitHub evidence settings', () => {
     vi.mocked(navigateTo).mockClear();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     for (const wrapper of mounted.splice(0)) wrapper.unmount();
+    await vi.waitFor(() => expect(useRouter().currentRoute.value.query)
+      .not.toHaveProperty('evidence'));
   });
 
   it('shows the section only when the capability is on', async () => {
