@@ -39,19 +39,56 @@ exit 0, HTTP 200, and a JSON object with boolean `ok=true`. Only fixed outcomes
 journal. Never log values, URLs, request/response bodies, or provider
 descriptions.
 
-**Content and deduplication.** `alert-telegram.sh` keeps `<key> <subject>` and
-bounded stdin. Keys retain `[A-Za-z0-9@._-]{1,120}`. Subjects are 1 to 200
-printable ASCII bytes under `LC_ALL=C`. Read at most 4096 detail bytes, keep
-printable ASCII and newlines, and cap the included detail at 2048 bytes with a
-fixed truncation notice. Total `text` is at most 3000 ASCII bytes including
-fixed guidance. Include `[aboutme-prod]`, key, UTC time, subject, and detail;
-omit hostname. Plain text, no parse mode: only unit names, counts, percentages,
-fixed guidance. No log lines, request URLs, resume/account data, credentials, or
-chat ID. Callers must select approved metadata; printable filtering cannot
-remove personal data. Preserve the Coraza metadata-location guidance for
-`coraza-log-invalid`. Watcher subjects use `failed units: <count>`, with bounded
-names and an omitted count in detail; never concatenate unit names into the
-subject.
+**Content.** `alert-telegram.sh` keeps `<key> <subject>` and bounded stdin as
+its input; keys retain `[A-Za-z0-9@._-]{1,120}`, subjects 1 to 200 printable
+ASCII bytes under `LC_ALL=C`, and detail at most 4096 bytes read, printable
+ASCII and newlines kept. Callers still pass only approved metadata: unit names,
+counts, percentages, mount points, and hours. No log lines, request URLs, resume
+or account data, credentials, chat ID, or hostname reach a message.
+
+Messages share one format with the owner's other products in the same group
+(owner, 2026-11-17): English, Telegram HTML parse mode, link previews off
+(`link_preview_options.is_disabled`):
+
+```text
+<mark> <b>aboutme</b> · <title>
+<one sentence of what happened>
+Action: <what Danny should do>   or   System: <what the host does next>
+<i>HH:MM ICT · HH:MM UTC · <job> · <a href="<runbook URL>">runbook</a></i>
+```
+
+- Marks: 🔴 failed or down, 🟠 degraded or still failing, 🟢 recovered.
+- `<title>`, the fixed words of the sentence, the third line, the severity, and
+  the runbook anchor come from a table in the sender keyed by the alert key or
+  its prefix; callers never pass markup. The table names each key's approved
+  fields; the sender fills them from the subject and detail it already receives.
+- Dynamic values (counts, unit names, mount points, hours) are filtered as
+  today, escaped for `&`, `<`, and `>`, and only ever placed in text, never in
+  an attribute. Unit names are listed until the line would pass 300 bytes, then
+  "and n more" with the exact count of the rest.
+- The whole message, as UTF-8 after escaping, is at most 1500 bytes. The sender
+  shortens only dynamic fields to fit and never cuts inside an entity or a tag;
+  the four lines are always present.
+- `<job>` is `aboutme-watch` for watcher checks, the failed unit's name for unit
+  failures, `aboutme-crowdsec-retention` or `aboutme-crowdsec-vacuum` for those
+  events, `alert-telegram` for the delivery test, and `aboutme-host` for an
+  unknown key.
+- Times are the send time in UTC+7 and UTC.
+- The runbook link is a fixed `https://github.com/dannyota/aboutme/blob/main/`
+  URL: the key's anchor in the table, else the
+  [Alarms](../runbooks/production.md#alarms) section. `coraza-log-invalid` keeps
+  its guidance: the third line says to read the Coraza metadata on the host, and
+  its runbook anchor holds the paths and the metadata-only rule.
+- An unknown key still sends, 🔴, with the title "host alert", its escaped
+  subject as the sentence, and "Action: read the journal on the host."
+- The delivery test sends "🟢 aboutme · alert delivery test" in this format,
+  with "System: no action needed." and no caller text.
+
+**Repeats.** Every key keeps the daily stamps below: at most one message per key
+per UTC day. A watcher key whose stamp for the previous UTC day exists sends the
+🟠 "still failing" form of its message, naming the date of the earlier stamp the
+sender can see. There is no recovery message yet; a state-change design with 🟢
+recovery messages is a separate, later change.
 
 Keep atomic noclobber stamps at `/var/lib/aboutme/alerts/<key>.<UTC-date>`.
 Concurrent calls for one key/day send at most one in-flight request. Suppress
@@ -97,13 +134,13 @@ The [runbook](../runbooks/production.md#host-telegram-setup-and-rotation) owns
 setup, rotation, and rollback. Order: owner acceptance, source verification,
 implementation/regressions, green exact-commit CI, staged installation and
 proof. Stage `alert-telegram.sh` beside active SMTP `alert.sh`. Its `--test`
-sends fixed `[aboutme-prod] host alert delivery test`, no caller text, same
-transport and credentials, one send per invocation, no daily-stamp read/write.
-Only owner receipt permits switching `watch.sh` and `aboutme-alert@.service` to
-Telegram. Every credential/destination change also needs receipt; failure blocks
-cutover, never stops serving or rolls back the app. Ordinary app deploys do not
-send tests. Older app images keep current host helpers; no data migration or
-alert replay.
+sends the fixed message "🟢 aboutme · alert delivery test" in the format above,
+no caller text, same transport and credentials, one send per invocation, no
+daily-stamp read/write. Only owner receipt permits switching `watch.sh` and
+`aboutme-alert@.service` to Telegram. Every credential/destination change also
+needs receipt; failure blocks cutover, never stops serving or rolls back the
+app. Ordinary app deploys do not send tests. Older app images keep current host
+helpers; no data migration or alert replay.
 
 First-party references, unfetched under the network prohibition:
 [API requests](https://core.telegram.org/bots/api#making-requests),
