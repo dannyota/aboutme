@@ -62,9 +62,10 @@ The deployer then:
 6. Renders the new units. When the candidate's
    `apps/server/migrations/schema-floor` names a release above the fence, raises
    the fence to it; from then on a failure fails closed. Runs migrations and
-   requires exit 0. Reads the highest id and row count of `goose_db_version`
-   before and after; any applied migration changes that pair. `--first-deploy`
-   runs `db-setup` after any raise and before migrations.
+   requires exit 0. Reads the highest id and row count of `goose_db_version` as
+   `aboutme_migrator`, never as a superuser, before and after; any applied
+   migration changes that pair. `--first-deploy` runs `db-setup` after any raise
+   and before migrations.
 7. Restarts Nuxt, starts Go, and waits for `/readyz` at `127.0.0.1:8080` on the
    host. Starts Caddy, then stops maintenance and proves it stopped.
 8. Starts the four job timers. Checks public health, readiness, TLS, HSTS,
@@ -96,12 +97,15 @@ Rename a changed fixed-name font under `/_nuxt/fonts/` so browsers fetch it.
 Before migrations and any schema-floor raise, failure restores the previous
 release and job timers through maintenance; first deploy failures keep
 maintenance up. A later failure also restores the previous release when both
-version reads succeed and match, no schema-floor raise ran, and the deploy is
-not a first deploy; the deployer prints `migrate applied no migration`. After an
-applied migration or an unknown state (`migrate applied migrations` or
-`migration state unknown`), fix forward or restore with the app and jobs
-stopped. Failed recovery retains the operation lock; inspect units and the host
-journal before retrying.
+version reads succeed and match, no schema-floor raise ran, the deploy is not a
+first deploy, and `packages/schema/released-versions.json` is identical at the
+new tag and the previous release's tag
+([ADR 0004](../adr/0004-resume-document-contract.md): a release that stores a
+new document version cannot roll back). The deployer prints
+`migrate applied no migration` and `document versions unchanged`. After an
+applied migration, changed document versions, or an unknown state, fix forward
+or restore with the app and jobs stopped. Failed recovery retains the operation
+lock; inspect units and the host journal before retrying.
 
 A CrowdSec retention failure stops both edge modes. Follow
 [CrowdSec incident recovery](crowdsec-postgresql.md#interrupted-deploy).
