@@ -146,9 +146,9 @@ one inserts the prefilled entry and selects it.
 
 A linked entry's card shows a library mark and the project name under its title,
 in muted text. Its form shows, above the fields, a `--surface-mist` note with a
-10 px radius: “Mục này lấy từ dự án {name}. Nội dung ở đây là của riêng CV này.”
-or “This entry comes from the project {name}. The text here belongs to this
-resume.”, with two actions:
+10 px radius, whose buttons hover to `--card`: “Mục này lấy từ dự án {name}. Nội
+dung ở đây là của riêng CV này.” or “This entry comes from the project {name}.
+The text here belongs to this resume.”, with two actions:
 
 - Refresh from library, which asks first (“Thay nội dung mục bằng nội dung hiện
   tại của dự án?” or “Replace this entry's text with the project's current

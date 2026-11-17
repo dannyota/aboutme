@@ -33,7 +33,7 @@ strings.
 
 ## Layout
 
-The page sits in `AppShell` on the Aurora canvas, like `/app/new`, and joins the
+The page sits in `AppShell` on the page ground, like `/app/new`, and joins the
 localized routes, so the shell shows the language toggle.
 
 | Width        | Pick and message states                | Review                                                                                            |
@@ -103,13 +103,14 @@ After a failure the page keeps the steps card and privacy note, shows the error
 The drop zone keeps its size and border, stops taking drops, and shows, in a
 column with 8 px gaps: the file name (`font-medium`, truncated with an ellipsis,
 `title` holding the full name), a `role="status"` line reading `reading`, then a
-6 px progress track (`--muted`, `rounded-full`) with a `--primary` fill, then
-`readingPage` (`text-sm` muted, `aria-hidden="true"`), `readingNote` (`text-xs`
-muted), and an `outline` `sm` `Button` `stop` with `aria-label` `stopLabel`. The
-track is `role="progressbar"` with `aria-label` `progressLabel`,
-`aria-valuemin="0"`, `aria-valuemax` the page count, and `aria-valuenow` the
-pages read; it stays empty until the page count is known. The fill width moves
-in 150 ms steps (instant under reduced motion). Nothing spins or pulses.
+6 px progress track (`--control`, `rounded-full`) with a `--chart-bar` fill,
+then `readingPage` (`text-sm` muted, `aria-hidden="true"`), `readingNote`
+(`text-xs` muted), and an `outline` `sm` `Button` `stop` with `aria-label`
+`stopLabel`. The track is `role="progressbar"` with `aria-label`
+`progressLabel`, `aria-valuemin="0"`, `aria-valuemax` the page count, and
+`aria-valuenow` the pages read; it stays empty until the page count is known.
+The fill width moves in 150 ms steps (instant under reduced motion). Nothing
+spins or pulses.
 
 Stop ends the read, returns to Pick with focus on the choose button, and shows
 `stopped` in an info `StatusBanner`. At the time limit the page shows
@@ -195,11 +196,12 @@ padding `max(12px, env(safe-area-inset-bottom))`. It holds, in order:
 1. `h2` `panelHeading` (from 900 px only; visually hidden below it).
 2. `selectedCount` (`text-sm`; `text-xs` below 900 px).
 3. The size meter: `sizeLabel` and `sizeValue` on one `text-sm` row (`text-xs`
-   below 900 px), then a 6 px `rounded-full` track on `--muted` with a fill in
-   `--primary`, or `--destructive` over the limit. The track is `role="meter"`,
-   `aria-label` `sizeLabel`, `aria-valuemin="0"`, `aria-valuemax="262144"`,
-   `aria-valuenow` the request bytes, and `aria-valuetext` `sizeValue`. KB
-   values are request bytes divided by 1,024, rounded up; the maximum reads 256.
+   below 900 px), then a 6 px `rounded-full` track on `--control` with a fill in
+   `--chart-bar`, or `--destructive` over the limit. The track is
+   `role="meter"`, `aria-label` `sizeLabel`, `aria-valuemin="0"`,
+   `aria-valuemax="262144"`, `aria-valuenow` the request bytes, and
+   `aria-valuetext` `sizeValue`. KB values are request bytes divided by 1,024,
+   rounded up; the maximum reads 256.
 4. The block reason, when one applies, in `text-sm` `--destructive` with an id:
    `sizeOver`, or `invalid` when the schema check fails.
 5. Create errors in `StatusBanner kind="error"`.
@@ -237,7 +239,7 @@ theme. Points to check in both themes at 390 and 1280 px:
   drag-over is `--accent` with a `--foreground` border.
 - Cards are `--card`; the step circles and the drop zone use `--surface-mist`;
   muted text stays AA on both.
-- Meter and progress fills are `--chart-bar` on `--muted`; over the limit the
+- Meter and progress fills are `--chart-bar` on `--control`; over the limit the
   fill and reason are `--destructive`.
 - No seal red, gradient, or paper token appears: nothing on this page is public
   or a resume sheet.
