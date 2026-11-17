@@ -6,6 +6,9 @@ trap 'printf "FAIL %s\n" "$retention_fixture_case" >&"$integration_error_fd"' ER
 
 ((EUID == 0)) || { echo "run as root" >&2; exit 1; }
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
+export ABOUTME_TEST_LIB=$repo_root/deploy/vn/tests/lib
+# shellcheck source=lib/wait.sh
+source "$ABOUTME_TEST_LIB/wait.sh"
 edge=$repo_root/deploy/vn/edge/crowdsec
 feed=/run/aboutme/caddy-log/crowdsec/serving.json
 # shellcheck source=../host/crowdsec-offline.sh
@@ -155,13 +158,13 @@ bash "$repo_root/deploy/vn/tests/crowdsec-config-test.sh" parser
 integration_stage=consumers
 
 http_status() { curl --noproxy '*' -s -o /dev/null -w '%{http_code}' --max-time 2 --interface "$1" "$2"; }
+status_is() {
+  result=$(http_status "$2" "$3" 2>/dev/null) || result=timeout
+  [[ $result == "$1" ]]
+}
 wait_status() {
-  local want=$1 source=$2 url=$3 result attempt
-  for ((attempt=0; attempt<20; attempt++)); do
-    result=$(http_status "$source" "$url" 2>/dev/null) || result=timeout
-    [[ $result != "$want" ]] || return 0
-    sleep 1
-  done
+  local want=$1 source=$2 url=$3 result=''
+  test_wait "http:$want from $source" 20 1 status_is "$want" "$source" "$url" && return 0
   printf 'FAIL %s stage=%s expected=http:%s actual=%s source=%s url=%s\n' \
     "$retention_fixture_case" "$integration_stage" "$want" "$result" "$source" "$url" >&2
   return 1
@@ -562,18 +565,15 @@ for _ in $(seq 21); do
     "$ts" "$duplicate_ip" >>"$feed"
 done
 
+decision_listed() {
+  local decisions
+  decisions=$(crowdsec_admitted_cli decisions list -o json)
+  jq -e --arg ip "$1" \
+    '.[] | .decisions[] | select(.value == $ip and .scenario == "aboutme/http-status")' \
+    >/dev/null <<<"$decisions"
+}
 wait_for_decision() {
-  local ip=$1 attempt decisions
-  for ((attempt = 0; attempt < 30; attempt++)); do
-    decisions=$(crowdsec_admitted_cli decisions list -o json)
-    if jq -e --arg ip "$ip" \
-      '.[] | .decisions[] | select(.value == $ip and .scenario == "aboutme/http-status")' \
-      >/dev/null <<<"$decisions"; then
-      return 0
-    fi
-    sleep 1
-  done
-  return 1
+  test_wait "decision for $1" 30 1 decision_listed "$1"
 }
 
 benign_ip=192.0.2.40

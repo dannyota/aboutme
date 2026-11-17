@@ -2,6 +2,9 @@
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
+export ABOUTME_TEST_LIB=$repo_root/deploy/vn/tests/lib
+# shellcheck source=lib/wait.sh
+source "$ABOUTME_TEST_LIB/wait.sh"
 watch_source=$repo_root/deploy/vn/host/bin/watch.sh
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
@@ -25,7 +28,9 @@ crowdsec_db_held_lock() { return 0; }
 crowdsec_db_ready() {
   if [[ ${WATCH_TEST_PAUSE_PREFLIGHT:-0} == 1 ]]; then
     : >"$WATCH_TEST_PREFLIGHT_ENTERED"
-    while [[ ! -e $WATCH_TEST_PREFLIGHT_RELEASE ]]; do sleep 0.01; done
+    source "$ABOUTME_TEST_LIB/wait.sh"
+    ABOUTME_TEST_SLEEP=$WATCH_TEST_REAL_SLEEP test_wait 'preflight release' "${ABOUTME_TEST_WAIT_SECONDS:-60}" 0.01 \
+      test -e "$WATCH_TEST_PREFLIGHT_RELEASE" || return 1
   fi
   if [[ ${WATCH_TEST_IGNORE_TERM_PREFLIGHT:-0} == 1 ]]; then
     timeout 15 bash -c '
@@ -99,7 +104,9 @@ case " $* " in
   *' pgbackrest '*)
     if [[ ${WATCH_TEST_HUNG_BACKUP:-0} == 1 ]]; then
       : >"$WATCH_TEST_BACKUP_ENTERED"
-      while [[ ! -e $WATCH_TEST_BACKUP_RELEASE ]]; do sleep 0.01; done
+      source "$ABOUTME_TEST_LIB/wait.sh"
+      ABOUTME_TEST_SLEEP=$WATCH_TEST_REAL_SLEEP test_wait 'backup release' "${ABOUTME_TEST_WAIT_SECONDS:-60}" 0.01 \
+        test -e "$WATCH_TEST_BACKUP_RELEASE" || exit 1
     fi
     if [[ ${WATCH_TEST_ALERT_FAILURES:-0} == 1 ]]; then
       printf '[]\n'
@@ -346,8 +353,8 @@ ABOUTME_ALERT_TEST_ROOT=$work/alert-state WATCH_TEST_MESSAGE=$work/after-rollbac
   WATCH_TEST_PREFLIGHT_RELEASE=$work/rollback-release WATCH_TEST_FAILED_UNITS=$work/failed-units \
   run_watch "$work/host-checks.log" "$work/rollback.alerts" 2>"$work/rollback.err" &
 watch_pid=$!
-for ((i=0; i<100; i++)); do [[ ! -e $work/rollback-entered ]] || break; sleep 0.01; done
-[[ -e $work/rollback-entered ]] || { echo 'rollback watcher did not pause' >&2; exit 1; }
+test_wait 'rollback watcher pause' "${ABOUTME_TEST_WAIT_SECONDS:-60}" 0.01 test -e "$work/rollback-entered" ||
+  { echo 'rollback watcher did not pause' >&2; exit 1; }
 ABOUTME_ALERT_TEST_ROOT=$work/alert-state bash "$repo_root/deploy/vn/host/alert-transport.sh" stage
 chmod 0600 "$work/alert-state/secrets/telegram-chat-id"
 printf '%s' '-1008888888888' >"$work/alert-state/secrets/telegram-chat-id"
@@ -367,11 +374,8 @@ WATCH_TEST_HUNG_CSCLI=1 WATCH_TEST_CSCLI_ENTERED=$work/cscli-entered \
   WATCH_TEST_FIXTURE=$base WATCH_TEST_ALERTS=$work/hung.alerts \
   WATCH_TEST_RETENTION_FAILURES=$work/hung.failures "$watch" >"$work/hung.journal" &
 watch_pid=$!
-for ((i=0; i<100; i++)); do
-  [[ ! -e $work/cscli-entered ]] || break
-  sleep 0.01
-done
-[[ -e $work/cscli-entered ]] || { echo 'hung cscli fixture did not start' >&2; exit 1; }
+test_wait 'hung cscli fixture' "${ABOUTME_TEST_WAIT_SECONDS:-60}" 0.01 test -e "$work/cscli-entered" ||
+  { echo 'hung cscli fixture did not start' >&2; exit 1; }
 if flock -n "$work/retention.lock" true; then
   echo 'watch query overlapped an edge transition' >&2; exit 1
 fi
@@ -450,11 +454,8 @@ WATCH_TEST_HUNG_BACKUP=1 WATCH_TEST_BACKUP_ENTERED=$work/backup-entered \
   WATCH_TEST_ALERTS=$work/backup.alerts WATCH_TEST_RETENTION_FAILURES=$work/backup.failures \
   "$watch" >"$work/backup.journal" &
 watch_pid=$!
-for ((i=0; i<100; i++)); do
-  [[ ! -e $work/backup-entered ]] || break
-  sleep 0.01
-done
-[[ -e $work/backup-entered ]] || { echo 'blocked backup fixture did not start' >&2; exit 1; }
+test_wait 'blocked backup fixture' "${ABOUTME_TEST_WAIT_SECONDS:-60}" 0.01 test -e "$work/backup-entered" ||
+  { echo 'blocked backup fixture did not start' >&2; exit 1; }
 flock -n "$work/fence.lock" true
 flock -n "$work/retention.lock" true
 touch "$work/backup-release"

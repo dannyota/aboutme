@@ -2,6 +2,9 @@
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
+export ABOUTME_TEST_LIB=$repo_root/deploy/vn/tests/lib
+# shellcheck source=lib/wait.sh
+source "$ABOUTME_TEST_LIB/wait.sh"
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 export DEPLOY_TEST_DIR=$work
@@ -118,10 +121,9 @@ case $args in
   *'SSH_CLIENT'*) printf '198.51.100.10'; exit 0 ;;
   *' ss -Htn '*)
     # Answer once the held probe runs, as the host sees it only then.
-    for ((i = 0; i < 500; i++)); do
-      [[ ! -f $DEPLOY_TEST_DIR/probe.pid ]] || break
-      /bin/sleep 0.01
-    done
+    source "$ABOUTME_TEST_LIB/wait.sh"
+    ABOUTME_TEST_SLEEP=/bin/sleep test_wait 'held egress probe' "${ABOUTME_TEST_WAIT_SECONDS:-60}" 0.01 \
+      test -f "$DEPLOY_TEST_DIR/probe.pid" || true
     [[ ${EGRESS_CASE:-} != interrupt ]] || kill -TERM "$PPID"
     printf '%s\n' "${EGRESS_COUNT:-1}"
     exit 0
