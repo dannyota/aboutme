@@ -24,7 +24,7 @@ const CANCEL_CLASS = 'w-full min-[900px]:order-2';
 
 const kb = computed(() => requestKb(props.bytes));
 const meterFillClass = computed(() =>
-  props.sizeOver ? 'bg-destructive' : 'bg-primary');
+  props.sizeOver ? 'bg-destructive' : 'bg-chart-bar');
 const blockReasonId = 'import-panel-block-reason';
 const schemaBlocked = computed(() => !props.schemaCheck.ok);
 const schemaGeneralOnly = computed(() =>
@@ -47,11 +47,11 @@ watch(() => props.sizeOver, (over, wasOver) => {
   <aside
     aria-labelledby="import-panel-heading"
     class="sticky bottom-0 -mx-4 grid gap-3 border-t bg-card px-4 pt-3
-      pb-[max(12px,env(safe-area-inset-bottom))] shadow-product
+      pb-[max(12px,env(safe-area-inset-bottom))]
       sm:-mx-6
       min-[900px]:bottom-auto min-[900px]:top-6 min-[900px]:mx-0
-      min-[900px]:self-start min-[900px]:rounded-lg min-[900px]:border
-      min-[900px]:p-6"
+      min-[900px]:self-start min-[900px]:rounded-[var(--radius-card)]
+      min-[900px]:border min-[900px]:p-6"
   >
     <h2
       id="import-panel-heading"
@@ -74,7 +74,7 @@ watch(() => props.sizeOver, (over, wasOver) => {
         aria-valuemin="0"
         :aria-valuenow="bytes"
         :aria-valuetext="copy.sizeValue(kb, MAX_REQUEST_KB)"
-        class="h-1.5 overflow-hidden rounded-full bg-muted"
+        class="h-1.5 overflow-hidden rounded-full bg-input"
         role="meter"
       >
         <div

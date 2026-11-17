@@ -382,7 +382,7 @@ const linkErrorMessage = computed(() => {
     class="mx-auto w-full max-w-3xl px-6 py-10"
     data-testid="settings-page"
   >
-    <h1 class="text-2xl font-semibold tracking-tight">
+    <h1 class="text-2xl font-extrabold tracking-[-0.02em]">
       {{ copy.title }}
     </h1>
 
@@ -392,7 +392,7 @@ const linkErrorMessage = computed(() => {
     >
       <h2
         id="devices-title"
-        class="text-lg font-semibold"
+        class="text-lg font-bold"
       >
         {{ copy.devices }}
       </h2>
@@ -431,7 +431,7 @@ const linkErrorMessage = computed(() => {
           <Button
             v-if="session.current"
             :disabled="!csrfToken"
-            variant="secondary"
+            variant="destructive"
             @click="logout"
           >
             {{ copy.logOut }}
@@ -440,7 +440,7 @@ const linkErrorMessage = computed(() => {
             v-else
             data-testid="revoke-button"
             :disabled="!csrfToken"
-            variant="secondary"
+            variant="destructive"
             @click="revokeSession(session.id)"
           >
             {{ copy.revoke }}
@@ -449,7 +449,7 @@ const linkErrorMessage = computed(() => {
       </ul>
       <Button
         data-testid="revoke-all-button"
-        class="mt-4 text-destructive"
+        class="mt-4"
         :disabled="!csrfToken"
         variant="outline"
         @click="revokeAll"
@@ -504,7 +504,7 @@ const linkErrorMessage = computed(() => {
     >
       <h2
         id="providers-title"
-        class="text-lg font-semibold"
+        class="text-lg font-bold"
       >
         {{ copy.providers }}
       </h2>

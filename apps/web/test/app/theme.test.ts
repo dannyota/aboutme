@@ -1,7 +1,7 @@
 import type { Resume } from '@aboutme/schema';
 import { mount } from '@vue/test-utils';
 import { readFileSync, readdirSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { relative, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import ResumeDocument from '../../app/components/resume/ResumeDocument.vue';
@@ -164,24 +164,13 @@ const SHADOWS: Record<Theme, Record<string, string>> = {
   },
 };
 
-const REMOVED = {
-  '--brand-blue': 'var(--brand)',
-  '--brand-deep-blue': 'var(--link)',
-  '--brand-indigo': 'var(--muted-foreground)',
-  '--brand-jade': 'var(--muted-foreground)',
-  '--brand-ochre': 'var(--muted-foreground)',
-  '--surface-blue': 'var(--surface-mist)',
-  '--surface-indigo': 'var(--surface-mist)',
-  '--surface-sand': 'var(--surface-sun)',
-  '--radius-feature': 'var(--radius-card)',
-  '--shadow-product': 'none',
-  '--shadow-primary': 'none',
-  '--shadow-cta': 'none',
-  '--gradient-brand': 'none',
-  '--gradient-brand-strong': 'none',
-  '--gradient-aurora': 'none',
-  '--gradient-hero-glow': 'none',
-} as const;
+const RETIRED = new RegExp([
+  '(?<!\\w)(?:brand-(?:blue|deep-blue|indigo|jade|ochre)',
+  'surface-(?:blue|indigo|sand)',
+  'radius-feature',
+  'shadow-(?:product|primary|cta))(?![\\w-])',
+  '--gradient-[\\w-]+',
+].join('|'), 'gu');
 
 const GROUNDS = [
   ['background', ['--background']],
@@ -361,7 +350,7 @@ describe('application theme', () => {
   it('keeps paper and fixed tokens out of the dark block', () => {
     const dark = blockDeclarations(css(), DARK);
     for (const token of [
-      ...Object.keys(FIXED), ...Object.keys(REMOVED),
+      ...Object.keys(FIXED),
       '--brand-foreground', '--seal-foreground', '--coin', '--coin-edge',
       '--coin-ink',
     ]) {
@@ -378,15 +367,13 @@ describe('application theme', () => {
     });
   });
 
-  it('aliases each removed token to its replacement in one block', () => {
-    const light = blockDeclarations(css(), LIGHT);
-    for (const [name, value] of Object.entries(REMOVED)) {
-      expect(light[name], name).toBe(value);
-    }
-    const names = Object.keys(light);
-    const positions = Object.keys(REMOVED).map((name) => names.indexOf(name));
-    expect(Math.max(...positions) - Math.min(...positions))
-      .toBe(positions.length - 1);
+  it('names no retired token in the app, its workers, or proofs', () => {
+    const names = ['app', 'server', 'e2e', '../../deploy/dev-https-browser']
+      .flatMap((directory) => sourceFiles(resolve(webRoot, directory)))
+      .flatMap((path) => [...readFileSync(path, 'utf8').matchAll(RETIRED)]
+        .map((match) => `${relative(workspaceRoot, path)} ${match[0]}`));
+
+    expect(names).toEqual([]);
     expect(css()).not.toMatch(/gradient\(/u);
   });
 
@@ -650,6 +637,7 @@ function normalize(value: string): string {
 function sourceFiles(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const path = resolve(directory, entry.name);
+    if (entry.name === 'node_modules') return [];
     if (entry.isDirectory()) return sourceFiles(path);
     return /\.(?:css|ts|vue)$/.test(entry.name) ? [path] : [];
   });

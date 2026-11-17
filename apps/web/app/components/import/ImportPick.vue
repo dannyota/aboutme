@@ -71,7 +71,8 @@ defineExpose({
   <div class="grid gap-6">
     <section
       aria-labelledby="import-steps-heading"
-      class="rounded-lg border bg-card p-4 shadow-product sm:p-6"
+      class="rounded-[var(--radius-card)] border border-border bg-card p-4
+        sm:p-6"
     >
       <h2
         id="import-steps-heading"
@@ -90,7 +91,7 @@ defineExpose({
           <span
             aria-hidden="true"
             class="flex size-6 shrink-0 items-center justify-center rounded-full
-              bg-surface-blue text-sm font-semibold text-link"
+              bg-surface-mist text-sm font-semibold text-foreground"
           >{{ index + 1 }}</span>
           <span>{{ step }}</span>
         </li>
@@ -98,7 +99,7 @@ defineExpose({
       <p class="mt-4 flex items-start gap-2 text-sm text-foreground">
         <Languages
           aria-hidden="true"
-          class="mt-0.5 size-4 shrink-0 text-brand-indigo"
+          class="mt-0.5 size-4 shrink-0 text-muted-foreground"
         />
         <span>{{ copy.englishOnly }}</span>
       </p>
@@ -123,11 +124,11 @@ defineExpose({
 
     <section
       aria-labelledby="import-pick-heading"
-      class="rounded-lg border-2 border-dashed p-6 transition-colors
+      class="rounded-[var(--radius-card)] border-2 p-6 transition-colors
         duration-150 motion-reduce:transition-none sm:p-8"
       :class="dragOver
-        ? 'border-primary bg-surface-indigo'
-        : 'border-input bg-surface-blue'"
+        ? 'border-solid border-foreground bg-accent'
+        : 'border-dashed border-control bg-surface-mist'"
       @dragleave="dragOver = false"
       @dragover.prevent="dragOver = !reading"
       @drop.prevent="onDropFiles"
@@ -148,7 +149,7 @@ defineExpose({
         >
           <FileUp
             aria-hidden="true"
-            class="size-8 text-brand-blue"
+            class="size-8 text-muted-foreground"
           />
           <p class="hidden font-medium sm:block">
             {{ dropPrompt }}
@@ -195,7 +196,7 @@ defineExpose({
             role="progressbar"
           >
             <div
-              class="h-full rounded-full bg-primary transition-[width]
+              class="h-full rounded-full bg-chart-bar transition-[width]
                 duration-150 motion-reduce:transition-none"
               :style="{
                 width: progressMax > 0
@@ -245,7 +246,7 @@ defineExpose({
     <p class="flex items-start gap-2 text-sm text-muted-foreground">
       <LockKeyhole
         aria-hidden="true"
-        class="mt-0.5 size-4 shrink-0 text-brand-blue"
+        class="mt-0.5 size-4 shrink-0 text-muted-foreground"
       />
       <span>{{ copy.privacy }} {{ copy.ownProfile }}</span>
     </p>

@@ -43,7 +43,7 @@ describe('ImportActionPanel', () => {
     expect(classes).toContain('min-[900px]:top-6');
     expect(classes).toContain('min-[900px]:bottom-auto');
     expect(classes).toContain('min-[900px]:mx-0');
-    expect(classes).toContain('min-[900px]:rounded-lg');
+    expect(classes).toContain('min-[900px]:rounded-[var(--radius-card)]');
     expect(classes).toContain('min-[900px]:border');
     expect(classes).toContain('min-[900px]:p-6');
   });

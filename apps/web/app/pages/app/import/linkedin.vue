@@ -399,7 +399,7 @@ async function submit(): Promise<void> {
             <h1
               id="import-review-heading"
               ref="reviewHeading"
-              class="text-2xl font-bold tracking-tight outline-none"
+              class="text-2xl font-extrabold tracking-[-0.02em] outline-none"
               tabindex="-1"
             >
               {{ copy.reviewHeading }}

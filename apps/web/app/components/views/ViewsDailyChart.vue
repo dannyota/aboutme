@@ -38,12 +38,13 @@ const axisDays = computed(() => {
   >
     <h2
       id="views-chart-heading"
-      class="text-lg font-semibold"
+      class="text-lg font-bold"
     >
       {{ props.copy.chartHeading }}
     </h2>
     <div
-      class="mt-4 rounded-[var(--radius)] border border-border bg-card p-4"
+      class="mt-4 rounded-[var(--radius-card)] border border-border bg-card
+        p-4"
     >
       <p
         v-if="allZero"
@@ -100,7 +101,7 @@ const axisDays = computed(() => {
   >
     <h2
       id="views-monthly-heading"
-      class="text-lg font-semibold"
+      class="text-lg font-bold"
     >
       {{ props.copy.monthlyHeading }}
     </h2>

@@ -302,7 +302,7 @@ onMounted(() => {
   >
     <h2
       id="github-evidence-title"
-      class="text-lg font-semibold"
+      class="text-lg font-bold"
     >
       {{ copy.title }}
     </h2>
@@ -408,11 +408,10 @@ onMounted(() => {
           {{ copy.continue }}
         </Button>
         <Button
-          class="text-destructive"
           data-testid="evidence-disconnect"
           :disabled="!csrfToken || pending"
           type="button"
-          variant="outline"
+          variant="destructive"
           @click="disconnect"
         >
           {{ copy.disconnect }}

@@ -43,7 +43,8 @@ watch(() => props.refreshing, async (refreshing) => {
 
 <template>
   <div
-    class="grid gap-2 rounded-md bg-surface-blue p-3 text-sm text-foreground"
+    class="grid gap-2 rounded-[var(--radius)] bg-surface-mist p-3 text-sm
+      text-foreground"
     data-project-note
   >
     <p class="break-words">
@@ -59,6 +60,7 @@ watch(() => props.refreshing, async (refreshing) => {
       <Button
         ref="refreshButton"
         data-action="refresh-project-entry"
+        class="hover:bg-card"
         :disabled="refreshing"
         size="sm"
         type="button"
@@ -69,6 +71,7 @@ watch(() => props.refreshing, async (refreshing) => {
       </Button>
       <Button
         as-child
+        class="hover:bg-card"
         size="sm"
         variant="ghost"
       >

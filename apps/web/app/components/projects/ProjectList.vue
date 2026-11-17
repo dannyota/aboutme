@@ -65,7 +65,8 @@ function languageLabel(project: Project, key: string): string {
 <template>
   <ul
     :aria-label="copy.listLabel"
-    class="divide-y divide-border rounded-lg border border-border bg-card"
+    class="divide-y divide-hairline rounded-[var(--radius-card)] border
+      border-border bg-card"
     data-testid="project-list"
   >
     <li
@@ -105,14 +106,18 @@ function languageLabel(project: Project, key: string): string {
             class="max-w-full"
           >
             <Badge
-              class="max-w-full"
+              class="max-w-full border-transparent bg-surface-mist
+                font-semibold text-foreground"
               variant="secondary"
             >
               <span class="truncate">{{ technology }}</span>
             </Badge>
           </li>
           <li v-if="hiddenTechnologies(project) > 0">
-            <Badge variant="outline">
+            <Badge
+              class="font-semibold"
+              variant="outline"
+            >
               {{ copy.moreTechnologies(hiddenTechnologies(project)) }}
             </Badge>
           </li>
@@ -127,6 +132,7 @@ function languageLabel(project: Project, key: string): string {
             :key="key"
           >
             <Badge
+              class="font-semibold"
               :data-default="key === project.defaultLanguage || undefined"
               variant="outline"
             >

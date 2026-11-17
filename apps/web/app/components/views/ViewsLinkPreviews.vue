@@ -20,7 +20,7 @@ const props = defineProps<{
   >
     <h2
       id="views-previews-heading"
-      class="text-lg font-semibold"
+      class="text-lg font-bold"
     >
       {{ props.copy.previewsHeading }}
     </h2>

@@ -103,7 +103,7 @@ function closeRelease(): void {
       <div class="min-w-0">
         <h1
           id="projects-title"
-          class="text-2xl font-bold tracking-tight"
+          class="text-2xl font-extrabold tracking-[-0.02em]"
         >
           {{ copy.title }}
         </h1>
@@ -145,7 +145,8 @@ function closeRelease(): void {
 
     <div
       v-if="view.kind === 'waiting-auth' || view.kind === 'loading'"
-      class="divide-y divide-border rounded-lg border border-border bg-card"
+      class="divide-y divide-hairline rounded-[var(--radius-card)] border
+        border-border bg-card"
       data-testid="projects-loading"
       role="status"
     >
@@ -178,7 +179,8 @@ function closeRelease(): void {
     </StatusBanner>
     <div
       v-else-if="empty"
-      class="rounded-lg border border-border bg-card p-8 text-center"
+      class="rounded-[var(--radius-card)] border border-border bg-card p-8
+        text-center"
       data-testid="projects-empty"
     >
       <p
