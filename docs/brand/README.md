@@ -75,9 +75,9 @@ The script uses the Playwright Chromium the e2e suite installs; set
 changes, bump its version in the file name and in `apps/web/app/i18n/meta.ts`,
 because crawlers cache the old URL. The same goes for the icons.
 
-`favicon.ico` is packed by hand, not by the script, and is in the previous set's
-red. Pack it from 16, 32, and 48 px renders of the mark without the inner ring,
-for example with ImageMagick:
+`favicon.ico` is packed by hand, not by the script, from 16, 32, and 48 px PNGs
+of the v4 icon (`icon-32-v4.png` and downscales of it and `icon-192-v4.png`),
+stored as PNG entries; any ICO packer that keeps PNG entries works, for example
 `magick icon-16.png icon-32-v4.png icon-48.png favicon.ico`.
 
 The stamp SVGs set their words in live text, so they need Be Vietnam Pro
