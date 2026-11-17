@@ -6,8 +6,6 @@ import { defineComponent, h } from 'vue';
 import { localeCookie } from '../app/i18n/locale';
 import { setSiteLocale } from './support/locale';
 
-// Chromium hides Clear-Site-Data from scripts; the endpoint clears the cookie.
-
 const meData = {
   user: {
     id: 'user-1',
@@ -42,7 +40,6 @@ const Probe = defineComponent({
   },
 });
 
-// Deleting an unset cookie can leave an empty entry in the test DOM.
 function localeCookieValue(): string | undefined {
   const prefix = `${localeCookie}=`;
   const value = document.cookie
@@ -73,6 +70,26 @@ async function triggerMutation(): Promise<void> {
 }
 
 describe('useAuth restores the locale cookie after Clear-Site-Data', () => {
+  it('keeps the restored choice when an older locale reader is disposed',
+    async () => {
+      setSiteLocale(undefined);
+      const reader = defineComponent({
+        setup() {
+          useLocale();
+          return () => h('div');
+        },
+      });
+      const wrapper = await mountSuspended(reader);
+      document.cookie = `${localeCookie}=en; Path=/`;
+      useState(localeCookie).value = 'en';
+      registerMutation(clearSiteData);
+
+      await triggerMutation();
+      wrapper.unmount();
+
+      expect(localeCookieValue()).toBe('en');
+    });
+
   it('rewrites a cleared choice without seeing the header', async () => {
     setSiteLocale('en');
     registerMutation(clearSiteData);
