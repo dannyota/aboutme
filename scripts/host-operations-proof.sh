@@ -70,4 +70,5 @@ source "$root/deploy/vn/scripts/ssh-lib.sh"
 jq -cn --arg id "$id" --arg nonce "$nonce" --arg result "$result" \
   '{verb:"proof",requestId:$id,phase:"serving",nonce:$nonce,result:$result}' |
   ssh -p "$SSH_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ForwardAgent=no \
+    -o ServerAliveInterval=15 -o ServerAliveCountMax=4 \
     "aboutme-admin@${DEPLOY_HOST:?}" 'sudo /usr/local/lib/aboutme/operation-run.sh request' 2>/dev/null

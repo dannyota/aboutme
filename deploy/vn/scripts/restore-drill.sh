@@ -447,7 +447,7 @@ connect_drill() {
   drill_ip=$(server_private_ip)
   [[ -n $drill_ip ]] || die "could not read the drill server's private IP"
   if ((!direct)); then
-    drill_opts+=(-o "ProxyCommand=ssh -p $SSH_PORT -o ControlPath=$ssh_dir/prod.sock -W %h:%p $ADMIN_USER@$prod_host")
+    drill_opts+=(-o "ProxyCommand=ssh -p $SSH_PORT -o ControlPath=$ssh_dir/prod.sock -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -W %h:%p $ADMIN_USER@$prod_host")
   fi
   prsh true || die "cannot reach the production host $prod_host over SSH"
   say "waiting for SSH on the drill server $drill_ip"
