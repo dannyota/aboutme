@@ -98,10 +98,11 @@ weight 700.
 
 The editor top bar is 64 px high. It holds the 24 px logo linking to the resume
 list, a divider, the resume title as the page h1, save state, public mark, the
-language toggle, Download PDF with the page size beside it, Publish, and the
-account menu. Download PDF is an outline pill. Publish is the seal button, the
-only red fill, with the ring "a" before its label. The title is weight 600 and,
-like the public link, follows the truncation rule of the
+language toggle, Download PDF with the page size beside it (below 42 rem the
+size stays in the button's accessible name only, so the bar fits at 320 px),
+Publish, and the account menu. Download PDF is an outline pill. Publish is the
+seal button, the only red fill, with the ring "a" before its label. The title is
+weight 600 and, like the public link, follows the truncation rule of the
 [type scale](typography-and-tokens.md#type). Below 56 rem the logo shows the
 mark alone and the bar's gaps shrink from 16 to 8 px. When space runs short, the
 title and the public link truncate with an ellipsis before any control moves;
