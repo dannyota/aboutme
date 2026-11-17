@@ -2,8 +2,8 @@ import { nextTick, type ComputedRef } from 'vue';
 import {
   isLocale,
   localeCookie,
-  localeCookieMaxAgeSeconds,
   type Locale,
+  writeLocaleCookie,
 } from '@/i18n/locale';
 
 export type AuthProvider = 'google' | 'github' | 'linkedin';
@@ -105,8 +105,7 @@ function restoreLocaleCookie(chosen: Locale): void {
   if (readLocaleCookie() !== undefined) return;
   const state = useState<Locale | undefined>(localeCookie);
   const value = isLocale(state.value) ? state.value : chosen;
-  document.cookie = `${localeCookie}=${value}; Path=/; `
-    + `Max-Age=${localeCookieMaxAgeSeconds}; SameSite=Lax`;
+  writeLocaleCookie(value);
 }
 
 export function useAuth(): UseAuthReturn {

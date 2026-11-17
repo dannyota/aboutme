@@ -104,7 +104,7 @@ const isStale = computed(() => state.value.kind === 'stale');
 <style scoped>
 .verify-page {
   --verify-verified: var(--link);
-  --verify-rolling: var(--brand-indigo);
+  --verify-rolling: var(--coin);
   --verify-neutral: var(--muted-foreground);
   --verify-bad: var(--destructive);
 }

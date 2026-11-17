@@ -174,32 +174,32 @@ The page uses the marketing shell on the Aurora canvas, like `/verify`, and only
 existing tokens and primitives. Nothing uses seal red, which means public; the
 Cannot list must not look like an error or a public state.
 
-| Measure        | Below 42 rem (390 px)     | From 42 rem (1280 px)  |
-| -------------- | ------------------------- | ---------------------- |
-| Column         | Full width, 16 px gutters | 60 rem, 24 px gutters  |
-| Top and bottom | 32 px, 64 px              | 48 px, 96 px           |
-| Section gap    | 32 px                     | 40 px                  |
-| `h1`           | 24 px, weight 700         | 32 px, weight 700      |
-| Card padding   | 20 px                     | 28 px                  |
-| Can and Cannot | One column, Can first     | Two columns, 32 px gap |
-| Claude parts   | Stacked                   | Stacked                |
+| Measure        | Below 42 rem (390 px)     | From 42 rem (1280 px)         |
+| -------------- | ------------------------- | ----------------------------- |
+| Column         | Full width, 16 px gutters | 60 rem, 24 px gutters         |
+| Top and bottom | 32 px, 64 px              | 48 px, 96 px                  |
+| Section gap    | 32 px                     | 40 px                         |
+| `h1`           | 32 px, weight 800         | 40 px from 48 rem, weight 800 |
+| Card padding   | 20 px                     | 28 px                         |
+| Can and Cannot | One column, Can first     | Two columns, 32 px gap        |
+| Claude parts   | Stacked                   | Stacked                       |
 
-- The header block uses the Library header: `--surface-blue` tint, border, and
-  the 20 px feature radius. The lead is 16 px `--muted-foreground`, at most 40
-  rem wide.
-- Every other section is a `--card` card with a border, the 20 px feature
-  radius, and `--shadow-product`. Section headings are `h2` at 18 px weight 600;
-  `h3` is 15 px weight 600.
+- The header block uses the Library header: a `--surface-blush` panel with
+  `--radius-panel` and no border, and the 32 px page heading (40 from 48 rem).
+  The lead is 16 px `--muted-foreground`, at most 40 rem wide.
+- Every other section is a `--card` card with a `--border` edge,
+  `--radius-card`, and no shadow. Section headings are `h2` at 20 px weight 700;
+  `h3` is 15 px weight 600. Body text is 16/1.6.
 - The URL and command blocks use the verify page's command block look: `--muted`
-  fill, border, 10 px radius, 13 px monospace, a 32 px copy button at the top
-  right, sideways scroll, no `$` prompt on the URL.
-- Steps are an `ol` with 24 px number disks: `--surface-blue` fill, 1 px
-  `--border` ring, `--foreground` 13 px weight 600 numerals. Inline UI names are
-  weight 600. Inline code uses `--muted` fill and 13 px monospace.
+  fill, no border, 10 px radius, 13 px monospace, a 32 px ghost circle copy
+  button at the top right whose hover fill is `--card`, sideways scroll, no `$`
+  prompt on the URL.
+- Steps are an `ol` with 24 px number disks: `--surface-mist` fill, no ring,
+  `--foreground` 13 px weight 700 numerals. Inline UI names are weight 600.
+  Inline code uses `--muted` fill and 13 px monospace.
 - Can items take a 16 px Lucide `check` in `--link`. Cannot items take a 16 px
   Lucide `minus` in `--muted-foreground`.
-- Example requests sit in a `--muted` panel with a 2 px `--brand-indigo` left
-  rule.
+- Example requests sit in a `--muted` panel with a 10 px radius and no rule.
 - Troubleshooting is a `dl`: the question as a 15 px weight 600 `dt`, the answer
   as a 15 px `dd`, 16 px between pairs.
 - Both themes come from the tokens alone. The page adds no theme value.

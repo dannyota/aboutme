@@ -57,8 +57,7 @@ const transparencyLogLink = computed(
 <template>
   <section
     aria-labelledby="verify-yourself-heading"
-    class="rounded-[20px] border bg-card p-5 shadow-[var(--shadow-product)]
-      min-[42rem]:p-7"
+    class="rounded-[var(--radius-card)] border bg-card p-5 min-[42rem]:p-7"
     data-testid="verify-yourself"
   >
     <h2
@@ -93,9 +92,7 @@ const transparencyLogLink = computed(
         <ToggleGroupItem
           v-for="target in targets"
           :key="target.key"
-          class="h-8 font-mono text-[13px] data-[state=on]:bg-card
-            data-[state=on]:text-foreground
-            data-[state=on]:shadow-[0_1px_1px_rgb(16_27_63/0.12)]"
+          class="h-8 font-mono text-[13px]"
           :value="target.key"
         >
           {{ target.label }}
@@ -107,7 +104,7 @@ const transparencyLogLink = computed(
       <li class="flex gap-3">
         <span
           class="flex size-[22px] flex-none items-center justify-center
-            rounded-full bg-surface-blue text-[11px] font-bold text-link"
+            rounded-full bg-surface-mist text-[11px] font-bold text-link"
         >1</span>
         <div class="min-w-0 flex-1">
           <p class="font-semibold">
@@ -128,7 +125,7 @@ const transparencyLogLink = computed(
       <li class="flex gap-3">
         <span
           class="flex size-[22px] flex-none items-center justify-center
-            rounded-full bg-surface-blue text-[11px] font-bold text-link"
+            rounded-full bg-surface-mist text-[11px] font-bold text-link"
         >2</span>
         <div class="min-w-0 flex-1">
           <p class="font-semibold">

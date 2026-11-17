@@ -23,13 +23,13 @@ defineProps<{
     >{{ part.text }}</code>
     <a
       v-else-if="part.kind === 'link' && part.external"
-      class="text-link underline-offset-4 hover:underline"
+      class="text-link underline decoration-1 underline-offset-4"
       :href="part.href"
       rel="noopener noreferrer"
     >{{ part.text }}</a>
     <NuxtLink
       v-else-if="part.kind === 'link'"
-      class="text-link underline-offset-4 hover:underline"
+      class="text-link underline decoration-1 underline-offset-4"
       :to="part.href"
     >{{ part.text }}</NuxtLink>
   </template>

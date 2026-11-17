@@ -10,13 +10,13 @@ defineProps<{
 <template>
   <section
     aria-labelledby="guide-troubleshooting-heading"
-    class="rounded-[var(--radius-feature)] border bg-card p-5
-      shadow-[var(--shadow-product)] min-[42rem]:p-7"
+    class="rounded-[var(--radius-card)] border bg-card p-5
+      min-[42rem]:p-7"
     data-testid="guide-troubleshooting"
   >
     <h2
       id="guide-troubleshooting-heading"
-      class="text-[18px] font-semibold"
+      class="text-lg font-bold"
     >
       {{ copy.heading }}
     </h2>

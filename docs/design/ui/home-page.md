@@ -13,24 +13,25 @@ English `aboutme.vn · Free resumes, private until you choose`.
 The identity reaches the application one change at a time. Each change ships
 alone and leaves a coherent look.
 
-| Order | Surfaces                                                                                                                             | State              |
-| ----- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------ |
-| 1     | The home page                                                                                                                        | Shipped in v0.9.12 |
-| 2     | Tokens, type, primitives, and the shell header                                                                                       | Shipped in v0.9.16 |
-| 3     | Sign-in, registration, password reset, email verification, second factor, and consent                                                | Next               |
-| 4     | The editor shell, the publish dialog, and the resumes list                                                                           | Next               |
-| 5     | The Library, template pages, and the showcase                                                                                        | Next               |
-| 6     | A footer shared by the public pages, the MCP guide, legal pages, verify, views, settings, the projects workspace, and the error page | After 2            |
-| 7     | The public page bar and public project pages                                                                                         | After 2            |
-| 8     | Icons, Open Graph images, brand art, the link-preview card pin, the maintenance page, and the mail color                             | After 2            |
+| Order | Surfaces                                                                                                 | State              |
+| ----- | -------------------------------------------------------------------------------------------------------- | ------------------ |
+| 1     | The home page                                                                                            | Shipped in v0.9.12 |
+| 2     | Tokens, type, primitives, and the shell header                                                           | Shipped in v0.9.16 |
+| 3     | Sign-in, registration, password reset, email verification, second factor, and consent                    | Shipped in v0.9.17 |
+| 4     | The editor shell, the publish dialog, and the resumes list                                               | Shipped in v0.9.18 |
+| 5     | The Library, template pages, and the showcase                                                            | Shipped in v0.9.19 |
+| 6     | A footer shared by the public pages, the MCP guide, the legal pages, the verify page, and the error page | Next               |
+| 7     | Settings, views, the projects workspace, LinkedIn import, and removing the retired token aliases         | After 6            |
+| 8     | The public page bar and public project pages                                                             | After 2            |
+| 9     | Icons, Open Graph images, brand art, the link-preview card pin, the maintenance page, and the mail color | After 2            |
 
 Until change 2 ships, the home route scopes its tokens and the chrome typeface
 on the root element, and leaving the home page changes ground, ink, primary
 color, typeface, and button shape. After change 2 every route shares the
 [tokens](typography-and-tokens.md); a surface whose own change has not shipped
 keeps its old layout in the new colors, and tokens that the identity removes
-stay as aliases of their replacements until change 6 deletes them. Until change
-8, icons, images, the card pin, and mail still use the earlier red `#CC2649`.
+stay as aliases of their replacements until change 7 deletes them. Until change
+9, icons, images, the card pin, and mail still use the earlier red `#CC2649`.
 
 ## Tokens
 

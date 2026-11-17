@@ -44,10 +44,18 @@ defineProps<{
 
 <style scoped>
 .footer {
+  --ring: var(--ring-inverse);
   --logo-mark: var(--logo-mark-inverse);
   padding: 44px 0 40px;
   background: var(--footer);
   color: var(--panel-foreground);
+}
+
+@media (forced-colors: none) {
+  .footer :deep([data-logo-part="mark"]),
+  .footer :deep([data-logo-part="dot"]) {
+    color: var(--logo-mark-inverse);
+  }
 }
 
 .foot {
@@ -59,7 +67,7 @@ defineProps<{
   max-width: 1264px;
   margin: 0 auto;
   padding: 0 16px;
-  font-size: 15px;
+  font: 500 15px/1.6 var(--font-chrome);
 }
 
 .foot-logo {
