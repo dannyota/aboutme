@@ -248,10 +248,10 @@ don't trust aboutme."
 
 The component selector, labeled "Thành phần" / "Component", is a single-choice
 `toggle-group` in a `--muted` track with 13 px monospace segments; the selected
-segment takes `--card` and a 1 px shadow. It is one tab stop: arrows move, Enter
-or Space selects. A component with two images appears once per image as "web
-v0.5.21" and "web v0.6.0". It starts on `server`, or on the failing component in
-the mismatch state.
+segment is an ink pill: `--foreground` fill and `--background` text. It is one
+tab stop: arrows move, Enter or Space selects. A component with two images
+appears once per image as "web v0.5.21" and "web v0.6.0". It starts on `server`,
+or on the failing component in the mismatch state.
 
 Two numbered steps follow, 20 px apart. Each has a 22 px `--surface-mist` number
 disk with `--link` digits and a weight 600 label:

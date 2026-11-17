@@ -174,15 +174,15 @@ The page uses the marketing shell on the Aurora canvas, like `/verify`, and only
 existing tokens and primitives. Nothing uses seal red, which means public; the
 Cannot list must not look like an error or a public state.
 
-| Measure        | Below 42 rem (390 px)     | From 42 rem (1280 px)  |
-| -------------- | ------------------------- | ---------------------- |
-| Column         | Full width, 16 px gutters | 60 rem, 24 px gutters  |
-| Top and bottom | 32 px, 64 px              | 48 px, 96 px           |
-| Section gap    | 32 px                     | 40 px                  |
-| `h1`           | 24 px, weight 700         | 32 px, weight 700      |
-| Card padding   | 20 px                     | 28 px                  |
-| Can and Cannot | One column, Can first     | Two columns, 32 px gap |
-| Claude parts   | Stacked                   | Stacked                |
+| Measure        | Below 42 rem (390 px)     | From 42 rem (1280 px)         |
+| -------------- | ------------------------- | ----------------------------- |
+| Column         | Full width, 16 px gutters | 60 rem, 24 px gutters         |
+| Top and bottom | 32 px, 64 px              | 48 px, 96 px                  |
+| Section gap    | 32 px                     | 40 px                         |
+| `h1`           | 32 px, weight 800         | 40 px from 48 rem, weight 800 |
+| Card padding   | 20 px                     | 28 px                         |
+| Can and Cannot | One column, Can first     | Two columns, 32 px gap        |
+| Claude parts   | Stacked                   | Stacked                       |
 
 - The header block uses the Library header: a `--surface-blush` panel with
   `--radius-panel` and no border, and the 32 px page heading (40 from 48 rem).

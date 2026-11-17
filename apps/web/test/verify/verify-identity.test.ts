@@ -92,6 +92,11 @@ describe('verify tokens', () => {
       expect(webSource(path), path).not.toMatch(RETIRED_STYLE);
     }
   });
+
+  it('leave the component selector on the ink selected state', () => {
+    expect(webSource('app/components/verify/VerifyCommands.vue'))
+      .not.toMatch(/data-\[state=on\]:(?:bg|shadow|text)-/u);
+  });
 });
 
 describe('verify cards', () => {

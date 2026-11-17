@@ -92,9 +92,7 @@ const transparencyLogLink = computed(
         <ToggleGroupItem
           v-for="target in targets"
           :key="target.key"
-          class="h-8 font-mono text-[13px] data-[state=on]:bg-card
-            data-[state=on]:text-foreground
-            data-[state=on]:shadow-[0_1px_1px_rgb(16_27_63/0.12)]"
+          class="h-8 font-mono text-[13px]"
           :value="target.key"
         >
           {{ target.label }}
