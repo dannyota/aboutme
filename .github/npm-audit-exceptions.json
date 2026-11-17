@@ -30,5 +30,13 @@
     ],
     "expires": "2026-12-31",
     "reason": "simple-git reaches only @nuxt/devtools, which runs in the Nuxt dev server; absent from the shipped .output; the fix (simple-git 4.0.2, @simple-git/argv-parser 2.0.1) is outside the ^3.36.0 range @nuxt/devtools 3.x pins"
+  },
+  {
+    "id": "GHSA-fc5q-39xc-vjpf",
+    "dirs": [
+      "apps/web"
+    ],
+    "expires": "2026-12-31",
+    "reason": "picomatch (<= 4.0.7) has no patched release; it reaches only build, dev and test tooling (nitropack and rollup plugins, @nuxt/devtools via unstorage, listhen, markdownlint-cli2 via globby). The v0.9.26 web image's .output has no picomatch code, and its only other copy is the Node base image's global npm CLI, which the container never runs. No runtime path passes a viewer- or owner-supplied pattern to picomatch, which is what the ReDoS needs."
   }
 ]

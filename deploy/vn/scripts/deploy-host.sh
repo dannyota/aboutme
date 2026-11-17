@@ -489,11 +489,12 @@ cimd_effective_mcp_flag() {
   printf '%s' "$effective"
 }
 
-step_migration_state() {
+migrator_query() {
   (
     set +xv
     umask 077
-    local password pgpass result
+    local password pgpass
+    find "$secrets" -maxdepth 1 -type f -name '.migration-pgpass.*' -mmin +1 -delete 2>/dev/null || true
     [[ -f $secrets/db-migrator-password && -r $secrets/db-migrator-password ]] || die "cannot read migrator password"
     password=$(<"$secrets/db-migrator-password") || die "cannot read migrator password"
     password=${password//\\/\\\\}
@@ -503,17 +504,21 @@ step_migration_state() {
     trap 'exit 1' HUP INT TERM
     printf '/run/postgresql:5432:aboutme:aboutme_migrator:%s\n' "$password" >"$pgpass" || die "cannot write migrator password file"
     unset password
-    result=$(PGPASSFILE="$pgpass" psql -X -qAt -v ON_ERROR_STOP=1 \
-      "host=/run/postgresql dbname=aboutme user=aboutme_migrator" \
-      -c "SELECT coalesce(max(id), 0) || ':' || count(*) FROM public.goose_db_version") || die "cannot read migration state"
-    [[ $result =~ ^[0-9]+:[0-9]+$ ]] || die "malformed migration state"
-    printf '%s\n' "$result"
+    PGPASSFILE="$pgpass" psql -X -qAt -v ON_ERROR_STOP=1 \
+      "host=/run/postgresql dbname=aboutme user=aboutme_migrator" -c "$1"
   )
 }
 
+step_migration_state() {
+  local result
+  result=$(migrator_query "SELECT coalesce(max(id), 0) || ':' || count(*) FROM public.goose_db_version") ||
+    die "cannot read migration state"
+  [[ $result =~ ^[0-9]+:[0-9]+$ ]] || die "malformed migration state"
+  printf '%s\n' "$result"
+}
+
 cimd_url_rows_exist() {
-  runuser -u postgres -- psql -X -qAt -v ON_ERROR_STOP=1 -d aboutme \
-    -c "SELECT EXISTS (SELECT 1 FROM public.oauth_clients AS client WHERE to_jsonb(client)->>'metadata_url' IS NOT NULL)" 2>/dev/null
+  migrator_query "SELECT EXISTS (SELECT 1 FROM public.oauth_clients AS client WHERE to_jsonb(client)->>'metadata_url' IS NOT NULL)" 2>/dev/null
 }
 
 cimd_serving_app_stopped() {
