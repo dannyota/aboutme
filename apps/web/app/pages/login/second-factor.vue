@@ -133,11 +133,7 @@ async function afterSuccess(): Promise<void> {
 }
 
 function refreshPage(): void {
-  try {
-    window.location.reload();
-  } catch {
-    // jsdom and happy-dom may not implement location.reload().
-  }
+  window.location.reload();
 }
 
 async function usePasskey(): Promise<void> {

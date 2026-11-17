@@ -262,6 +262,21 @@ describe('second-factor.vue loading and method rendering', () => {
       .toBe(false);
   });
 
+  it('reloads the page from the refresh prompt', async () => {
+    registerStatus({ methods: ['sms'] });
+    const reload = vi.spyOn(window.location, 'reload')
+      .mockImplementation(() => {});
+    try {
+      const wrapper = await mountSuspended(SecondFactorPage);
+      await flushPromises();
+      await wrapper.get('[data-testid="second-factor-refresh-button"]')
+        .trigger('click');
+      expect(reload).toHaveBeenCalledOnce();
+    } finally {
+      reload.mockRestore();
+    }
+  });
+
   it('shows a refresh prompt beside recovery for an unknown method',
     async () => {
       registerStatus({ methods: ['sms', 'recovery'] });
