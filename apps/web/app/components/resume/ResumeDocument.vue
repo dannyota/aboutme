@@ -78,9 +78,9 @@ a[href="#public-resume"]:focus {
   padding: 0.5rem 0.75rem;
   border-radius: 4px;
   background: #ffffff;
-  color: #10202a;
+  color: #4336c9;
   font: 600 14px/1.2 system-ui, sans-serif;
-  outline: 2px solid #10202a;
+  outline: 2px solid #1a1650;
 }
 
 body:has(> #public-resume) {
@@ -105,17 +105,15 @@ body:has(> #public-resume) {
 }
 
 .public-toolbar {
-  --toolbar-ground: #f9f8f5;
-  --toolbar-border: #e5e1d6;
-  --toolbar-mark: #cc2649;
-  --toolbar-credit: #5c6178;
-  --toolbar-credit-hover: #23399a;
-  --toolbar-button-fill: #ffffff;
-  --toolbar-button-border: #e5e1d6;
-  --toolbar-button-label: #23399a;
-  --toolbar-button-hover-fill: #eceef6;
-  --toolbar-focus-ring: #26409c;
-  --toolbar-button-shadow: 0 1px 2px rgba(16, 27, 63, 0.06);
+  --toolbar-ground: #ffffff;
+  --toolbar-border: #e3e0f2;
+  --toolbar-mark: #de1b5a;
+  --toolbar-credit: #55517d;
+  --toolbar-credit-hover: #4336c9;
+  --toolbar-button-border: #1a1650;
+  --toolbar-button-label: #1a1650;
+  --toolbar-button-hover-fill: #f1effa;
+  --toolbar-focus-ring: #1a1650;
   box-sizing: border-box;
   padding-block: 8px 7px;
   background: var(--toolbar-ground);
@@ -143,7 +141,7 @@ body:has(> #public-resume) {
 
 @media (width < 40rem) {
   .public-toolbar-inner {
-    column-gap: 12px;
+    column-gap: 8px;
   }
 }
 
@@ -202,6 +200,7 @@ body:has(> #public-resume) {
 
 .public-download,
 .public-projects {
+  position: relative;
   box-sizing: border-box;
   display: inline-flex;
   flex-shrink: 0;
@@ -209,14 +208,13 @@ body:has(> #public-resume) {
   gap: 6px;
   height: 32px;
   padding: 0 12px 0 10px;
-  border: 1px solid var(--toolbar-button-border);
-  border-radius: 10px;
-  background: var(--toolbar-button-fill);
+  border: 1.5px solid var(--toolbar-button-border);
+  border-radius: 999px;
+  background: transparent;
   color: var(--toolbar-button-label);
   font: 500 14px/20px "Be Vietnam Pro", system-ui, sans-serif;
   text-decoration: none;
   white-space: nowrap;
-  box-shadow: var(--toolbar-button-shadow);
 }
 
 .public-projects {
@@ -227,10 +225,43 @@ body:has(> #public-resume) {
   flex-shrink: 0;
 }
 
+.public-download-short {
+  display: none;
+}
+
+@media (width < 30rem) {
+  .public-credit {
+    font-size: 12px;
+  }
+
+  .public-download {
+    padding: 0 10px 0 8px;
+  }
+
+  .public-projects {
+    padding-inline: 10px;
+  }
+
+  .public-download-full {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .public-download-short {
+    display: inline;
+  }
+}
+
 @media (pointer: coarse) {
   .public-download,
   .public-projects {
-    position: relative;
     height: 40px;
   }
 

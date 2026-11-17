@@ -199,10 +199,10 @@ describe('joinInviteContainerStyle', () => {
       width: '320px',
       padding: '16px',
       borderRadius: '14px',
-      border: '1px solid #E5E1D6',
+      border: '1px solid #E3E0F2',
       background: '#FFFFFF',
-      color: '#5C6178',
-      boxShadow: '0 1px 2px rgba(16, 27, 63, 0.06)',
+      color: '#55517D',
+      boxShadow: '0 16px 24px -14px rgba(26, 22, 80, 0.55)',
     });
   });
 
@@ -220,9 +220,9 @@ describe('joinInviteContainerStyle', () => {
       display: 'flex',
       alignItems: 'center',
       gap: '8px',
-      borderTop: '1px solid #E5E1D6',
+      borderTop: '1px solid #E3E0F2',
       background: '#FFFFFF',
-      color: '#5C6178',
+      color: '#55517D',
     });
     expect(String(style.padding)).toBe(
       '0 calc(12px + env(safe-area-inset-right)) '
@@ -244,34 +244,37 @@ describe('joinInviteContainerStyle', () => {
 describe('join invite color scheme', () => {
   it('takes the dark column of the bar tokens', () => {
     expect(joinInvitePalette(true)).toEqual({
-      surface: '#141A2E',
-      border: 'rgba(230, 225, 210, 0.13)',
-      text: '#A5ABBF',
-      shadow: 'none',
-      action: '#72A0FF',
-      onAction: '#071126',
+      surface: '#0E0A0D',
+      border: '#2E242C',
+      text: '#A3959F',
+      shadow: '0 16px 24px -14px rgba(0, 0, 0, 0.7)',
+      action: '#7267C0',
+      onAction: '#FFFFFF',
     });
+  });
+
+  it('takes the light column of the bar tokens', () => {
     expect(joinInvitePalette(false)).toEqual({
       surface: '#FFFFFF',
-      border: '#E5E1D6',
-      text: '#5C6178',
-      shadow: '0 1px 2px rgba(16, 27, 63, 0.06)',
-      action: '#1A5CEB',
+      border: '#E3E0F2',
+      text: '#55517D',
+      shadow: '0 16px 24px -14px rgba(26, 22, 80, 0.55)',
+      action: '#594BAD',
       onAction: '#FFFFFF',
     });
   });
 
   it('draws the dark card and bar with the dark tokens', () => {
     expect(joinInviteContainerStyle('card', true)).toMatchObject({
-      border: '1px solid rgba(230, 225, 210, 0.13)',
-      background: '#141A2E',
-      color: '#A5ABBF',
-      boxShadow: 'none',
+      border: '1px solid #2E242C',
+      background: '#0E0A0D',
+      color: '#A3959F',
+      boxShadow: '0 16px 24px -14px rgba(0, 0, 0, 0.7)',
     });
     expect(joinInviteContainerStyle('bar', true)).toMatchObject({
-      borderTop: '1px solid rgba(230, 225, 210, 0.13)',
-      background: '#141A2E',
-      color: '#A5ABBF',
+      borderTop: '1px solid #2E242C',
+      background: '#0E0A0D',
+      color: '#A3959F',
     });
   });
 

@@ -598,6 +598,7 @@ apps/web/e2e/print.spec.ts
 apps/web/e2e/project-page-details.ts
 apps/web/e2e/project-pages.spec.ts
 apps/web/e2e/projects.spec.ts
+apps/web/e2e/public-bar.ts
 apps/web/e2e/renderer-content.ts
 apps/web/e2e/renderer-details.ts
 apps/web/e2e/renderer-membership.ts

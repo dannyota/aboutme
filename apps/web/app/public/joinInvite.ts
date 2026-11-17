@@ -185,20 +185,20 @@ interface JoinInvitePalette {
 
 const LIGHT_PALETTE: JoinInvitePalette = {
   surface: '#FFFFFF',
-  border: '#E5E1D6',
-  text: '#5C6178',
-  shadow: '0 1px 2px rgba(16, 27, 63, 0.06)',
-  action: '#1A5CEB',
+  border: '#E3E0F2',
+  text: '#55517D',
+  shadow: '0 16px 24px -14px rgba(26, 22, 80, 0.55)',
+  action: '#594BAD',
   onAction: '#FFFFFF',
 };
 
 const DARK_PALETTE: JoinInvitePalette = {
-  surface: '#141A2E',
-  border: 'rgba(230, 225, 210, 0.13)',
-  text: '#A5ABBF',
-  shadow: 'none',
-  action: '#72A0FF',
-  onAction: '#071126',
+  surface: '#0E0A0D',
+  border: '#2E242C',
+  text: '#A3959F',
+  shadow: '0 16px 24px -14px rgba(0, 0, 0, 0.7)',
+  action: '#7267C0',
+  onAction: '#FFFFFF',
 };
 
 export const joinInvitePalette = (dark: boolean): JoinInvitePalette =>

@@ -381,11 +381,28 @@ async function openAndAssertInvite(
     + 'bằng một đường dẫn.'
     : 'Make your own resume on aboutme.vn: free, open source, shared '
       + 'with one link.');
-  await expect(region.getByRole('link'))
-    .toHaveCSS('background-color', 'rgb(26, 92, 235)');
-  await expect(region.getByRole('link'))
-    .toHaveCSS('color', 'rgb(255, 255, 255)');
-  await expect(region).toHaveCSS('color', 'rgb(92, 97, 120)');
+  await expectInviteStyle(page, cell.placement);
+}
+
+const INVITE_STYLE = 'Join invite style.';
+
+async function expectInviteStyle(
+  page: Page, placement: InviteCell['placement'],
+): Promise<void> {
+  const region = page.locator('.join-invite');
+  const action = region.getByRole('link');
+  await expect(action, INVITE_STYLE)
+    .toHaveCSS('background-color', 'rgb(89, 75, 173)');
+  await expect(action, INVITE_STYLE).toHaveCSS('color', 'rgb(255, 255, 255)');
+  await expect(action, INVITE_STYLE)
+    .toHaveCSS('border-top-left-radius', '999px');
+  await expect(region, INVITE_STYLE).toHaveCSS('color', 'rgb(85, 81, 125)');
+  await expect(region, INVITE_STYLE)
+    .toHaveCSS('border-top-color', 'rgb(227, 224, 242)');
+  await expect(region, INVITE_STYLE).toHaveCSS('box-shadow',
+    placement === 'card'
+      ? 'rgba(26, 22, 80, 0.55) 0px 16px 24px -14px'
+      : 'none');
 }
 
 for (const [languageIndex, lng] of (['vi', 'en'] as const).entries()) {
@@ -435,7 +452,32 @@ for (const placement of ['bar', 'card'] as const) {
       () => mutateAttribute(page.locator('.join-invite p'), 'aria-hidden',
         'true'), 'Invite full accessible paragraph.');
   });
+  mutationTest(`invite ${placement} rejects a squared action`, async ({
+    page,
+  }) => {
+    await open(page);
+    await proveMutation(() => expectInviteStyle(page, placement),
+      () => applyStyleMutation(page.locator('.join-invite a'),
+        { 'border-radius': '10px' }), INVITE_STYLE);
+  });
+  mutationTest(`invite ${placement} rejects a changed border`, async ({
+    page,
+  }) => {
+    await open(page);
+    await proveMutation(() => expectInviteStyle(page, placement),
+      () => applyStyleMutation(page.locator('.join-invite'),
+        { 'border-top-color': 'rgb(255, 0, 0)' }), INVITE_STYLE);
+  });
 }
+
+mutationTest('invite card rejects a missing shadow', async ({ page }) => {
+  await openAndAssertInvite(page, {
+    lng: 'vi', placement: 'card', width: 1920,
+  });
+  await proveMutation(() => expectInviteStyle(page, 'card'),
+    () => applyStyleMutation(page.locator('.join-invite'),
+      { 'box-shadow': 'none' }), INVITE_STYLE);
+});
 
 mutationTest('gate rejects unexpected provider artwork', async ({ page }) => {
   await page.goto('/_harness/render?mode=gate&lng=vi&providers=google'

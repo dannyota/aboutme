@@ -1,6 +1,7 @@
 import { expect, type Page } from '@playwright/test';
 
 import type { ScreenContract } from './display-assertions';
+import { BAR_COLORS } from './public-bar';
 import type { StyleRule } from './screen-expectations';
 import { denyExternalRequests } from './support';
 
@@ -12,20 +13,24 @@ const FAMILY = '"Be Vietnam Pro", Inter, system-ui, sans-serif';
 
 export const PROJECT_COLORS = {
   light: {
-    ground: 'rgb(249, 248, 245)', card: 'rgb(255, 255, 255)',
-    ink: 'rgb(16, 27, 63)', muted: 'rgb(92, 97, 120)',
-    link: 'rgb(35, 57, 154)', primary: 'rgb(38, 64, 156)',
-    onPrimary: 'rgb(255, 255, 255)', chip: 'rgb(239, 237, 230)',
-    mark: 'rgb(204, 38, 73)',
+    ground: 'rgb(255, 255, 255)', card: 'rgb(255, 255, 255)',
+    ink: 'rgb(26, 22, 80)', muted: 'rgb(85, 81, 125)',
+    link: 'rgb(67, 54, 201)', primary: 'rgb(89, 75, 173)',
+    onPrimary: 'rgb(255, 255, 255)', chip: 'rgb(241, 239, 250)',
+    border: 'rgb(227, 224, 242)', hairline: 'rgba(26, 22, 80, 0.14)',
   },
   dark: {
-    ground: 'rgb(12, 16, 32)', card: 'rgb(20, 26, 46)',
-    ink: 'rgb(243, 241, 236)', muted: 'rgb(165, 171, 191)',
-    link: 'rgb(163, 182, 245)', primary: 'rgb(143, 166, 240)',
-    onPrimary: 'rgb(12, 16, 32)', chip: 'rgb(26, 33, 56)',
-    mark: 'rgb(255, 107, 138)',
+    ground: 'rgb(14, 10, 13)', card: 'rgb(27, 20, 25)',
+    ink: 'rgb(211, 202, 208)', muted: 'rgb(163, 149, 159)',
+    link: 'rgb(181, 155, 219)', primary: 'rgb(114, 103, 192)',
+    onPrimary: 'rgb(255, 255, 255)', chip: 'rgb(21, 16, 21)',
+    border: 'rgb(46, 36, 44)', hairline: 'rgba(211, 202, 208, 0.14)',
   },
 } as const;
+
+const PHONE_WIDTH = 480;
+export const PROJECT_BAR_ROW = 'Project bar one row.';
+export const PROJECT_SHAPES = 'Project shapes.';
 
 const OWNER: Record<Lng, string> = {
   vi: 'Nguyễn Văn An', en: 'Ada Lovelace',
@@ -70,11 +75,14 @@ const backLabel = (lng: Lng): string => lng === 'vi'
   ? `Về CV của ${OWNER[lng]}`
   : `Back to ${OWNER[lng]}'s resume`;
 
-export function projectPageType(kind: ProjectPageKind): StyleRule[] {
+export function projectPageType(
+  kind: ProjectPageKind, width = 1280,
+): StyleRule[] {
   const shared: StyleRule[] = [
     {
       selector: '.public-credit', message: 'Project credit typography',
-      css: { 'font-family': FAMILY, 'font-size': '13px',
+      css: { 'font-family': FAMILY,
+        'font-size': width < PHONE_WIDTH ? '12px' : '13px',
         'font-weight': '500', 'line-height': '20px' },
     },
     {
@@ -106,7 +114,7 @@ export function projectPageType(kind: ProjectPageKind): StyleRule[] {
 }
 
 export function projectContract(
-  kind: ProjectPageKind, lng: Lng, scheme: Scheme,
+  kind: ProjectPageKind, lng: Lng, scheme: Scheme, width = 1280,
 ): ScreenContract {
   const title = kind === 'project-list'
     ? (lng === 'vi' ? 'Dự án' : 'Projects')
@@ -117,7 +125,7 @@ export function projectContract(
       + 'main :is(h1, h2, p, dt, dd, li, a)',
     flow: 'main > *',
     type: ['main h1', FAMILY, 'Be Vietnam Pro'],
-    styles: projectPageType(kind),
+    styles: projectPageType(kind, width),
     paint: ['.public-project-page', 'background-color',
       PROJECT_COLORS[scheme].ground],
     copy: ['main h1', title],
@@ -244,19 +252,25 @@ export async function expectProjectColors(
   page: Page, kind: ProjectPageKind, scheme: Scheme,
 ): Promise<void> {
   const color = PROJECT_COLORS[scheme];
+  const bar = BAR_COLORS[scheme];
   const checks: [string, string, string][] = [
     ['.public-project-page', 'background-color', color.ground],
     ['main h1', 'color', color.ink],
-    ['.public-credit', 'color', color.muted],
-    ['.public-mark', 'color', color.mark],
-    ['.public-back', 'color', color.link],
-    ['.public-back', 'background-color', color.card],
+    ['.public-toolbar', 'background-color', bar.ground],
+    ['.public-toolbar', 'border-bottom-color', bar.border],
+    ['.public-credit', 'color', bar.credit],
+    ['.public-mark', 'color', bar.mark],
+    ['.public-back', 'color', bar.label],
+    ['.public-back', 'border-top-color', bar.label],
+    ['.public-back', 'background-color', 'rgba(0, 0, 0, 0)'],
     ['.project-chips li:not(.project-chips-more)', 'background-color',
       color.chip],
     ['.project-chips li:not(.project-chips-more)', 'color', color.ink],
     ...(kind === 'project-list'
       ? [
           ['.project-rows', 'background-color', color.card],
+          ['.project-rows', 'border-top-color', color.border],
+          ['.project-row + .project-row', 'border-top-color', color.hairline],
           ['.project-row-name a', 'color', color.link],
           ['.project-row-meta', 'color', color.muted],
           ['.project-chips-more', 'color', color.muted],
@@ -265,8 +279,14 @@ export async function expectProjectColors(
           ['.project-external-primary', 'background-color', color.primary],
           ['.project-external-primary', 'color', color.onPrimary],
           ['.project-external:not(.project-external-primary)', 'color',
-            color.link],
+            color.ink],
+          ['.project-external:not(.project-external-primary)',
+            'border-top-color', color.ink],
+          ['.project-external:not(.project-external-primary)',
+            'background-color', 'rgba(0, 0, 0, 0)'],
+          ['.project-external', 'box-shadow', 'none'],
           ['.project-facts', 'background-color', color.card],
+          ['.project-facts', 'border-top-color', color.border],
           ['.project-outcome', 'background-color', color.card],
           ['.project-facts dt', 'color', color.muted],
           ['.project-description', 'color', color.ink],
@@ -278,6 +298,85 @@ export async function expectProjectColors(
     expect(await nodes.count(), 'Project scheme colors.').toBeGreaterThan(0);
     for (const node of await nodes.all()) {
       await expect(node, 'Project scheme colors.').toHaveCSS(property, value);
+    }
+  }
+}
+
+export async function expectProjectBarRow(page: Page): Promise<void> {
+  const row = await page.evaluate(() => {
+    const box = (selector: string) =>
+      document.querySelector(selector)!.getBoundingClientRect();
+    const inner = document.querySelector('.public-toolbar-inner')!;
+    const innerBox = inner.getBoundingClientRect();
+    const innerStyle = getComputedStyle(inner);
+    const brand = box('.public-brand');
+    const back = box('.public-back');
+    const range = document.createRange();
+    range.selectNodeContents(document.querySelector('.public-back')!);
+    const label = range.getBoundingClientRect();
+    const lines = new Set([...range.getClientRects()]
+      .map((rect) => Math.round(rect.top))).size;
+    const root = document.documentElement;
+    return {
+      coarse: matchMedia('(pointer: coarse)').matches,
+      overflow: root.scrollWidth > root.clientWidth,
+      viewport: innerWidth,
+      barHeight: box('.public-toolbar').height,
+      contentLeft: innerBox.left + parseFloat(innerStyle.paddingLeft),
+      contentRight: innerBox.right - parseFloat(innerStyle.paddingRight),
+      brand: { left: brand.left, right: brand.right,
+        middle: (brand.top + brand.bottom) / 2 },
+      back: { left: back.left, right: back.right,
+        middle: (back.top + back.bottom) / 2 },
+      labelInside: label.width > 0 && label.left >= back.left
+        && label.right <= back.right && label.top >= back.top
+        && label.bottom <= back.bottom,
+      lines,
+    };
+  });
+  expect({
+    coarse: row.coarse,
+    overflow: row.overflow,
+    barHeight: Math.abs(row.barHeight - 56) <= 1,
+    oneRow: Math.abs(row.brand.middle - row.back.middle) <= 1,
+    apart: row.brand.right + 8 <= row.back.left + 1,
+    gutter: Math.abs(row.contentLeft - 16) <= 1
+      && Math.abs(row.viewport - 16 - row.contentRight) <= 1,
+    edges: Math.abs(row.brand.left - row.contentLeft) <= 1
+      && Math.abs(row.back.right - row.contentRight) <= 1,
+    labelInside: row.labelInside,
+    lines: row.lines,
+  }, PROJECT_BAR_ROW).toEqual({
+    coarse: true,
+    overflow: false,
+    barHeight: true,
+    oneRow: true,
+    apart: true,
+    gutter: true,
+    edges: true,
+    labelInside: true,
+    lines: 1,
+  });
+}
+
+export async function expectProjectShapes(
+  page: Page, kind: ProjectPageKind,
+): Promise<void> {
+  const width = page.viewportSize()!.width;
+  const card = width >= 1024 ? '28px' : width >= 768 ? '26px' : '22px';
+  const checks: [string, string][] = [
+    ['.public-back', '999px'],
+    ...(kind === 'project-list'
+      ? [['.project-rows', card]] as [string, string][]
+      : [['.project-external', '999px'], ['.project-facts', card],
+          ['.project-outcome', card]] as [string, string][]),
+  ];
+  for (const [selector, radius] of checks) {
+    const nodes = page.locator(selector);
+    expect(await nodes.count(), PROJECT_SHAPES).toBeGreaterThan(0);
+    for (const node of await nodes.all()) {
+      await expect(node, PROJECT_SHAPES)
+        .toHaveCSS('border-top-left-radius', radius);
     }
   }
 }
