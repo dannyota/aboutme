@@ -499,7 +499,7 @@ func TestEvidence_ConnectsWithTheExactCallbackAndNoScope(t *testing.T) {
 
 func TestEvidence_CallbackChecksTheTransactionRedirectURI(t *testing.T) {
 	h := newHarness(t)
-	handle, tx, err := auth.NewTransactionStore(h.q).BeginEvidence(t.Context(), h.user.ID, 0, testOrigin+"/api/v1/auth/github/callback")
+	handle, tx, err := auth.NewTransactionStore(h.q).BeginEvidence(t.Context(), h.user.ID, 0, uuid.Nil, testOrigin+"/api/v1/auth/github/callback")
 	if err != nil {
 		t.Fatal(err)
 	}

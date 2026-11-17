@@ -21,7 +21,7 @@ func TestEvidenceTransaction_BindsUserGenerationAndIsOneUse(t *testing.T) {
 	ctx := context.Background()
 	userID := createTestUser(t, q)
 
-	handle, begun, err := ts.BeginEvidence(ctx, userID, 7, evidenceCallbackForTest)
+	handle, begun, err := ts.BeginEvidence(ctx, userID, 7, uuid.Nil, evidenceCallbackForTest)
 	if err != nil {
 		t.Fatalf("BeginEvidence() error = %v", err)
 	}
@@ -33,7 +33,7 @@ func TestEvidenceTransaction_BindsUserGenerationAndIsOneUse(t *testing.T) {
 		t.Fatalf("ConsumeEvidence() error = %v", err)
 	}
 	if got.Provider != auth.ProviderGitHub || got.Purpose != auth.PurposeEvidence || got.LinkingUserID != userID ||
-		got.EvidenceGeneration != 7 || got.RedirectURI != evidenceCallbackForTest || got.State != begun.State || got.PKCEVerifier != begun.PKCEVerifier {
+		got.EvidenceGeneration != 7 || got.EvidenceProjectID != uuid.Nil || got.RedirectURI != evidenceCallbackForTest || got.State != begun.State || got.PKCEVerifier != begun.PKCEVerifier {
 		t.Fatalf("ConsumeEvidence() = %+v, want the bound user, generation 7, and the exact callback", got)
 	}
 	if _, err := ts.ConsumeEvidence(ctx, handle); !errors.Is(err, auth.ErrTransactionInvalid) {
@@ -41,11 +41,32 @@ func TestEvidenceTransaction_BindsUserGenerationAndIsOneUse(t *testing.T) {
 	}
 }
 
+func TestEvidenceTransaction_CarriesTheReturnProject(t *testing.T) {
+	q := newTestQueries(t)
+	ts := auth.NewTransactionStore(q)
+	ctx := context.Background()
+	project := uuid.New()
+	handle, begun, err := ts.BeginEvidence(ctx, createTestUser(t, q), 3, project, evidenceCallbackForTest)
+	if err != nil {
+		t.Fatalf("BeginEvidence() error = %v", err)
+	}
+	if begun.EvidenceProjectID != project {
+		t.Fatalf("BeginEvidence() project = %v, want %v", begun.EvidenceProjectID, project)
+	}
+	got, err := ts.ConsumeEvidence(ctx, handle)
+	if err != nil {
+		t.Fatalf("ConsumeEvidence() error = %v", err)
+	}
+	if got.EvidenceProjectID != project || got.EvidenceGeneration != 3 {
+		t.Fatalf("ConsumeEvidence() = %+v, want project %v at generation 3", got, project)
+	}
+}
+
 func TestEvidenceTransaction_SignInConsumeRefusesIt(t *testing.T) {
 	q := newTestQueries(t)
 	ts := auth.NewTransactionStore(q)
 	ctx := context.Background()
-	handle, _, err := ts.BeginEvidence(ctx, createTestUser(t, q), 0, evidenceCallbackForTest)
+	handle, _, err := ts.BeginEvidence(ctx, createTestUser(t, q), 0, uuid.Nil, evidenceCallbackForTest)
 	if err != nil {
 		t.Fatalf("BeginEvidence() error = %v", err)
 	}
@@ -84,11 +105,11 @@ func TestEvidenceTransaction_ExpiresAfterTenMinutes(t *testing.T) {
 	ctx := context.Background()
 	userID := createTestUser(t, q)
 
-	fresh, _, err := ts.BeginEvidence(ctx, userID, 1, evidenceCallbackForTest)
+	fresh, _, err := ts.BeginEvidence(ctx, userID, 1, uuid.Nil, evidenceCallbackForTest)
 	if err != nil {
 		t.Fatalf("BeginEvidence() error = %v", err)
 	}
-	stale, _, err := ts.BeginEvidence(ctx, userID, 1, evidenceCallbackForTest)
+	stale, _, err := ts.BeginEvidence(ctx, userID, 1, uuid.Nil, evidenceCallbackForTest)
 	if err != nil {
 		t.Fatalf("BeginEvidence() error = %v", err)
 	}
@@ -106,7 +127,7 @@ func TestGitHubSignInCallback_RefusesAnEvidenceTransaction(t *testing.T) {
 	gh := newGitHubStub(t, withTokenResponse("code-evidence", "sign-in-must-not-exchange"), withUser(uniqueGitHubUserID(t), "octocat"))
 	handler, q := newTestService(t, withGitHubEndpoint(gh.URL))
 	ts := auth.NewTransactionStore(q)
-	handle, tx, err := ts.BeginEvidence(context.Background(), createTestUser(t, q), 0, evidenceCallbackForTest)
+	handle, tx, err := ts.BeginEvidence(context.Background(), createTestUser(t, q), 0, uuid.Nil, evidenceCallbackForTest)
 	if err != nil {
 		t.Fatalf("BeginEvidence() error = %v", err)
 	}

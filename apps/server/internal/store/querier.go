@@ -14,6 +14,7 @@ import (
 
 type Querier interface {
 	AcceptPrivacyNoticeRecipient(ctx context.Context, arg AcceptPrivacyNoticeRecipientParams) (int64, error)
+	AccountHasProjectEvidence(ctx context.Context, userID uuid.UUID) (bool, error)
 	ActivatePrivacyNoticeCampaign(ctx context.Context, arg ActivatePrivacyNoticeCampaignParams) (int64, error)
 	AddResumeShareSignalDays(ctx context.Context, arg AddResumeShareSignalDaysParams) error
 	AddResumeViewDays(ctx context.Context, arg AddResumeViewDaysParams) error
@@ -326,6 +327,7 @@ type Querier interface {
 	PrivacyNoticeCaptureProof(ctx context.Context) (PrivacyNoticeCaptureProofRow, error)
 	PrivacyNoticeDatabaseTime(ctx context.Context) (time.Time, error)
 	PrivacyNoticeTotals(ctx context.Context) (PrivacyNoticeTotalsRow, error)
+	ProjectBelongsToUser(ctx context.Context, arg ProjectBelongsToUserParams) (bool, error)
 	ProjectDocumentBytes(ctx context.Context, document json.RawMessage) (int32, error)
 	ProjectStoredDocumentEquals(ctx context.Context, arg ProjectStoredDocumentEqualsParams) (bool, error)
 	ProposeProjectSlug(ctx context.Context, arg ProposeProjectSlugParams) (string, error)

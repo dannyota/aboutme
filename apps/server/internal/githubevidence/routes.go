@@ -39,10 +39,6 @@ type sessionBody struct {
 	ExpiresAt time.Time `json:"expiresAt"`
 }
 
-type startBody struct {
-	AuthorizeURL string `json:"authorizeUrl"`
-}
-
 func (s *Service) RegisterRoutes(mux *http.ServeMux) {
 	if !s.enabled {
 		unavailable := http.HandlerFunc(writeUnavailable)
@@ -132,45 +128,6 @@ func (s *Service) statusSnapshot(a account) statusBody {
 	}
 	s.registry.endSession(a.user.ID, live)
 	return body
-}
-
-func (s *Service) handleStart(w http.ResponseWriter, r *http.Request) {
-	sess, ok := auth.SessionFromContext(r.Context())
-	if !ok {
-		writeSessionRequired(w)
-		return
-	}
-	if !plainRequest(r) {
-		writeRequestInvalid(w, "this request takes no query or body")
-		return
-	}
-	if s.registry.isClosed() {
-		api.WriteError(w, http.StatusServiceUnavailable, unavailableCode, "GitHub evidence is not available")
-		return
-	}
-	if allowed, retry := s.starts.admit(sess.UserID, s.now()); !allowed {
-		writeLimited(w, retry)
-		return
-	}
-	if err := s.transactions.ReapExpired(r.Context()); err != nil {
-		s.logInternal(r, "reap_transactions", err)
-	}
-	row, found, err := s.connection(r, sess.UserID)
-	if err != nil {
-		s.writeInternal(w, r, "read_connection", err)
-		return
-	}
-	var generation int64
-	if found {
-		generation = row.Generation
-	}
-	handle, tx, err := s.transactions.BeginEvidence(r.Context(), sess.UserID, generation, s.callbackURL)
-	if err != nil {
-		s.writeInternal(w, r, "begin_transaction", err)
-		return
-	}
-	auth.SetOAuthTxCookie(w, handle)
-	api.WriteData(w, http.StatusOK, startBody{AuthorizeURL: s.client.authorizeLink(tx.State, tx.PKCEVerifier, s.callbackURL)})
 }
 
 func (s *Service) handleDisconnect(w http.ResponseWriter, r *http.Request) {
