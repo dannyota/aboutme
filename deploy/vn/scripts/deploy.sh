@@ -109,6 +109,7 @@ phase=prepare
 render_requested=0
 previous=
 migration_may_be_applied=0
+schema_floor_raised=0
 timers_stopped=0
 
 retry() {
@@ -362,6 +363,7 @@ if [[ -n $schema_floor_tag ]]; then
   }
   if ((schema_floor > fence_minimum)); then
     migration_may_be_applied=1
+    schema_floor_raised=1
     on_host fence.sh raise "$op" "$schema_floor_tag"
     say "raised the release fence to the schema floor $schema_floor_tag ($schema_floor)"
   fi
@@ -371,8 +373,19 @@ if ((first)); then
   step db-setup
 fi
 if ((!rollback)); then
+  before='' after='' before_known=0 after_known=0
+  if before=$(step migration-state); then before_known=1; fi
   migration_may_be_applied=1
   step migrate
+  if after=$(step migration-state); then after_known=1; fi
+  if ((!before_known || !after_known)); then
+    say "migration state unknown"
+  elif [[ $before != "$after" ]]; then
+    say "migrate applied migrations"
+  else
+    say "migrate applied no migration"
+    if ((!schema_floor_raised && !first)); then migration_may_be_applied=0; fi
+  fi
 fi
 
 step app-up
