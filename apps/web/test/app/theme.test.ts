@@ -164,24 +164,13 @@ const SHADOWS: Record<Theme, Record<string, string>> = {
   },
 };
 
-const REMOVED = {
-  '--brand-blue': 'var(--brand)',
-  '--brand-deep-blue': 'var(--link)',
-  '--brand-indigo': 'var(--muted-foreground)',
-  '--brand-jade': 'var(--muted-foreground)',
-  '--brand-ochre': 'var(--muted-foreground)',
-  '--surface-blue': 'var(--surface-mist)',
-  '--surface-indigo': 'var(--surface-mist)',
-  '--surface-sand': 'var(--surface-sun)',
-  '--radius-feature': 'var(--radius-card)',
-  '--shadow-product': 'none',
-  '--shadow-primary': 'none',
-  '--shadow-cta': 'none',
-  '--gradient-brand': 'none',
-  '--gradient-brand-strong': 'none',
-  '--gradient-aurora': 'none',
-  '--gradient-hero-glow': 'none',
-} as const;
+const RETIRED = new RegExp([
+  '(?<!\\w)(?:brand-(?:blue|deep-blue|indigo|jade|ochre)',
+  'surface-(?:blue|indigo|sand)',
+  'radius-feature',
+  'shadow-(?:product|primary|cta))(?![\\w-])',
+  '--gradient-[\\w-]+',
+].join('|'), 'gu');
 
 const GROUNDS = [
   ['background', ['--background']],
@@ -361,7 +350,7 @@ describe('application theme', () => {
   it('keeps paper and fixed tokens out of the dark block', () => {
     const dark = blockDeclarations(css(), DARK);
     for (const token of [
-      ...Object.keys(FIXED), ...Object.keys(REMOVED),
+      ...Object.keys(FIXED),
       '--brand-foreground', '--seal-foreground', '--coin', '--coin-edge',
       '--coin-ink',
     ]) {
@@ -378,15 +367,14 @@ describe('application theme', () => {
     });
   });
 
-  it('aliases each removed token to its replacement in one block', () => {
-    const light = blockDeclarations(css(), LIGHT);
-    for (const [name, value] of Object.entries(REMOVED)) {
-      expect(light[name], name).toBe(value);
-    }
-    const names = Object.keys(light);
-    const positions = Object.keys(REMOVED).map((name) => names.indexOf(name));
-    expect(Math.max(...positions) - Math.min(...positions))
-      .toBe(positions.length - 1);
+  it('names no retired token in the app or its render workers', () => {
+    const names = [
+      ...sourceFiles(resolve(webRoot, 'app')),
+      ...sourceFiles(resolve(webRoot, 'server')),
+    ].flatMap((path) => [...readFileSync(path, 'utf8').matchAll(RETIRED)]
+      .map((match) => `${path.slice(webRoot.length + 1)} ${match[0]}`));
+
+    expect(names).toEqual([]);
     expect(css()).not.toMatch(/gradient\(/u);
   });
 
