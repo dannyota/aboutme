@@ -760,6 +760,24 @@ mutationTest('chrome rejects auth artwork over the points', async ({
     () => placeAuthArtworkOverPoints(page), 'Chrome auth artwork clearance.');
 });
 
+for (const path of ['/', '/login']) {
+  test(`${path} hydrates without mismatches under a dark system theme`,
+    async ({ browser }) => {
+      const context = await browser.newContext({ colorScheme: 'dark' });
+      const page = await context.newPage();
+      const mismatches: string[] = [];
+      page.on('console', (message) => {
+        if (/hydration/iu.test(message.text())) mismatches.push(message.text());
+      });
+      expect((await page.goto(path))?.status()).toBe(200);
+      await expect(page.locator('.theme-toggle')).toHaveAttribute(
+        'aria-label', /^(?:Switch to light theme|Chuyển sang chế độ sáng)$/u);
+      await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+      expect(mismatches).toEqual([]);
+      await context.close();
+    });
+}
+
 for (const kind of ['selection', 'scrollbar'] as const) {
   mutationTest(`chrome rejects a ${kind} that reaches the resume`, async ({
     page,
