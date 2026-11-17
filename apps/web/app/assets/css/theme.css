@@ -75,22 +75,6 @@
     0 32px 64px -24px rgba(26, 22, 80, 0.5), 0 2px 8px rgba(26, 22, 80, 0.12);
   --font-chrome: "Plus Jakarta Sans", "Be Vietnam Pro", system-ui, sans-serif;
   --font-paper: "Be Vietnam Pro", "Inter", system-ui, sans-serif;
-  --brand-blue: var(--brand);
-  --brand-deep-blue: var(--link);
-  --brand-indigo: var(--muted-foreground);
-  --brand-jade: var(--muted-foreground);
-  --brand-ochre: var(--muted-foreground);
-  --surface-blue: var(--surface-mist);
-  --surface-indigo: var(--surface-mist);
-  --surface-sand: var(--surface-sun);
-  --radius-feature: var(--radius-card);
-  --shadow-product: none;
-  --shadow-primary: none;
-  --shadow-cta: none;
-  --gradient-brand: none;
-  --gradient-brand-strong: none;
-  --gradient-aurora: none;
-  --gradient-hero-glow: none;
 }
 
 @media (min-width: 48rem) {
@@ -215,14 +199,6 @@ html[data-theme="dark"] {
   --color-paper-ink: var(--paper-ink);
   --color-paper-muted: var(--paper-muted);
   --color-paper-hover: var(--paper-hover);
-  --color-brand-blue: var(--brand-blue);
-  --color-brand-deep-blue: var(--brand-deep-blue);
-  --color-brand-indigo: var(--brand-indigo);
-  --color-brand-jade: var(--brand-jade);
-  --color-brand-ochre: var(--brand-ochre);
-  --color-surface-blue: var(--surface-blue);
-  --color-surface-indigo: var(--surface-indigo);
-  --color-surface-sand: var(--surface-sand);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: var(--radius);
   --radius-lg: var(--radius);

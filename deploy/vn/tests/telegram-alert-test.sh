@@ -25,17 +25,18 @@ cleanup() {
 }
 trap cleanup EXIT
 ((EUID != 0)) || { echo 'Telegram fixtures require a non-root user' >&2; exit 1; }
-mkdir -m 0700 "$work/state" "$work/state/secrets" "$work/bin"
+mkdir -m 0700 "$work/state" "$work/state/secrets" "$work/bin" "$work/clock-reads"
 printf '123456:synthetic_BOT-token' >"$work/state/secrets/telegram-bot-token"
 printf '%s' '-1001234567890' >"$work/state/secrets/telegram-chat-id"
 chmod 0400 "$work/state/secrets/"*
 export ABOUTME_ALERT_TEST_ROOT=$work/state
 export ABOUTME_ALERT_TEST_ENDPOINT=http://127.0.0.1:20983
-export TG_FIXTURE=$work TG_REAL_CURL TG_REAL_STAT TG_REAL_SHA256SUM TG_REAL_SLEEP
+export TG_FIXTURE=$work TG_REAL_CURL TG_REAL_STAT TG_REAL_SHA256SUM TG_REAL_SLEEP TG_REAL_DATE TG_TEST_PID=$$
 TG_REAL_CURL=$(command -v curl) || fail 'curl is unavailable'
 TG_REAL_STAT=$(command -v stat) || fail 'stat is unavailable'
 TG_REAL_SHA256SUM=$(command -v sha256sum) || fail 'sha256sum is unavailable'
 TG_REAL_SLEEP=$(command -v sleep) || fail 'sleep is unavailable'
+TG_REAL_DATE=$(command -v date) || fail 'date is unavailable'
 cat >"$work/bin/sha256sum" <<'STUB'
 #!/usr/bin/env bash
 printf '%s\n' "$@" >>"$TG_FIXTURE/hash-argv"
@@ -134,9 +135,22 @@ fi
 STUB
 cat >"$work/bin/date" <<'STUB'
 #!/usr/bin/env bash
+if ! [[ $# -ge 3 && $1 == -u && $2 == -d && $3 =~ ^@[0-9]+$ ]]; then
+  sender='' pid=$PPID
+  while ((pid > 1 && pid != TG_TEST_PID)) && stat=$(<"/proc/$pid/stat"); do
+    read -r -a fields <<<"${stat##*) }"
+    mapfile -d '' -t args <"/proc/$pid/cmdline"
+    for arg in "${args[@]}"; do [[ $arg != */alert-telegram.sh ]] || sender=$pid-${fields[19]}; done
+    pid=${fields[1]}
+  done
+  if [[ -n $sender ]] && ! (set -o noclobber; : >"$TG_FIXTURE/clock-reads/$sender") 2>/dev/null; then
+    printf '%s\n' "$*" >>"$TG_FIXTURE/clock-read-twice"
+    echo 'the sender read the clock twice' >&2; exit 1
+  fi
+fi
 case $* in
-  '-u +%F') printf '%s\n' "${TG_TEST_DAY:-2030-01-02}" ;;
-  '-u +%FT%TZ') printf '%sT03:04:05Z\n' "${TG_TEST_DAY:-2030-01-02}" ;;
+  '-u +%s') exec "$TG_REAL_DATE" -u -d "${TG_TEST_DAY:-2030-01-02} ${TG_TEST_TIME:-03:04:05}" +%s ;;
+  '-u -d @'[0-9]*' +%F') exec "$TG_REAL_DATE" "$@" ;;
   *) echo 'unexpected date fixture arguments' >&2; exit 1 ;;
 esac
 STUB
@@ -203,11 +217,36 @@ private_output() {
   fi
   [[ ! -e $work/hash-secret-exported ]] || fail 'Telegram credential reached the hash environment'
   [[ ! -e $work/stat-secret-exported ]] || fail 'Telegram credential reached the stat environment'
+  [[ ! -e $work/clock-read-twice ]] || fail 'the sender read the clock more than once'
 }
+clock='10:04 ICT · 03:04 UTC'
+msg() {
+  printf '%s <b>aboutme</b> · %s\n%s\n%s\n<i>%s · %s · <a href="https://github.com/dannyota/aboutme/blob/main/docs/runbooks/%s">runbook</a></i>' \
+    "$1" "$2" "$3" "$4" "$clock" "$5" "$6"
+}
+expect_text() {
+  python3 -I - "$work/requests" "$1" <<'PY' || fail "$2"
+import json, sys
+body = json.loads(open(sys.argv[1], encoding="utf-8").readlines()[-1])["body"]
+assert set(body) == {"chat_id", "text", "parse_mode", "link_preview_options"}, "unexpected Telegram body fields"
+assert body["parse_mode"] == "HTML", "HTML parse mode missing"
+assert body["link_preview_options"] == {"is_disabled": True}, "link previews are not disabled"
+assert len(body["text"].encode()) <= 1500, "message exceeds 1500 bytes"
+assert body["text"] == sys.argv[2], "message text differs:\n" + body["text"] + "\nexpected:\n" + sys.argv[2]
+PY
+}
+send_case() {
+  printf '%s' "$4" | TG_TEST_DAY=$1 run_sender "$2" "$3" || fail "delivery failed for $2"
+  grep -qxF "alert-telegram: sent $2" "$work/err" || fail "delivery did not report sent for $2"
+  expect_text "$5" "message text changed for $2"
+}
+delivery_test=$(msg 🟢 'alert delivery test' 'This message tests host alert delivery.' 'System: no action needed.' \
+  alert-telegram production.md#host-telegram-setup-and-rotation)
 if run_sender unconfirmed diagnostic </dev/null; then fail 'unconfirmed delivery was accepted'; fi
 grep -qxF 'alert-telegram: invalid_secret unconfirmed' "$work/err" || fail 'unconfirmed delivery did not report invalid_secret'
 [[ $(count_requests) == 0 && ! -e $work/state/alerts ]] || fail 'unconfirmed delivery sent or created stamps'
 telegram_token=inherited telegram_chat=inherited digest=inherited run_sender --test </dev/null || fail 'initial test delivery failed'
+expect_text "$delivery_test" 'delivery test message changed'
 touch -d '2030-01-01 00:00:00 UTC' "$work/state/secrets/telegram-bot-token"
 telegram_token=inherited telegram_chat=inherited digest=inherited \
   bash "$transport" confirm-receipt --received >"$work/cutover.out" 2>&1 || fail 'receipt rejected unchanged credentials after a metadata change'
@@ -227,6 +266,8 @@ printf 'approved detail\n' | run_sender host-check 'host diagnostic' || fail 'ap
 grep -qxF 'alert-telegram: sent host-check' "$work/err" || fail 'host delivery did not report sent'
 [[ $(count_requests) == 1 ]] || fail 'host delivery did not send exactly once'
 [[ $(count_attempts) == $((attempts_before + 1)) && $(count_delays) == "$delays_before" ]] || fail 'successful delivery retried or waited'
+expect_text "$(msg 🔴 'host alert' 'host diagnostic' 'Action: read the journal on the host.' aboutme-host production.md#alarms)" \
+  'unknown key message changed'
 run_sender host-check 'host diagnostic' </dev/null || fail 'duplicate host delivery failed'
 grep -qxF 'alert-telegram: suppressed host-check' "$work/err" || fail 'duplicate host delivery did not report suppressed'
 [[ $(count_requests) == 1 ]] || fail 'duplicate host delivery sent another request'
@@ -236,12 +277,8 @@ python3 -I - "$work/requests" <<'PY' || fail 'Telegram request validation failed
 import json, sys
 r = json.loads(open(sys.argv[1]).readline())
 assert r["path"] == "/bot123456:synthetic_BOT-token/sendMessage", "unexpected Telegram API path"
-assert set(r["body"]) == {"chat_id", "text"}, "unexpected Telegram body fields"
 assert r["body"]["chat_id"] == "-1001234567890", "unexpected Telegram destination"
-t = r["body"]["text"]
-assert "[aboutme-prod]" in t and "Key: host-check" in t and "Time (UTC):" in t, "alert metadata missing"
-assert "approved detail" in t and "Host:" not in t and t.isascii() and len(t) <= 3000, "alert content bounds violated"
-assert "2030-01-02T03:04:05Z" in t, "alert UTC timestamp missing"
+assert "approved detail" not in r["body"]["text"], "unknown key detail reached the message"
 PY
 [[ $(stat -c %a "$work/state/alerts/host-check.2030-01-02") == 600 ]] || fail 'daily stamp was not private'
 TG_TEST_DAY=2030-01-03 run_sender host-check diagnostic </dev/null || fail 'next-day delivery failed'
@@ -399,35 +436,184 @@ printf boundary >"$work/scenario"
 run_sender reply-boundary diagnostic </dev/null || fail 'response at the size limit was rejected'
 
 printf success >"$work/scenario"
-python3 -I -c 'import sys; sys.stdout.buffer.write(b"a"*5000+b"\x00\t\xff")' |
-  LC_ALL=C.UTF-8 run_sender coraza-log-invalid 'Coraza diagnostic' || fail 'oversized detail delivery failed'
-python3 -I - "$work/requests" <<'PY' || fail 'detail truncation validation failed'
-import json, sys
-t = json.loads(open(sys.argv[1]).readlines()[-1])["body"]["text"]
-assert t.isascii() and len(t) <= 3000 and "[detail truncated]" in t, "detail bounds or truncation notice missing"
-notice = "\n[detail truncated]"
-prefix = 2048 - len(notice)
-assert "a" * prefix + notice in t and "a" * (prefix + 1) not in t, "detail truncation boundary changed"
-assert "/run/aboutme/caddy-log/waf" in t and "journalctl -u aboutme-watch" in t, "Coraza guidance missing"
+watcher=production.md#host-watcher backups=production.md#backups-and-restore crowdsec=crowdsec-postgresql.md
+grow='Action: grow the volume with vngcloud volume resize-volume, then growpart and resize2fs.'
+units_action="Action: read each failed unit's journal on the host."
+unit_action="Action: read the unit's journal on the host."
+pg_action='Action: check the PostgreSQL service and its journal on the host.'
+archive_action='Action: check pgBackRest archiving and the backup bucket from the host.'
+missing_action='Action: check pgBackRest and the backup bucket from the host.'
+stale_action='Action: check the backup timers and the last pgBackRest run on the host.'
+bans_action='Action: review the CrowdSec alerts on the host for an attack or false positives.'
+coraza_action='Action: read the Coraza metadata on the host.'
+totp_action='Action: read the totp_unavailable reasons in the aboutme-server journal.'
+retention_action='Action: follow the CrowdSec failure recovery before reopening the edge.'
+overdue_system='System: this retention pass deletes it.'
+vacuum_system='System: the next hourly vacuum tries again.'
+unknown_action='Action: read the journal on the host.'
+failed_names='' listed=''
+for ((i=0; i<20; i++)); do printf -v failed_names '%saboutme-long-failed-unit-%03d.service\n' "$failed_names" "$i"; done
+for ((i=0; i<7; i++)); do printf -v listed '%s%saboutme-long-failed-unit-%03d.service' "$listed" "${listed:+, }" "$i"; done
+hostile='<b>bold</b> & "quoted" '\''single'\'' \back <a href="x">link</a> >'
+hostile_html='&lt;b&gt;bold&lt;/b&gt; &amp; "quoted" '\''single'\'' \back &lt;a href="x"&gt;link&lt;/a&gt; &gt;'
+
+events() {
+  send_case "$1" unit-aboutme-server 'unit aboutme-server failed' '' \
+    "$(msg 🔴 'unit failed' 'Unit aboutme-server failed.' "$unit_action" aboutme-server production.md#unit-failures)"
+  send_case "$1" unit-aboutme-crowdsec-retention 'unit aboutme-crowdsec-retention failed' '' \
+    "$(msg 🔴 'CrowdSec retention failed' 'CrowdSec retention failed, so the host stops Caddy and CrowdSec.' \
+      "$retention_action" aboutme-crowdsec-retention "$crowdsec#failure-recovery")"
+  send_case "$1" unit-crowdsec_retention_overdue 'unit crowdsec_retention_overdue failed' '' \
+    "$(msg 🟠 'CrowdSec retention overdue' 'A CrowdSec record passed its retention deadline before deletion.' \
+      "$overdue_system" aboutme-crowdsec-retention "$crowdsec#retention-and-maintenance")"
+  send_case "$1" crowdsec-vacuum 'CrowdSec vacuum failed' '' \
+    "$(msg 🔴 'CrowdSec vacuum failed' 'The hourly CrowdSec vacuum failed.' "$vacuum_system" \
+      aboutme-crowdsec-vacuum "$crowdsec#retention-and-maintenance")"
+  send_case "$1" hostile-subject "$hostile" '<i>detail</i>' \
+    "$(msg 🔴 'host alert' "$hostile_html" "$unknown_action" aboutme-host production.md#alarms)"
+}
+
+day=2030-01-05
+send_case $day disk-root '/ is 85% full' $'grow it: vngcloud volume resize-volume, then growpart and resize2fs\n' \
+  "$(msg 🟠 'disk almost full' '/ is 85% full.' "$grow" aboutme-watch "$watcher")"
+send_case $day disk-data '/srv/data is ?% full' '' \
+  "$(msg 🟠 'disk almost full' 'Disk use of /srv/data cannot be read.' "$grow" aboutme-watch "$watcher")"
+send_case $day failed-units 'failed units: 101' "${failed_names}omitted units: 81"$'\n' \
+  "$(msg 🔴 'units failed' "101 units failed: $listed and 94 more." "$units_action" aboutme-watch "$watcher")"
+send_case $day postgres-down 'PostgreSQL does not answer on /run/postgresql' '' \
+  "$(msg 🔴 'PostgreSQL down' 'PostgreSQL does not answer on /run/postgresql.' "$pg_action" aboutme-watch "$watcher")"
+send_case $day archive-failing 'WAL archiving to the backup bucket is failing' '' \
+  "$(msg 🔴 'WAL archiving failing' 'WAL archiving to the backup bucket is failing.' "$archive_action" aboutme-watch "$backups")"
+send_case $day backup-missing 'no pgBackRest backup can be read' '' \
+  "$(msg 🔴 'backup missing' 'No pgBackRest backup can be read.' "$missing_action" aboutme-watch "$backups")"
+send_case $day backup-stale 'the newest backup is 27 hours old' '' \
+  "$(msg 🟠 'backup stale' 'The newest backup is 27 hours old.' "$stale_action" aboutme-watch "$backups")"
+send_case $day crowdsec-bans 'CrowdSec raised 51 alerts in the last hour' '' \
+  "$(msg 🟠 'many CrowdSec alerts' 'CrowdSec raised 51 alerts in the last hour.' "$bans_action" aboutme-watch "$watcher")"
+send_case $day coraza-log-invalid 'the Coraza match log has 1 unknown records in the last hour' '' \
+  "$(msg 🟠 'Coraza log invalid' 'The Coraza match log has 1 unknown record in the last hour.' "$coraza_action" \
+    aboutme-watch production.md#coraza-logs)"
+send_case $day totp-unavailable 'the server logged totp_unavailable 3 times' '' \
+  "$(msg 🔴 'TOTP unavailable' 'The server logged totp_unavailable 3 times.' "$totp_action" aboutme-watch "$watcher")"
+events $day
+send_case $day disk-hostile '/mnt/<b>&"x"</b> is 9% full' '' \
+  "$(msg 🟠 'disk almost full' '/mnt/&lt;b&gt;&amp;"x"&lt;/b&gt; is 9% full.' "$grow" aboutme-watch "$watcher")"
+send_case $day disk-fallback '<i>x</i> & "y" is full' '' \
+  "$(msg 🟠 'disk almost full' '&lt;i&gt;x&lt;/i&gt; &amp; "y" is full' "$grow" aboutme-watch "$watcher")"
+
+day=2030-01-06
+since=', still failing since the alert on 2030-01-05 UTC'
+send_case $day disk-root '/ is 86% full' '' \
+  "$(msg 🟠 "disk almost full$since" '/ is 86% full.' "$grow" aboutme-watch "$watcher")"
+send_case $day disk-data '/srv/data is 71% full' '' \
+  "$(msg 🟠 "disk almost full$since" '/srv/data is 71% full.' "$grow" aboutme-watch "$watcher")"
+send_case $day failed-units 'failed units: 1' $'a&<b>.service\nomitted units: 0\n' \
+  "$(msg 🟠 "units failed$since" '1 unit failed: a&amp;&lt;b&gt;.service.' "$units_action" aboutme-watch "$watcher")"
+send_case $day postgres-down 'PostgreSQL does not answer on /run/postgresql' '' \
+  "$(msg 🟠 "PostgreSQL down$since" 'PostgreSQL does not answer on /run/postgresql.' "$pg_action" aboutme-watch "$watcher")"
+send_case $day archive-failing 'WAL archiving to the backup bucket is failing' '' \
+  "$(msg 🟠 "WAL archiving failing$since" 'WAL archiving to the backup bucket is failing.' "$archive_action" aboutme-watch "$backups")"
+send_case $day backup-missing 'no pgBackRest backup can be read' '' \
+  "$(msg 🟠 "backup missing$since" 'No pgBackRest backup can be read.' "$missing_action" aboutme-watch "$backups")"
+send_case $day backup-stale 'the newest backup is 1 hours old' '' \
+  "$(msg 🟠 "backup stale$since" 'The newest backup is 1 hour old.' "$stale_action" aboutme-watch "$backups")"
+send_case $day crowdsec-bans 'CrowdSec raised 1 alerts in the last hour' '' \
+  "$(msg 🟠 "many CrowdSec alerts$since" 'CrowdSec raised 1 alert in the last hour.' "$bans_action" aboutme-watch "$watcher")"
+send_case $day coraza-log-invalid 'the Coraza match log is malformed' '' \
+  "$(msg 🟠 "Coraza log invalid$since" 'The Coraza match log is malformed.' "$coraza_action" aboutme-watch production.md#coraza-logs)"
+send_case $day totp-unavailable 'the server logged totp_unavailable 1 times' '' \
+  "$(msg 🟠 "TOTP unavailable$since" 'The server logged totp_unavailable 1 time.' "$totp_action" aboutme-watch "$watcher")"
+events $day
+
+day=2030-01-07
+chmod 0644 "$work/state/alerts/postgres-down.2030-01-06"
+send_case $day postgres-down 'PostgreSQL does not answer on /run/postgresql' '' \
+  "$(msg 🔴 'PostgreSQL down' 'PostgreSQL does not answer on /run/postgresql.' "$pg_action" aboutme-watch "$watcher")"
+mv "$work/state/alerts/totp-unavailable.2030-01-06" "$work/state/alerts/totp-real"
+ln -s totp-real "$work/state/alerts/totp-unavailable.2030-01-06"
+send_case $day totp-unavailable 'the server logged totp_unavailable 2 times' '' \
+  "$(msg 🔴 'TOTP unavailable' 'The server logged totp_unavailable 2 times.' "$totp_action" aboutme-watch "$watcher")"
+private_output
+
+day=2030-01-09
+printf -v amps '%200s' ''
+amps=${amps// /"&"}
+send_case $day worst-subject "$amps" '' \
+  "$(msg 🔴 'host alert' "${amps//&/"&amp;"}" "$unknown_action" aboutme-host production.md#alarms)"
+printf -v longest_key '%0120d' 1
+printf -v longest_subject '%0200d' 1
+send_case $day "$longest_key" "$longest_subject" $'quotes: " backslash: \\\n' \
+  "$(msg 🔴 'host alert' "$longest_subject" "$unknown_action" aboutme-host production.md#alarms)"
+printf -v longest_unit 'u%0114d' 1
+send_case $day "unit-$longest_unit" "unit $longest_unit failed" '' \
+  "$(msg 🔴 'unit failed' "Unit $longest_unit failed." "$unit_action" "$longest_unit" production.md#unit-failures)"
+printf 'aboutme-web\t\000\377.service\nnext\r.service\nomitted units: 0\n' |
+  TG_TEST_DAY=$day run_sender failed-units 'failed units: 2' || fail 'control-byte filtering delivery failed'
+expect_text "$(msg 🔴 'units failed' '2 units failed: aboutme-web.service, next.service.' "$units_action" aboutme-watch "$watcher")" \
+  'control-byte filtering changed'
+python3 -I -c 'import sys; sys.stdout.write("\n" * 5000 + "late.service\n")' |
+  TG_TEST_DAY=2030-01-11 run_sender failed-units 'failed units: 1' || fail 'oversized detail delivery failed'
+expect_text "$(msg 🔴 'units failed' '1 unit failed.' "$units_action" aboutme-watch "$watcher")" 'detail read bound changed'
+
+stamps=$work/state/alerts
+pg_down='PostgreSQL does not answer on /run/postgresql'
+: >"$stamps/postgres-down.2030-12-30"
+chmod 0600 "$stamps/postgres-down.2030-12-30"
+clock='00:00 ICT · 17:00 UTC'
+TG_TEST_TIME=17:00:00 send_case 2030-12-31 postgres-down "$pg_down" '' \
+  "$(msg 🟠 'PostgreSQL down, still failing since the alert on 2030-12-30 UTC' "$pg_down." "$pg_action" aboutme-watch "$watcher")"
+[[ -e $stamps/postgres-down.2030-12-31 && ! -e $stamps/postgres-down.2031-01-01 ]] || fail 'ICT midnight stamp did not use the UTC day'
+clock='06:59 ICT · 23:59 UTC'
+TG_TEST_TIME=23:59:59 send_case 2030-12-31 totp-unavailable 'the server logged totp_unavailable 2 times' '' \
+  "$(msg 🔴 'TOTP unavailable' 'The server logged totp_unavailable 2 times.' "$totp_action" aboutme-watch "$watcher")"
+[[ -e $stamps/totp-unavailable.2030-12-31 && ! -e $stamps/totp-unavailable.2031-01-01 ]] || fail 'last UTC second stamp did not use the UTC day'
+clock='07:00 ICT · 00:00 UTC'
+since=', still failing since the alert on 2030-12-31 UTC'
+TG_TEST_TIME=00:00:00 send_case 2031-01-01 postgres-down "$pg_down" '' \
+  "$(msg 🟠 "PostgreSQL down$since" "$pg_down." "$pg_action" aboutme-watch "$watcher")"
+TG_TEST_TIME=00:00:00 send_case 2031-01-01 totp-unavailable 'the server logged totp_unavailable 2 times' '' \
+  "$(msg 🟠 "TOTP unavailable$since" 'The server logged totp_unavailable 2 times.' "$totp_action" aboutme-watch "$watcher")"
+[[ -e $stamps/postgres-down.2031-01-01 && -e $stamps/totp-unavailable.2031-01-01 ]] || fail 'year rollover stamp did not use the UTC day'
+clock='10:04 ICT · 03:04 UTC'
+private_output
+
+(
+  # shellcheck source=../host/bin/alert-telegram.sh
+  source "$sender"
+  mark=🔴 title='host alert' before='' after='' third=$unknown_action job=aboutme-host anchor=production.md#alarms
+  ict=10:04 utc=03:04
+  for ((pad=0; pad<26; pad++)); do
+    printf -v field '%*s' "$pad" ''
+    field=${field// /x}
+    for ((i=0; i<400; i++)); do field+='<b>&"x"</b>'; done
+    alert_fit || exit 1
+    printf '%s' "$text" >"$work/fit-$pad"
+    alert_html "$field"
+    printf '%s' "$alert_escaped" >"$work/fit-$pad.field"
+  done
+) || fail 'oversized message was not shortened'
+python3 -I - "$work" "$(msg 🔴 'host alert' '' "$unknown_action" aboutme-host production.md#alarms)" <<'PY' ||
+import pathlib, re, sys
+work, expected = pathlib.Path(sys.argv[1]), sys.argv[2].split("\n")
+for pad in range(26):
+    text = (work / f"fit-{pad}").read_text(encoding="utf-8")
+    field = (work / f"fit-{pad}.field").read_text(encoding="utf-8")
+    assert 1496 <= len(text.encode()) <= 1500, "shortened message size is outside 1496 to 1500 bytes"
+    lines = text.split("\n")
+    assert len(lines) == 4, "shortened message lost a line"
+    assert [lines[0], lines[2], lines[3]] == [expected[0], expected[2], expected[3]], "fixed lines changed"
+    assert lines[1].endswith("…") and field.startswith(lines[1][:-1]), "field was not shortened at its end"
+    assert [text.count(t) for t in ("<b>", "</b>", "<i>", "</i>", "<a ", "</a>")] == [1] * 6, "markup changed"
+    bare = re.sub(r'</?[bi]>|<a href="[^"<>&]*">|</a>', "", text)
+    assert "<" not in bare and ">" not in bare, "a tag was cut or injected"
+    assert re.fullmatch(r'(?:[^&]|&(?:amp|lt|gt|quot);)*', bare, re.S), "an entity was cut"
 PY
-printf 'line\t\000\377\nnext\r\n' | run_sender controls diagnostic || fail 'control-byte filtering delivery failed'
-python3 -I - "$work/requests" <<'PY' || fail 'control-byte filtering validation failed'
-import json, sys
-t = json.loads(open(sys.argv[1]).readlines()[-1])["body"]["text"]
-assert "line\nnext" in t and all(32 <= ord(c) <= 126 or c == "\n" for c in t), "control-byte filtering changed"
-PY
+  fail 'message shortening validation failed'
+
 for bad in '' $'bad\nsubject' $'bad\tname' $'bad\xc3\xa9' "$(printf '%0201d' 1)"; do
   if run_sender invalid-subject "$bad" </dev/null; then fail 'invalid subject was accepted'; fi
   grep -qxF 'alert-telegram: invalid_input' "$work/err" || fail 'invalid subject outcome missing'
 done
-printf -v longest_key '%0120d' 1
-printf -v longest_subject '%0200d' 1
-printf 'quotes: " backslash: \\\n' | run_sender "$longest_key" "$longest_subject" || fail 'maximum key and subject delivery failed'
-python3 -I - "$work/requests" <<'PY' || fail 'JSON escaping validation failed'
-import json, sys
-t = json.loads(open(sys.argv[1]).readlines()[-1])["body"]["text"]
-assert 'quotes: " backslash: \\' in t and len(t) <= 3000, "JSON escaping or message bound changed"
-PY
 if run_sender '../key' subject </dev/null; then fail 'invalid key was accepted'; fi
 if ABOUTME_ALERT_TEST_ENDPOINT=https://example.test run_sender invalid-endpoint subject </dev/null; then
   fail 'invalid endpoint was accepted'
@@ -527,10 +713,10 @@ run_sender --test </dev/null || fail 'first staged test delivery failed'
 run_sender --test </dev/null || fail 'second staged test delivery failed'
 find "$work/state/alerts" -type f -printf '%f\n' | sort >"$work/stamps-after"
 cmp -s "$work/stamps-before" "$work/stamps-after" || fail 'test delivery changed daily stamps'
-python3 -I - "$work/requests" <<'PY' || fail 'test delivery content validation failed'
+python3 -I - "$work/requests" "$delivery_test" <<'PY' || fail 'test delivery content validation failed'
 import json, sys
-for line in open(sys.argv[1]).readlines()[-2:]:
-    assert json.loads(line)["body"]["text"] == "[aboutme-prod] host alert delivery test", "test delivery content changed"
+for line in open(sys.argv[1], encoding="utf-8").readlines()[-2:]:
+    assert json.loads(line)["body"]["text"] == sys.argv[2], "test delivery content changed"
 PY
 if bash "$transport" confirm-receipt >"$work/cutover.out" 2>&1; then fail 'cutover without explicit receipt was accepted'; fi
 [[ ! -e $work/state/alert-transport ]] || fail 'missing receipt selected Telegram'
@@ -580,4 +766,6 @@ printf 500 >"$work/scenario"
 if run_sender --test </dev/null; then fail 'failed test delivery was accepted'; fi
 if bash "$transport" confirm-receipt --received >"$work/cutover.out" 2>&1; then fail 'failed test left a usable proof'; fi
 [[ ! -e $work/state/alert-transport ]] || fail 'failed test selected Telegram'
+[[ ! -e $work/clock-read-twice ]] || fail 'the sender read the clock more than once'
+compgen -G "$work/clock-reads/*" >/dev/null || fail 'the clock-read counter saw no sender'
 echo 'Telegram alert tests passed'

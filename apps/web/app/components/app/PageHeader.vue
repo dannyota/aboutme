@@ -17,7 +17,7 @@ const props = withDefaults(
     <div>
       <h1
         :id="titleId"
-        class="text-2xl font-bold tracking-tight"
+        class="text-2xl font-extrabold tracking-[-0.02em]"
       >
         {{ title }}
       </h1>

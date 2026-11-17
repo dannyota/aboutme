@@ -119,7 +119,7 @@ async function refreshAfterAction(): Promise<void> {
   >
     <h2
       id="agents-title"
-      class="text-lg font-semibold"
+      class="text-lg font-bold"
     >
       {{ copy.title }}
     </h2>
@@ -208,7 +208,7 @@ async function refreshAfterAction(): Promise<void> {
             data-testid="agent-revoke"
             :disabled="!csrfToken || revokePending"
             type="button"
-            variant="secondary"
+            variant="destructive"
             @click="openConfirmation(grant)"
           >
             {{ copy.revoke }}

@@ -132,7 +132,8 @@ function groupModel(section: OneSection): boolean | 'indeterminate' {
 
     <section
       aria-labelledby="import-resume-heading"
-      class="grid gap-3 rounded-lg border bg-card p-4 shadow-product sm:p-6"
+      class="grid gap-3 rounded-[var(--radius-card)] border border-border
+        bg-card p-4 sm:p-6"
     >
       <h2
         id="import-resume-heading"
@@ -160,7 +161,8 @@ function groupModel(section: OneSection): boolean | 'indeterminate' {
 
     <section
       aria-labelledby="import-personal-heading"
-      class="grid gap-3 rounded-lg border bg-card p-4 shadow-product sm:p-6"
+      class="grid gap-3 rounded-[var(--radius-card)] border border-border
+        bg-card p-4 sm:p-6"
     >
       <h2
         id="import-personal-heading"
@@ -225,7 +227,8 @@ function groupModel(section: OneSection): boolean | 'indeterminate' {
       v-for="section in review.sections"
       :key="section.key"
       :aria-labelledby="`import-section-${section.key}-heading`"
-      class="grid gap-3 rounded-lg border bg-card p-4 shadow-product sm:p-6"
+      class="grid gap-3 rounded-[var(--radius-card)] border border-border
+        bg-card p-4 sm:p-6"
     >
       <div class="flex items-center gap-2">
         <Checkbox
@@ -271,7 +274,8 @@ function groupModel(section: OneSection): boolean | 'indeterminate' {
     <section
       v-if="review.dropped.length > 0"
       aria-labelledby="import-not-imported-heading"
-      class="grid gap-2 rounded-lg border bg-card p-4 shadow-product sm:p-6"
+      class="grid gap-2 rounded-[var(--radius-card)] border border-border
+        bg-card p-4 sm:p-6"
     >
       <h2
         id="import-not-imported-heading"

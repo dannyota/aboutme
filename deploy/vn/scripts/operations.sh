@@ -35,7 +35,8 @@ envelope=$(operation_envelope "$envelope" 2>/dev/null) || fail invalid_request 2
 bash "$root/scripts/release-eligibility.sh" --deploy-checkout >/dev/null 2>&1 || fail refused
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
-ssh_opts=(-p "$SSH_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ForwardAgent=no -o ConnectTimeout=10)
+ssh_opts=(-p "$SSH_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ForwardAgent=no -o ConnectTimeout=10
+  -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
 remote() { ssh "${ssh_opts[@]}" "aboutme-admin@$DEPLOY_HOST" "$@"; }
 files=(
   host/operation-run.sh host/operation-state.sh host/operation-account.sh

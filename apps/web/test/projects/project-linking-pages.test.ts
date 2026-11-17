@@ -314,6 +314,9 @@ describe('a second published resume', () => {
       await flushPromises();
 
       expect(note()?.textContent?.trim()).toBe(PRIVACY);
+      expect([...note()!.classList]).toEqual(expect.arrayContaining([
+        'bg-surface-mist', 'rounded-[var(--radius)]',
+      ]));
       expect(document.body.querySelector('[role="alertdialog"]')).toBeNull();
     });
 });

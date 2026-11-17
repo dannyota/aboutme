@@ -104,7 +104,7 @@ function choose(resumeId: string, checked: boolean): void {
       </div>
       <p
         v-if="sharesPublic"
-        class="rounded-md bg-surface-blue p-3 text-sm"
+        class="rounded-[var(--radius)] bg-surface-mist p-3 text-sm"
         data-testid="project-create-privacy"
         role="status"
       >

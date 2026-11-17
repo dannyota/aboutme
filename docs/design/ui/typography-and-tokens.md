@@ -65,10 +65,11 @@ light and `#0E0A0D` dark. With no stored preference it emits one tag per
 theme button updates it. The public resume page emits none.
 
 The identity has no gradient, no glow, and no blue, jade, or ochre brand color.
-A consumer of a removed token takes its replacement: `--brand-blue` becomes
-`--brand` and `--brand-deep-blue` becomes `--link`; `--brand-indigo`,
-`--brand-jade`, and `--brand-ochre` icons take `--muted-foreground` or sit in a
-coin; `--surface-blue` and `--surface-indigo` become `--surface-mist` and
+The retired tokens no longer exist in `theme.css`; a test fails if any consumer
+names one. Each took a replacement: `--brand-blue` becomes `--brand` and
+`--brand-deep-blue` becomes `--link`; `--brand-indigo`, `--brand-jade`, and
+`--brand-ochre` icons take `--muted-foreground` or sit in a coin;
+`--surface-blue` and `--surface-indigo` become `--surface-mist` and
 `--surface-sand` becomes `--surface-sun`; `--radius-feature` becomes
 `--radius-card`, or `--radius-panel` for a page-level band; `--shadow-product`,
 `--shadow-primary`, and the gradients have no replacement.

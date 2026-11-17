@@ -177,7 +177,7 @@ async function submitProviderReauth(provider: AuthProvider): Promise<void> {
   >
     <h2
       id="password-title"
-      class="text-lg font-semibold"
+      class="text-lg font-bold"
     >
       {{ copy.title }}
     </h2>

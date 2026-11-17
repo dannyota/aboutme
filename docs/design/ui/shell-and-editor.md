@@ -196,13 +196,15 @@ When reauthentication finds a second factor, the dialog stays open, links that
 step in a new tab, and sends the same request once more when the owner chooses
 Continue.
 
-Settings is a narrow, left-aligned page divided by top rules. Signed-in devices
-show the device description, relative last-seen time, This device, and Log out
-or Revoke actions, with Log out everywhere below. Password settings are always
-present. Account export and deletion appear in the Privacy section. Connected
-agents, sign-in providers and
-[GitHub evidence](../github-evidence.md#connection) appear only when their
-capabilities are enabled. Connected agents links the
+Settings is a narrow, left-aligned page divided by `--border` top rules, with
+section titles at 20/1.4 weight 700. Revoke, Disconnect, Remove (passkey or
+authenticator app), Log out of one device, and Delete account are destructive
+outline pills; Log out everywhere is an outline pill. Signed-in devices show the
+device description, relative last-seen time, This device, and Log out or Revoke
+actions, with Log out everywhere below. Password settings are always present.
+Account export and deletion appear in the Privacy section. Connected agents,
+sign-in providers and [GitHub evidence](../github-evidence.md#connection) appear
+only when their capabilities are enabled. Connected agents links the
 [MCP guide](../mcp-guide.md) at `/guide/mcp` from its empty state (“Xem cách kết
 nối trợ lý AI” or “See how to connect an AI assistant”) and again under the
 grant list when it has entries.

@@ -43,7 +43,7 @@ usage() {
 on_host() {
   local cmd
   printf -v cmd '%q ' "$lib/secrets-host.sh" "$@"
-  ssh -p "$SSH_PORT" -o BatchMode=yes "$admin@$host" "sudo $cmd"
+  ssh -p "$SSH_PORT" -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=4 "$admin@$host" "sudo $cmd"
 }
 
 name_ok() { [[ $1 =~ ^[a-z0-9-]+$ ]] || die "malformed secret name '$1'"; }

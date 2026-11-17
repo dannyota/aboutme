@@ -13,10 +13,10 @@ const props = defineProps<{
 
 <template>
   <li
-    class="relative flex min-h-48 flex-col rounded-[var(--radius)]
-      border border-border bg-card shadow-[var(--shadow-product)]
-      transition-transform duration-200 ease-out hover:-translate-y-1
-      motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+    class="relative flex min-h-48 flex-col rounded-[var(--radius-card)]
+      border border-border bg-card transition-transform duration-200
+      ease-out hover:-translate-y-1 motion-reduce:transition-none
+      motion-reduce:hover:translate-y-0"
     :data-testid="`views-resume-${props.resume.id}`"
   >
     <NuxtLink

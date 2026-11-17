@@ -101,7 +101,9 @@ const last90 = computed(() => {
         class="mt-6 flex flex-wrap items-baseline gap-x-2"
         data-testid="views-headline"
       >
-        <span class="text-4xl font-bold tabular-nums tracking-tight">{{
+        <span
+          class="text-3xl font-extrabold tabular-nums tracking-[-0.02em]"
+        >{{
           copy.headlineCount(last90.real)
         }}</span>
         <!-- Vue's condense mode strips whitespace-only text nodes. -->

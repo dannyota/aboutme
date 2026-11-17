@@ -70,13 +70,14 @@ trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
+ssh_opts=(-p "$SSH_PORT" -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
 # Runs a command on the host as root; the command text is fixed in this file.
-host_root() { ssh -p "$SSH_PORT" -o BatchMode=yes "$admin@$host" "sudo bash -c $(printf '%q' "$1")"; }
-host_fence() { ssh -p "$SSH_PORT" -o BatchMode=yes "$admin@$host" sudo /usr/local/lib/aboutme/fence.sh "$@"; }
-host_deploy_read() { ssh -p "$SSH_PORT" -o BatchMode=yes "$admin@$host" "sudo /usr/local/lib/aboutme/deploy-host.sh - - $1"; }
-host_deploy() { ssh -p "$SSH_PORT" -o BatchMode=yes "$admin@$host" sudo /usr/local/lib/aboutme/deploy-host.sh "$op" "$tag" "$1"; }
+host_root() { ssh "${ssh_opts[@]}" "$admin@$host" "sudo bash -c $(printf '%q' "$1")"; }
+host_fence() { ssh "${ssh_opts[@]}" "$admin@$host" sudo /usr/local/lib/aboutme/fence.sh "$@"; }
+host_deploy_read() { ssh "${ssh_opts[@]}" "$admin@$host" "sudo /usr/local/lib/aboutme/deploy-host.sh - - $1"; }
+host_deploy() { ssh "${ssh_opts[@]}" "$admin@$host" sudo /usr/local/lib/aboutme/deploy-host.sh "$op" "$tag" "$1"; }
 host_psql() {
-  ssh -p "$SSH_PORT" -o BatchMode=yes "$admin@$host" \
+  ssh "${ssh_opts[@]}" "$admin@$host" \
     "sudo /usr/local/lib/aboutme/fence.sh checkpoint '$op' '$tag' >/dev/null && sudo -u postgres psql -X -q -At -v ON_ERROR_STOP=1 -d aboutme" <<<"$1"
 }
 
@@ -177,7 +178,7 @@ cmd_dump_restore() {
   rds_open
   pg_dump -Fc "$rds_url" | age -r "$recipient" >"$work/dump.age"
   say "dumped $(stat -c %s "$work/dump.age") encrypted bytes"
-  ssh -p "$SSH_PORT" -o BatchMode=yes "$admin@$host" \
+  ssh "${ssh_opts[@]}" "$admin@$host" \
     "sudo bash -c \"set -euo pipefail; /usr/local/lib/aboutme/fence.sh checkpoint '$op' '$tag' >/dev/null; umask 077; cat > /srv/data/cutover-dump.age\"" \
     <"$work/dump.age"
   rm -f "$work/dump.age"

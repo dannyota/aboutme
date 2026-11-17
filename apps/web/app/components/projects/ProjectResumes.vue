@@ -54,7 +54,7 @@ function resumePath(id: string): string {
   >
     <h2
       id="project-resumes-title"
-      class="text-lg font-semibold"
+      class="text-lg font-bold"
     >
       {{ copy.resumesSection }}
     </h2>
@@ -70,7 +70,8 @@ function resumePath(id: string): string {
     </p>
     <div
       v-if="view.kind === 'loading'"
-      class="grid gap-2 rounded-lg border border-border bg-card px-4 py-4"
+      class="grid gap-2 rounded-[var(--radius-card)] border border-border
+        bg-card px-4 py-4"
       role="status"
     >
       <span class="sr-only">{{ copy.resumesLoading }}</span>
@@ -102,7 +103,8 @@ function resumePath(id: string): string {
     </p>
     <ul
       v-else
-      class="divide-y divide-border rounded-lg border border-border bg-card"
+      class="divide-y divide-hairline rounded-[var(--radius-card)] border
+        border-border bg-card"
     >
       <li
         v-for="resume in view.items"
@@ -172,7 +174,7 @@ function resumePath(id: string): string {
         {{ statusText }}
         <NuxtLink
           v-if="status?.kind === 'document-invalid'"
-          class="underline"
+          class="text-link underline underline-offset-4"
           :to="resumePath(status.resume.id)"
         >
           {{ copy.openResume }}

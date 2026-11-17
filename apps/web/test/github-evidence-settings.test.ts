@@ -186,8 +186,10 @@ describe('GitHub evidence settings', () => {
     vi.mocked(navigateTo).mockClear();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     for (const wrapper of mounted.splice(0)) wrapper.unmount();
+    await vi.waitFor(() => expect(useRouter().currentRoute.value.query)
+      .not.toHaveProperty('evidence'));
   });
 
   it('shows the section only when the capability is on', async () => {
@@ -263,6 +265,20 @@ describe('GitHub evidence settings', () => {
     expect(session.get('time').attributes('datetime')).toBe(expiresAt);
     expect(buttonLabels(wrapper)).toEqual(['Done', 'Disconnect']);
     expect(wrapper.text()).not.toContain('583231');
+  });
+
+  it('titles the section at 20 px, weight 700, and draws Disconnect as a '
+    + 'destructive outline pill', async () => {
+    state = connectedIdle;
+    const wrapper = await mountSection();
+
+    const title = wrapper.get('#github-evidence-title');
+    expect(title.classes()).toEqual(
+      expect.arrayContaining(['text-lg', 'font-bold']),
+    );
+    expect(title.classes()).not.toContain('font-semibold');
+    expect(wrapper.get('[data-testid="evidence-disconnect"]')
+      .attributes('data-variant')).toBe('destructive');
   });
 
   it(
