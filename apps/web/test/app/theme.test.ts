@@ -1,7 +1,7 @@
 import type { Resume } from '@aboutme/schema';
 import { mount } from '@vue/test-utils';
 import { readFileSync, readdirSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { relative, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import ResumeDocument from '../../app/components/resume/ResumeDocument.vue';
@@ -367,12 +367,11 @@ describe('application theme', () => {
     });
   });
 
-  it('names no retired token in the app or its render workers', () => {
-    const names = [
-      ...sourceFiles(resolve(webRoot, 'app')),
-      ...sourceFiles(resolve(webRoot, 'server')),
-    ].flatMap((path) => [...readFileSync(path, 'utf8').matchAll(RETIRED)]
-      .map((match) => `${path.slice(webRoot.length + 1)} ${match[0]}`));
+  it('names no retired token in the app, its workers, or proofs', () => {
+    const names = ['app', 'server', 'e2e', '../../deploy/dev-https-browser']
+      .flatMap((directory) => sourceFiles(resolve(webRoot, directory)))
+      .flatMap((path) => [...readFileSync(path, 'utf8').matchAll(RETIRED)]
+        .map((match) => `${relative(workspaceRoot, path)} ${match[0]}`));
 
     expect(names).toEqual([]);
     expect(css()).not.toMatch(/gradient\(/u);
@@ -638,6 +637,7 @@ function normalize(value: string): string {
 function sourceFiles(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const path = resolve(directory, entry.name);
+    if (entry.name === 'node_modules') return [];
     if (entry.isDirectory()) return sourceFiles(path);
     return /\.(?:css|ts|vue)$/.test(entry.name) ? [path] : [];
   });
