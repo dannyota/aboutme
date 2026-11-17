@@ -485,7 +485,6 @@ apps/web/app/landing/sampleResume.ts
 apps/web/app/landing/showcase.ts
 apps/web/app/landing/structuredData.ts
 apps/web/app/landing/styles/home.css
-apps/web/app/landing/styles/tokens.css
 apps/web/app/lib/showcaseContract.ts
 apps/web/app/lib/showcaseQuery.ts
 apps/web/app/lib/utils.ts

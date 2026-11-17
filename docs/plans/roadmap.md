@@ -75,7 +75,7 @@ These run beside the features, ship as their own patch releases, and add nothing
 - Remove the undeployed AWS code ([ADR 0026](../adr/0026-vietnam-hosted-production.md)).
 - Move JavaScript dependencies to one [pnpm workspace](../design/pnpm-workspace.md).
 - Slim the server runtime image, then carry [third-party licences](../design/third-party-licences.md) in every release image.
-- Small removals: the unused root `@playwright/mcp`, the second test DOM, and the [approval probe](../design/production-pull-deploy/README.md#release-order-and-owner-decisions).
+- Small removals: the second test DOM and the [approval probe](../design/production-pull-deploy/README.md#release-order-and-owner-decisions).
 
 ## v0.10: changes you approve
 

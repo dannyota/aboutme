@@ -82,6 +82,4 @@ useHead(computed(() => ({
   </div>
 </template>
 
-<style src="../landing/styles/tokens.css"></style>
-
 <style src="../landing/styles/home.css"></style>

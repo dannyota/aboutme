@@ -1,27 +1,37 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+
+import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 
-const tokensCss = readFileSync('app/landing/styles/tokens.css', 'utf8');
+import AppLogo from '../app/components/app/AppLogo.vue';
+
+const homePage = readFileSync('app/pages/index.vue', 'utf8');
+const themeCss = readFileSync('app/assets/css/theme.css', 'utf8');
 const homeCss = readFileSync('app/landing/styles/home.css', 'utf8');
 const heroArt = readFileSync('app/landing/components/HeroArt.vue', 'utf8');
 const hero = readFileSync('app/landing/components/HomeHero.vue', 'utf8');
 const HOME = 'html[data-page="home"]';
 
 describe('home styles', () => {
-  it('leaves the color tokens to the application theme', () => {
-    expect(tokensCss).not.toMatch(/--[\w-]+\s*:/u);
-    expect(tokensCss).not.toContain('header[data-testid="app-shell"]');
-    for (const selector of selectors(tokensCss)) {
-      expect(selector.startsWith(HOME), selector).toBe(true);
-    }
+  it('loads only the scoped home stylesheet', () => {
+    expect(existsSync('app/landing/styles/tokens.css')).toBe(false);
+    expect(homePage.match(/<style\b[^>]*>/gu))
+      .toEqual(['<style src="../landing/styles/home.css">']);
+    expect(homeCss).not.toContain(HOME);
   });
 
-  it('paints the home logo mark with the logo mark token', () => {
-    expect(tokensCss.replace(/\s+/gu, ' ')).toContain(
-      `@media (forced-colors: none) { ${HOME} [data-logo-part="mark"], `
-      + `${HOME} [data-logo-part="dot"] { color: var(--logo-mark); } }`,
-    );
-  });
+  it('paints the home logo mark through AppLogo with the logo mark token',
+    () => {
+      const svg = mount(AppLogo).element as Element;
+      const painted = Array.from(svg.querySelectorAll('.text-logo-mark'),
+        (part) => part.getAttribute('data-logo-part'));
+
+      expect(painted).toEqual(['mark', 'dot']);
+      expect(themeCss).toMatch(
+        /@theme inline \{[^}]*--color-logo-mark: var\(--logo-mark\);/u,
+      );
+      expect(homeCss).not.toContain('data-logo-part');
+    });
 
   it('scopes every home rule to the home page', () => {
     for (const selector of selectors(homeCss)) {
