@@ -86,7 +86,23 @@ export async function applyStyleMutation(
   return restore;
 
   async function restore(): Promise<void> {
-    await saved.evaluate((records) => {
+    await saved.evaluate((records, options) => {
+      for (const { element, original, sheet } of records) {
+        if (sheet === undefined) {
+          element.setAttribute('style', original ?? '');
+          element.style.setProperty('transition', 'none', 'important');
+          element.style.setProperty('animation', 'none', 'important');
+        } else {
+          const rule = sheet.sheet!.cssRules[0] as CSSStyleRule;
+          for (const property of options.properties) {
+            rule.style.removeProperty(property);
+          }
+        }
+        const computed = getComputedStyle(element, options.pseudo);
+        for (const property of options.properties) {
+          void computed.getPropertyValue(property);
+        }
+      }
       for (const record of records) {
         const { element, original, attribute, previous, sheet } = record;
         if (original === null) {
@@ -103,7 +119,7 @@ export async function applyStyleMutation(
           }
         }
       }
-    });
+    }, { properties: Object.keys(styles), pseudo });
     await saved.dispose();
   }
 }

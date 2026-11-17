@@ -516,6 +516,27 @@ for (const [kind, width, target, styles] of [
   });
 }
 
+mutationTest('style mutations restore without animating back', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1024, height: 900 });
+  expect((await page.goto('/templates'))?.status()).toBe(200);
+  await page.evaluate(() => document.fonts.ready);
+  const fan = page.getByTestId('gallery-fan');
+  await fan.evaluate((node) => {
+    node.style.setProperty('transition', 'right 5s linear', 'important');
+  });
+  expect(await fan.evaluate((node) => getComputedStyle(node)
+    .transitionDuration)).toBe('5s');
+  try {
+    await proveMutation(() => expectLibraryFan(page),
+      () => applyStyleMutation(fan, { right: '40px' }),
+      'Library fan geometry.');
+  } finally {
+    await fan.evaluate((node) => node.style.removeProperty('transition'));
+  }
+});
+
 const MUTATION_MESSAGES = {
   'sheet alignment': 'Chrome sheet alignment.',
   'hero overhang': 'Chrome sheet alignment.',
