@@ -58,6 +58,59 @@ if (REFUSE_CIMD_ROLLBACK=1 step_restore_previous "$record") >"$work/out" 2>&1; t
 fi
 grep -qxF 'CIMD rollback refused' "$work/out"
 [[ $(cat "$work/rollback-check") == 1000 && ! -e $work/render ]]
+sed -n '/^write_release_json() {/,/^}/p; /^step_migration_state() {/,/^}/p' "$host" >"$work/release-functions"
+# shellcheck disable=SC1091
+source "$work/release-functions"
+state=$work/release-state release_json=$work/release-state/release.json
+mkdir "$state"
+release_failures=0
+for release_case in same-absent same-present different; do
+  printf '%s\n' "$record" >"$release_json"
+  rm -f "$state/release.previous.json"
+  [[ $release_case != same-present ]] || printf 'previous record\n' >"$state/release.previous.json"
+  tag=v0.1.0 number=1000
+  [[ $release_case != different ]] || { tag=v0.1.1; number=1001; }
+  write_release_json "$tag" "$number" "$(jq -r .server_image <<<"$record")" \
+    "$(jq -r .web_image <<<"$record")" "$(jq -r .caddy_image <<<"$record")" \
+    "$(jq -r .maintenance_image <<<"$record")" v0.1.0 1000
+  case $release_case in
+    same-absent) [[ ! -e $state/release.previous.json ]] || release_failures=1 ;;
+    same-present) [[ $(cat "$state/release.previous.json") == 'previous record' ]] || release_failures=1 ;;
+    different) cmp -s <(printf '%s\n' "$record") "$state/release.previous.json" || release_failures=1 ;;
+  esac
+done
+((release_failures == 0)) || echo 'same-tag render replaced previous release' >&2
+secrets=$work/secrets
+mkdir -m 700 "$secrets"
+printf '%s' 'synthetic:password\value' >"$secrets/db-migrator-password"
+runuser() { echo 'runuser must not be used for migration state' >&2; return 1; }
+psql() {
+  [[ $# == 7 && $1 == -X && $2 == -qAt && $3 == -v && $4 == ON_ERROR_STOP=1 && $5 == 'host=/run/postgresql dbname=aboutme user=aboutme_migrator' && $6 == -c && $7 == "SELECT coalesce(max(id), 0) || ':' || count(*) FROM public.goose_db_version" ]] || return 2
+  [[ -f ${PGPASSFILE:-} && $(stat -c %a "$PGPASSFILE") == 600 ]] || return 2
+  [[ $(cat "$PGPASSFILE") == '/run/postgresql:5432:aboutme:aboutme_migrator:synthetic\:password\\value' ]] || return 2
+  printf '%s\n' "$PGPASSFILE" >"$work/pgpass-path"
+  case $MIGRATION_OUTPUT in
+    valid) printf '42:7\n' ;;
+    malformed) printf '42:7\nextra\n' ;;
+    failed) return 1 ;;
+  esac
+}
+grep -qxF '  migration-state:0) step_migration_state ;;' "$host" || release_failures=1
+for MIGRATION_OUTPUT in valid malformed failed; do
+  status=0
+  rm -f "$work/pgpass-path"
+  (step_migration_state) >"$work/migration-state.out" 2>&1 || status=$?
+  if [[ $MIGRATION_OUTPUT == valid ]]; then
+    [[ $status == 0 && $(cat "$work/migration-state.out") == 42:7 ]] || release_failures=1
+  else
+    [[ $status != 0 ]] || release_failures=1
+  fi
+  [[ -f $work/pgpass-path && ! -e $(cat "$work/pgpass-path") ]] || release_failures=1
+done
+rm "$secrets/db-migrator-password"
+if (step_migration_state) >"$work/migration-state.out" 2>&1; then release_failures=1; fi
+grep -q 'cannot read migrator password' "$work/migration-state.out" || release_failures=1
+((release_failures == 0)) || { echo 'release or migration-state regression failed' >&2; exit 1; }
 sed -n '/^render_observer() {/,/^}/p; /^image_ok() {/,/^}/p' "$host" >"$work/observer-functions"
 # shellcheck disable=SC1091
 source "$work/observer-functions"

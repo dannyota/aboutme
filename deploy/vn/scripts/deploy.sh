@@ -109,6 +109,7 @@ phase=prepare
 render_requested=0
 previous=
 migration_may_be_applied=0
+schema_floor_raised=0
 timers_stopped=0
 
 retry() {
@@ -352,6 +353,24 @@ say "maintenance confirmed from outside"
 if ((egress_after_maintenance)); then egress_check || exit 1; fi
 
 if ((!first)); then previous=$(step release-json) || exit 1; fi
+if ((!rollback)); then
+  document_versions=unknown
+  document_path=packages/schema/released-versions.json
+  previous_tag=$(jq -r '.release_tag // empty' <<<"$previous" 2>/dev/null) || previous_tag=''
+  if [[ -n $previous_tag ]] && release_number "$previous_tag" >/dev/null &&
+     previous_commit=$(git -C "$here" rev-parse --verify "$previous_tag^{commit}" 2>/dev/null) &&
+     candidate_entry=$(git -C "$here" ls-tree --full-tree "$commit" -- "$document_path" 2>/dev/null) &&
+     previous_entry=$(git -C "$here" ls-tree --full-tree "$previous_commit" -- "$document_path" 2>/dev/null); then
+    if [[ -z $candidate_entry || -z $previous_entry ]]; then
+      document_versions=changed
+    elif candidate_blob=$(git -C "$here" rev-parse "$commit:$document_path" 2>/dev/null) &&
+         previous_blob=$(git -C "$here" rev-parse "$previous_commit:$document_path" 2>/dev/null) &&
+         [[ $candidate_blob =~ ^[0-9a-f]{40,64}$ && $previous_blob =~ ^[0-9a-f]{40,64}$ ]]; then
+      if [[ $candidate_blob == "$previous_blob" ]]; then document_versions=unchanged; else document_versions=changed; fi
+    fi
+  fi
+  say "document versions $document_versions"
+fi
 render_requested=1
 step render "${image[server]}" "${image[web]}" "${image[caddy]}" "$observer_image"
 if [[ -n $schema_floor_tag ]]; then
@@ -362,6 +381,7 @@ if [[ -n $schema_floor_tag ]]; then
   }
   if ((schema_floor > fence_minimum)); then
     migration_may_be_applied=1
+    schema_floor_raised=1
     on_host fence.sh raise "$op" "$schema_floor_tag"
     say "raised the release fence to the schema floor $schema_floor_tag ($schema_floor)"
   fi
@@ -371,8 +391,19 @@ if ((first)); then
   step db-setup
 fi
 if ((!rollback)); then
+  before='' after='' before_known=0 after_known=0
+  if before=$(step migration-state); then before_known=1; fi
   migration_may_be_applied=1
   step migrate
+  if after=$(step migration-state); then after_known=1; fi
+  if ((!before_known || !after_known)); then
+    say "migration state unknown"
+  elif [[ $before != "$after" ]]; then
+    say "migrate applied migrations"
+  else
+    say "migrate applied no migration"
+    if ((!schema_floor_raised && !first)) && [[ $document_versions == unchanged ]]; then migration_may_be_applied=0; fi
+  fi
 fi
 
 step app-up
