@@ -420,7 +420,7 @@ fi
 rm -f "$ABOUTME_TEST_STATE/active/aboutme-job-media-orphan-sweep.timer"
 aboutme_assert_cutover_quiescent
 
-for helper in cimd_url_rows_exist cimd_serving_app_stopped; do
+for helper in migrator_query cimd_url_rows_exist cimd_serving_app_stopped; do
   sed -n "/^$helper() {/,/^}/p" "$root/deploy/vn/scripts/deploy-host.sh" >>"$work/cimd-helpers.sh"
 done
 for helper in cimd_env_mcp_flag cimd_effective_mcp_flag; do
@@ -436,10 +436,15 @@ systemctl() {
   [[ ${CIMD_STATE:-inactive} != failure ]] || return 1
   printf '%s\n' "${CIMD_STATE:-inactive}"
 }
-runuser() {
-  [[ $* == *'-u postgres -- psql -X -qAt -v ON_ERROR_STOP=1 -d aboutme'* ]] || return 1
+secrets=$work/cimd-secrets
+mkdir -m 700 "$secrets"
+printf '%s' 'synthetic-migrator' >"$secrets/db-migrator-password"
+runuser() { echo 'runuser must not be used for the URL-client read' >&2; return 1; }
+psql() {
+  [[ $* == '-X -qAt -v ON_ERROR_STOP=1 host=/run/postgresql dbname=aboutme user=aboutme_migrator -c '* ]] || return 1
   [[ $* == *'SELECT EXISTS (SELECT 1 FROM public.oauth_clients'* ]] || return 1
   [[ $* == *"to_jsonb(client)->>'metadata_url' IS NOT NULL)"* ]] || return 1
+  [[ -f ${PGPASSFILE:-} && $(cat "$PGPASSFILE") == '/run/postgresql:5432:aboutme:aboutme_migrator:synthetic-migrator' ]] || return 1
   [[ ${CIMD_QUERY:-f} != failure ]] || return 1
   printf '%s\n' "${CIMD_QUERY:-f}"
 }
