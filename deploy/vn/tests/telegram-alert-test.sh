@@ -25,13 +25,13 @@ cleanup() {
 }
 trap cleanup EXIT
 ((EUID != 0)) || { echo 'Telegram fixtures require a non-root user' >&2; exit 1; }
-mkdir -m 0700 "$work/state" "$work/state/secrets" "$work/bin"
+mkdir -m 0700 "$work/state" "$work/state/secrets" "$work/bin" "$work/clock-reads"
 printf '123456:synthetic_BOT-token' >"$work/state/secrets/telegram-bot-token"
 printf '%s' '-1001234567890' >"$work/state/secrets/telegram-chat-id"
 chmod 0400 "$work/state/secrets/"*
 export ABOUTME_ALERT_TEST_ROOT=$work/state
 export ABOUTME_ALERT_TEST_ENDPOINT=http://127.0.0.1:20983
-export TG_FIXTURE=$work TG_REAL_CURL TG_REAL_STAT TG_REAL_SHA256SUM TG_REAL_SLEEP TG_REAL_DATE
+export TG_FIXTURE=$work TG_REAL_CURL TG_REAL_STAT TG_REAL_SHA256SUM TG_REAL_SLEEP TG_REAL_DATE TG_TEST_PID=$$
 TG_REAL_CURL=$(command -v curl) || fail 'curl is unavailable'
 TG_REAL_STAT=$(command -v stat) || fail 'stat is unavailable'
 TG_REAL_SHA256SUM=$(command -v sha256sum) || fail 'sha256sum is unavailable'
@@ -135,8 +135,21 @@ fi
 STUB
 cat >"$work/bin/date" <<'STUB'
 #!/usr/bin/env bash
+if ! [[ $# -ge 3 && $1 == -u && $2 == -d && $3 =~ ^@[0-9]+$ ]]; then
+  sender='' pid=$PPID
+  while ((pid > 1 && pid != TG_TEST_PID)) && stat=$(<"/proc/$pid/stat"); do
+    read -r -a fields <<<"${stat##*) }"
+    mapfile -d '' -t args <"/proc/$pid/cmdline"
+    for arg in "${args[@]}"; do [[ $arg != */alert-telegram.sh ]] || sender=$pid-${fields[19]}; done
+    pid=${fields[1]}
+  done
+  if [[ -n $sender ]] && ! (set -o noclobber; : >"$TG_FIXTURE/clock-reads/$sender") 2>/dev/null; then
+    printf '%s\n' "$*" >>"$TG_FIXTURE/clock-read-twice"
+    echo 'the sender read the clock twice' >&2; exit 1
+  fi
+fi
 case $* in
-  '-u +%s') exec "$TG_REAL_DATE" -u -d "${TG_TEST_DAY:-2030-01-02} 03:04:05" +%s ;;
+  '-u +%s') exec "$TG_REAL_DATE" -u -d "${TG_TEST_DAY:-2030-01-02} ${TG_TEST_TIME:-03:04:05}" +%s ;;
   '-u -d @'[0-9]*' +%F') exec "$TG_REAL_DATE" "$@" ;;
   *) echo 'unexpected date fixture arguments' >&2; exit 1 ;;
 esac
@@ -204,9 +217,12 @@ private_output() {
   fi
   [[ ! -e $work/hash-secret-exported ]] || fail 'Telegram credential reached the hash environment'
   [[ ! -e $work/stat-secret-exported ]] || fail 'Telegram credential reached the stat environment'
+  [[ ! -e $work/clock-read-twice ]] || fail 'the sender read the clock more than once'
 }
+clock='10:04 ICT · 03:04 UTC'
 msg() {
-  printf '%s <b>aboutme</b> · %s\n%s\n%s\n<i>10:04 ICT · 03:04 UTC · %s · <a href="https://github.com/dannyota/aboutme/blob/main/docs/runbooks/%s">runbook</a></i>' "$@"
+  printf '%s <b>aboutme</b> · %s\n%s\n%s\n<i>%s · %s · <a href="https://github.com/dannyota/aboutme/blob/main/docs/runbooks/%s">runbook</a></i>' \
+    "$1" "$2" "$3" "$4" "$clock" "$5" "$6"
 }
 expect_text() {
   python3 -I - "$work/requests" "$1" <<'PY' || fail "$2"
@@ -539,6 +555,28 @@ python3 -I -c 'import sys; sys.stdout.write("\n" * 5000 + "late.service\n")' |
   TG_TEST_DAY=2030-01-11 run_sender failed-units 'failed units: 1' || fail 'oversized detail delivery failed'
 expect_text "$(msg 🔴 'units failed' '1 unit failed.' "$units_action" aboutme-watch "$watcher")" 'detail read bound changed'
 
+stamps=$work/state/alerts
+pg_down='PostgreSQL does not answer on /run/postgresql'
+: >"$stamps/postgres-down.2030-12-30"
+chmod 0600 "$stamps/postgres-down.2030-12-30"
+clock='00:00 ICT · 17:00 UTC'
+TG_TEST_TIME=17:00:00 send_case 2030-12-31 postgres-down "$pg_down" '' \
+  "$(msg 🟠 'PostgreSQL down, still failing since the alert on 2030-12-30 UTC' "$pg_down." "$pg_action" aboutme-watch "$watcher")"
+[[ -e $stamps/postgres-down.2030-12-31 && ! -e $stamps/postgres-down.2031-01-01 ]] || fail 'ICT midnight stamp did not use the UTC day'
+clock='06:59 ICT · 23:59 UTC'
+TG_TEST_TIME=23:59:59 send_case 2030-12-31 totp-unavailable 'the server logged totp_unavailable 2 times' '' \
+  "$(msg 🔴 'TOTP unavailable' 'The server logged totp_unavailable 2 times.' "$totp_action" aboutme-watch "$watcher")"
+[[ -e $stamps/totp-unavailable.2030-12-31 && ! -e $stamps/totp-unavailable.2031-01-01 ]] || fail 'last UTC second stamp did not use the UTC day'
+clock='07:00 ICT · 00:00 UTC'
+since=', still failing since the alert on 2030-12-31 UTC'
+TG_TEST_TIME=00:00:00 send_case 2031-01-01 postgres-down "$pg_down" '' \
+  "$(msg 🟠 "PostgreSQL down$since" "$pg_down." "$pg_action" aboutme-watch "$watcher")"
+TG_TEST_TIME=00:00:00 send_case 2031-01-01 totp-unavailable 'the server logged totp_unavailable 2 times' '' \
+  "$(msg 🟠 "TOTP unavailable$since" 'The server logged totp_unavailable 2 times.' "$totp_action" aboutme-watch "$watcher")"
+[[ -e $stamps/postgres-down.2031-01-01 && -e $stamps/totp-unavailable.2031-01-01 ]] || fail 'year rollover stamp did not use the UTC day'
+clock='10:04 ICT · 03:04 UTC'
+private_output
+
 (
   # shellcheck source=../host/bin/alert-telegram.sh
   source "$sender"
@@ -728,4 +766,6 @@ printf 500 >"$work/scenario"
 if run_sender --test </dev/null; then fail 'failed test delivery was accepted'; fi
 if bash "$transport" confirm-receipt --received >"$work/cutover.out" 2>&1; then fail 'failed test left a usable proof'; fi
 [[ ! -e $work/state/alert-transport ]] || fail 'failed test selected Telegram'
+[[ ! -e $work/clock-read-twice ]] || fail 'the sender read the clock more than once'
+compgen -G "$work/clock-reads/*" >/dev/null || fail 'the clock-read counter saw no sender'
 echo 'Telegram alert tests passed'
