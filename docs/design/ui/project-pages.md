@@ -77,9 +77,9 @@ Facts column, one bordered panel:
    (2026-11-13), so a link the owner wrote on that resume is not lost when its
    title links here.
 2. “Vai trò” or “Role”, and “Thời gian” or “Dates”, as a definition list.
-3. “Công nghệ” or “Technologies”: all chips, wrapping.
-4. GitHub evidence, when that feature ships ([design](../github-evidence.md));
-   until then the panel ends at Technologies and shows no placeholder.
+3. “Công nghệ” or “Technologies”: all chips, wrapping. GitHub evidence is not in
+   this panel; it has its own section after the text
+   ([design](../github-evidence-picker.md#project-page)).
 
 Empty optional parts are omitted with their headings. A project with no link,
 role, dates or technology has no facts column and its text takes the full width;

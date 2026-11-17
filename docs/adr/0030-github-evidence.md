@@ -3,8 +3,8 @@
 Status: Accepted (2026-11-11). The owner chose a separate, no-scope GitHub
 connection for evidence on 2026-11-10
 ([roadmap](../plans/roadmap.md#owner-decisions)) and approved this record and
-the [GitHub evidence design](../design/github-evidence.md) on 2026-11-11.
-Nothing is implemented yet.
+the [GitHub evidence design](../design/github-evidence.md) on 2026-11-11. The
+connection is live in production since v0.9.15.
 
 ## Context
 
@@ -51,7 +51,7 @@ address, which anyone can set
    when its owner id matches. Contributor lists and commits are not evidence.
 7. **Evidence belongs to the library project** and is shown on every project
    page of that project.
-8. **Disconnecting** deletes the connection and ends any session. The owner
+8. **Disconnecting** clears the connection and ends any session. The owner
    chooses whether attached items stay as plain links or are removed.
 
 ## Alternatives rejected
