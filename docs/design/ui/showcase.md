@@ -42,11 +42,11 @@ chọn hiện ở đây.” or “Real resumes that aboutme.vn users published a
 show here.”, in `--muted-foreground`, at most 42 rem wide, 8 px under the h1. It
 holds no focusable element.
 
-| Width          | h1          | Lead        | Space under the header |
-| -------------- | ----------- | ----------- | ---------------------- |
-| Below 641 px   | 28 px, 1.3  | 15 px, 1.5  | 8 px to the bar        |
-| 641 to 1023 px | 32 px, 1.3  | 15 px, 1.5  | 8 px to the bar        |
-| From 1024 px   | 40 px, 1.25 | 16 px, 1.55 | 28 px grid row gap     |
+| Width          | h1                         | Lead        | Space under the header |
+| -------------- | -------------------------- | ----------- | ---------------------- |
+| Below 641 px   | 32 px, 1.3                 | 15 px, 1.5  | 8 px to the bar        |
+| 641 to 1023 px | 32 px, 40 from 768 px; 1.3 | 15 px, 1.5  | 8 px to the bar        |
+| From 1024 px   | 40 px, 1.3                 | 16 px, 1.55 | 28 px grid row gap     |
 
 ## Count line
 
