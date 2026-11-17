@@ -172,6 +172,8 @@ workflows in public repositories after 60 days without repository activity.
 Check its enabled state and run history after an idle period. See
 [GitHub's schedule documentation](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule).
 
+### Host watcher
+
 Host alarms use `aboutme-watch.timer`, `aboutme-watch.service`, and
 `aboutme-alert@.service`. The watcher runs every five minutes and checks:
 
@@ -181,6 +183,8 @@ Host alarms use `aboutme-watch.timer`, `aboutme-watch.service`, and
 - CrowdSec retention/vacuum timers and lease, CrowdSec alert counts, and
   malformed Coraza logs or unknown record kinds in the last hour.
 - `totp_unavailable` in the server journal.
+
+### Unit failures
 
 Operation request and retention units also trigger `OnFailure=` mail. Their
 journal output contains no target or raw command diagnostics; inspect closed
@@ -197,6 +201,8 @@ sudo journalctl -u aboutme-watch -u aboutme-server --since -30min
 sudo systemctl list-timers 'aboutme-*'
 ```
 
+### Coraza logs
+
 Each watcher run journals hourly totals without sending mail:
 
 ```sh
@@ -210,8 +216,10 @@ output, including zeros. Malformed logs or unknown record kinds still send
 Coraza counts rule-match records, not distinct requests. Inspect current and
 rotated serving and maintenance metadata logs on tmpfs at
 `/run/aboutme/caddy-log/waf/` for timestamps, levels, message types, diagnostic
-kinds, and rule IDs. These records do not prove response status or successful
-access. Check the configured Coraza mode before treating a match as blocked.
+kinds, and rule IDs. Summarize only that metadata; never copy raw request data,
+full URLs, messages, or credentials into alerts, issues, or notes. These records
+do not prove response status or successful access. Check the configured Coraza
+mode before treating a match as blocked.
 
 ### Host Telegram setup and rotation
 
@@ -231,8 +239,8 @@ bash deploy/vn/scripts/telegram-setup.sh
 bash deploy/vn/scripts/secrets.sh age-copy "$AGE_RECIPIENT" "$ENCRYPTED_BACKUP"
 ```
 
-On the host, require exit 0 and owner receipt in the intended group of
-`[aboutme-prod] host alert delivery test` before confirmation:
+On the host, require exit 0 and owner receipt in the intended group of the "🟢
+aboutme · alert delivery test" message before confirmation:
 
 ```sh
 sudo /usr/local/lib/aboutme/alert-telegram.sh --test </dev/null

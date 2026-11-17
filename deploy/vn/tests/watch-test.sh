@@ -112,6 +112,9 @@ cat >"$work/bin/date" <<'STUB'
 #!/usr/bin/env bash
 case $* in
   +%s) printf '2000000000\n' ;;
+  '-u +%s') printf '1893553445\n' ;;
+  '-u -d @1893553445 +%F') printf '2030-01-02\n' ;;
+  '-u -d @1893467045 +%F') printf '2030-01-01\n' ;;
   '-u +%F') printf '2030-01-02\n' ;;
   '-u +%FT%TZ') printf '2030-01-02T03:04:05Z\n' ;;
   -R) printf 'Wed, 02 Jan 2030 03:04:05 +0000\n' ;;
@@ -251,8 +254,38 @@ ABOUTME_ALERT_TEST_ROOT=$work/alert-state \
 cp "$work/alert-state/alert-transport" "$work/lib/alert-transport"
 ABOUTME_ALERT_TEST_ROOT=$work/alert-state WATCH_TEST_MESSAGE=$work/telegram-message \
   WATCH_TEST_FAILED_UNITS=$work/failed-units run_watch "$work/host-checks.log" "$work/telegram.alerts"
-grep -qF 'failed units: 101' "$work/telegram-message"
-grep -qF 'omitted units: 81' "$work/telegram-message"
+telegram_text() {
+  python3 -I - "$1" <<'PY'
+import json, re, sys
+for line in open(sys.argv[1], encoding="utf-8"):
+    if line.startswith('data = "'):
+        body = json.loads(re.sub(r'\\(.)', r'\1', line[len('data = "'):].rstrip("\n")[:-1]))
+        assert body["parse_mode"] == "HTML" and body["link_preview_options"] == {"is_disabled": True}
+        sys.stdout.buffer.write(body["text"].encode())
+        break
+else:
+    sys.exit("no Telegram request body")
+PY
+}
+listed=
+for ((i=0; i<7; i++)); do printf -v listed '%s%saboutme-long-failed-unit-%03d.service' "$listed" "${listed:+, }" "$i"; done
+units_message() {
+  printf '%s <b>aboutme</b> · %s\n101 units failed: %s and 94 more.\n%s\n<i>10:04 ICT · 03:04 UTC · aboutme-watch · <a href="%s">runbook</a></i>' \
+    "$1" "$2" "$listed" "Action: read each failed unit's journal on the host." \
+    https://github.com/dannyota/aboutme/blob/main/docs/runbooks/production.md#host-watcher
+}
+[[ $(telegram_text "$work/telegram-message") == "$(units_message 🔴 'units failed')" ]] || {
+  echo 'watcher failed-units Telegram message changed' >&2; exit 1;
+}
+rm -f "$work/alert-state/alerts/failed-units."*
+: >"$work/alert-state/alerts/failed-units.2030-01-01"
+chmod 0600 "$work/alert-state/alerts/failed-units.2030-01-01"
+ABOUTME_ALERT_TEST_ROOT=$work/alert-state WATCH_TEST_MESSAGE=$work/telegram-repeat \
+  WATCH_TEST_FAILED_UNITS=$work/failed-units run_watch "$work/host-checks.log" "$work/telegram-repeat.alerts"
+[[ $(telegram_text "$work/telegram-repeat") == \
+  "$(units_message 🟠 'units failed, still failing since the alert on 2030-01-01 UTC')" ]] || {
+  echo 'watcher still-failing Telegram message changed' >&2; exit 1;
+}
 
 rm -f "$work/alert-state/alerts/failed-units."*
 : >"$work/transport-attempts"
