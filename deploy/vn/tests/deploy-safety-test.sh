@@ -61,9 +61,6 @@ for script in deploy.sh restore-drill.sh; do
   done < <(grep 'ControlPath=' "$path")
 done
 
-# Every ssh in command position that can open a connection carries both
-# keepalive options, written out or through a *_opts array whose every
-# non-empty assignment carries them.
 ssh_keepalive_scan() {
   awk '
     function report(message) { printf "%s:%d: %s\n", FILENAME, start, message; found = 1 }
