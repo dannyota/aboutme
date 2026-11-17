@@ -144,10 +144,11 @@ filters, Show results.
 
 Text uses only pairs the theme tests check in both themes: `--foreground`,
 `--muted-foreground`, and `--link` on every ground the page uses, and
-`--primary-foreground` on `--primary`. The 13 px slug on `--card` is about 6.1:1
-light and 7.5:1 dark. The tests check `--input` on `--background` and `--card`;
-it measures about 3.8:1 and 3.4:1 on `--popover` and 3.3:1 and 3.6:1 on
-`--surface-sand` (light, dark). Focus rings use `--ring`, 3:1 on every ground.
+`--background` on `--foreground` for pressed options. The 13 px slug on `--card`
+is about 6.1:1 light and 7.5:1 dark. The tests check `--input` on `--background`
+and `--card`; it measures about 3.8:1 and 3.4:1 on `--popover` and 3.49:1 and
+3.90:1 on `--surface-mist` (light, dark). Focus rings use `--ring`, 3:1 on every
+ground.
 
 Every control's accessible name starts with its visible text (WCAG 2.5.3); the
 close button and Report are icon-only. Targets: Filters, the close button,

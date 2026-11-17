@@ -31,14 +31,14 @@ lucide `ListFilter` icon at 18 px (`aria-hidden`), then “Bộ lọc” or “F
 14 px weight 500 `--foreground`, with `aria-haspopup="dialog"` and
 `aria-expanded`.
 
-With any filter on, the border turns `--primary`, the right padding drops to 10
-px, and a badge (`data-testid="showcase-filters-badge"`, `aria-hidden`) follows
-the label: the number of active filters, 1 to 3, in a pill at least 22 px wide
-and 22 px high with 6 px side padding, `--primary` fill, and 12 px weight 700
-`--primary-foreground`. The button's accessible name becomes “Bộ lọc, {n} đang
-bật” or “Filters, {n} active”, which starts with the visible label. The server
-HTML holds the badge for a filtered URL. The button stays visible and enabled in
-every state.
+With any filter on, the border turns `--foreground`, the right padding drops to
+10 px, and a badge (`data-testid="showcase-filters-badge"`, `aria-hidden`)
+follows the label: the number of active filters, 1 to 3, in a pill at least 22
+px wide and 22 px high with 6 px side padding, `--foreground` fill, and 12 px
+weight 700 `--background`. The button's accessible name becomes “Bộ lọc, {n}
+đang bật” or “Filters, {n} active”, which starts with the visible label. The
+server HTML holds the badge for a filtered URL. The button stays visible and
+enabled in every state.
 
 ### Bottom sheet
 
@@ -49,10 +49,10 @@ Its content mounts only while open. It passes `showClose: false` and draws its
 own close button.
 
 **Box.** `--popover` fill, a 1 px `--border` top edge, the top corners at
-`--radius-feature` (20 px), the bottom corners square. Below 641 px it spans the
-width; from 641 px it is centered, at most 40 rem wide. It is a flex column
-capped at `85dvh`, with an `85vh` fallback. The overlay is the primitive's own.
-From top to bottom:
+`--radius-card`, the bottom corners square. Below 641 px it spans the width;
+from 641 px it is centered, at most 40 rem wide. It is a flex column capped at
+`85dvh`, with an `85vh` fallback. The overlay is the primitive's own. From top
+to bottom:
 
 1. **Grip.** A 40 by 4 px `--input` pill, centered, 8 px from the top,
    `aria-hidden`; decoration only, with no drag gesture.
@@ -74,9 +74,9 @@ From top to bottom:
 `type="single"`, `data-testid="showcase-roles"`, named “Lọc theo vị trí” or
 “Filter by role”: All roles (“Mọi vị trí”), the nine Library roles in Library
 chip order with the Library labels, then Other (“Khác”). The 11 options wrap, 8
-px apart: 40 px pills, 14 px side padding, 14 px weight 500 `--foreground` on
-`--card` with a 1 px `--border`, `--surface-indigo` on hover. A pressed option
-takes a `--primary` fill and border, weight 600 `--primary-foreground`, and
+px apart: 40 px pills, 14 px side padding, 14 px weight 500 `--foreground`
+transparent with a 1 px `--control`, `--accent` on hover. A pressed option is an
+ink pill: `--foreground` fill and border, weight 600 `--background`, and
 `aria-pressed="true"`. One tab stop; arrow keys move in DOM order; Enter or
 Space selects; a pressed option stays pressed.
 
@@ -156,8 +156,9 @@ sticky. It holds the same shared filter fields as the sheet
 `orientation="vertical"`: a column with 2 px between rows. Each row is 36 px
 high, 12 px side padding, 10 px radius, left-aligned 14 px `--foreground` at
 weight 400, transparent, `--muted` on hover. The pressed row takes an `--accent`
-fill, weight 600, and an 8 px `--primary` dot at its right end (`aria-hidden`),
-and carries `aria-pressed="true"`. Arrow Up and Down move focus.
+fill, weight 600, and an 8 px `--foreground` dot at its right end
+(`aria-hidden`), and carries `aria-pressed="true"`. Arrow Up and Down move
+focus.
 
 **Resume language.** The heading “Ngôn ngữ của CV” or “Resume language”, then
 the same three options as a three-row list styled exactly like the Role list,

@@ -119,10 +119,10 @@ width changes at 641 px, as [shared controls](showcase-filters.md) specify.
 ### Desktop rows
 
 Each row wraps with 8 px gaps and no horizontal scroll. Chips are 36 px high, 16
-px side padding, a full pill radius, 1 px `--border`, `--card` fill, 14 px
-weight 500 `--foreground`; hover uses `--surface-indigo`. Focus uses a 2 px
-`--ring` outline at 2 px offset. The selected chip has `--primary` fill and
-border and `--primary-foreground` text, still weight 500.
+px side padding, a full pill radius, 1 px `--control`, transparent fill, 14 px
+weight 500 `--foreground`; hover uses `--accent`. Focus uses a 2 px `--ring`
+outline at 2 px offset. The selected chip is an ink pill: `--foreground` fill
+and border and `--background` text, weight 600.
 
 Role (`data-testid="gallery-roles"`) uses `data-role` for every option,
 including `all`, without dots. One Tab stop; arrow keys move focus in DOM order,

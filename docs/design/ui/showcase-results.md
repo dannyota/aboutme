@@ -29,9 +29,9 @@ at 1440.
 ## Tile
 
 Each `li` (`data-showcase-slug`) is a flex column on `--card` with a 1 px
-`--border`, `--radius-dialog` (14 px), and `--shadow-product`. It holds two
-focus targets, in order: the tile link and the Report link. Report is never
-inside the tile link.
+`--border`, `--radius-dialog` (14 px), and no shadow. It holds two focus
+targets, in order: the tile link and the Report link. Report is never inside the
+tile link.
 
 **Tile link.** A block `NuxtLink` (`data-showcase-tile`) to `/{slug}`, same tab,
 `rel="nofollow"`, covering the card image and the meta block, not the footer
@@ -53,7 +53,7 @@ two rows:
 
 1. The meta row, a flex row that wraps with an 8 px gap, items centered:
    - The role chip, only when the item has a role (`data-showcase-role`): a 24
-     px pill, 10 px side padding, full radius, `--surface-blue` fill, 12 px
+     px pill, 10 px side padding, full radius, `--surface-mist` fill, 12 px
      weight 600 `--foreground`, with the Library role label or “Khác” / Other.
      It is a label, not a control.
    - The language, 14 px `--muted-foreground`: “Tiếng Việt”, “Tiếng Anh”, or
@@ -85,9 +85,10 @@ In the `list` state, on every page, the grid's last `li` is the invite card
 (`data-testid="showcase-invite"`); no other state shows it. It is not a tile: no
 `data-showcase-tile`, and the pager's focus move skips it.
 
-The card is a flex column, content centered vertically, on `--surface-sand` with
-a 1 px dashed `--input` border and `--radius-dialog` (14 px), no shadow. Padding
-is 20 px by 16 px below 641 px and 24 px from 641 px, with 12 px between items:
+The card is a flex column, content centered vertically, on `--surface-mist` with
+no border and `--radius-card`, no shadow, and its action is an outline pill.
+Padding is 20 px by 16 px below 641 px and 24 px from 641 px, with 12 px between
+items:
 
 1. The title, an h2, “Muốn CV của bạn ở đây?” or “Want your resume here?”, 20
    px/1.3 bold `--foreground`.
