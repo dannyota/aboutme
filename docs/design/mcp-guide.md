@@ -192,7 +192,8 @@ Cannot list must not look like an error or a public state.
   `h3` is 15 px weight 600. Body text is 16/1.6.
 - The URL and command blocks use the verify page's command block look: `--muted`
   fill, no border, 10 px radius, 13 px monospace, a 32 px ghost circle copy
-  button at the top right, sideways scroll, no `$` prompt on the URL.
+  button at the top right whose hover fill is `--card`, sideways scroll, no `$`
+  prompt on the URL.
 - Steps are an `ol` with 24 px number disks: `--surface-mist` fill, no ring,
   `--foreground` 13 px weight 700 numerals. Inline UI names are weight 600.
   Inline code uses `--muted` fill and 13 px monospace.

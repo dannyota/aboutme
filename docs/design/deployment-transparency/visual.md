@@ -198,7 +198,7 @@ Facts, 13 px, 14 px apart:
 - During a rollout, a tag: "Cũ hơn" / "Older" in `--muted` or "Mới nhất" /
   "Newest" in `--coin` with `--coin-ink`, 11 px weight 700 pill.
 - Replicas: one 8 px square per replica, 3 px apart, up to eight, then the text
-  "{n} bản sao" / "{n} replica" or "{n} replicas". Squares are `--brand-blue`,
+  "{n} bản sao" / "{n} replica" or "{n} replicas". Squares are `--chart-bar`,
   `--input` for the older image, and hidden from screen readers.
 - Signature and SBOM marks: a 14 px icon plus the word.
 
