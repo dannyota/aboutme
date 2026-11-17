@@ -128,7 +128,7 @@ async function onSubmit() {
     testid="login-page"
   >
     <h1
-      class="border-b pb-4 text-xl font-semibold"
+      class="text-2xl font-extrabold tracking-[-0.02em]"
       data-page-title
     >
       {{ copy.signIn }}
@@ -180,7 +180,7 @@ async function onSubmit() {
         :locale="locale"
       />
       <Button
-        class="h-9 w-full"
+        class="h-12 w-full"
         :disabled="pending"
         type="submit"
       >

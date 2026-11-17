@@ -50,7 +50,7 @@ const googleMark = [
 ] as const;
 
 const googleClass = cn(
-  'h-10 w-full rounded-[4px] border px-3 text-sm font-medium',
+  'h-10 w-full rounded-full border px-4 text-sm font-medium',
   'font-[family-name:Roboto]',
   'border-[#747775] bg-white text-[#1F1F1F] hover:bg-[#F2F2F2]',
   'dark:border-[#8E918F] dark:bg-[#131314] dark:text-[#E3E3E3]',

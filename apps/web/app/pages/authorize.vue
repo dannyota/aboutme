@@ -184,11 +184,13 @@ onMounted(() => {
 
 <template>
   <main
-    class="mx-auto w-full max-w-[26rem] px-6 py-16"
+    class="mx-auto my-16 w-[calc(100%-2rem)] max-w-[32rem]
+      rounded-[var(--radius-card)] border border-border bg-card p-6
+      sm:p-8"
     data-testid="authorize-page"
   >
     <h1
-      class="border-b pb-4 text-xl font-semibold"
+      class="text-2xl font-extrabold tracking-[-0.02em]"
       data-page-title
     >
       <template v-if="view?.clientKind === 'cimd'">
@@ -296,7 +298,7 @@ onMounted(() => {
     >
       <dl
         :aria-label="copy.requestedPermissions"
-        class="divide-y border-y"
+        class="divide-y divide-hairline border-y border-hairline"
         data-testid="consent-scopes"
       >
         <template
@@ -322,7 +324,6 @@ onMounted(() => {
       </p>
       <div class="flex flex-wrap gap-2">
         <Button
-          class="h-9"
           data-decision="approve"
           :disabled="pending"
           type="submit"
@@ -330,11 +331,10 @@ onMounted(() => {
           {{ pending ? copy.working : copy.approve }}
         </Button>
         <Button
-          class="h-9"
           data-decision="deny"
           :disabled="pending"
           type="button"
-          variant="ghost"
+          variant="outline"
           @click="submit('deny')"
         >
           {{ copy.deny }}
@@ -343,7 +343,7 @@ onMounted(() => {
     </form>
     <Button
       v-if="state === 'reauth' || state === 'restart'"
-      class="mt-6 h-9"
+      class="mt-6"
       data-testid="consent-sign-in-again"
       type="button"
       @click="state === 'restart' ? navigateTo('/login') : loginForSession()"

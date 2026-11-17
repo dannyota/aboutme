@@ -26,8 +26,9 @@ import {
 } from './style-mutation';
 import {
   expectChromeDecoration, expectChromeFan, expectChromeList,
-  expectChromeNavigation, expectRendererBoundary, expectSampleIsolation,
-  expectSlugPrefixCell, leakChromeIntoResume,
+  expectAuthArtworkClear, expectChromeNavigation, expectRendererBoundary,
+  expectSampleIsolation, expectSlugPrefixCell, leakChromeIntoResume,
+  placeAuthArtworkOverPoints,
 } from './chrome-details';
 
 import type { ScreenContract } from './screen-contract';
@@ -674,6 +675,36 @@ for (const entry of PAGES) {
     await prepareScreen(page);
   }, chromeContract(entry.name, 'vi', 'light'));
 }
+
+async function openForgotPassword(
+  page: Page, baseURL: string | undefined, locale: Locale, width: number,
+): Promise<void> {
+  await page.setViewportSize({ width, height: 900 });
+  await page.context().addCookies([
+    { name: 'aboutme-locale', value: locale, url: baseURL! },
+  ]);
+  const response = await page.goto('/forgot-password');
+  expect(response?.status()).toBe(200);
+  await page.evaluate(() => document.fonts.ready);
+}
+
+for (const locale of ['vi', 'en'] as const) {
+  for (const width of [1024, 1440] as const) {
+    test(`the auth artwork clears the points at ${width} px (${locale})`,
+      async ({ page, baseURL }) => {
+        await openForgotPassword(page, baseURL, locale, width);
+        await expectAuthArtworkClear(page);
+      });
+  }
+}
+
+mutationTest('chrome rejects auth artwork over the points', async ({
+  page, baseURL,
+}) => {
+  await openForgotPassword(page, baseURL, 'vi', 1024);
+  await proveMutation(() => expectAuthArtworkClear(page),
+    () => placeAuthArtworkOverPoints(page), 'Chrome auth artwork clearance.');
+});
 
 for (const kind of ['selection', 'scrollbar'] as const) {
   mutationTest(`chrome rejects a ${kind} that reaches the resume`, async ({

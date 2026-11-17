@@ -41,15 +41,25 @@ their accessible names remain complete.
 
 The six account pages (sign in, second factor, create account, forgot password,
 reset password, and verify email) share `AuthLayout`. Below 1024 px they are a
-single 26 rem column with the form alone. From 1024 px they become a two-column
-card up to 64 rem wide with a border, the 20 px feature radius, and
-`--shadow-product`. The form sits in the right column, held to 26 rem, and a
-`--surface-blue` brand panel fills the left. The form comes first in the DOM;
-the brand panel follows it and holds no focusable element. The panel shows the
-32 px logo, the statement “CV của bạn luôn riêng tư cho đến khi bạn xuất bản.”
-or “Your resume stays private until you publish it.”, three points with blue,
-indigo, and ochre icons (Free and open source, One link per resume, PDF in A4 or
-Letter), and a decorative white sheet tilted 3 degrees over the hero glow.
+single 26 rem column with the form alone on the page ground. From 1024 px a
+`--panel` brand panel with `--radius-panel` fills the left column and the form
+sits on the plain ground in the right column, held to 26 rem. There is no outer
+card, border, or shadow. The form comes first in the DOM; the brand panel
+follows it and holds no focusable element. The panel shows the 32 px logo with
+its inverse mark, the statement “CV của bạn luôn riêng tư cho đến khi bạn xuất
+bản.” or “Your resume stays private until you publish it.” in
+`--panel-foreground` at 32/1.3 weight 800, three points with 28 px `--coin`
+bullets holding `--coin-ink` icons (Free and open source, One link per resume,
+PDF in A4 or Letter), and a decorative white sheet tilted 3 degrees, cropped by
+the panel's bottom edge, with a lock coin. The panel carries no seal. The page
+heading is 32/1.3 weight 800 with no rule below it. The submit button is a
+full-width 48 px main pill; provider buttons are full-width outline pills; text
+links in the form use `--link`. Copy, field order, and test ids are unchanged.
+
+The consent page at `/authorize` is one card on the plain ground, up to 32 rem
+wide, with `--radius-card`, a `--border` edge, and no shadow. Allow is the main
+pill and Deny an outline pill, since denying deletes nothing. Scope rows are
+separated by `--hairline`.
 
 The resume list is a desk of up to three paper cards: one column, three from 768
 px, with 24 px gaps and 32 px from 768 px. Each card is a `.paper-surface` sheet
