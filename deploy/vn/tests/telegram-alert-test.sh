@@ -5,6 +5,9 @@ set -euo pipefail
 fail() { echo "$1" >&2; exit 1; }
 
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
+export ABOUTME_TEST_LIB=$repo/deploy/vn/tests/lib
+# shellcheck source=lib/wait.sh
+source "$ABOUTME_TEST_LIB/wait.sh"
 sender=$repo/deploy/vn/host/bin/alert-telegram.sh
 transport=$repo/deploy/vn/host/alert-transport.sh
 if [[ ${1-} == root-routing ]]; then
@@ -115,11 +118,10 @@ if [[ $# == 1 && $1 == 10 ]]; then
   printf '10\n' >>"$TG_FIXTURE/retry-delays"
   if [[ ${TG_RETRY_PAUSE:-0} == 1 ]]; then
     : >"$TG_FIXTURE/retry-waiting"
-    for ((i=0; i<500; i++)); do
-      [[ ! -e $TG_FIXTURE/retry-release ]] || exit 0
-      "$TG_REAL_SLEEP" 0.01
-    done
-    exit 1
+    source "$ABOUTME_TEST_LIB/wait.sh"
+    ABOUTME_TEST_SLEEP=$TG_REAL_SLEEP test_wait 'retry release' "${ABOUTME_TEST_WAIT_SECONDS:-60}" 0.01 \
+      test -e "$TG_FIXTURE/retry-release" || exit 1
+    exit 0
   fi
   exit 0
 fi
@@ -203,8 +205,8 @@ PY
 printf success >"$work/scenario"
 python3 -I -B "$work/endpoint.py" "$work" >"$work/endpoint.out" 2>&1 &
 server_pid=$!
-for ((i=0; i<100; i++)); do [[ ! -e $work/ready ]] || break; sleep 0.01; done
-[[ -e $work/ready ]] || { echo 'fake Telegram endpoint did not start' >&2; exit 1; }
+test_wait 'fake Telegram endpoint' "${ABOUTME_TEST_WAIT_SECONDS:-60}" 0.01 test -e "$work/ready" ||
+  { echo 'fake Telegram endpoint did not start' >&2; exit 1; }
 
 run_sender() { bash "$sender" "$@" >"$work/out" 2>"$work/err"; }
 count_requests() { if [[ -f $work/requests ]]; then wc -l <"$work/requests"; else echo 0; fi; }
@@ -673,7 +675,7 @@ attempts_before=$(count_attempts)
 delays_before=$(count_delays)
 TG_RETRY_PAUSE=1 run_sender unit-retry-concurrent diagnostic </dev/null &
 first=$!
-for ((i=0; i<100; i++)); do [[ ! -e $work/retry-waiting ]] || break; sleep 0.01; done
+test_wait 'retry wait' "${ABOUTME_TEST_WAIT_SECONDS:-60}" 0.01 test -e "$work/retry-waiting" || true
 [[ -e $work/retry-waiting && -e $work/state/alerts/unit-retry-concurrent.2030-01-02 ]] || fail 'retry did not wait while retaining its stamp'
 run_sender unit-retry-concurrent diagnostic </dev/null || fail 'duplicate during a retry wait failed'
 grep -qxF 'alert-telegram: suppressed unit-retry-concurrent' "$work/err" || fail 'duplicate during a retry wait was not suppressed'
@@ -689,8 +691,8 @@ printf slow >"$work/scenario"
 rm -f "$work/entered"
 run_sender concurrent diagnostic </dev/null &
 first=$!
-for ((i=0; i<100; i++)); do [[ ! -e $work/entered ]] || break; sleep 0.01; done
-[[ -e $work/entered ]] || fail 'concurrent sender did not enter the endpoint'
+test_wait 'concurrent sender' "${ABOUTME_TEST_WAIT_SECONDS:-60}" 0.01 test -e "$work/entered" ||
+  fail 'concurrent sender did not enter the endpoint'
 before=$(count_requests)
 run_sender concurrent diagnostic </dev/null || fail 'concurrent duplicate delivery failed'
 [[ $(count_requests) == "$before" ]] || fail 'concurrent duplicate sent another request'
@@ -698,8 +700,8 @@ wait "$first" || fail 'first concurrent delivery failed'
 rm -f "$work/entered"
 bash "$sender" interrupted diagnostic </dev/null >"$work/signal.out" 2>"$work/signal.err" &
 interrupted=$!
-for ((i=0; i<100; i++)); do [[ ! -e $work/entered ]] || break; sleep 0.01; done
-[[ -e $work/entered ]] || fail 'interrupted sender did not enter the endpoint'
+test_wait 'interrupted sender' "${ABOUTME_TEST_WAIT_SECONDS:-60}" 0.01 test -e "$work/entered" ||
+  fail 'interrupted sender did not enter the endpoint'
 kill -TERM "$interrupted" || fail 'interrupted sender could not be signaled'
 if wait "$interrupted"; then fail 'interrupted sender reported success'; fi
 if compgen -G "$work/state/alerts/interrupted.*" >/dev/null; then fail 'interrupted sender retained its stamp'; fi

@@ -98,6 +98,17 @@ describe('theme preference boundary', () => {
     },
   );
 
+  it('renders both icons and lets the theme attribute pick one', async () => {
+    const wrapper = await mountSuspended(ThemeToggle);
+
+    const dark = wrapper.get('[data-theme-icon="dark"]');
+    const light = wrapper.get('[data-theme-icon="light"]');
+    expect(dark.classes())
+      .toEqual(expect.arrayContaining(['hidden', 'dark:block']));
+    expect(light.classes()).toContain('dark:hidden');
+    expect(light.classes()).not.toContain('hidden');
+  });
+
   it('emits one theme-color per scheme until a theme is stored', () => {
     expect(themeColorMeta(undefined)).toEqual([
       {

@@ -25,9 +25,7 @@ else.
 The site icons live in `apps/web/public/` with versioned names: `favicon-v4.svg`
 (dark-scheme aware), `icon-32-v4.png`, `apple-touch-icon-v4.png`,
 `icon-192-v4.png`, `icon-512-v4.png`, `site-v4.webmanifest`, and `favicon.ico`.
-The PNG icons are the red mark on an opaque white square. The previous set
-(`favicon-v3.svg`, the `-v3` icons, `site-v3.webmanifest`, `og-image-v7.jpg`,
-and `og-image-v6-en.jpg`) stays in `public/`, unlinked, for one release.
+The PNG icons are the red mark on an opaque white square.
 
 ## Colors
 

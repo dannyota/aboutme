@@ -24,6 +24,7 @@
         --paper-line: #e4e7e5;
         --paper-ink: #171a18;
         --shadow-paper: 0 1px 2px #171a180f, 0 12px 32px #171a181a;
+        --radius-card: 22px;
       }
       @media (prefers-color-scheme: dark) {
         :root {
@@ -37,6 +38,16 @@
           --seal: #e2788f;
           --mist: #151015;
           --shadow-paper: 0 1px 2px #0006, 0 12px 32px #00000080;
+        }
+      }
+      @media (min-width: 48rem) {
+        :root {
+          --radius-card: 26px;
+        }
+      }
+      @media (min-width: 64rem) {
+        :root {
+          --radius-card: 28px;
         }
       }
       * {
@@ -170,7 +181,7 @@
         margin-top: 2rem;
         padding: 1rem 1.25rem;
         border: 1px solid var(--border);
-        border-radius: 14px;
+        border-radius: var(--radius-card);
         background: var(--card);
       }
       .status {

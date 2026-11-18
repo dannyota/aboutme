@@ -2,6 +2,9 @@
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
+export ABOUTME_TEST_LIB=$repo_root/deploy/vn/tests/lib
+# shellcheck source=lib/wait.sh
+source "$ABOUTME_TEST_LIB/wait.sh"
 fence=$repo_root/deploy/vn/scripts/fence.sh
 safety=$repo_root/deploy/vn/scripts/deploy-safety.sh
 work=$(mktemp -d)
@@ -130,11 +133,7 @@ started=$SECONDS
   timeout 40 "$fence" lock deploy "$floor_tag"
 ) >"$work/busy.out" 2>"$work/busy.err" &
 waiting=$!
-for ((attempt=0; attempt<100; attempt++)); do
-  [[ ! -e $FLOCK_CALLS.bundle ]] || break
-  sleep 0.05
-done
-[[ -e $FLOCK_CALLS.bundle ]]
+test_wait 'bundle lock attempt' "${ABOUTME_TEST_WAIT_SECONDS:-60}" 0.05 test -e "$FLOCK_CALLS.bundle" || exit 1
 kill -0 "$waiting"
 "$REAL_FLOCK" -x -n "$work/fence/fence.lock" true
 if wait "$waiting"; then echo 'bundle contention allowed ownership' >&2; exit 1; else status=$?; fi

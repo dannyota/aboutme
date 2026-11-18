@@ -72,9 +72,9 @@ so.
 - Slug grammar `^[a-z0-9]+(-[a-z0-9]+)*$`, 4 to 30 characters, globally unique;
   released slugs enter a 180-day tombstone. Reserved roots cannot be claimed.
 - Email and password authentication, plus independently enabled provider login
-  (ADR 0016). Production enables Google and disables password registration. The
-  UI shows a provider control only for a name in the capabilities read's
-  `providers` list.
+  (ADR 0016). Production enables Google and LinkedIn, keeps GitHub off, and
+  keeps password registration open. The UI shows a provider control only for a
+  name in the capabilities read's `providers` list.
 - The resume renderer is pure: `(document, renderContext) -> HTML`. Application
   chrome must never change how the renderer's output looks; renderer golden HTML
   and screenshot suites are the proof.
@@ -88,7 +88,8 @@ so.
   devices", "slug". Vietnamese copy uses "CV", the common Vietnamese word.
   Buttons name the action they perform; copy is sentence case.
 - Out of v1: cover letters, job tracker, first-party AI writing, custom domains,
-  teams, analytics, collaborative editing, and any operator or admin surface.
+  teams, analytics beyond owner-only view counts, collaborative editing, and any
+  operator or admin surface.
 
 ## Brand Commitments
 
