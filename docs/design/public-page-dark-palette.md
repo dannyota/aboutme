@@ -18,15 +18,19 @@ All steps use OKLCH. A color outside sRGB is clipped by lowering its chroma in
    chroma is at least 0.01 (a tinted paper), otherwise of `colors.primary`.
 3. **Ground.** The dark `background` is
    `oklch(0.20, min(0.25 × toneC, 0.015), toneH)`: a near-black carrying a trace
-   of the template's own hue.
+   of the template's own hue. On the screen sheets of the
+   [web layout](public-web-layout.md#paper-and-desk) the charcoal paper
+   `#2a2723` replaces it.
 4. **Text.** The dark `text` is `oklch(0.90, min(textC, 0.015), textH)`.
 5. **Primary and accent.** Each keeps its hue and chroma and takes lightness
    `min(max(L, 1.10 − L), 0.94)`. A dark navy becomes a light steel blue; a
    mid-tone orange keeps its lightness and the clamp lifts it.
 6. **Tinted surface.** A light `colors.surface` (lightness 0.5 or more) becomes
-   `oklch(0.27, min(2 × C, 0.035), H)`, one step above the ground. A dark
-   surface keeps its hue and chroma and takes lightness `max(L, 0.30)`, so an
-   authored dark band stays a band above the ground.
+   `oklch(0.27, min(2 × C, 0.035), H)`, one step above the ground; on the screen
+   sheets, `oklch(paper L + 0.07, min(2 × C, 0.035), H)`. A dark surface keeps
+   its hue and chroma and takes lightness `max(L, 0.30)`, on the screen sheets
+   `max(L, paper L + 0.07)`, so an authored dark band stays a band above the
+   ground.
 
 The role derivation then applies its floors against the dark surfaces: 4.5:1 for
 body, headings, meta, and links; 3:1 for the name and for level fills and tag
@@ -61,7 +65,9 @@ Other rules:
   colors, so the root takes the browser's dark Canvas, not the template's
   ground. The page fills the viewport with its own ground (`min-height: 100vh`),
   so Canvas shows only in overscroll. The rule needs no script, so the first
-  paint is already correct.
+  paint is already correct. On the screen sheets of the
+  [web layout](public-web-layout.md#paper-and-desk) the root takes the fixed
+  desk color instead, which a root rule can set.
 - `light-dark()` is not used: Safari before 17.5 drops it, which would leave
   text black on the dark ground.
 - The page adds no `theme-color` meta; the HTML validator rejects it.
@@ -70,7 +76,9 @@ Other rules:
 
 The rule gives these dark values for each preset's own colors, computed by a
 reference model of the rule. The unit test pins the implementation's values, and
-a user's own colors go through the same rule.
+a user's own colors go through the same rule. On the screen sheets of the
+[web layout](public-web-layout.md#paper-and-desk) the ground is the charcoal
+paper and the roles derive against it; the sheets goldens pin those values.
 
 | Template           | Ground    | Body      | Heading   | Link      | Tinted region     |
 | ------------------ | --------- | --------- | --------- | --------- | ----------------- |
@@ -95,9 +103,10 @@ a user's own colors go through the same rule.
 | one-page-tight     | `#131619` | `#d8dfe6` | `#aec0cf` | `#8ba6b9` | none              |
 | startup-bold       | `#151617` | `#d8dee8` | `#e8ebf0` | `#e8ebf0` | none              |
 
-Across all twenty, on every surface: body at least 10.1:1, meta 6.4:1, headings
-4.5:1, links 4.5:1, and level and tag fills 3.5:1. Link values are those on the
-ground; a tinted region clamps its own.
+Measured on the dark rule's own ground, across all twenty, on every surface:
+body at least 10.1:1, meta 6.4:1, headings 4.5:1, links 4.5:1, and level and tag
+fills 3.5:1. Link values are those on the ground; a tinted region clamps its
+own.
 
 No template needs a hand-made exception. Two rule branches cover the special
 cases:

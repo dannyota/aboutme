@@ -59,7 +59,8 @@ The boundary in one line each:
 - The **document** owns what the resume says. No template or token may add,
   remove, reorder, or reword content.
 - The **user** owns every value in `customization` and may change any of them
-  individually at any time.
+  individually at any time
+  ([screen exceptions](../public-web-layout.md#inside-a-sheet)).
 - A **preset** owns the same values collectively: it is a saved point in that
   same space, not a separate layer above it.
 - The **renderer** owns everything not in `customization`, and owns it for all
@@ -178,8 +179,8 @@ and details) sit side by side:
   the photo stays at its edge.
 - `detailsLayout` and `iconStyle` apply inside the text block unchanged.
 - With no photo, the setting has no effect.
-- On a continuous page shown on a screen narrower than 36em (576 px), a side
-  photo stacks above the text, as with `top`. The rule is a screen media query.
+- On a continuous or sheets page shown narrower than 36em (576 px), a side photo
+  stacks above the text, as with `top`. The rule is a screen media query.
   Printed and paged output, the PDF and the paged preview, always keeps the side
   layout.
 - A template switch keeps the owner's `photoPosition`, or its absence, as it
@@ -203,10 +204,11 @@ text before it, and a dot inside the domain, and holds no white space, control,
 or format character and none of ``< > " ' ` ( ) \ , ; : ? # %``. A phone links
 as `tel:` plus the value with spaces, dots, hyphens, and parentheses removed,
 when that result matches `^\+?[0-9]{3,20}$`. Their anchor text is always the
-value, and `display` does not apply. A value that fails renders as text.
-`location` always renders as **plain text**. `label`, when present and
-non-empty, replaces the type's default label; the `twitter` default label is
-"X".
+value, and `display` does not apply. The screen sheets lay contacts out as rows
+([web layout](../public-web-layout.md#inside-a-sheet)) with the same anchors. A
+value that fails renders as text. `location` always renders as **plain text**.
+`label`, when present and non-empty, replaces the type's default label; the
+`twitter` default label is "X".
 
 When `header.iconStyle` shows icons, a typed detail omits its default label; a
 non-empty user `label` and every `custom` detail's label still render (ADR
@@ -383,13 +385,13 @@ Rules the above encodes:
 
 ## 8. Conformance — what a preset must ship
 
-| Artifact                              | Requirement                                                                                      |
-| ------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `packages/schema/templates/<id>.json` | validates against the preset schema; all eight customization keys plus `layout.placement`        |
-| golden HTML snapshots                 | populated one- and two-column starting states of `full` × both modes × this preset               |
-| browser display assertions            | build-only harness; named subset and migration in [display assertions](../display-assertions.md) |
-| focused renderer tests                | draft emptiness, optional fields, one and two columns, and empty-sidebar behavior                |
-| contrast check                        | the preset's own colors satisfy `colors.md` §5 before clamping                                   |
+| Artifact                              | Requirement                                                                                          |
+| ------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `packages/schema/templates/<id>.json` | validates against the preset schema; all eight customization keys plus `layout.placement`            |
+| golden HTML snapshots                 | populated one- and two-column starting states of `full` × continuous, paged and sheets × this preset |
+| browser display assertions            | build-only harness; named subset and migration in [display assertions](../display-assertions.md)     |
+| focused renderer tests                | draft emptiness, optional fields, one and two columns, and empty-sidebar behavior                    |
+| contrast check                        | the preset's own colors satisfy `colors.md` §5 before clamping                                       |
 
 Existing screenshot comparisons remain required until replacement acceptance and
 cutover. Golden HTML and the presentation contract remain unchanged.
