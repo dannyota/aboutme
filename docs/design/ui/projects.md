@@ -66,6 +66,10 @@ Sections, in order, each under a top rule as in Settings:
 3. **Address.** The slug, read only, with Change address.
 4. **Delete.** A destructive Delete project button.
 
+With the GitHub evidence capability on, an Evidence section sits between Details
+and Resumes; the [picker design](../github-evidence-picker.md#picker) specifies
+it.
+
 Saving is explicit. A bar fixed to the bottom of the column holds the save state
 and Save, enabled only when something changed. Save sends the whole document
 with the revision it loaded. Leaving with unsaved changes asks first, with the
