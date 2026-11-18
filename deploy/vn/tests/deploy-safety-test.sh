@@ -325,6 +325,26 @@ if aboutme_edge_transition true; then fail 'accepted a surviving systemd transit
   fail 'uncertain edge mutation retained startup admission'
 rm "$ABOUTME_TEST_STATE/transition-persists" "$work/run/crowdsec-retention-failed"
 
+stop_budget_check() {
+  local safety=$root/deploy/vn/scripts/deploy-safety.sh unit=$root/deploy/vn/host/quadlet/aboutme-server.container.in
+  local server podman_stop unit_stop edge lock_wait
+  server=$(sed -nE 's/.*total: ([0-9]+) \* time\.Second.*/\1/p' "$root/apps/server/cmd/server/serve.go")
+  podman_stop=$(sed -nE 's/^PodmanArgs=(.* )?--stop-timeout=([0-9]+)( .*)?$/\2/p' "$unit")
+  unit_stop=$(sed -nE 's/^TimeoutStopSec=([0-9]+)s$/\1/p' "$unit")
+  edge=$(sed -n '/^aboutme_stop_edge() {/,/^}/p' "$safety" |
+    sed -nE 's/^ +timeout --kill-after=1s ([0-9]+) systemctl stop "\$@" \|\| rc=\$\?$/\1/p')
+  lock_wait=$(sed -nE 's/^ +flock -x -w ([0-9]+) "\$edge_lock" \|\| return 1$/\1/p' "$safety")
+  for value in "$server" "$podman_stop" "$unit_stop" "$edge" "$lock_wait"; do
+    [[ $value =~ ^[1-9][0-9]*$ ]] || fail 'a stop budget value is missing or repeated'
+  done
+  ((server + 5 <= podman_stop)) || fail "Podman's ${podman_stop} s stop leaves under 5 s over the ${server} s server budget"
+  ((podman_stop < unit_stop)) || fail "systemd's ${unit_stop} s stop must exceed Podman's ${podman_stop} s"
+  ((unit_stop < edge)) || fail "the ${edge} s edge stop must exceed systemd's ${unit_stop} s"
+  ((edge + 1 + 14 < lock_wait)) ||
+    fail "the ${edge} s edge stop with its inspections must end inside the ${lock_wait} s retention lock wait"
+}
+stop_budget_check
+
 for fault in timeout-malformed fail-inspection-after-stop raw-exit-two; do
   touch "$work/run/crowdsec-retention-ok"
   touch "$ABOUTME_TEST_STATE/$fault"

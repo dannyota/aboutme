@@ -119,6 +119,13 @@ for unit in "$work/absent/units/aboutme-server.container" "$work/present/units/a
   [[ $(grep -c '^Ulimit=' "$unit") == 1 ]] || fail 'the server unit must set exactly one Ulimit'
   [[ $(awk '/^\[/ { section = $0 } $0 == "Ulimit=core=0:0" { print section }' "$unit") == '[Container]' ]] ||
     fail 'the server unit must turn core dumps off in [Container]'
+  [[ $(grep -c '^PodmanArgs=' "$unit") == 1 ]] || fail 'the server unit must set exactly one PodmanArgs'
+  [[ $(awk '/^\[/ { section = $0 } /^PodmanArgs=(.* )?--stop-timeout=25( |$)/ { print section }' "$unit") == '[Container]' ]] ||
+    fail 'the server unit must give Podman a 25 s stop timeout in [Container]'
+  [[ $(grep -c '^TimeoutStopSec=' "$unit") == 1 ]] || fail 'the server unit must set exactly one TimeoutStopSec'
+  [[ $(awk '/^\[/ { section = $0 } $0 == "TimeoutStopSec=30s" { print section }' "$unit") == '[Service]' ]] ||
+    fail 'the server unit must give systemd a 30 s stop timeout in [Service]'
+  if grep -q '^StopTimeout=' "$unit"; then fail 'Podman 4.9 rejects the Quadlet StopTimeout key'; fi
 done
 sed "s|/etc/aboutme/|$work/guard-|g" "$work/present/units/aboutme-server.container" >"$work/guard.container"
 cp "$root/deploy/vn/host/env/server.env" "$work/guard-server.env"

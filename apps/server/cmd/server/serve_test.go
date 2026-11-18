@@ -35,7 +35,9 @@ func TestServePairSeparatesPublicAndPrivateRoutesAndJoins(t *testing.T) {
 	var stops atomic.Int32
 	done := make(chan error, 1)
 	go func() {
-		done <- servePair(ctx, slog.New(slog.NewTextHandler(io.Discard, nil)), publicListener, publicMux, privateListener, privateMux, func() { stops.Add(1) })
+		_, serveErr := servePair(ctx, slog.New(slog.NewTextHandler(io.Discard, nil)), serverStopBudget(), publicListener, publicMux, privateListener, privateMux,
+			func(context.Context) error { stops.Add(1); return nil })
+		done <- serveErr
 	}()
 	client := &http.Client{Timeout: time.Second}
 	for _, check := range []struct {
