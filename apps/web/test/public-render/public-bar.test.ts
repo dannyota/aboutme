@@ -248,7 +248,7 @@ describe('public page bar row', () => {
     expect(inner).toMatchObject({
       'width': 'min(100% - 20px, 46rem)',
       'margin-inline': 'auto',
-      'padding-inline': 'clamp(6px, 2cqi, 26px)',
+      'padding-inline': 'clamp(6px, 2cqi - 2px, 26px)',
     });
     expect(inner).not.toHaveProperty('max-width');
     expect(inner).not.toHaveProperty('font-size');

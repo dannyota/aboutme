@@ -344,7 +344,7 @@ test.describe('public page measure', () => {
         };
       });
       const sheetWidth = Math.min(cell.width - 20, 736);
-      const inset = Math.min(Math.max(cell.width * 0.02, 6), 26);
+      const inset = Math.min(Math.max(cell.width * 0.02 - 2, 6), 26);
       expect(geometry.page).toBe(cell.width);
       expect(geometry.bar).toBe(cell.width);
       expect(geometry.linkTop).toBeLessThan(geometry.sheet.top);

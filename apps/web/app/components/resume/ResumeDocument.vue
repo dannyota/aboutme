@@ -124,7 +124,7 @@ body:has(> #public-resume) {
   min-height: 32px;
   width: min(100% - 20px, 46rem);
   margin-inline: auto;
-  padding-inline: clamp(6px, 2cqi, 26px);
+  padding-inline: clamp(6px, 2cqi - 2px, 26px);
 }
 
 @media (width < 40rem) {

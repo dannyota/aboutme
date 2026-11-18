@@ -307,10 +307,29 @@ describe('public page skip link focus colors', () => {
     'utf8',
   );
   const body = `{
-    background: #0e0a0d;
+    background: #141210;
     color: #b59bdb;
     outline-color: #cdbcd9;
   }`;
+  const luminance = (hex: string): number => {
+    const [red, green, blue] = [1, 3, 5].map((start) => {
+      const value = Number.parseInt(hex.slice(start, start + 2), 16) / 255;
+      return value <= 0.04045
+        ? value / 12.92
+        : ((value + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * red! + 0.7152 * green! + 0.0722 * blue!;
+  };
+  const contrast = (one: string, two: string): number => {
+    const [light, dark] = [luminance(one), luminance(two)]
+      .sort((a, b) => b - a);
+    return (light! + 0.05) / (dark! + 0.05);
+  };
+
+  it('grounds the dark skip link on the dark desk with legible text', () => {
+    expect(contrast('#b59bdb', '#141210')).toBeGreaterThanOrEqual(4.5);
+    expect(css).not.toContain('#0e0a0d');
+  });
 
   it.each([
     ['dark', '@media screen {'],

@@ -1,26 +1,19 @@
 @media screen {
   .public-resume-page,
-  .preview-sheet[data-web-columns],
   .template-paper[data-web-columns] {
     container-type: inline-size;
   }
 
-  .public-resume-page,
-  .preview-sheet[data-web-columns] .resume-document,
   .template-paper[data-web-columns] .resume-document {
     --screen-measure: 52em;
     --screen-margin-x: clamp(16px, calc((100cqw - var(--screen-measure)) / 2), var(--page-margin-x));
     --screen-margin-y: clamp(16px, calc((100cqw - var(--screen-measure)) / 2), var(--page-margin-y));
   }
 
-  .public-resume-page[data-columns="2"],
-  .preview-sheet[data-web-columns="2"] .resume-document,
   .template-paper[data-web-columns="2"] .resume-document {
     --screen-measure: 70em;
   }
 
-  .public-resume-page .resume-document:not(.resume-sheets),
-  .preview-sheet[data-web-columns] .resume-document:not(.resume-sheets),
   .template-paper[data-web-columns] .resume-document:not(.resume-sheets) {
     padding: var(--screen-margin-y) var(--screen-margin-x);
   }
