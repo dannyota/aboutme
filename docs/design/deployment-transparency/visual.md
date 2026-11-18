@@ -292,9 +292,9 @@ px icon column 10 px from the text.
 
 "Chứng minh" / "It proves", with `check` in `--link`:
 
-The host states that it reports itself, with weaker trust than ECS. Before a
-document loads, the lists name no platform ([page.md](page.md#limits)). A GitHub
-build claim applies only to an image whose signature was checked.
+The list states that the host reports itself, with weaker trust than ECS. Before
+a document loads, the lists name no platform ([page.md](page.md#limits)). A
+GitHub build claim applies only to an image whose signature was checked.
 
 - Máy chủ GreenNode tự báo cáo các mã băm Podman đang chạy và số bản sao. / The
   GreenNode host itself reports the running Podman digests and replica counts.

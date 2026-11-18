@@ -124,9 +124,6 @@ describe('verify page states', () => {
       const base = fixture('unverified');
       const document = {
         ...base,
-        platform: {
-          provider: 'greennode', orchestrator: 'podman', region: 'HCM03',
-        },
         components: base.components.map((component) => ({
           ...component,
           running_images: component.running_images.map((image) => ({
@@ -191,9 +188,6 @@ describe('verify page states', () => {
       const base = fixture('verified');
       const document = {
         ...base,
-        platform: {
-          provider: 'greennode', orchestrator: 'podman', region: 'HCM03',
-        },
       };
       mockResponse = {
         status: 200, body: document, date: freshDate(document),

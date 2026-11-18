@@ -216,12 +216,9 @@ The test `TestDocumentLeaksNothing` in `deploy/observer/internal/document`:
 
 ## Versions
 
-- Version 1 accepts only the `greennode` provider, the `podman` orchestrator, a
-  GreenNode region code, and `-amd64` SBOM assets, since the AWS observer paths
-  were removed
+- Narrowing the accepted values keeps version 1 when every document still
+  accepted was valid before, as when the AWS observer paths were removed
   ([ADR 0027](../../adr/0027-deployment-transparency-observer.md#history)).
-  Every document the narrowed schema accepts was valid before, so the version
-  stays 1.
 - A field added to version 1 must be optional for readers, and is added to the
   schema, the allowlist test, and the page in one change. Readers ignore unknown
   fields.

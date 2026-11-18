@@ -59,8 +59,9 @@ The `www` host keeps its apex redirect.
 ## Evidence and compatibility
 
 The document uses `platform.provider: greennode`,
-`platform.orchestrator: podman`, and region `HCM03`, the only platform values
-version 1 accepts. These fields identify the host reporter without a new field.
+`platform.orchestrator: podman`, and region `HCM03`. Version 1 accepts no other
+provider or orchestrator. These fields identify the host reporter without a new
+field.
 
 The root reporter writes signatures and SBOMs as `unchecked` and leaves build
 claims null. The observer checks each running digest with the existing

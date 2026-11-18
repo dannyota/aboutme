@@ -76,9 +76,6 @@ describe('page state from each fixture', () => {
 
   it('renders a Podman host report with unchecked evidence', () => {
     const value = clone('verified');
-    value.platform = {
-      provider: 'greennode', orchestrator: 'podman', region: 'HCM03',
-    };
     value.release = null;
     value.summary = 'unverified';
     for (const entry of value.components) {
@@ -494,9 +491,6 @@ describe('chain view', () => {
 
   it('uses the running image start times when there is no release', () => {
     const value = clone('unverified');
-    value.platform = {
-      provider: 'greennode', orchestrator: 'podman', region: 'HCM03',
-    };
     for (const component of value.components) {
       for (const image of component.running_images) {
         image.version = null;
