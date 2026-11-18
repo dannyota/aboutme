@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useMediaQuery } from '@vueuse/core';
-import { computed } from 'vue';
+import { computed, watch } from 'vue';
 
 import AppSheetContent from '@/components/app/AppSheetContent.vue';
 import StatusBanner from '@/components/app/StatusBanner.vue';
@@ -37,6 +37,10 @@ const props = defineProps<{
 const emit = defineEmits<{ closed: [] }>();
 
 const wide = useMediaQuery('(width >= 640px)');
+let linkFocused = false;
+watch(wide, () => {
+  linkFocused = document.activeElement?.id === 'evidence-link';
+}, { flush: 'pre' });
 const copy = computed(() => projectEvidenceCopy[props.locale]);
 const projects = computed(() => projectsCopy[props.locale]);
 const settings = computed(() => githubEvidenceSettingsCopy[props.locale]);
@@ -74,9 +78,11 @@ function onOpenChange(open: boolean): void {
 
 function onOpenAutoFocus(event: Event): void {
   const container = event.target instanceof HTMLElement ? event.target : null;
-  const active = container?.querySelector<HTMLElement>(
-    '[role="tab"][data-state="active"]',
-  );
+  const selector = linkFocused
+    ? '#evidence-link'
+    : '[role="tab"][data-state="active"]';
+  linkFocused = false;
+  const active = container?.querySelector<HTMLElement>(selector);
   if (active === null || active === undefined) return;
   event.preventDefault();
   active.focus();

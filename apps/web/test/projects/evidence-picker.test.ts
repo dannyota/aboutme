@@ -120,6 +120,14 @@ async function mountPicker(options: Setup = {}) {
   };
   const navigate = vi.fn();
   const closed = vi.fn();
+  const timers: { run: () => void; ms: number; cancelled: boolean }[] = [];
+  const schedule = (run: () => void, ms: number) => {
+    const timer = { run, ms, cancelled: false };
+    timers.push(timer);
+    return () => {
+      timer.cancelled = true;
+    };
+  };
   api.read.mockResolvedValue(ok(loaded));
   evidenceApi.candidates.mockImplementation(async (_id, query) =>
     query.kind === 'pullRequest' ? page(pulls) : page(repositories));
@@ -145,6 +153,7 @@ async function mountPicker(options: Setup = {}) {
         auth: fakes.auth,
         now: () => NOW,
         navigate,
+        schedule,
       });
       context.picker = picker;
       context.editor = editor;
@@ -175,7 +184,8 @@ async function mountPicker(options: Setup = {}) {
   mounted.push(wrapper);
   await flushPromises();
   return {
-    wrapper, api, evidenceApi, github, navigate, closed, ...fakes, ...context,
+    wrapper, api, evidenceApi, github, navigate, closed, timers, ...fakes,
+    ...context,
   };
 }
 
@@ -699,22 +709,47 @@ describe('evidence picker', () => {
       expect(evidenceApi.attach).not.toHaveBeenCalled();
     });
 
-  it('starts GitHub once and keeps Continue busy after a good reply',
-    async () => {
-      const { evidenceApi, github, navigate } = await mountPicker();
-      evidenceApi.candidates.mockResolvedValue(
-        evidenceFailed('session-required'),
-      );
-      await openPicker();
+  it('starts GitHub once, then enables Continue again five seconds after '
+    + 'a navigation that never left', async () => {
+    const { evidenceApi, github, navigate, timers } = await mountPicker();
+    evidenceApi.candidates.mockResolvedValue(
+      evidenceFailed('session-required'),
+    );
+    await openPicker();
+    const button = () => inDocument<HTMLButtonElement>(
+      '[data-action="evidence-continue"]',
+    );
 
-      await clickIn('[data-action="evidence-continue"]');
-      await clickIn('[data-action="evidence-continue"]');
+    await clickIn('[data-action="evidence-continue"]');
+    await clickIn('[data-action="evidence-continue"]');
 
-      expect(github.start).toHaveBeenCalledTimes(1);
-      expect(navigate).toHaveBeenCalledTimes(1);
-      expect(inDocument<HTMLButtonElement>('[data-action="evidence-continue"]')
-        .disabled).toBe(true);
-    });
+    expect(github.start).toHaveBeenCalledTimes(1);
+    expect(navigate).toHaveBeenCalledTimes(1);
+    expect(button().disabled).toBe(true);
+    expect(timers.map((timer) => [timer.ms, timer.cancelled]))
+      .toEqual([[5000, false]]);
+    timers[0]!.run();
+    await flushPromises();
+
+    expect(button().disabled).toBe(false);
+    await clickIn('[data-action="evidence-continue"]');
+    expect(github.start).toHaveBeenCalledTimes(2);
+  });
+
+  it('cancels the Continue timer when the page goes away', async () => {
+    const { evidenceApi, timers, wrapper } = await mountPicker();
+    evidenceApi.candidates.mockResolvedValue(
+      evidenceFailed('session-required'),
+    );
+    await openPicker();
+    await clickIn('[data-action="evidence-continue"]');
+    expect(timers.map((timer) => timer.cancelled)).toEqual([false]);
+
+    wrapper.unmount();
+    mounted.pop();
+
+    expect(timers.map((timer) => timer.cancelled)).toEqual([true]);
+  });
 
   it('never navigates after the page is gone', async () => {
     const { evidenceApi, github, navigate, wrapper } = await mountPicker();
@@ -754,29 +789,117 @@ describe('evidence picker', () => {
         .toBe('Pull requests');
     });
 
-  it.each([
-    ['a save runs', (context: Awaited<ReturnType<typeof mountPicker>>) => {
+  it('disables Attach without the save-first hint while a save runs',
+    async () => {
+      const context = await mountPicker();
+      await openPicker();
       context.api.replace.mockReturnValue(new Promise(() => {}));
       void context.editor.save();
-    }],
-    ['the project changed elsewhere',
-      (context: Awaited<ReturnType<typeof mountPicker>>) => {
-        context.editor.markStale(project({ id: PROJECT, revision: '9' }));
-      }],
-  ])('disables Attach without the save-first hint while %s', async (
-    _name, arrange,
-  ) => {
-    const context = await mountPicker();
+      await flushPromises();
+
+      expect(inDocument<HTMLButtonElement>('[data-action="evidence-attach"]')
+        .disabled).toBe(true);
+      expect(query('[data-testid="evidence-save-first"]')).toBeNull();
+      expect(query('[data-testid="project-evidence-save-first"]')).toBeNull();
+      expect(inDocument('[data-action="evidence-attach"]')
+        .getAttribute('aria-describedby')).toBeNull();
+    });
+
+  it('closes when the project changes elsewhere', async () => {
+    const { picker, editor } = await mountPicker();
     await openPicker();
-    arrange(context);
+
+    editor.markStale(project({ id: PROJECT, revision: '9' }));
+    await flushPromises();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(picker.open.value).toBe(false);
+    expect(query('[data-testid="evidence-dialog"]')).toBeNull();
+    expect(inDocument<HTMLButtonElement>('#project-evidence-add').disabled)
+      .toBe(true);
+  });
+
+  it('reads the releases of a repository again after Change repository',
+    async () => {
+      const { evidenceApi } = await mountPicker();
+      evidenceApi.candidates.mockImplementation(async (_id, request) =>
+        request.kind === 'release'
+          ? page([candidate({
+              candidateId: id(20 + (request.repository ?? 0)),
+              kind: 'release', title: `v${request.repository}`,
+              repository: {
+                id: request.repository ?? null, fullName: 'octocat/x',
+              },
+            })])
+          : page(repositories));
+      await openPicker();
+      await selectTab('Releases');
+      const choose = async (name: string) => {
+        const button = [...document.body.querySelectorAll<HTMLElement>(
+          '[data-action="evidence-choose-repository"]',
+        )].find((node) => node.textContent?.trim() === name)!;
+        button.click();
+        await flushPromises();
+      };
+
+      await choose('octocat/hello');
+      await clickIn('[data-action="evidence-change-repository"]');
+      await choose('octocat/tools');
+      await clickIn('[data-action="evidence-change-repository"]');
+      await choose('octocat/hello');
+
+      expect(evidenceApi.candidates.mock.calls
+        .map((call) => call[1])
+        .filter((request) => request.kind === 'release')
+        .map((request) => request.repository)).toEqual([101, 102, 101]);
+      expect(rows()).toEqual(['v101']);
+    });
+
+  it('waits for a discarded listing to settle before reading the same page '
+    + 'again', async () => {
+    const { evidenceApi, editor } = await mountPicker({
+      loaded: project({ id: PROJECT, evidence: [evidenceItem()] }),
+    });
+    let first: (value: never) => void = () => {};
+    const fresh = candidate({ candidateId: id(31), title: 'octocat/fresh',
+      repository: { id: 131, fullName: 'octocat/fresh' } });
+    evidenceApi.candidates
+      .mockReturnValueOnce(new Promise((resolve) => {
+        first = resolve;
+      }))
+      .mockResolvedValueOnce(page([fresh]));
+    await openPicker();
+    expect(evidenceApi.candidates).toHaveBeenCalledTimes(1);
+
+    editor.adoptEvidence([], '4');
+    await flushPromises();
+    expect(evidenceApi.candidates).toHaveBeenCalledTimes(1);
+    first(page(repositories));
     await flushPromises();
 
-    expect(inDocument<HTMLButtonElement>('[data-action="evidence-attach"]')
-      .disabled).toBe(true);
-    expect(query('[data-testid="evidence-save-first"]')).toBeNull();
-    expect(query('[data-testid="project-evidence-save-first"]')).toBeNull();
-    expect(inDocument('[data-action="evidence-attach"]')
-      .getAttribute('aria-describedby')).toBeNull();
+    expect(evidenceApi.candidates).toHaveBeenCalledTimes(2);
+    expect([...document.body.querySelectorAll('[data-evidence-candidate]')]
+      .map((row) => row.getAttribute('data-evidence-candidate')))
+      .toEqual([id(31)]);
+  });
+
+  it('keeps focus and the typed link in the paste field across the '
+    + 'breakpoint', async () => {
+    await mountPicker();
+    await openPicker();
+    await selectTab('Paste a link');
+    await typeLink('https://github.com/octocat/hello/pull/4');
+    inDocument('#evidence-link').focus();
+
+    await resize(false);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await flushPromises();
+
+    const field = inDocument<HTMLInputElement>('#evidence-link');
+    expect(inDocument('[data-slot="sheet-content"]').contains(field))
+      .toBe(true);
+    expect(document.activeElement).toBe(field);
+    expect(field.value).toBe('https://github.com/octocat/hello/pull/4');
   });
 
   it.each([

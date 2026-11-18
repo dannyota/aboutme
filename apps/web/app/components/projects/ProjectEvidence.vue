@@ -127,7 +127,7 @@ function add(event: MouseEvent): void {
     <div>
       <Button
         id="project-evidence-add"
-        :disabled="controller.atLimit.value"
+        :disabled="controller.atLimit.value || controller.stale.value"
         type="button"
         variant="outline"
         @click="add"

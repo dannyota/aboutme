@@ -46,7 +46,13 @@ export interface Listing {
 export interface EvidencePickerDeps {
   readonly evidence: Pick<
     ProjectEvidenceController,
-    'attach' | 'items' | 'unsaved' | 'locked' | 'atLimit' | 'pending'
+    | 'attach'
+    | 'items'
+    | 'unsaved'
+    | 'stale'
+    | 'locked'
+    | 'atLimit'
+    | 'pending'
   >;
   readonly project: () => Project | null;
   readonly api: Pick<ProjectEvidenceApi, 'candidates'>;
@@ -54,6 +60,7 @@ export interface EvidencePickerDeps {
   readonly auth: ProjectAuth;
   readonly now?: () => number;
   readonly navigate?: (url: string) => unknown;
+  readonly schedule?: (run: () => void, ms: number) => () => void;
   readonly onProjectGone?: () => void;
 }
 
@@ -98,6 +105,14 @@ export interface EvidencePicker {
   continueWithGitHub(): Promise<void>;
 }
 
+type CandidateResult = Awaited<
+  ReturnType<ProjectEvidenceApi['candidates']>
+> | { readonly kind: 'failed'; readonly failure: 'session-lost' };
+
+const SIGNED_OUT = {
+  kind: 'failed', failure: 'session-lost', retryAfter: null,
+} as const;
+
 const IDLE: Listing = {
   status: 'idle',
   items: [],
@@ -106,6 +121,13 @@ const IDLE: Listing = {
   failure: null,
   failedPage: 0,
 };
+
+const START_RESET_MS = 5000;
+
+function scheduleTimeout(run: () => void, ms: number): () => void {
+  const handle = setTimeout(run, ms);
+  return () => clearTimeout(handle);
+}
 
 const LINK_ERRORS = new Set<EvidenceNotice['kind']>([
   'unsupported-link', 'not-confirmed', 'duplicate',
@@ -176,6 +198,7 @@ export function useEvidencePicker(deps: EvidencePickerDeps): EvidencePicker {
   const now = deps.now ?? (() => Date.now());
   const navigate = deps.navigate
     ?? ((url: string) => navigateTo(url, { external: true }));
+  const schedule = deps.schedule ?? scheduleTimeout;
   const open = ref(false);
   const tab = ref<PickerTab>('repository');
   const outcome = ref<PickerOutcome | null>(null);
@@ -190,12 +213,16 @@ export function useEvidencePicker(deps: EvidencePickerDeps): EvidencePicker {
   const startFailure = ref<GitHubEvidenceFailure | null>(null);
   const limitHit = ref(false);
   const listings = ref<Readonly<Record<string, Listing>>>({});
+  const generations = new Map<string, number>();
+  const inflight = new Map<string, Promise<unknown>>();
   let opener: HTMLElement | null = null;
-  let epoch = 0;
+  let cancelStartReset: (() => void) | null = null;
   let disposed = false;
   if (getCurrentScope() !== undefined) {
     onScopeDispose(() => {
       disposed = true;
+      cancelStartReset?.();
+      cancelStartReset = null;
     });
   }
 
@@ -222,6 +249,29 @@ export function useEvidencePicker(deps: EvidencePickerDeps): EvidencePicker {
     listings.value = { ...listings.value, [key]: next };
   }
 
+  function drop(keys: readonly string[]): void {
+    for (const key of keys) {
+      generations.set(key, (generations.get(key) ?? 0) + 1);
+    }
+    listings.value = Object.fromEntries(Object.entries(listings.value)
+      .filter(([key]) => !keys.includes(key)));
+  }
+
+  async function request(
+    key: string,
+    send: () => Promise<CandidateResult>,
+  ): Promise<CandidateResult> {
+    const before = inflight.get(key);
+    if (before !== undefined) await before;
+    const sent = send();
+    inflight.set(key, sent);
+    try {
+      return await sent;
+    } finally {
+      if (inflight.get(key) === sent) inflight.delete(key);
+    }
+  }
+
   async function load(kind: EvidenceKind, page: number): Promise<void> {
     const key = keyOf(kind);
     const chosen = repository.value;
@@ -230,16 +280,20 @@ export function useEvidencePicker(deps: EvidencePickerDeps): EvidencePicker {
     if (key === null || project === null) return;
     const current = listings.value[key] ?? IDLE;
     if (current.status === 'loading') return;
-    const started = epoch;
+    const generation = generations.get(key) ?? 0;
+    const stillWanted = () =>
+      !disposed && (generations.get(key) ?? 0) === generation;
     put(key, { ...current, status: 'loading', failure: null });
     const query: CandidateQuery = kind === 'release' && chosen !== null
       ? { kind, page, repository: chosen.id }
       : { kind, page };
-    const result = ownerId === undefined
-      ? { kind: 'failed', failure: 'session-lost', retryAfter: null } as const
-      : await sendWithCsrf(deps.auth, ownerId, (csrfToken) =>
-          deps.api.candidates(project.id, query, csrfToken));
-    if (disposed || started !== epoch) return;
+    const send = async (): Promise<CandidateResult> => {
+      if (ownerId === undefined || !stillWanted()) return SIGNED_OUT;
+      return sendWithCsrf(deps.auth, ownerId, (csrfToken) =>
+        deps.api.candidates(project.id, query, csrfToken));
+    };
+    const result = await request(key, send);
+    if (!stillWanted()) return;
     if (result.kind === 'failed' && result.failure === 'project-not-found') {
       put(key, current);
       open.value = false;
@@ -292,11 +346,16 @@ export function useEvidencePicker(deps: EvidencePickerDeps): EvidencePicker {
   watch(() => deps.evidence.items.value.map((item) => item.id),
     (next, previous) => {
       if (!previous.some((id) => !next.includes(id))) return;
-      epoch += 1;
-      listings.value = {};
+      drop([...new Set([
+        ...Object.keys(listings.value), ...inflight.keys(),
+      ])]);
       attached.value = [];
       if (open.value) ensure(tab.value);
     });
+
+  watch(() => deps.evidence.stale.value, (stale) => {
+    if (stale) open.value = false;
+  });
 
   function chooserKind(kind: EvidenceKind): EvidenceKind {
     return kind === 'release' && repository.value === null
@@ -387,6 +446,12 @@ export function useEvidencePicker(deps: EvidencePickerDeps): EvidencePicker {
       return;
     }
     await navigate(url);
+    if (disposed) return;
+    cancelStartReset?.();
+    cancelStartReset = schedule(() => {
+      cancelStartReset = null;
+      starting.value = false;
+    }, START_RESET_MS);
   }
 
   return {
@@ -444,6 +509,8 @@ export function useEvidencePicker(deps: EvidencePickerDeps): EvidencePicker {
     },
     changeRepository() {
       repository.value = null;
+      drop(Object.keys(listings.value)
+        .filter((key) => key.startsWith('release:')));
       ensure('release');
     },
     setLink(value) {

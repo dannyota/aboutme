@@ -230,7 +230,10 @@ async function save(): Promise<void> {
 }
 
 function focusEvidenceOpener(): void {
-  void nextTick(() => focusAfterPicker(picker.opener()));
+  void nextTick(() => {
+    if (editor.notice.value === null) focusAfterPicker(picker.opener());
+    else notice.value?.focus?.();
+  });
 }
 
 function closeRelease(): void {

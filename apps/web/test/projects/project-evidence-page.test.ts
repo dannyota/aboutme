@@ -406,4 +406,54 @@ describe('project editor evidence section', () => {
       .not.toBeNull();
     expect(dialog()).toBeNull();
   });
+
+  it('disables Add while the project changed elsewhere, until Reload',
+    async () => {
+      evidenceApi.remove.mockResolvedValue(stale(project({
+        id: PROJECT, revision: '9', evidence: two(),
+      })));
+      await mountEditor();
+      const add = inDocument<HTMLButtonElement>('#project-evidence-add');
+      expect(add.disabled).toBe(false);
+
+      inDocument(`[data-evidence-item="${E1}"] [data-action="evidence-remove"]`)
+        .click();
+      await flushPromises();
+      expect(inDocument<HTMLButtonElement>('#project-evidence-add').disabled)
+        .toBe(true);
+
+      inDocument('[data-action="project-reload"]').click();
+      await flushPromises();
+      expect(inDocument<HTMLButtonElement>('#project-evidence-add').disabled)
+        .toBe(false);
+    });
+
+  it('closes the dialog onto the changed-elsewhere banner', async () => {
+    evidenceApi.attach.mockResolvedValue(evidenceFailed('duplicate'));
+    await mountEditor();
+    api.read.mockResolvedValue(ok(project({
+      id: PROJECT, revision: '7', evidence: two(),
+      text: { en: { name: 'Elsewhere' } },
+    })));
+    inDocument('#project-evidence-add').click();
+    await flushPromises();
+    const tab = [...document.body.querySelectorAll<HTMLElement>(
+      '[role="tab"]',
+    )].find((node) => node.textContent?.trim() === 'Paste a link')!;
+    tab.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    await flushPromises();
+    await typeInto('#evidence-link', 'https://github.com/octocat/hello');
+
+    inDocument('[data-action="evidence-attach-link"]').click();
+    await flushPromises();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await flushPromises();
+
+    expect(dialog()).toBeNull();
+    const banner = inDocument('[data-testid="project-notice"]');
+    expect(banner.textContent).toContain('This project changed elsewhere.');
+    expect(document.activeElement).toBe(banner);
+    expect(inDocument<HTMLButtonElement>('#project-evidence-add').disabled)
+      .toBe(true);
+  });
 });

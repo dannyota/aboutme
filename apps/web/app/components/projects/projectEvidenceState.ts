@@ -66,6 +66,7 @@ export interface ProjectEvidenceController {
   readonly available: ComputedRef<boolean>;
   readonly items: ComputedRef<readonly ProjectEvidence[]>;
   readonly unsaved: ComputedRef<boolean>;
+  readonly stale: ComputedRef<boolean>;
   readonly locked: ComputedRef<boolean>;
   readonly atLimit: ComputedRef<boolean>;
   readonly pending: Ref<string | null>;
@@ -131,9 +132,9 @@ export function useProjectEvidence(
   const items = computed<readonly ProjectEvidence[]>(() =>
     editor.loaded.value?.evidence ?? []);
   const unsaved = computed(() => changed.value);
-  const locked = computed(() => unsaved.value
-    || editor.saving.value
-    || editor.notice.value === 'changed-elsewhere');
+  const stale = computed(() => editor.notice.value === 'changed-elsewhere');
+  const locked = computed(() =>
+    unsaved.value || editor.saving.value || stale.value);
   const atLimit = computed(() => items.value.length >= EVIDENCE_LIMIT);
 
   watch(() => editor.loaded.value?.id, (id) => {
@@ -264,6 +265,7 @@ export function useProjectEvidence(
     available,
     items,
     unsaved,
+    stale,
     locked,
     atLimit,
     pending,
