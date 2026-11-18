@@ -31,6 +31,7 @@ const BACKGROUND_LIGHTNESS = 0.2;
 const TEXT_LIGHTNESS = 0.9;
 const SURFACE_LIGHTNESS = 0.27;
 const DARK_SURFACE_FLOOR = 0.3;
+const PAPER_SURFACE_STEP = 0.07;
 const INK_CEILING = 0.94;
 
 const liftInk = (color: string): string => {
@@ -44,16 +45,27 @@ const liftInk = (color: string): string => {
 export const isDarkBackground = (colors: Colors): boolean =>
   rgbToOKLCH(colors.background).l < 0.5;
 
-export function darkColors(colors: Colors): Colors {
+const surfaceLightness = (
+  paper: string | undefined,
+): { light: number; floor: number } => {
+  if (paper === undefined) {
+    return { light: SURFACE_LIGHTNESS, floor: DARK_SURFACE_FLOOR };
+  }
+  const lifted = rgbToOKLCH(paper).l + PAPER_SURFACE_STEP;
+  return { light: lifted, floor: lifted };
+};
+
+export function darkColors(colors: Colors, paper?: string): Colors {
   if (isDarkBackground(colors)) return colors;
   const background = rgbToOKLCH(colors.background);
+  const surfaceL = surfaceLightness(paper);
 
   const tone = background.c >= 0.01
     ? background
     : rgbToOKLCH(colors.primary);
   const text = rgbToOKLCH(colors.text);
   const dark: Colors = {
-    background: oklchToGamutHex({
+    background: paper ?? oklchToGamutHex({
       l: BACKGROUND_LIGHTNESS,
       c: Math.min(0.25 * tone.c, 0.015),
       h: tone.h,
@@ -70,13 +82,13 @@ export function darkColors(colors: Colors): Colors {
     const surface = rgbToOKLCH(colors.surface);
     dark.surface = surface.l >= 0.5
       ? oklchToGamutHex({
-          l: SURFACE_LIGHTNESS,
+          l: surfaceL.light,
           c: Math.min(2 * surface.c, 0.035),
           h: surface.h,
         })
       : oklchToGamutHex({
           ...surface,
-          l: Math.max(surface.l, DARK_SURFACE_FLOOR),
+          l: Math.max(surface.l, surfaceL.floor),
         });
   }
   return dark;

@@ -1,0 +1,211 @@
+.resume-document.resume-sheets {
+  --sheet-desk: #e6dfd0;
+  --sheet-shadow: 74 54 22;
+}
+
+.resume-document.resume-sheets .resume-sheet-body {
+  container-type: inline-size;
+}
+
+.resume-document.resume-sheets .details-rows {
+  display: grid;
+  row-gap: var(--details-row-gap);
+  justify-items: stretch;
+  text-align: start;
+}
+
+.resume-document.resume-sheets .contact-chip--sheets {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  align-content: center;
+  justify-content: space-between;
+  column-gap: 0.75em;
+  overflow-x: clip;
+}
+
+.resume-document.resume-sheets .contact-chip--sheets .contact-label {
+  z-index: 1;
+  min-width: 0;
+  white-space: normal;
+  background: var(--color-surface);
+}
+
+.resume-document.resume-sheets .contact-chip--sheets .contact-label::after {
+  content: none;
+}
+
+.resume-document.resume-sheets .contact-chip--sheets .contact-value {
+  display: flex;
+  align-items: baseline;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.resume-document.resume-sheets .contact-chip--sheets .contact-value::before {
+  content: "";
+  flex: none;
+  width: 100vw;
+  margin-inline-start: -100vw;
+  border-block-end: 1px dotted var(--color-rule);
+}
+
+.resume-document.resume-sheets .contact-chip--sheets a::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+}
+
+@supports selector(:has(a)) {
+  .resume-document.resume-sheets .contact-chip--sheets:has(a:focus-visible) {
+    outline: 2px solid var(--color-link);
+    outline-offset: 2px;
+  }
+
+  .resume-document.resume-sheets .contact-chip--sheets a:focus-visible {
+    outline: none;
+  }
+}
+
+@container (width < 480px) {
+  .resume-document.resume-sheets .resume-header[data-photo-position] {
+    --photo-size: 66px;
+    --header-photo-gap-side: 14px;
+  }
+
+  .resume-document.resume-sheets .entry-body p,
+  .resume-document.resume-sheets .entry-body li {
+    text-align: var(--body-align-narrow);
+    hyphens: manual;
+  }
+}
+
+@media screen {
+  :where(.resume-sheets, .resume-sheets *)[style*="--paper-color-surface"] {
+    --color-surface: var(--paper-color-surface) !important;
+    --color-surface-header: var(--paper-color-surface-header) !important;
+    --color-surface-sidebar: var(--paper-color-surface-sidebar) !important;
+    --color-heading: var(--paper-color-heading) !important;
+    --color-body: var(--paper-color-body) !important;
+    --color-meta: var(--paper-color-meta) !important;
+    --color-accent: var(--paper-color-accent) !important;
+    --color-accent-text: var(--paper-color-accent-text) !important;
+    --color-accent-solid: var(--paper-color-accent-solid) !important;
+    --color-on-accent: var(--paper-color-on-accent) !important;
+    --color-link: var(--paper-color-link) !important;
+    --color-rule: var(--paper-color-rule) !important;
+    --color-track: var(--paper-color-track) !important;
+  }
+
+  :root:has(.public-resume-page .resume-sheets) {
+    background: #e6dfd0;
+  }
+
+  :root:has(.public-resume-page .resume-sheets[data-color-scheme="dark"]) {
+    color-scheme: dark;
+    background: #141210;
+  }
+
+  .resume-document.resume-sheets[data-color-scheme="dark"] {
+    --sheet-desk: #141210;
+    --sheet-shadow: 0 0 0;
+  }
+
+  .resume-document.resume-sheets {
+    --fs-base: var(--sheet-fs-base) !important;
+    --fs-name: var(--sheet-fs-name) !important;
+    --fs-headline: var(--sheet-fs-headline) !important;
+    --fs-heading: var(--sheet-fs-heading) !important;
+    --fs-title: var(--sheet-fs-title) !important;
+    --fs-subtitle: var(--sheet-fs-subtitle) !important;
+    --fs-body: var(--sheet-fs-body) !important;
+    --fs-meta: var(--sheet-fs-meta) !important;
+    display: flow-root;
+    padding: 0;
+    background: var(--sheet-desk);
+  }
+
+  .resume-document.resume-sheets .resume-sheet {
+    width: min(100% - 20px, 46rem);
+    margin: 0 auto clamp(14px, 2.5cqi, 26px);
+    padding: clamp(28px, 6cqi, 60px) clamp(22px, 9cqi, 84px) clamp(20px, 3cqi, 30px);
+    border-radius: clamp(14px, 1.5cqi, 18px);
+    background: var(--color-surface);
+    box-shadow:
+      0 0 0 0.5px rgb(var(--sheet-shadow) / 0.14),
+      0 1px 2px rgb(var(--sheet-shadow) / 0.08),
+      0 10px 26px -8px rgb(var(--sheet-shadow) / 0.2),
+      0 32px 60px -28px rgb(var(--sheet-shadow) / 0.22);
+  }
+
+  .resume-document.resume-sheets .resume-sheet-body > .resume-section:last-child {
+    margin-block-end: 0;
+  }
+
+  .resume-document.resume-sheets .entry-body {
+    max-width: 62ch;
+  }
+
+  .resume-document.resume-sheets .resume-headline {
+    max-width: 62ch;
+    margin-inline: var(--headline-margin-inline);
+  }
+
+  .resume-document.resume-sheets .contact-chip--sheets {
+    min-height: 44px;
+  }
+
+  .resume-document.resume-sheets .resume-folio {
+    display: flex;
+    gap: 1em;
+    justify-content: space-between;
+    margin-block-start: clamp(30px, 4cqi, 44px);
+    color: var(--color-meta);
+    font-size: 0.7em;
+    line-height: 1.2;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .resume-document.resume-sheets .resume-folio::before {
+    content: attr(data-folio-name);
+    content: attr(data-folio-name) / "";
+  }
+
+  .resume-document.resume-sheets .resume-folio::after {
+    content: attr(data-folio-page);
+    content: attr(data-folio-page) / "";
+  }
+}
+
+@media screen and (prefers-color-scheme: dark) {
+  :root:has(.public-resume-page .resume-sheets[data-color-scheme="system"]) {
+    color-scheme: dark;
+    background: #141210;
+  }
+
+  .resume-document.resume-sheets[data-color-scheme="system"] {
+    --sheet-desk: #141210;
+    --sheet-shadow: 0 0 0;
+  }
+}
+
+@media (forced-colors: active) {
+  .resume-document.resume-sheets .resume-sheet {
+    border: 1px solid CanvasText;
+  }
+}
+
+@media print {
+  .resume-document.resume-sheets {
+    padding: var(--page-margin-y) var(--page-margin-x);
+    background: var(--color-surface);
+  }
+
+  .resume-document.resume-sheets .resume-folio {
+    display: none;
+  }
+}

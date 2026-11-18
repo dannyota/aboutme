@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Resume } from '@aboutme/schema';
-import { computed, type CSSProperties, provide } from 'vue';
+import { computed, provide } from 'vue';
 
 import { ResumeLngKey } from './formatDate';
 import LayoutColumns from './LayoutColumns.vue';
@@ -11,6 +11,8 @@ import {
   resolveRenderModel,
 } from './resolveRenderModel';
 import ResumeHeader from './ResumeHeader.vue';
+import ResumeSheets from './ResumeSheets.vue';
+import { articleStyle } from './useResumeStyles';
 
 const props = defineProps<{
   document: Resume;
@@ -21,12 +23,7 @@ const model = computed(() => resolveRenderModel(props.document, props.context));
 provide(ResumeLngKey, computed(() => model.value.lng));
 provide(ProjectLinksKey, computed(() =>
   props.context.projectLinks ?? NO_PROJECT_LINKS));
-const rootStyle = computed<CSSProperties>(() => ({
-  ...model.value.styles.root,
-  fontSynthesis: 'none',
-  printColorAdjust: 'exact' as const,
-  WebkitPrintColorAdjust: 'exact' as const,
-}));
+const rootStyle = computed(() => articleStyle(model.value.styles.root));
 </script>
 
 <template>
@@ -34,6 +31,10 @@ const rootStyle = computed<CSSProperties>(() => ({
     v-if="context.mode === 'paged'"
     :document="document"
     :context="context"
+  />
+  <ResumeSheets
+    v-else-if="context.mode === 'sheets'"
+    :model="model"
   />
   <article
     v-else
@@ -57,6 +58,8 @@ const rootStyle = computed<CSSProperties>(() => ({
 @import './resumeColorScheme.css';
 
 @import './resumeScreenMargins.css';
+
+@import './resumeSheets.css';
 
 a[href="#public-resume"]:not(:focus) {
   position: absolute;
@@ -373,11 +376,12 @@ body:has(> #public-resume) {
 }
 
 @container (width < 36em) {
-  .resume-document:not(.resume-page) .resume-header[data-photo-position] {
+  .resume-document:not(.resume-page):not(.resume-sheets)
+    .resume-header[data-photo-position] {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .resume-document:not(.resume-page)
+  .resume-document:not(.resume-page):not(.resume-sheets)
     .resume-header[data-photo-position] .resume-photo {
     grid-row: auto;
     grid-column: auto;

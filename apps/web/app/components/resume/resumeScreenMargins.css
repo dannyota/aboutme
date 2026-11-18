@@ -19,9 +19,9 @@
     --screen-measure: 70em;
   }
 
-  .public-resume-page .resume-document,
-  .preview-sheet[data-web-columns] .resume-document,
-  .template-paper[data-web-columns] .resume-document {
+  .public-resume-page .resume-document:not(.resume-sheets),
+  .preview-sheet[data-web-columns] .resume-document:not(.resume-sheets),
+  .template-paper[data-web-columns] .resume-document:not(.resume-sheets) {
     padding: var(--screen-margin-y) var(--screen-margin-x);
   }
 }

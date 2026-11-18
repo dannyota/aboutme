@@ -2,7 +2,10 @@ import type { Customization } from '@aboutme/schema';
 import { TEMPLATES } from '@aboutme/schema/templates';
 import { describe, expect, it } from 'vitest';
 
-import { contrastRatio } from '../../app/components/resume/clampContrast';
+import {
+  contrastRatio,
+  rgbToOKLCH,
+} from '../../app/components/resume/clampContrast';
 import {
   darkColors,
   isDarkBackground,
@@ -10,13 +13,46 @@ import {
 } from '../../app/components/resume/darkPalette';
 import {
   effectiveSurfaceTarget,
+  type ResumeStyleOptions,
   useResumeStyles,
 } from '../../app/components/resume/useResumeStyles';
 
-const MAPPING: Record<
+type Mapping = Record<
   string,
   readonly [string, string, string, string, string?, string?]
-> = {
+>;
+
+const CHARCOAL: Mapping = {
+  'academic-dense': ['#2a2723', '#d9dfe4', '#aec9e6', '#aec9e6'],
+  'ats-plain': ['#2a2723', '#dedede', '#ebebeb', '#ebebeb'],
+  'classic-serif': ['#2a2723', '#dadee6', '#dbe0e7', '#92b0e5'],
+  'consulting-formal': ['#2a2723', '#d8dfe5', '#9fbfe6', '#6a9dd5'],
+  'creative-accent':
+    ['#2a2723', '#e4dcd8', '#ec623f', '#ec623f', '#49332b', 'header'],
+  'designer-tag': ['#2a2723', '#e0dddb', '#acba99', '#809657'],
+  'editorial-wide': ['#2a2723', '#e1ddd7', '#cbb9a7', '#b7835d'],
+  'elegant-serif-two':
+    ['#2a2723', '#e3ddd7', '#db8b99', '#db8b99', '#423724', 'sidebar'],
+  'engineer-compact': ['#2a2723', '#d8dfe6', '#92bcd4', '#5a9db9'],
+  'executive-band':
+    ['#2a2723', '#d8dfe8', '#b4c9e6', '#b6844a', '#283a51', 'header'],
+  'government-formal': ['#2a2723', '#dedede', '#ebebeb', '#ebebeb'],
+  'graduate-friendly':
+    ['#2a2723', '#e3ddd7', '#c88262', '#cd7844', '#453625', 'header'],
+  'high-contrast': ['#2a2723', '#dedede', '#ebebeb', '#548aff'],
+  'international-lang':
+    ['#2a2723', '#e1ddd9', '#e0dcd9', '#a79483', '#3d392f', 'header'],
+  'minimal-air': ['#2a2723', '#dadee5', '#dbdee4', '#dbdee4'],
+  'modern-sidebar':
+    ['#2a2723', '#d5e0e6', '#88b7ce', '#4a99ac', '#2d3c42', 'sidebar'],
+  'mono-print': ['#2a2723', '#dedede', '#ebebeb', '#ebebeb'],
+  'nordic-muted':
+    ['#2a2723', '#d7dfe8', '#8fa8bd', '#7093a9', '#36393d', 'sidebar'],
+  'one-page-tight': ['#2a2723', '#d8dfe6', '#aec0cf', '#8ba6b9'],
+  'startup-bold': ['#2a2723', '#d8dee8', '#e8ebf0', '#e8ebf0'],
+};
+
+const NEAR_BLACK: Mapping = {
   'academic-dense': ['#12171c', '#d9dfe4', '#aec9e6', '#aec9e6'],
   'ats-plain': ['#161616', '#dedede', '#ebebeb', '#ebebeb'],
   'classic-serif': ['#151617', '#dadee6', '#dbe0e7', '#92b0e5'],
@@ -45,6 +81,26 @@ const MAPPING: Record<
   'one-page-tight': ['#131619', '#d8dfe6', '#aec0cf', '#8ba6b9'],
   'startup-bold': ['#151617', '#d8dee8', '#e8ebf0', '#e8ebf0'],
 };
+
+const GROUNDS: ReadonlyArray<{
+  readonly name: string;
+  readonly options: ResumeStyleOptions;
+  readonly mapping: Mapping;
+  readonly floors: { body: number; meta: number; fill: number };
+}> = [
+  {
+    name: 'the charcoal paper of the sheets',
+    options: { sheets: true },
+    mapping: CHARCOAL,
+    floors: { body: 8.5, meta: 5.5, fill: 3.4 },
+  },
+  {
+    name: 'the near-black ground outside sheets',
+    options: {},
+    mapping: NEAR_BLACK,
+    floors: { body: 10.1, meta: 6.4, fill: 3.5 },
+  },
+];
 
 const HEX = /^#[0-9a-f]{6}$/u;
 
@@ -81,10 +137,14 @@ const darkScope = (
     ROLES.map((role) => [role, scope[`--dark-color-${role}`]!]),
   );
 
-describe('dark palette rule', () => {
+describe.each(GROUNDS)('dark palette rule on $name', ({
+  options,
+  mapping,
+  floors,
+}) => {
   it('covers every preset the design maps', () => {
     expect(TEMPLATES.map((preset) => preset.id).sort()).toEqual(
-      Object.keys(MAPPING).sort(),
+      Object.keys(mapping).sort(),
     );
   });
 
@@ -94,8 +154,8 @@ describe('dark palette rule', () => {
       it.each([1, 2] as const)('maps the design values in %i column(s)',
         (columns) => {
           const customization = storedCustomization(preset, columns);
-          const styles = useResumeStyles(customization, 'en', 'dark');
-          const [ground, body, heading, link, region, where] = MAPPING[id]!;
+          const styles = useResumeStyles(customization, 'en', 'dark', options);
+          const [ground, body, heading, link, region, where] = mapping[id]!;
           expect(styles.root['--dark-color-surface']).toBe(ground);
           expect(styles.root['--dark-color-body']).toBe(body);
           expect(styles.root['--dark-color-heading']).toBe(heading);
@@ -117,7 +177,7 @@ describe('dark palette rule', () => {
         'meets every contrast floor on every surface in %i column(s)',
         (columns) => {
           const customization = storedCustomization(preset, columns);
-          const styles = useResumeStyles(customization, 'en', 'dark');
+          const styles = useResumeStyles(customization, 'en', 'dark', options);
           const target = effectiveSurfaceTarget(customization);
           const scopes: ReadonlyArray<readonly [string, Record<string, string>]>
             = [
@@ -154,17 +214,17 @@ describe('dark palette rule', () => {
               `${id} ${label} tag label`,
             ).toBeGreaterThanOrEqual(4.5);
             at('rule', 1.5);
-            at('body', 10.1);
-            at('meta', 6.4);
-            at('accent-solid', 3.5);
+            at('body', floors.body);
+            at('meta', floors.meta);
+            at('accent-solid', floors.fill);
           }
         },
       );
 
       it('writes only #rrggbb values and leaves the light roles alone', () => {
         const customization = storedCustomization(preset, 2);
-        const light = useResumeStyles(customization);
-        const dark = useResumeStyles(customization, 'en', 'system');
+        const light = useResumeStyles(customization, 'en', undefined, options);
+        const dark = useResumeStyles(customization, 'en', 'system', options);
         for (const [name, value] of Object.entries(dark.root)) {
           if (name.startsWith('--dark-color-')) expect(value).toMatch(HEX);
           else if (name.startsWith('--color-')) {
@@ -179,7 +239,12 @@ describe('dark palette rule', () => {
 
   it('adds no dark custom property to light output', () => {
     for (const preset of TEMPLATES) {
-      const styles = useResumeStyles(storedCustomization(preset, 2));
+      const styles = useResumeStyles(
+        storedCustomization(preset, 2),
+        'en',
+        undefined,
+        options,
+      );
       for (const scope of [styles.root, styles.header, styles.sidebar]) {
         expect(
           Object.keys(scope ?? {}).filter((key) => key.includes('dark')),
@@ -191,12 +256,22 @@ describe('dark palette rule', () => {
   it('writes a dark role set at the article, header band, and sidebar', () => {
     const header = TEMPLATES.find((preset) => preset.id === 'creative-accent')!;
     const sidebar = TEMPLATES.find((preset) => preset.id === 'modern-sidebar')!;
-    const band = useResumeStyles(storedCustomization(header, 1), 'en', 'dark');
+    const band = useResumeStyles(
+      storedCustomization(header, 1),
+      'en',
+      'dark',
+      options,
+    );
     expect(Object.keys(band.header!).filter((key) =>
       key.startsWith('--dark-color-')).sort()).toEqual(
       ROLES.map((role) => `--dark-color-${role}`).sort(),
     );
-    const side = useResumeStyles(storedCustomization(sidebar, 2), 'en', 'dark');
+    const side = useResumeStyles(
+      storedCustomization(sidebar, 2),
+      'en',
+      'dark',
+      options,
+    );
     expect(Object.keys(side.sidebar!).filter((key) =>
       key.startsWith('--dark-color-'))).toHaveLength(ROLES.length);
     expect(side.header).toBeUndefined();
@@ -208,10 +283,66 @@ describe('dark palette rule', () => {
       storedCustomization(preset, 1),
       'en',
       'dark',
+      options,
     );
     expect(styles.header!['--dark-color-heading']).not.toBe('#ffffff');
     expect(styles.header!['--dark-color-heading']).toBe('#b4c9e6');
     expect(styles.header!['--color-heading']).toBe('#ffffff');
+  });
+});
+
+describe('dark source colors on the charcoal paper', () => {
+  const paper = '#2a2723';
+  const step = (color: string): number =>
+    rgbToOKLCH(color).l - rgbToOKLCH(paper).l;
+
+  it('replaces the ground with the paper', () => {
+    expect(darkColors({
+      primary: '#16273d',
+      text: '#1f2933',
+      background: '#ffffff',
+    }, paper).background).toBe(paper);
+  });
+
+  it('sets a light surface at the paper lightness plus 0.07', () => {
+    const result = darkColors({
+      primary: '#16273d',
+      text: '#1f2933',
+      background: '#ffffff',
+      surface: '#f1f5f9',
+    }, paper);
+    expect(step(result.surface!)).toBeCloseTo(0.07, 2);
+  });
+
+  it('lifts the executive-band navy to the paper lightness plus 0.07', () => {
+    const result = darkColors({
+      primary: '#16273d',
+      text: '#1f2937',
+      background: '#ffffff',
+      accent: '#8a5a1e',
+      surface: '#16273d',
+    }, paper);
+    expect(result.surface).toBe('#283a51');
+    expect(step(result.surface!)).toBeCloseTo(0.07, 2);
+  });
+
+  it('keeps a dark surface already above the lifted floor', () => {
+    const result = darkColors({
+      primary: '#16273d',
+      text: '#1f2933',
+      background: '#ffffff',
+      surface: '#4a4a4a',
+    }, paper);
+    expect(result.surface).toBe(oklchToGamutHex(rgbToOKLCH('#4a4a4a')));
+  });
+
+  it('returns an already dark background as authored', () => {
+    const authored = {
+      primary: '#e8e8e8',
+      text: '#dddddd',
+      background: '#101820',
+    };
+    expect(darkColors(authored, paper)).toBe(authored);
   });
 });
 
