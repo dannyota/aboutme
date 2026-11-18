@@ -9,7 +9,7 @@ renderer-owned (`tokens.md` §1).
 | Target          | Route         | Pagination model                                                                                           | Authority               |
 | --------------- | ------------- | ---------------------------------------------------------------------------------------------------------- | ----------------------- |
 | Editor preview  | `/app/**`     | JS measure-and-break between entries and body blocks, selected A4/Letter page, `transform: scale()` to fit | approximate             |
-| Public SSR page | `/[slug]`     | continuous flow, no pagination                                                                             | not paginated at all    |
+| Public SSR page | `/[slug]`     | screen sheets of the [web layout](../public-web-layout.md); browser print flattens them                    | not paginated at all    |
 | PDF             | `/print/[id]` | CSS `@page` plus fragmentation properties                                                                  | **authoritative**       |
 | Share image     | `/print/[id]` | Fixed 1200 by 630 pixel viewport; top crop, no page fragmentation                                          | One fixed image variant |
 

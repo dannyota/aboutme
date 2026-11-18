@@ -145,8 +145,8 @@ says what readers get in plainer words than System.
 
 ### Editor preview
 
-- Web mode shows the chosen scheme: the continuous sheet takes the dark ground
-  and roles. The sheet keeps its 2 px radius and paper shadow.
+- Web mode shows the chosen scheme on the paper sheets of the
+  [web layout](public-web-layout.md), with no chrome frame.
 - Match device follows the editing device's `prefers-color-scheme`, which is
   what a reader on the same device sees. The editor's own light or dark theme
   does not drive the preview.
@@ -179,15 +179,15 @@ See [Template mapping](public-page-dark-palette.md#template-mapping).
 
 ## What stays light
 
-| Output                                      | Why it stays light                                          |
-| ------------------------------------------- | ----------------------------------------------------------- |
-| PDF download and the owner's PDF            | Snapshot drops the field; the print app passes no scheme    |
-| Browser print of the public page            | The dark rule is screen-only; print uses the light roles    |
-| Link-preview card                           | The card envelope carries no scheme                         |
-| Sign-in gate page                           | aboutme chrome before the resume; its envelope is unchanged |
-| Library, template pages, thumbnails, sample | Their render context carries no scheme                      |
-| "What an ATS reads" tab                     | A sample's text on a `.paper-surface` panel, unchanged      |
-| `/{slug}.md` and the PDF text layer         | Text only; the scheme changes no content, order, or wording |
+| Output                                      | Why it stays light                                            |
+| ------------------------------------------- | ------------------------------------------------------------- |
+| PDF download and the owner's PDF            | Snapshot drops the field; the print app passes no scheme      |
+| Browser print of the public page            | Screen-only dark rule; print flattens the sheets (web layout) |
+| Link-preview card                           | The card envelope carries no scheme                           |
+| Sign-in gate page                           | aboutme chrome before the resume; its envelope is unchanged   |
+| Library, template pages, thumbnails, sample | Their render context carries no scheme                        |
+| "What an ATS reads" tab                     | A sample's text on a `.paper-surface` panel, unchanged        |
+| `/{slug}.md` and the PDF text layer         | Text only; the scheme changes no content, order, or wording   |
 
 The ATS text is the same in both schemes: the scheme changes only colors, never
 the DOM order, text, or hidden state.

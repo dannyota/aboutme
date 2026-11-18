@@ -254,20 +254,21 @@ forbidden.
 - Editor preview measures rendered entries and breaks between entries or between
   an entry's body blocks, keeping each entry header with its first block. It is
   approximate and visually marks pages.
-- Public HTML is continuous and centred at a readable measure on the page
-  background: 52em of text for one column and 70em for two, in em of the body
-  size, plus the page margins. Body lines then hold about 90-110 characters in
-  every template, and a two-column main column keeps about 45em. Screens
-  narrower than the measure, such as phones, keep the full width. On screen, the
-  public page, the editor's Web preview, and the template detail's Page preview
-  give the text its measure before the template's print margin: the inline
-  padding is `clamp(16px, (container width - measure) / 2, margin-x)`, with the
-  measure in em of the body size. A phone gets 16 px, a tablet a growing margin,
-  and a desktop the full template margin. The block padding uses the same
-  formula with `margin-y`. The container is the page root (the preview sheet in
-  the editor), so the width excludes the scrollbar. The PDF and print routes,
-  the editor's paged preview, and the template detail's stored PDF page images
-  keep the template margin.
+- On screen the public page and the editor's Web preview render the sheets of
+  the [web layout](public-web-layout.md), and browser print flattens them. The
+  template detail's Page preview is continuous and centred at a readable measure
+  on the page background: 52em of text for one column and 70em for two, in em of
+  the body size, plus the page margins. Body lines then hold about 90-110
+  characters in every template, and a two-column main column keeps about 45em.
+  Screens narrower than the measure, such as phones, keep the full width. On
+  screen, the template detail's Page preview gives the text its measure before
+  the template's print margin: the inline padding is
+  `clamp(16px, (container width - measure) / 2, margin-x)`, with the measure in
+  em of the body size. A phone gets 16 px, a tablet a growing margin, and a
+  desktop the full template margin. The block padding uses the same formula with
+  `margin-y`. The container is `.template-paper`, so the width excludes the
+  scrollbar. The PDF and print routes, the editor's paged preview, and the
+  template detail's stored PDF page images keep the template margin.
 - The public page `<title>` is the owner's page title or `<full name> — Resume`.
   When the owner sets an emoji, the page links it as an SVG `data:` icon. The
   server computes both exact values; the renderer writes them and the public
@@ -275,9 +276,9 @@ forbidden.
   ([ADR 0014](../adr/0014-public-page-head-and-link-preview.md)).
 - When download is enabled, the public page shows a link to its own PDF
   (`/api/v1/public/resumes/{slug}/pdf`) in the page bar above the resume, at the
-  right of the measure; the [page bar spec](public-page-theme.md) sets its look.
-  It works without JavaScript and is hidden in print. Its label follows the
-  resume language: "Tải PDF" for Vietnamese, "Download PDF" otherwise. The
+  right of the sheet's width; the [page bar spec](public-page-theme.md) sets its
+  look. It works without JavaScript and is hidden in print. Its label follows
+  the resume language: "Tải PDF" for Vietnamese, "Download PDF" otherwise. The
   public HTML validator allows exactly that link, once, only while download is
   enabled. The public PDF and the owner's PDF download as
   `<Full-Name>-Resume.pdf`: `filename` carries the name folded to ASCII, and an
@@ -292,19 +293,21 @@ forbidden.
 - Chromium and CSS `@page` own PDF pagination.
 
 Content, order, type, color, and visibility must agree across targets; only page
-break placement may differ. If Chromium cannot fragment the supported two-column
-layout deterministically, release is blocked until a print-specific layout with
-the same content and order passes. Divergent or clipped output is not an
-accepted residual risk.
+break placement may differ, except the screen overrides of the
+[web layout](public-web-layout.md#inside-a-sheet). If Chromium cannot fragment
+the supported two-column layout deterministically, release is blocked until a
+print-specific layout with the same content and order passes. Divergent or
+clipped output is not an accepted residual risk.
 
-Golden HTML covers every preset and both display modes against two in-memory
-starting states of the `full` fixture: populated one-column and populated two-
-column layouts, as ADR 0012 requires. Focused tests cover draft emptiness and
-optional fields. [Display assertions](display-assertions.md) owns the accepted
-layout, style, content, accessibility, and PDF coverage, with pinned browsers,
-fonts, timezone, and locale, including Vietnamese text. Existing screenshot
-comparisons remain until replacement acceptance; no cross-platform pixel
-equality is required after cutover.
+Golden HTML covers every preset in the continuous and paged modes, and in the
+sheets layout, against two in-memory starting states of the `full` fixture:
+populated one-column and populated two-column layouts, as ADR 0012 requires.
+Focused tests cover draft emptiness and optional fields.
+[Display assertions](display-assertions.md) owns the accepted layout, style,
+content, accessibility, and PDF coverage, with pinned browsers, fonts, timezone,
+and locale, including Vietnamese text. Existing screenshot comparisons remain
+until replacement acceptance; no cross-platform pixel equality is required after
+cutover.
 
 ## Freshness
 

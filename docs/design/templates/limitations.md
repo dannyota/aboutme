@@ -45,8 +45,10 @@ in [ADR 0004](../../adr/0004-resume-document-contract.md).
 7. **`baseSizePx` may be set to 10 (7.5 pt).** The schema's floor permits a
    document too small to read in print, and no publish-policy rule rejects it.
    The template cannot override it without breaking the user-owns-base-size
-   boundary. _Cost of leaving it out:_ a user can publish an unreadable resume;
-   the containment is an editor-side warning, not a contract change.
+   boundary; only the screen sheets of the
+   [web layout](../public-web-layout.md#inside-a-sheet) floor it at 16 px, and
+   the PDF keeps it. _Cost of leaving it out:_ a user can publish an unreadable
+   resume; the containment is an editor-side warning, not a contract change.
 8. **Links are always underlined.** Color alone cannot mark a link: a monochrome
    print loses it, and WCAG AAA body contrast and G183's 3:1 link-versus-body
    contrast cannot both hold on a white page. The renderer therefore underlines
