@@ -5,6 +5,8 @@ export type ProjectRequest = components['schemas']['ReplaceProjectRequest'];
 export type CreateProjectRequest
   = components['schemas']['CreateProjectRequest'];
 export type ProjectDates = components['schemas']['PublicDateRange'];
+export type ProjectEvidence = components['schemas']['ProjectEvidence'];
+export type EvidenceKind = components['schemas']['ProjectEvidenceKind'];
 
 export const PROJECT_LIMIT = 30;
 export const LANGUAGE_LIMIT = 4;
@@ -18,6 +20,10 @@ export const TEXT_LIMITS = {
   outcome: 600,
 } as const;
 export const COUNTER_WINDOW = 20;
+export const EVIDENCE_LIMIT = 10;
+export const EVIDENCE_KINDS: readonly EvidenceKind[] = [
+  'repository', 'pullRequest', 'release',
+];
 
 export type PlainTextField = keyof typeof TEXT_LIMITS;
 export const PLAIN_TEXT_FIELDS: readonly PlainTextField[] = [
@@ -215,4 +221,64 @@ export function projectName(project: Project): string {
 
 export function projectRole(project: Project): string {
   return project.text[project.defaultLanguage]?.role ?? '';
+}
+
+export function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+export function isRevision(value: unknown): value is string {
+  return typeof value === 'string' && /^[0-9]+$/u.test(value);
+}
+
+export function isIsoDate(value: unknown): value is string {
+  return typeof value === 'string'
+    && value !== ''
+    && Number.isFinite(Date.parse(value));
+}
+
+export function isEvidenceKind(value: unknown): value is EvidenceKind {
+  return EVIDENCE_KINDS.includes(value as EvidenceKind);
+}
+
+function isEvidenceItem(value: unknown): value is ProjectEvidence {
+  if (!isRecord(value)) return false;
+  const { id, kind, url, repositoryName, title, itemDate, checkedAt } = value;
+  return typeof id === 'string'
+    && id !== ''
+    && isEvidenceKind(kind)
+    && typeof url === 'string'
+    && url.startsWith('https://github.com/')
+    && typeof repositoryName === 'string'
+    && typeof title === 'string'
+    && isIsoDate(itemDate)
+    && isIsoDate(checkedAt)
+    && typeof value.confirmed === 'boolean'
+    && (value.flagReason === null
+      || value.flagReason === 'rule_failed'
+      || value.flagReason === 'gone');
+}
+
+export function isEvidenceList(value: unknown): value is ProjectEvidence[] {
+  return Array.isArray(value)
+    && value.length <= EVIDENCE_LIMIT
+    && value.every(isEvidenceItem);
+}
+
+export function isProject(value: unknown): value is Project {
+  if (!isRecord(value) || !isRecord(value.text)) return false;
+  const { technologies, evidence } = value;
+  const listed = technologies === undefined
+    || (Array.isArray(technologies)
+      && technologies.every((item) => typeof item === 'string'));
+  return typeof value.id === 'string'
+    && value.id !== ''
+    && typeof value.slug === 'string'
+    && isRevision(value.revision)
+    && typeof value.updatedAt === 'string'
+    && typeof value.defaultLanguage === 'string'
+    && isRecord(value.text[value.defaultLanguage])
+    && Object.values(value.text).every(isRecord)
+    && listed
+    && (evidence === undefined || isEvidenceList(evidence));
 }

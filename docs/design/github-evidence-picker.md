@@ -94,7 +94,9 @@ A pasted link is parsed, never fetched as given. Accepted after trimming:
 `https://github.com/{owner}/{repo}`, `/pull/{number}` and `/releases/tag/{tag}`,
 with an optional trailing slash. `http`, another host, `www.`, more segments, a
 query or a fragment answer `evidence_unsupported_link`. The kind comes from the
-link; a request kind that disagrees answers the same error.
+link; a request kind that disagrees answers the same error. The picker trims the
+input and adds `https://` to one that starts with exactly `github.com/`; any
+other form, such as `http://` or `www.`, reaches the server as typed.
 
 ## Picker
 
@@ -104,23 +106,31 @@ resumes a project appears on. It is absent when the capability is off.
 - **Add evidence from GitHub** opens a dialog (a bottom sheet below 640 px) with
   four tabs: Repositories, Pull requests, Releases (choose one of the owner's
   repositories, then its releases) and Paste a link. Each row has its own
-  **Attach**; one attach per request, applied at once like linking, and disabled
-  while the editor has unsaved text edits. Rows already on this project show
-  "Attached" instead.
+  **Attach**; one attach per request, applied at once like linking. Rows already
+  on this project show "Attached" instead.
 - Without a live session the dialog shows **Continue with GitHub**. The start
   call's JSON body may carry `returnTo`, a string that must equal
   `/app/projects/{uuid}` for a project of the account; the server stores the
   project id in the OAuth transaction and the callback redirects to the route it
-  builds from that id, with `evidence=connected` or `evidence=failed`, and the
-  editor reopens the dialog. A missing, malformed or foreign value falls back to
-  Settings; a repeated key fails the request.
+  builds from that id, with `evidence=connected`, `evidence=failed` or
+  `evidence=different_account`, and the editor reopens the dialog with that
+  outcome; `different_account` shows the Different account copy with a link to
+  Settings. A missing, malformed or foreign value falls back to Settings; a
+  repeated key fails the request.
 - States: loading rows; an empty tab; GitHub's incomplete search results
   ("GitHub returned only part of the results; paste a link to find more"); an
   upstream error with **Try again**; a rate limit with the time it lifts; a
   session that ended (the list reloads after Continue); the 10-item limit.
 - The section lists items in the owner's order with move up and down buttons,
-  **Check again** and **Remove**. A flagged item shows its reason; the owner
-  checks again or removes it, and until then it renders as a plain link.
+  **Check again** and **Remove**, which asks no confirmation. A flagged item
+  shows its reason; the owner checks again or removes it, and until then it
+  renders as a plain link. Check again without a live session opens the dialog
+  in its session-ended state.
+- While the editor has unsaved edits, every evidence write (Attach, move, Check
+  again, Remove) and Continue with GitHub are disabled with the save-first hint,
+  because each write advances the revision Save uses and Continue leaves the
+  page. A revision conflict on an evidence write shows the editor's
+  changed-elsewhere state, with no automatic retry.
 - When the project has no evidence yet, the dialog states above the tabs that
   the project page will link to the owner's GitHub activity and that every
   resume showing the project shows it.
@@ -223,6 +233,9 @@ under [ADR 0006](../adr/0006-transactional-idempotency.md):
   [connection's ending rules](github-evidence.md#evidence-session).
 - It answers 200 with `{generation, projectRevisions, resumeRevisions}`. Open
   editors meet an advanced project revision as any other conflict.
+- Settings reuses its `Idempotency-Key` for the same `keepLinks` and
+  `generation` until it gets a definitive answer, so a lost 200 replays instead
+  of answering `evidence_connection_changed`.
 - Settings asks before disconnecting when `hasEvidence` is true: keep the items
   as plain links (the default) or remove them from every project.
 
@@ -266,26 +279,44 @@ does; no tool attaches, checks again, reorders or removes a single item.
 
 ## Copy
 
-| Key                | Vietnamese                                                                                                | English                                                                                                         |
-| ------------------ | --------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| Section            | Bằng chứng trên GitHub                                                                                    | GitHub evidence                                                                                                 |
-| Add                | Thêm bằng chứng từ GitHub                                                                                 | Add evidence from GitHub                                                                                        |
-| Tabs               | Kho mã · Pull request · Bản phát hành · Dán đường dẫn                                                     | Repositories · Pull requests · Releases · Paste a link                                                          |
-| Attach             | Gắn                                                                                                       | Attach                                                                                                          |
-| Attached           | Đã gắn                                                                                                    | Attached                                                                                                        |
-| Pull request label | Tác giả của pull request đã được merge                                                                    | Author of a merged pull request                                                                                 |
-| Release label      | Tác giả của bản phát hành này                                                                             | Author of this release                                                                                          |
-| Repository label   | Chủ sở hữu kho mã này                                                                                     | Owner of this repository                                                                                        |
-| Checked            | kiểm tra ngày {date}                                                                                      | checked on {date}                                                                                               |
-| Check again        | Kiểm tra lại                                                                                              | Check again                                                                                                     |
-| Rule failed        | Lần kiểm tra gần nhất không còn đáp ứng điều kiện.                                                        | The last check no longer met the rule.                                                                          |
-| Gone               | GitHub không còn tìm thấy mục này.                                                                        | GitHub no longer finds this item.                                                                               |
-| Empty              | Không tìm thấy mục nào.                                                                                   | Nothing found.                                                                                                  |
-| Incomplete         | GitHub chỉ trả về một phần kết quả; hãy dán đường dẫn để tìm thêm.                                        | GitHub returned only part of the results; paste a link to find more.                                            |
-| Upstream           | GitHub chưa phản hồi. Hãy thử lại sau.                                                                    | GitHub did not respond. Try again later.                                                                        |
-| Limit              | Mỗi dự án có tối đa 10 mục.                                                                               | A project holds at most 10 items.                                                                               |
-| First attach       | Trang dự án sẽ có đường dẫn tới hoạt động GitHub của bạn, và mọi CV hiện dự án này cũng hiện các mục này. | The project page will link to your GitHub activity, and every resume that shows this project shows these items. |
-| Different account  | Tài khoản GitHub này khác tài khoản đã kết nối. Hãy ngắt kết nối trước.                                   | This GitHub account differs from the connected one. Disconnect first.                                           |
-| Disconnect ask     | Giữ các mục đã gắn dưới dạng đường dẫn thường?                                                            | Keep the attached items as plain links?                                                                         |
-| Disconnect keep    | Giữ đường dẫn                                                                                             | Keep links                                                                                                      |
-| Disconnect remove  | Xoá khỏi mọi dự án                                                                                        | Remove from every project                                                                                       |
+| Key                 | Vietnamese                                                                                                                              | English                                                                                                                                     |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Section             | Bằng chứng trên GitHub                                                                                                                  | GitHub evidence                                                                                                                             |
+| Add                 | Thêm bằng chứng từ GitHub                                                                                                               | Add evidence from GitHub                                                                                                                    |
+| Tabs                | Kho mã · Pull request · Bản phát hành · Dán đường dẫn                                                                                   | Repositories · Pull requests · Releases · Paste a link                                                                                      |
+| Attach              | Gắn                                                                                                                                     | Attach                                                                                                                                      |
+| Attached            | Đã gắn                                                                                                                                  | Attached                                                                                                                                    |
+| Pull request label  | Tác giả của pull request đã được merge                                                                                                  | Author of a merged pull request                                                                                                             |
+| Release label       | Tác giả của bản phát hành này                                                                                                           | Author of this release                                                                                                                      |
+| Repository label    | Chủ sở hữu kho mã này                                                                                                                   | Owner of this repository                                                                                                                    |
+| Checked             | kiểm tra ngày {date}                                                                                                                    | checked on {date}                                                                                                                           |
+| Check again         | Kiểm tra lại                                                                                                                            | Check again                                                                                                                                 |
+| Rule failed         | Lần kiểm tra gần nhất không còn đáp ứng điều kiện.                                                                                      | The last check no longer met the rule.                                                                                                      |
+| Gone                | GitHub không còn tìm thấy mục này.                                                                                                      | GitHub no longer finds this item.                                                                                                           |
+| Empty               | Không tìm thấy mục nào.                                                                                                                 | Nothing found.                                                                                                                              |
+| Incomplete          | GitHub chỉ trả về một phần kết quả; hãy dán đường dẫn để tìm thêm.                                                                      | GitHub returned only part of the results; paste a link to find more.                                                                        |
+| Upstream            | GitHub chưa phản hồi. Hãy thử lại sau.                                                                                                  | GitHub did not respond. Try again later.                                                                                                    |
+| Limit               | Mỗi dự án có tối đa 10 mục.                                                                                                             | A project holds at most 10 items.                                                                                                           |
+| First attach        | Trang dự án sẽ có đường dẫn tới hoạt động GitHub của bạn, và mọi CV hiện dự án này cũng hiện các mục này.                               | The project page will link to your GitHub activity, and every resume that shows this project shows these items.                             |
+| Different account   | Tài khoản GitHub này khác tài khoản đã kết nối. Hãy ngắt kết nối trước.                                                                 | This GitHub account differs from the connected one. Disconnect first.                                                                       |
+| Disconnect ask      | Giữ các mục đã gắn dưới dạng đường dẫn thường?                                                                                          | Keep the attached items as plain links?                                                                                                     |
+| Disconnect keep     | Giữ đường dẫn                                                                                                                           | Keep links                                                                                                                                  |
+| Disconnect remove   | Xóa khỏi mọi dự án                                                                                                                      | Remove from every project                                                                                                                   |
+| Remove              | Gỡ                                                                                                                                      | Remove                                                                                                                                      |
+| Move up             | Chuyển {title} lên                                                                                                                      | Move {title} up                                                                                                                             |
+| Move down           | Chuyển {title} xuống                                                                                                                    | Move {title} down                                                                                                                           |
+| Try again           | Thử lại                                                                                                                                 | Try again                                                                                                                                   |
+| More                | Xem thêm                                                                                                                                | Show more                                                                                                                                   |
+| Loading             | Đang tải                                                                                                                                | Loading                                                                                                                                     |
+| Session ended       | Phiên làm việc với GitHub đã kết thúc. Hãy tiếp tục với GitHub để tải lại danh sách.                                                    | Your GitHub session has ended. Continue with GitHub to load the list again.                                                                 |
+| Rate limit          | Đã chạm giới hạn yêu cầu tới GitHub. Hãy thử lại sau {time}.                                                                            | The GitHub request limit is reached. Try again after {time}.                                                                                |
+| Choose a repository | Chọn kho mã                                                                                                                             | Choose a repository                                                                                                                         |
+| Change repository   | Đổi kho mã                                                                                                                              | Change repository                                                                                                                           |
+| Paste label         | Đường dẫn GitHub                                                                                                                        | GitHub link                                                                                                                                 |
+| Paste hint          | Kho mã, pull request hoặc bản phát hành, ví dụ github.com/ten/kho, github.com/ten/kho/pull/12 hoặc github.com/ten/kho/releases/tag/v1.0 | A repository, pull request or release, such as github.com/name/repo, github.com/name/repo/pull/12 or github.com/name/repo/releases/tag/v1.0 |
+| Not confirmed       | GitHub không xác nhận bạn là tác giả hoặc chủ sở hữu của mục này.                                                                       | GitHub does not confirm you as the author or owner of this item.                                                                            |
+| Unsupported link    | Đường dẫn này không phải kho mã, pull request hay bản phát hành trên GitHub.                                                            | This link is not a GitHub repository, pull request or release.                                                                              |
+| Not found           | Mục này không còn trong dự án. Danh sách đã được tải lại.                                                                               | This item is no longer on the project. The list has been reloaded.                                                                          |
+| Duplicate           | Mục này đã có trong dự án.                                                                                                              | This item is already on the project.                                                                                                        |
+| Size                | Dự án đã đạt dung lượng tối đa. Hãy rút gọn nội dung hoặc gỡ bớt mục.                                                                   | The project has reached its size limit. Shorten its text or remove an item.                                                                 |
+| Connection changed  | Kết nối GitHub vừa thay đổi. Trạng thái đã được tải lại; hãy thử lại.                                                                   | The GitHub connection just changed. The status has been reloaded; try again.                                                                |

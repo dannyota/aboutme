@@ -1,168 +1,72 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, nextTick, onMounted, ref } from 'vue';
 import LoadingState from '../app/LoadingState.vue';
 import StatusBanner from '../app/StatusBanner.vue';
 import { Button } from '../ui/button';
-import { createApiClient } from '../../api/client';
+import EvidenceDisconnectDialog from './EvidenceDisconnectDialog.vue';
+import {
+  createGitHubEvidenceApi,
+  type GitHubEvidenceFailure,
+  type GitHubEvidenceOutcome,
+  type GitHubEvidenceStatus,
+} from '../../composables/githubEvidenceApi';
 import { sendWithCsrf } from '../../composables/projectsApi';
 import { validateAuthorizeUrl } from '../../composables/providerAuthorization';
 import { useAuth } from '../../composables/useAuth';
 import {
   githubEvidenceSettingsCopy,
 } from '../../i18n/github-evidence-settings';
+import { privacySettingsCopy } from '../../i18n/privacy-settings';
+import { projectsCopy } from '../../i18n/projects';
 
-interface EvidenceView {
-  readonly generation: number;
-  readonly connection: {
-    readonly login: string;
-    readonly connectedAt: string;
-  } | null;
-  readonly expiresAt: string | null;
-}
-
-type Failure
-  = | 'session-lost'
-    | 'csrf-rejected'
-    | 'unavailable'
-    | 'session-ended'
-    | 'upstream'
-    | 'rate-limited'
-    | 'connection-changed'
-    | 'failed';
-
-type Outcome<T>
-  = | { readonly kind: 'ok'; readonly value: T }
-    | { readonly kind: 'failed'; readonly failure: Failure };
-
-interface RawResult {
-  readonly data?: unknown;
-  readonly error?: unknown;
-  readonly response: Response;
-}
+type Failure = Exclude<GitHubEvidenceFailure, 'session-lost'>;
+type Notice = 'connected' | 'failed' | 'different-account';
 
 const auth = useAuth();
 const { csrfToken } = auth;
-const api = createApiClient();
+const api = createGitHubEvidenceApi();
 const route = useRoute();
 const router = useRouter();
 const { locale } = useLocale();
 const copy = computed(() => githubEvidenceSettingsCopy[locale.value]);
+const cancelLabel = computed(() => privacySettingsCopy[locale.value].cancel);
 
 const loading = ref(true);
 const loadFailed = ref(false);
-const view = ref<EvidenceView | null>(null);
+const view = ref<GitHubEvidenceStatus | null>(null);
 const pending = ref(false);
-const failure = ref<Exclude<Failure, 'session-lost'> | null>(null);
-type Notice = 'connected' | 'failed' | 'different-account';
-
+const failure = ref<Failure | null>(null);
 const notice = ref<Notice | null>(null);
+const asking = ref(false);
+const disconnectButton = ref<{ $el?: HTMLElement } | null>(null);
+const connectButton = ref<{ $el?: HTMLElement } | null>(null);
+const errorBanner = ref<{ focus?: () => void } | null>(null);
+let cancelled = false;
+let intent: {
+  readonly keepLinks: boolean;
+  readonly generation: number;
+  readonly key: string;
+} | null = null;
 
 const errorMessage = computed(() => {
   if (failure.value === null) return null;
   const errors = copy.value.errors;
-  const messages: Record<Exclude<Failure, 'session-lost'>, string> = {
+  const messages: Record<Failure, string> = {
     'csrf-rejected': errors.csrfRejected,
     'unavailable': errors.unavailable,
     'session-ended': errors.sessionEnded,
     'upstream': errors.upstream,
     'rate-limited': errors.rateLimited,
-    'connection-changed': errors.failed,
+    'connection-changed': errors.connectionChanged,
+    'busy': projectsCopy[locale.value].tryAgain,
     'failed': errors.failed,
   };
   return messages[failure.value];
 });
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function isIsoDate(value: unknown): value is string {
-  return typeof value === 'string'
-    && value !== ''
-    && Number.isFinite(Date.parse(value));
-}
-
-function connectionFrom(
-  value: unknown,
-): EvidenceView['connection'] | undefined {
-  if (value === null) return null;
-  if (!isRecord(value)) return undefined;
-  const { githubUserId, login, connectedAt } = value;
-  return typeof githubUserId === 'number'
-    && typeof login === 'string'
-    && login !== ''
-    && isIsoDate(connectedAt)
-    ? { login, connectedAt }
-    : undefined;
-}
-
-function expiryFrom(value: unknown): string | null | undefined {
-  if (value === null) return null;
-  if (!isRecord(value)) return undefined;
-  const { expiresAt } = value;
-  return isIsoDate(expiresAt) ? expiresAt : undefined;
-}
-
-function viewFrom(data: unknown): EvidenceView | undefined {
-  if (!isRecord(data) || !isRecord(data.data)) return undefined;
-  const { generation } = data.data;
-  if (
-    typeof generation !== 'number'
-    || !Number.isSafeInteger(generation)
-    || generation < 0
-  ) {
-    return undefined;
-  }
-  const connection = connectionFrom(data.data.connection);
-  const expiresAt = expiryFrom(data.data.session);
-  return connection === undefined || expiresAt === undefined
-    ? undefined
-    : { generation, connection, expiresAt };
-}
-
-function authorizeUrlFrom(data: unknown): unknown {
-  return isRecord(data) && isRecord(data.data) ? data.data.authorizeUrl : null;
-}
-
-function failureOf(status: number, error: unknown): Failure {
-  const code = isRecord(error) && isRecord(error.error)
-    ? error.error.code
-    : undefined;
-  if (status === 401) return 'session-lost';
-  if (status === 403 && code === 'csrf_rejected') return 'csrf-rejected';
-  if (code === 'evidence_unavailable') return 'unavailable';
-  if (code === 'evidence_session_required') return 'session-ended';
-  if (code === 'rate_limited') return 'rate-limited';
-  if (code === 'evidence_upstream') return 'upstream';
-  if (code === 'evidence_connection_changed') return 'connection-changed';
-  return 'failed';
-}
-
-async function settle<T>(
-  run: () => Promise<RawResult>,
-  parse: (data: unknown) => T | undefined,
-): Promise<Outcome<T>> {
-  let result: RawResult;
-  try {
-    result = await run();
-  } catch {
-    return { kind: 'failed', failure: 'failed' };
-  }
-  if (!result.response.ok) {
-    return {
-      kind: 'failed',
-      failure: failureOf(result.response.status, result.error),
-    };
-  }
-  const value = parse(result.data);
-  return value === undefined
-    ? { kind: 'failed', failure: 'failed' }
-    : { kind: 'ok', value };
-}
-
 function withCsrf<T>(
-  send: (token: string) => Promise<Outcome<T>>,
-): Promise<Outcome<T>> {
+  send: (token: string) => Promise<GitHubEvidenceOutcome<T>>,
+): Promise<GitHubEvidenceOutcome<T>> {
   const ownerId = auth.user.value?.id;
   if (ownerId === undefined) {
     return Promise.resolve({ kind: 'failed', failure: 'session-lost' });
@@ -170,54 +74,8 @@ function withCsrf<T>(
   return sendWithCsrf(auth, ownerId, send);
 }
 
-function read(): Promise<Outcome<EvidenceView>> {
-  return settle(
-    () => api.GET('/github-evidence', {
-      cache: 'no-store',
-    }) as Promise<RawResult>,
-    viewFrom,
-  );
-}
-
-function start(token: string): Promise<Outcome<unknown>> {
-  return settle(
-    () => api.POST('/github-evidence/start', {
-      headers: { 'X-CSRF-Token': token },
-      cache: 'no-store',
-    }) as Promise<RawResult>,
-    authorizeUrlFrom,
-  );
-}
-
-function endSession(token: string): Promise<Outcome<null>> {
-  return settle(
-    () => api.POST('/github-evidence/session/end', {
-      headers: { 'X-CSRF-Token': token },
-      cache: 'no-store',
-    }) as Promise<RawResult>,
-    () => null,
-  );
-}
-
-function disconnectAccount(
-  generation: number,
-  key: string,
-): (token: string) => Promise<Outcome<null>> {
-  return (token) => settle(
-    () => api.DELETE('/github-evidence', {
-      params: {
-        query: { keepLinks: 'true', generation },
-        header: { 'Idempotency-Key': key },
-      },
-      headers: { 'X-CSRF-Token': token },
-      cache: 'no-store',
-    }) as Promise<RawResult>,
-    () => null,
-  );
-}
-
 async function refreshState(): Promise<void> {
-  const result = await read();
+  const result = await api.status();
   if (result.kind === 'ok') {
     view.value = result.value;
     loadFailed.value = false;
@@ -240,10 +98,10 @@ async function load(): Promise<void> {
 }
 
 async function perform<T>(
-  send: (token: string) => Promise<Outcome<T>>,
+  send: (token: string) => Promise<GitHubEvidenceOutcome<T>>,
   onDone: (value: T) => Promise<void>,
-): Promise<void> {
-  if (pending.value) return;
+): Promise<GitHubEvidenceOutcome<T> | null> {
+  if (pending.value) return null;
   pending.value = true;
   failure.value = null;
   notice.value = null;
@@ -251,11 +109,11 @@ async function perform<T>(
     const result = await withCsrf(send);
     if (result.kind === 'ok') {
       await onDone(result.value);
-      return;
+      return result;
     }
     if (result.failure === 'session-lost') {
       await navigateTo('/login');
-      return;
+      return result;
     }
     failure.value = result.failure;
     if (
@@ -264,13 +122,14 @@ async function perform<T>(
     ) {
       await refreshState();
     }
+    return result;
   } finally {
     pending.value = false;
   }
 }
 
-function connect(): Promise<void> {
-  return perform(start, async (value) => {
+function connect(): Promise<unknown> {
+  return perform((token) => api.start(token), async (value) => {
     const url = validateAuthorizeUrl('github', value);
     if (url === null) {
       failure.value = 'failed';
@@ -280,17 +139,66 @@ function connect(): Promise<void> {
   });
 }
 
-function done(): Promise<void> {
-  return perform(endSession, refreshState);
+function done(): Promise<unknown> {
+  return perform((token) => api.endSession(token), refreshState);
 }
 
-function disconnect(): Promise<void> {
+function keyFor(keepLinks: boolean, generation: number): string {
+  if (intent?.keepLinks !== keepLinks || intent.generation !== generation) {
+    intent = { keepLinks, generation, key: crypto.randomUUID() };
+  }
+  return intent.key;
+}
+
+async function sendDisconnect(keepLinks: boolean): Promise<void> {
   const current = view.value;
-  if (current === null) return Promise.resolve();
-  return perform(
-    disconnectAccount(current.generation, crypto.randomUUID()),
+  if (current === null) return;
+  const key = keyFor(keepLinks, current.generation);
+  const result = await perform(
+    (token) => api.disconnect(keepLinks, current.generation, key, token),
     refreshState,
   );
+  if (
+    result !== null
+    && (result.kind === 'ok'
+      || result.failure === 'connection-changed'
+      || result.failure === 'session-lost')
+  ) {
+    intent = null;
+  }
+}
+
+async function disconnect(): Promise<void> {
+  if (view.value?.hasEvidence === true) {
+    asking.value = true;
+    return;
+  }
+  await sendDisconnect(true);
+  await focusAfterDisconnect();
+}
+
+async function focusAfterDisconnect(): Promise<void> {
+  await nextTick();
+  if (errorMessage.value !== null) {
+    errorBanner.value?.focus?.();
+    return;
+  }
+  (disconnectButton.value ?? connectButton.value)?.$el?.focus();
+}
+
+async function choose(keepLinks: boolean | null): Promise<void> {
+  asking.value = false;
+  cancelled = keepLinks === null;
+  if (keepLinks === null) return;
+  await sendDisconnect(keepLinks);
+  await focusAfterDisconnect();
+}
+
+async function restoreFocus(): Promise<void> {
+  if (!cancelled) return;
+  cancelled = false;
+  await nextTick();
+  disconnectButton.value?.$el?.focus();
 }
 
 function readCallbackResult(): void {
@@ -366,6 +274,7 @@ onMounted(() => {
     </StatusBanner>
     <StatusBanner
       v-if="errorMessage"
+      ref="errorBanner"
       kind="error"
       testid="evidence-error"
     >
@@ -447,6 +356,7 @@ onMounted(() => {
           {{ copy.continue }}
         </Button>
         <Button
+          ref="disconnectButton"
           data-testid="evidence-disconnect"
           :disabled="!csrfToken || pending"
           type="button"
@@ -456,6 +366,17 @@ onMounted(() => {
           {{ copy.disconnect }}
         </Button>
       </div>
+      <EvidenceDisconnectDialog
+        :open="asking"
+        :title="copy.disconnectAsk"
+        :keep-label="copy.disconnectKeep"
+        :remove-label="copy.disconnectRemove"
+        :cancel-label="cancelLabel"
+        @keep="choose(true)"
+        @remove="choose(false)"
+        @cancel="choose(null)"
+        @closed="restoreFocus"
+      />
     </template>
     <template v-else-if="view">
       <p class="text-sm">
@@ -463,6 +384,7 @@ onMounted(() => {
       </p>
       <div>
         <Button
+          ref="connectButton"
           data-testid="evidence-connect"
           :disabled="!csrfToken || pending"
           type="button"

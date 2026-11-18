@@ -21,6 +21,7 @@ import {
   validateDraft,
   type Project,
   type ProjectDraft,
+  type ProjectEvidence,
   type ProjectIssue,
 } from '../components/projects/projectDocument';
 import { choosesTwoPublished } from '../editor/projectLinks';
@@ -314,6 +315,7 @@ export interface ProjectEditorController {
   save(extraIssues?: readonly ProjectIssue[]): Promise<void>;
   reload(): Promise<void>;
   adopt(project: Project): void;
+  adoptEvidence(evidence: readonly ProjectEvidence[], revision: string): void;
   markStale(project: Project): void;
   addLanguage(key: string): boolean;
   makeDefault(key: string): void;
@@ -482,6 +484,12 @@ export function useProjectEditor(
       loaded.value = project;
       if (draft.value !== null) draft.value.slug = project.slug;
       winner = null;
+    },
+    adoptEvidence(evidence, revision) {
+      const current = loaded.value;
+      if (current !== null) {
+        loaded.value = { ...current, evidence: [...evidence], revision };
+      }
     },
     markStale,
     addLanguage(key) {
