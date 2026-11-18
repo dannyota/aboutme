@@ -116,7 +116,9 @@ Sheets are plain `div` elements with no role or name, have no
 - Tinted header bands keep their surfaces. In Light they stay faint against the
   warm paper (1.03 to 1.11:1), which is accepted: bands are tints, and their
   text roles hold the floors. Rules, tracks and tints mix the accent into the
-  paper.
+  paper. A header with a tinted surface bleeds to the sheet's top and side
+  edges, with the sheet's top radius on its top corners, and keeps the sheet's
+  inline padding inside, so its text lines up with the sections below.
 - `customization.colorScheme` keeps its meaning: Light, Dark, or Match device
   through `prefers-color-scheme`. No new field.
 
@@ -133,22 +135,24 @@ paged output keep the side layout as today.
 
 **Overridden on screen in sheets, and only there:**
 
-| Leaf                          | On screen                                                           |
-| ----------------------------- | ------------------------------------------------------------------- |
-| `layout.columns`, side tint   | One column; the side column's tint is not drawn                     |
-| `header.detailsLayout`        | Contact rows, start-aligned whatever `header.align` says            |
-| Label omitted beside icons    | Rows show the label, except a link with `display` `label`           |
-| `font.baseSizePx`             | `max(baseSizePx, 16px)`; every size keeps its multiple of that base |
-| `spacing.lineHeight`          | At least 1.5                                                        |
-| `font.textAlign` `justify`    | Start-aligned when the container is narrower than 480 px            |
-| `spacing.pageMargin`          | Replaced by the sheet padding                                       |
-| `colors.background` `#ffffff` | Warm paper, as above                                                |
+| Leaf                          | On screen                                                                                                  |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `layout.columns`, side tint   | One column; the side column's tint is not drawn                                                            |
+| `header.detailsLayout`        | Contact rows, start-aligned whatever `header.align` says                                                   |
+| Label omitted beside icons    | Rows show the label, except a link with `display` `label`                                                  |
+| `font.baseSizePx`             | `max(baseSizePx, 16px)`; every size keeps its multiple of that base                                        |
+| Name size                     | At most 1.7em of that base below a 480 px content box, 2em from 480 px, and never above the template's own |
+| `spacing.lineHeight`          | At least 1.5                                                                                               |
+| `font.textAlign` `justify`    | Start-aligned when the container is narrower than 480 px                                                   |
+| `spacing.pageMargin`          | Replaced by the sheet padding                                                                              |
+| `colors.background` `#ffffff` | Warm paper, as above                                                                                       |
 
 Entry bodies, profile text and the headline are at most 62ch wide. Floored type
 sizes are emitted only in sheets mode. The PDF keeps every value exactly.
 
 **Contacts.** One `div` row per contact, keeping the `contact-chip` and
-`contact-label` classes with a sheets modifier, at least 44 px high on screen:
+`contact-label` classes with a sheets modifier, at least 44 px high on screen,
+with the same vertical padding on every row, wrapped or not:
 
 - The icon, when `iconStyle` is not `none`.
 - The label, with no colon: `detail.label`, else the type's default label.
