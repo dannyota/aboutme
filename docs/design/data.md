@@ -33,6 +33,8 @@ intended model, not replacement DDL.
 | `authentication_security_events` | Rejected non-increasing passkey counter values, retained for 180 days                                                     |
 | `projects`                       | Private library: UUIDv7, cascading owner, unique owner/slug, positive revision, JSON document at most 96 KiB, timestamps  |
 | `project_slug_holds`             | Cascading owner, slug and release time; unique owner/slug; held from account-local reuse for 180 days                     |
+| `project_evidence`               | Cascading project, position, kind, GitHub ids, number or tag, URL, names, dates, check binding, rule result and flag      |
+| `github_connections`             | One per account, cascading: nullable GitHub user id, login and connect time; a growing generation and binding             |
 | `resumes`                        | Owner, title, optional slug, publish flags, document version, revision, locale, and three JSON parts                      |
 | `resume_preview_cards`           | One per live resume: 16-hex card version, PNG of 1 to 524,288 bytes, render time; cascades with the resume                |
 | `resume_showcase`                | One per showcase opt-in: opt-in time, role, card version, template ID; cascades                                           |

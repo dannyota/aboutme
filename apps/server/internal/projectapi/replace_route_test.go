@@ -30,6 +30,10 @@ func (l *routeLinks) ReplaceProject(_ context.Context, replacement resumeapi.Pro
 	return resume.ExecuteResult{Outcome: resume.CommitCommitted, Response: resume.StoredResponse{Status: http.StatusOK, Body: []byte(`{"data":{}}`)}}, nil
 }
 
+func (l *routeLinks) EditProjectEvidence(context.Context, resumeapi.ProjectEvidenceEdit) (resume.ExecuteResult, error) {
+	return resume.ExecuteResult{Outcome: resume.CommitNotAttempted}, errors.New("unexpected evidence edit")
+}
+
 func (l *routeLinks) RemoveProject(context.Context, resumeapi.ProjectRemoval) (resume.ExecuteResult, error) {
 	return resume.ExecuteResult{Outcome: resume.CommitNotAttempted}, errors.New("unexpected removal")
 }

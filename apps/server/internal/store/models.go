@@ -50,6 +50,7 @@ type GithubConnection struct {
 	Login        *string
 	ConnectedAt  *time.Time
 	Generation   int64
+	Binding      int64
 }
 
 type IdempotencyRecord struct {
@@ -168,6 +169,7 @@ type OAuthTransaction struct {
 	ReturnPath         string
 	ResumeID           *uuid.UUID
 	EvidenceGeneration *int64
+	EvidenceProjectID  *uuid.UUID
 }
 
 type PasswordCredential struct {
@@ -266,6 +268,25 @@ type Project struct {
 	Document  json.RawMessage
 	CreatedAt time.Time
 	UpdatedAt time.Time
+}
+
+type ProjectEvidence struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	Position       int32
+	Kind           string
+	RepositoryID   int64
+	ItemID         int64
+	PullNumber     *int64
+	ReleaseTag     *string
+	Url            string
+	RepositoryName string
+	Title          string
+	ItemDate       time.Time
+	CheckedAt      time.Time
+	CheckedBinding int64
+	RuleMet        bool
+	FlagReason     *string
 }
 
 type ProjectSlugHold struct {

@@ -41,6 +41,12 @@ var projectToolNames = []string{
 	"delete_project", "link_project", "refresh_project_entry",
 }
 
+type projectToolEvidence struct {
+	projectapi.EvidenceSource
+}
+
+func (projectToolEvidence) Enabled() bool { return true }
+
 type projectToolWorld struct {
 	h           *bearerHarness
 	session     *mcp.ClientSession
@@ -112,7 +118,7 @@ func startProjectToolServerAt(t *testing.T, h *bearerHarness) (*mcp.ClientSessio
 			Coordinator: coordinator, RecoveryPool: h.pool,
 		})
 	projects := projectapi.New(h.pool, resume.NewIdempotencyStore(h.pool), projectapi.Options{
-		AllowSlug: func(uuid.UUID, time.Time) bool { return true }, Clock: h.clock.Now, Links: resumes,
+		AllowSlug: func(uuid.UUID, time.Time) bool { return true }, Clock: h.clock.Now, Links: resumes, Evidence: projectToolEvidence{},
 	})
 	handler, err := NewServer(ServerDependencies{
 		Bearer: h.bearer, Resumes: resumes, Projects: projects, Rates: mustTestMCPRates(t), MaxRequestBodyBytes: maxMCPRequestBytes,

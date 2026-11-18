@@ -25,6 +25,8 @@ import (
 	"danny.vn/aboutme/apps/server/internal/api"
 	"danny.vn/aboutme/apps/server/internal/auth"
 	"danny.vn/aboutme/apps/server/internal/config"
+	"danny.vn/aboutme/apps/server/internal/publicstate"
+	"danny.vn/aboutme/apps/server/internal/resumeapi"
 	"danny.vn/aboutme/apps/server/internal/store"
 	"danny.vn/aboutme/apps/server/internal/testutil"
 )
@@ -49,6 +51,8 @@ type stubGitHub struct {
 	revokeStatus int
 	beforeToken  func()
 	tokenBody    func(token string) string
+	reads        map[string]http.HandlerFunc
+	readLog      []string
 }
 
 func newStubGitHub(t *testing.T) *stubGitHub {
@@ -59,6 +63,7 @@ func newStubGitHub(t *testing.T) *stubGitHub {
 	mux.HandleFunc("POST /login/oauth/access_token", gh.serveToken)
 	mux.HandleFunc("GET /user", gh.serveUser)
 	mux.HandleFunc("DELETE /applications/{client}/token", gh.serveRevoke)
+	mux.HandleFunc("GET /", gh.serveRead)
 	server := httptest.NewServer(mux)
 	t.Cleanup(server.Close)
 	gh.URL = server.URL
@@ -178,6 +183,9 @@ type harness struct {
 	session  store.Session
 	bodiesMu sync.Mutex
 	bodies   []string
+
+	library     *resumeapi.Service
+	coordinator *publicstate.Coordinator
 }
 
 type syncBuffer struct {
@@ -226,7 +234,10 @@ func newHarness(t *testing.T) *harness {
 	}
 	authService.SetSessionEndListener(svc)
 	sessions.SetEndListener(svc)
+	library, coordinator := newLibrary(t, pool, sessions)
+	svc.SetLibrary(library)
 	h := &harness{t: t, gh: gh, pool: pool, q: store.New(pool), svc: svc, auth: authService, sessions: sessions, logs: logs,
+		library: library, coordinator: coordinator,
 		handler: api.New(logger, noopPinger{}, api.Options{}, nil, svc.RegisterRoutes, authService.RegisterRoutes)}
 	h.user, h.raw, h.session = h.newAccount()
 	return h
@@ -262,7 +273,12 @@ type call struct {
 
 func (h *harness) do(c call) *httptest.ResponseRecorder {
 	h.t.Helper()
-	r := httptest.NewRequestWithContext(h.t.Context(), c.method, c.path, strings.NewReader(c.body))
+	return h.doWith(h.t.Context(), c)
+}
+
+func (h *harness) doWith(ctx context.Context, c call) *httptest.ResponseRecorder {
+	h.t.Helper()
+	r := httptest.NewRequestWithContext(ctx, c.method, c.path, strings.NewReader(c.body))
 	r.RemoteAddr = "203.0.113.7:4000"
 	r.Header.Set("Origin", testOrigin)
 	if c.csrf != "" {
@@ -499,7 +515,7 @@ func TestEvidence_ConnectsWithTheExactCallbackAndNoScope(t *testing.T) {
 
 func TestEvidence_CallbackChecksTheTransactionRedirectURI(t *testing.T) {
 	h := newHarness(t)
-	handle, tx, err := auth.NewTransactionStore(h.q).BeginEvidence(t.Context(), h.user.ID, 0, testOrigin+"/api/v1/auth/github/callback")
+	handle, tx, err := auth.NewTransactionStore(h.q).BeginEvidence(t.Context(), h.user.ID, 0, uuid.Nil, testOrigin+"/api/v1/auth/github/callback")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -571,9 +587,7 @@ func TestEvidence_FailuresAfterTheExchangeRevokeOnce(t *testing.T) {
 		prepare func(h *harness, s started)
 	}{
 		{"callback after a disconnect", func(h *harness, _ started) {
-			if rec := h.do(h.as(http.MethodDelete, StatusPath+"?keepLinks=true")); rec.Code != http.StatusNoContent {
-				h.t.Fatalf("disconnect = %d %s", rec.Code, rec.Body.String())
-			}
+			requireDisconnected(h.t, h.disconnect(true))
 		}},
 		{"disconnect commits during the exchange", func(h *harness, _ started) {
 			h.gh.set(func(gh *stubGitHub) {
@@ -634,9 +648,7 @@ func TestEvidence_SessionEndingsRevokeOnce(t *testing.T) {
 			}
 		}},
 		{"disconnect", func(h *harness) {
-			if rec := h.do(h.as(http.MethodDelete, StatusPath+"?keepLinks=false")); rec.Code != http.StatusNoContent {
-				h.t.Fatalf("disconnect = %d %s", rec.Code, rec.Body.String())
-			}
+			requireDisconnected(h.t, h.disconnect(false))
 			if row := h.connection(h.user.ID); row.githubUserID != nil || row.login != nil || row.connectedAt != nil || row.generation != 2 {
 				h.t.Fatalf("connection after disconnect = %+v, want cleared at generation 2", row)
 			}
@@ -728,7 +740,8 @@ func TestEvidence_RacingEndingsSendOneRevocation(t *testing.T) {
 			h.handler.ServeHTTP(httptest.NewRecorder(), r)
 		})
 		wg.Go(func() {
-			r := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, StatusPath+"?keepLinks=true", nil)
+			r := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, StatusPath+disconnectQuery(true, 1), nil)
+			r.Header.Set("Idempotency-Key", uuid.NewString())
 			r.Header.Set("Origin", testOrigin)
 			r.Header.Set(auth.CSRFHeaderName, csrfFor(h.session))
 			r.AddCookie(sessionCookie(h.raw))
@@ -756,7 +769,7 @@ func TestEvidence_StartAndRouteRules(t *testing.T) {
 		{"status with a bearer token only", call{method: http.MethodGet, path: StatusPath, header: http.Header{"Authorization": {"Bearer " + sentinelToken}}}, http.StatusUnauthorized, "session_required"},
 		{"start without CSRF", call{method: http.MethodPost, path: StartPath, cookies: []*http.Cookie{sessionCookie(h.raw)}}, http.StatusForbidden, "csrf_rejected"},
 		{"done without CSRF", call{method: http.MethodPost, path: SessionEndPath, cookies: []*http.Cookie{sessionCookie(h.raw)}}, http.StatusForbidden, "csrf_rejected"},
-		{"disconnect without CSRF", call{method: http.MethodDelete, path: StatusPath + "?keepLinks=true", cookies: []*http.Cookie{sessionCookie(h.raw)}}, http.StatusForbidden, "csrf_rejected"},
+		{"disconnect without CSRF", call{method: http.MethodDelete, path: StatusPath + disconnectQuery(true, 0), cookies: []*http.Cookie{sessionCookie(h.raw)}}, http.StatusForbidden, "csrf_rejected"},
 		{"start with a query", func() call { c := h.as(http.MethodPost, StartPath+"?purpose=link"); return c }(), http.StatusBadRequest, requestInvalidCode},
 		{"done without a session", h.as(http.MethodPost, SessionEndPath), http.StatusConflict, sessionRequiredCode},
 	} {
@@ -781,30 +794,34 @@ func TestEvidence_StartAndRouteRules(t *testing.T) {
 	}
 }
 
-func TestEvidence_KeepLinksIsARequiredBoolean(t *testing.T) {
+func TestEvidence_DisconnectRefusesABadQueryKeyOrBody(t *testing.T) {
 	h := newHarness(t)
-	for _, query := range []string{"", "?", "?keepLinks", "?keepLinks=", "?keepLinks=yes", "?keepLinks=TRUE", "?keepLinks=1",
-		"?keepLinks=true&keepLinks=false", "?keepLinks=true&other=1", "?keeplinks=true"} {
-		rec := h.do(h.as(http.MethodDelete, StatusPath+query))
-		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), requestInvalidCode) {
-			t.Errorf("DELETE %q = %d %s, want 400 %s", query, rec.Code, rec.Body.String(), requestInvalidCode)
-		}
+	key := uuid.NewString()
+	for _, query := range []string{"", "?", "?keepLinks=true", "?generation=0", "?keepLinks&generation=0", "?keepLinks=&generation=0",
+		"?keepLinks=yes&generation=0", "?keepLinks=TRUE&generation=0", "?keepLinks=1&generation=0", "?keepLinks=true&keepLinks=false&generation=0",
+		"?keepLinks=true&generation=0&other=1", "?keeplinks=true&generation=0", "?keepLinks=true&generation=", "?keepLinks=true&generation=-1",
+		"?keepLinks=true&generation=+0", "?keepLinks=true&generation=00", "?keepLinks=true&generation=01", "?keepLinks=true&generation=0x1",
+		"?keepLinks=true&generation=0&generation=0", "?keepLinks=true&generation=9223372036854775808", "?keepLinks=true&generation=0;x"} {
+		requireError(t, h.disconnectAs(query, key), http.StatusBadRequest, requestInvalidCode)
 	}
-	if h.connection(h.user.ID).found {
-		t.Fatal("an invalid disconnect wrote the connection row")
+	requireError(t, h.disconnectAs(disconnectQuery(true, 0), ""), http.StatusBadRequest, "idempotency_key_required")
+	for _, bad := range []string{"not-a-uuid", key + "," + key} {
+		requireError(t, h.disconnectAs(disconnectQuery(true, 0), bad), http.StatusBadRequest, "idempotency_key_invalid")
 	}
-	withBody := h.as(http.MethodDelete, StatusPath+"?keepLinks=true")
+	twice := h.as(http.MethodDelete, StatusPath+disconnectQuery(true, 0))
+	twice.header = http.Header{"Idempotency-Key": {key, key}}
+	requireError(t, h.do(twice), http.StatusBadRequest, "idempotency_key_invalid")
+	withBody := h.as(http.MethodDelete, StatusPath+disconnectQuery(true, 0))
 	withBody.body = "{}"
-	withBody.header = http.Header{"Content-Type": {"application/json"}}
-	if rec := h.do(withBody); rec.Code != http.StatusBadRequest {
-		t.Errorf("DELETE with a body = %d, want 400", rec.Code)
+	withBody.header = http.Header{"Content-Type": {"application/json"}, "Idempotency-Key": {key}}
+	requireError(t, h.do(withBody), http.StatusBadRequest, requestInvalidCode)
+	if h.connection(h.user.ID).found {
+		t.Fatal("a refused disconnect wrote the connection row")
 	}
-	for i, query := range []string{"?keepLinks=true", "?keepLinks=false"} {
-		if rec := h.do(h.as(http.MethodDelete, StatusPath+query)); rec.Code != http.StatusNoContent {
-			t.Fatalf("DELETE %s = %d %s", query, rec.Code, rec.Body.String())
-		}
-		if row := h.connection(h.user.ID); row.generation != int64(i+1) || row.githubUserID != nil {
-			t.Fatalf("after DELETE %s connection = %+v, want generation %d", query, row, i+1)
+	for i, keep := range []bool{true, false} {
+		out := requireDisconnected(t, h.disconnect(keep))
+		if row := h.connection(h.user.ID); out.Generation != int64(i+1) || row.generation != int64(i+1) || row.githubUserID != nil {
+			t.Fatalf("after disconnect keepLinks=%t: %+v, connection %+v, want generation %d", keep, out, row, i+1)
 		}
 	}
 }
@@ -847,7 +864,7 @@ func TestEvidence_NoTokenOrSecretInRoutesLogsOrRows(t *testing.T) {
 	})
 	requireOutcome(t, h.connect(h.raw, h.session), outcomeFailed)
 	h.do(h.as(http.MethodPost, SessionEndPath))
-	h.do(h.as(http.MethodDelete, StatusPath+"?keepLinks=true"))
+	requireDisconnected(t, h.disconnect(true))
 	h.drain()
 	tokens, revoked, _, _ := h.gh.snapshot()
 	if len(tokens) != 2 || len(revoked) != 2 {

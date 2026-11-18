@@ -12,10 +12,11 @@ import (
 	"testing"
 )
 
-const (
-	notificationMethod = "AccountSessionsEndedLocked"
-	boundaryMethod     = "inAccount"
-)
+const notificationMethod = "AccountSessionsEndedLocked"
+
+func boundaryMethod(name string) bool {
+	return name == "inAccount" || name == "lockAccount"
+}
 
 func serverRoot(t *testing.T) string {
 	t.Helper()
@@ -64,7 +65,7 @@ func notificationSites(root string) (map[invariantSite]bool, error) {
 					return true
 				}
 				notifies := sel.Sel.Name == notificationMethod && owner != notificationMethod
-				enters := sel.Sel.Name == boundaryMethod && file.Name.Name == "githubevidence"
+				enters := boundaryMethod(sel.Sel.Name) && !boundaryMethod(owner) && file.Name.Name == "githubevidence"
 				if notifies || enters {
 					sites[invariantSite{file: filepath.ToSlash(rel), fn: enclosing}] = true
 				}
@@ -102,7 +103,7 @@ func TestInvariantSites_TheTableNamesEveryNotificationSite(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(found) == 0 {
-		t.Fatal("found no call to AccountSessionsEndedLocked or inAccount under apps/server")
+		t.Fatal("found no call to AccountSessionsEndedLocked, inAccount or lockAccount under apps/server")
 	}
 	named := map[invariantSite]bool{}
 	for _, tc := range callerCases() {

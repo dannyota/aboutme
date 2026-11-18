@@ -29,6 +29,7 @@ const (
 	productionTokenURL     = "https://github.com/login/oauth/access_token"
 	productionAPIBaseURL   = "https://api.github.com"
 	githubAPIVersion       = "2022-11-28"
+	userAgent              = "aboutme.vn"
 	maxLoginLength         = 100
 )
 
@@ -48,6 +49,7 @@ var (
 
 type client struct {
 	http         *http.Client
+	apiBase      string
 	authorizeURL string
 	tokenURL     string
 	userURL      string
@@ -86,6 +88,7 @@ func newClient(clientID string, clientSecret config.Secret, endpoint string, tra
 		apiBase = endpoint
 	}
 	c := &client{
+		apiBase:      apiBase,
 		authorizeURL: authorizeURL,
 		tokenURL:     tokenURL,
 		userURL:      apiBase + "/user",
@@ -96,7 +99,7 @@ func newClient(clientID string, clientSecret config.Secret, endpoint string, tra
 		now:          now,
 	}
 	c.http = &http.Client{
-		Transport: guardedTransport{base: transport, allowed: map[string]bool{
+		Transport: guardedTransport{base: transport, api: apiBase, allowed: map[string]bool{
 			http.MethodPost + " " + c.tokenURL:    true,
 			http.MethodGet + " " + c.userURL:      true,
 			http.MethodDelete + " " + c.revokeURL: true,
@@ -111,6 +114,7 @@ func newClient(clientID string, clientSecret config.Secret, endpoint string, tra
 
 type guardedTransport struct {
 	base    http.RoundTripper
+	api     string
 	allowed map[string]bool
 }
 
@@ -126,10 +130,14 @@ func (g guardedTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 func (g guardedTransport) permits(req *http.Request) bool {
 	u := req.URL
-	if u == nil || u.Opaque != "" || u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" {
+	if u == nil || u.Opaque != "" || u.User != nil || u.ForceQuery || u.Fragment != "" {
 		return false
 	}
-	return g.allowed[req.Method+" "+u.Scheme+"://"+u.Host+u.EscapedPath()]
+	origin := u.Scheme + "://" + u.Host
+	if u.RawQuery == "" && g.allowed[req.Method+" "+origin+u.EscapedPath()] {
+		return true
+	}
+	return req.Method == http.MethodGet && origin == g.api && permittedRead(u.EscapedPath(), u.RawQuery)
 }
 
 func (c *client) authorizeLink(state, verifier, redirectURI string) string {
@@ -159,10 +167,15 @@ func (c *client) send(ctx context.Context, method, target string, body []byte, p
 	if err != nil {
 		return 0, nil, nil, errDestinationRefused
 	}
+	req.Header.Set("User-Agent", userAgent)
 	prepare(req.Header)
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return 0, nil, nil, classifyTransportError(ctx, err)
+		classified := classifyTransportError(ctx, err)
+		if resp != nil && errors.Is(classified, errRedirectRefused) {
+			return resp.StatusCode, resp.Header, nil, classified
+		}
+		return 0, nil, nil, classified
 	}
 	defer resp.Body.Close() //nolint:errcheck // the body is read whole below; a close error changes nothing
 	payload, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))

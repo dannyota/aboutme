@@ -592,7 +592,7 @@ const consumeOAuthTransaction = `-- name: ConsumeOAuthTransaction :one
 UPDATE oauth_transactions
 SET consumed_at = $2
 WHERE handle_hash = $1 AND consumed_at IS NULL AND expires_at > $2
-RETURNING id, handle_hash, provider, purpose, linking_user_id, state, pkce_verifier, nonce, redirect_uri, created_at, expires_at, consumed_at, return_path, resume_id, evidence_generation
+RETURNING id, handle_hash, provider, purpose, linking_user_id, state, pkce_verifier, nonce, redirect_uri, created_at, expires_at, consumed_at, return_path, resume_id, evidence_generation, evidence_project_id
 `
 
 type ConsumeOAuthTransactionParams struct {
@@ -619,6 +619,7 @@ func (q *Queries) ConsumeOAuthTransaction(ctx context.Context, arg ConsumeOAuthT
 		&i.ReturnPath,
 		&i.ResumeID,
 		&i.EvidenceGeneration,
+		&i.EvidenceProjectID,
 	)
 	return i, err
 }
@@ -1050,10 +1051,10 @@ func (q *Queries) CreateOAuthToken(ctx context.Context, arg CreateOAuthTokenPara
 
 const createOAuthTransaction = `-- name: CreateOAuthTransaction :one
 INSERT INTO oauth_transactions (
-    handle_hash, provider, purpose, linking_user_id, state, pkce_verifier, nonce, redirect_uri, return_path, expires_at, resume_id, evidence_generation
+    handle_hash, provider, purpose, linking_user_id, state, pkce_verifier, nonce, redirect_uri, return_path, expires_at, resume_id, evidence_generation, evidence_project_id
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
-) RETURNING id, handle_hash, provider, purpose, linking_user_id, state, pkce_verifier, nonce, redirect_uri, created_at, expires_at, consumed_at, return_path, resume_id, evidence_generation
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+) RETURNING id, handle_hash, provider, purpose, linking_user_id, state, pkce_verifier, nonce, redirect_uri, created_at, expires_at, consumed_at, return_path, resume_id, evidence_generation, evidence_project_id
 `
 
 type CreateOAuthTransactionParams struct {
@@ -1069,6 +1070,7 @@ type CreateOAuthTransactionParams struct {
 	ExpiresAt          time.Time
 	ResumeID           *uuid.UUID
 	EvidenceGeneration *int64
+	EvidenceProjectID  *uuid.UUID
 }
 
 func (q *Queries) CreateOAuthTransaction(ctx context.Context, arg CreateOAuthTransactionParams) (OAuthTransaction, error) {
@@ -1085,6 +1087,7 @@ func (q *Queries) CreateOAuthTransaction(ctx context.Context, arg CreateOAuthTra
 		arg.ExpiresAt,
 		arg.ResumeID,
 		arg.EvidenceGeneration,
+		arg.EvidenceProjectID,
 	)
 	var i OAuthTransaction
 	err := row.Scan(
@@ -1103,6 +1106,7 @@ func (q *Queries) CreateOAuthTransaction(ctx context.Context, arg CreateOAuthTra
 		&i.ReturnPath,
 		&i.ResumeID,
 		&i.EvidenceGeneration,
+		&i.EvidenceProjectID,
 	)
 	return i, err
 }

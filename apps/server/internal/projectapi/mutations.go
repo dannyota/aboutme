@@ -189,7 +189,11 @@ func (s *Service) match(ctx context.Context, q *store.Queries, owner, id uuid.UU
 		if linkErr != nil {
 			return project.Project{}, linkErr
 		}
-		return project.Project{}, &linkedMismatch{current: resourceOf(mismatch.Current, links)}
+		current, oneErr := s.single(ctx, q, owner, mismatch.Current, links)
+		if oneErr != nil {
+			return project.Project{}, oneErr
+		}
+		return project.Project{}, &linkedMismatch{current: current}
 	}
 	return current, err
 }
@@ -231,7 +235,11 @@ func (s *Service) create(ctx context.Context, q *store.Queries, owner uuid.UUID,
 	if err != nil {
 		return resume.StoredResponse{}, err
 	}
-	return stored(201, resourceOf(p, nil), map[string]string{"Location": projectsPath + "/" + p.ID.String(), "ETag": revisionTag(p.Revision)})
+	one, err := s.single(ctx, q, owner, p, nil)
+	if err != nil {
+		return resume.StoredResponse{}, err
+	}
+	return stored(201, one, map[string]string{"Location": projectsPath + "/" + p.ID.String(), "ETag": revisionTag(p.Revision)})
 }
 
 func (s *Service) reauthenticate(ctx context.Context, q *store.Queries, sess store.Session) error {

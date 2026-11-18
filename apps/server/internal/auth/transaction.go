@@ -53,6 +53,7 @@ type Transaction struct {
 	ResumeID      uuid.UUID
 
 	EvidenceGeneration int64
+	EvidenceProjectID  uuid.UUID
 }
 
 var ErrTransactionInvalid = errors.New("auth: oauth transaction invalid")
@@ -141,7 +142,7 @@ func (s *TransactionStore) Consume(ctx context.Context, handle string, expectedP
 	return transactionFromRow(row), nil
 }
 
-func (s *TransactionStore) BeginEvidence(ctx context.Context, userID uuid.UUID, generation int64, redirectURI string) (string, Transaction, error) {
+func (s *TransactionStore) BeginEvidence(ctx context.Context, userID uuid.UUID, generation int64, projectID uuid.UUID, redirectURI string) (string, Transaction, error) {
 	if userID == uuid.Nil || generation < 0 {
 		return "", Transaction{}, errors.New("auth: begin evidence transaction: invalid binding")
 	}
@@ -152,6 +153,10 @@ func (s *TransactionStore) BeginEvidence(ctx context.Context, userID uuid.UUID, 
 	state, err := randomToken()
 	if err != nil {
 		return "", Transaction{}, fmt.Errorf("auth: begin evidence transaction: generate state: %w", err)
+	}
+	var project *uuid.UUID
+	if projectID != uuid.Nil {
+		project = &projectID
 	}
 	row, err := s.q.CreateOAuthTransaction(ctx, store.CreateOAuthTransactionParams{
 		HandleHash:         hashHandle(handle),
@@ -164,6 +169,7 @@ func (s *TransactionStore) BeginEvidence(ctx context.Context, userID uuid.UUID, 
 		ReturnPath:         settingsSessionsPath,
 		ExpiresAt:          s.now().Add(oauthTxTTL),
 		EvidenceGeneration: &generation,
+		EvidenceProjectID:  project,
 	})
 	if err != nil {
 		return "", Transaction{}, fmt.Errorf("auth: begin evidence transaction: %w", err)
@@ -220,6 +226,9 @@ func transactionFromRow(row store.OAuthTransaction) Transaction {
 	}
 	if row.EvidenceGeneration != nil {
 		tx.EvidenceGeneration = *row.EvidenceGeneration
+	}
+	if row.EvidenceProjectID != nil {
+		tx.EvidenceProjectID = *row.EvidenceProjectID
 	}
 	return tx
 }

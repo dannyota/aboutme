@@ -12,14 +12,31 @@ import (
 	"github.com/google/uuid"
 )
 
+const accountHasProjectEvidence = `-- name: AccountHasProjectEvidence :one
+SELECT EXISTS (
+    SELECT 1
+    FROM project_evidence e
+    JOIN projects p ON p.id = e.project_id
+    WHERE p.user_id = $1
+)
+`
+
+func (q *Queries) AccountHasProjectEvidence(ctx context.Context, userID uuid.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, accountHasProjectEvidence, userID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const clearGitHubConnection = `-- name: ClearGitHubConnection :one
-INSERT INTO github_connections (user_id, generation)
-VALUES ($1, 1)
+INSERT INTO github_connections (user_id, generation, binding)
+VALUES ($1, 1, 1)
 ON CONFLICT (user_id) DO UPDATE
 SET github_user_id = NULL,
     login = NULL,
     connected_at = NULL,
-    generation = github_connections.generation + 1
+    generation = github_connections.generation + 1,
+    binding = github_connections.binding + 1
 RETURNING generation
 `
 
@@ -31,7 +48,7 @@ func (q *Queries) ClearGitHubConnection(ctx context.Context, userID uuid.UUID) (
 }
 
 const getGitHubConnection = `-- name: GetGitHubConnection :one
-SELECT user_id, github_user_id, login, connected_at, generation
+SELECT user_id, github_user_id, login, connected_at, generation, binding
 FROM github_connections
 WHERE user_id = $1
 `
@@ -45,12 +62,13 @@ func (q *Queries) GetGitHubConnection(ctx context.Context, userID uuid.UUID) (Gi
 		&i.Login,
 		&i.ConnectedAt,
 		&i.Generation,
+		&i.Binding,
 	)
 	return i, err
 }
 
 const getGitHubConnectionForUpdate = `-- name: GetGitHubConnectionForUpdate :one
-SELECT user_id, github_user_id, login, connected_at, generation
+SELECT user_id, github_user_id, login, connected_at, generation, binding
 FROM github_connections
 WHERE user_id = $1
 FOR UPDATE
@@ -65,19 +83,24 @@ func (q *Queries) GetGitHubConnectionForUpdate(ctx context.Context, userID uuid.
 		&i.Login,
 		&i.ConnectedAt,
 		&i.Generation,
+		&i.Binding,
 	)
 	return i, err
 }
 
 const installGitHubConnection = `-- name: InstallGitHubConnection :one
-INSERT INTO github_connections (user_id, github_user_id, login, connected_at, generation)
-VALUES ($1, $2::bigint, $3::text, $4::timestamptz, 1)
+INSERT INTO github_connections (user_id, github_user_id, login, connected_at, generation, binding)
+VALUES ($1, $2::bigint, $3::text, $4::timestamptz, 1, 1)
 ON CONFLICT (user_id) DO UPDATE
 SET github_user_id = EXCLUDED.github_user_id,
     login = EXCLUDED.login,
     connected_at = EXCLUDED.connected_at,
-    generation = github_connections.generation + 1
-RETURNING user_id, github_user_id, login, connected_at, generation
+    generation = github_connections.generation + 1,
+    binding = CASE
+        WHEN github_connections.github_user_id IS NOT DISTINCT FROM EXCLUDED.github_user_id THEN github_connections.binding
+        ELSE github_connections.binding + 1
+    END
+RETURNING user_id, github_user_id, login, connected_at, generation, binding
 `
 
 type InstallGitHubConnectionParams struct {
@@ -101,6 +124,25 @@ func (q *Queries) InstallGitHubConnection(ctx context.Context, arg InstallGitHub
 		&i.Login,
 		&i.ConnectedAt,
 		&i.Generation,
+		&i.Binding,
 	)
 	return i, err
+}
+
+const projectBelongsToUser = `-- name: ProjectBelongsToUser :one
+SELECT EXISTS (
+    SELECT 1 FROM projects WHERE id = $1 AND user_id = $2
+)
+`
+
+type ProjectBelongsToUserParams struct {
+	ProjectID uuid.UUID
+	UserID    uuid.UUID
+}
+
+func (q *Queries) ProjectBelongsToUser(ctx context.Context, arg ProjectBelongsToUserParams) (bool, error) {
+	row := q.db.QueryRow(ctx, projectBelongsToUser, arg.ProjectID, arg.UserID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
