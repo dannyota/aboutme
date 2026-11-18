@@ -508,14 +508,14 @@ export interface paths {
         };
         /**
          * The GitHub connection and whether an evidence session is live
-         * @description Returns the caller's GitHub connection (`null` when none) and the live evidence session's expiry (`null` when none is live). A session whose recorded authentication epoch or connection generation no longer matches is ended here and reported as `null`. Takes no query or body.
+         * @description Returns the connection generation (`0` when no connection row exists), the caller's GitHub connection (`null` when none) and the live evidence session's expiry (`null` when none is live). Send the generation back on disconnect. A session whose recorded authentication epoch or connection generation no longer matches is ended here and reported as `null`. Takes no query or body.
          */
         get: operations["getGitHubEvidence"];
         put?: never;
         post?: never;
         /**
          * Disconnect GitHub
-         * @description Under the owner lock, advances the connection generation and clears the GitHub user id, login and connected time; the row and its generation stay. Then ends the evidence session and asks GitHub to revoke its token. Advances the generation even when nothing is connected, so a callback begun earlier fails. `keepLinks` is required; no evidence is stored in this release, so its value changes nothing else yet. Takes no body.
+         * @description A guarded write under the owner lock. `generation` must equal the current connection generation, which `GET /github-evidence` reports, or the request answers `409 evidence_connection_changed` and changes nothing. When any evidence item exists, every published resume of the caller that links a project with evidence is planned first and must be unchanged under the owner lock; after three changed plans the request answers `public_state_busy` and changes nothing. In one transaction it advances the connection generation and binding and clears the GitHub user id, login and connected time (the row stays); with `keepLinks=false` it deletes every evidence item of the account and advances each changed project's revision, and with `keepLinks=true` it keeps every item as a plain link and changes no project; and it advances each planned resume's revision by one without a document change. Last before commit it ends the evidence session and asks GitHub to revoke its token. Advances the generation even when nothing is connected, so a callback begun earlier fails. A stored replay for the `Idempotency-Key` answers before the generation check; the fingerprint covers the route, `keepLinks` and `generation`. Takes no body and no `If-Match`, and answers no `ETag`.
          */
         delete: operations["deleteGitHubEvidence"];
         options?: never;
@@ -534,7 +534,7 @@ export interface paths {
         put?: never;
         /**
          * Begin connecting GitHub, or continue with it
-         * @description Creates a one-use OAuth transaction with purpose `evidence`, a fresh `state`, PKCE S256 and the callback URL `PUBLIC_ORIGIN` + `/api/v1/github-evidence/callback`, bound to the caller and the connection generation at this moment. It expires after ten minutes. Sets the `__Host-oauth-tx` cookie and returns GitHub's authorize URL for a top-level navigation; the URL asks for no scope. Never redirects. `GET` answers `405`. At most 10 starts per account per hour. Takes no query or body.
+         * @description Creates a one-use OAuth transaction with purpose `evidence`, a fresh `state`, PKCE S256 and the callback URL `PUBLIC_ORIGIN` + `/api/v1/github-evidence/callback`, bound to the caller and the connection generation at this moment. It expires after ten minutes. Sets the `__Host-oauth-tx` cookie and returns GitHub's authorize URL for a top-level navigation; the URL asks for no scope. Never redirects. `GET` answers `405`. At most 10 starts per account per hour. Takes no query. The body is optional: none, an empty body, or a JSON object with an optional string `returnTo`. A `returnTo` equal to `/app/projects/{id}` for a project of the caller is stored in the transaction so the callback returns there; a missing, malformed or foreign value falls back to Settings. Any other body, a repeated or unknown key, or a body over 4,096 bytes is `400 request_invalid`.
          */
         post: operations["postGitHubEvidenceStart"];
         delete?: never;
@@ -552,7 +552,7 @@ export interface paths {
         };
         /**
          * Complete connecting GitHub
-         * @description GitHub's redirect target. Consumes the `__Host-oauth-tx` transaction once and clears the cookie on every outcome. Requires the transaction's `state`, its callback URL, and a live `__Host-session` of the user who started it. Then exchanges the code, refuses a token response whose `scope` is missing or not empty, and fetches the GitHub profile. One owner-locked transaction compares the generation recorded at start with the stored one and, only when equal, installs the connection, advances the generation and starts a 30-minute in-memory evidence session that replaces any earlier one. Any failure after the exchange asks GitHub to revoke the token. The refresh token is dropped unread. It never signs in, links an identity or updates reauthentication proof.
+         * @description GitHub's redirect target. Consumes the `__Host-oauth-tx` transaction once and clears the cookie on every outcome. Requires the transaction's `state`, its callback URL, and a live `__Host-session` of the user who started it. Then exchanges the code, refuses a token response whose `scope` is missing or not empty, and fetches the GitHub profile. One owner-locked transaction compares the generation recorded at start with the stored one and, only when equal, installs the connection, advances the generation and starts a 30-minute in-memory evidence session that replaces any earlier one. The binding advances only when the GitHub user id changes, so continuing with the same account keeps every confirmed mark. Connecting a different GitHub account while the account has evidence is refused. Any failure after the exchange asks GitHub to revoke the token. The refresh token is dropped unread. It never signs in, links an identity or updates reauthentication proof.
          */
         get: operations["getGitHubEvidenceCallback"];
         put?: never;
@@ -662,7 +662,7 @@ export interface paths {
         };
         /**
          * List the caller's private project library
-         * @description Lists only the caller's projects in creation order. Reads share the resume read limiter. Query parameters and bodies are rejected. Every response uses Cache-Control no-store, no-transform.
+         * @description Lists only the caller's projects in creation order. No project in the list carries `evidence`. Reads share the resume read limiter. Query parameters and bodies are rejected. Every response uses Cache-Control no-store, no-transform.
          */
         get: operations["listProjects"];
         put?: never;
@@ -689,12 +689,12 @@ export interface paths {
         };
         /**
          * Read one owned library project
-         * @description Missing and foreign IDs return the same project_not_found response. Reads share the resume read limiter. Every response uses Cache-Control no-store, no-transform.
+         * @description Missing and foreign IDs return the same project_not_found response. While GitHub evidence is on, the project carries the read-only `evidence` array. Reads share the resume read limiter. Every response uses Cache-Control no-store, no-transform.
          */
         get: operations["getProject"];
         /**
          * Replace a complete owned library project
-         * @description Omitted optional fields are cleared and absent translations removed. Every successful write advances the project revision. When the stored slug or the stored sanitized document changes, every published resume of the caller that links the project advances its revision by one in the same transaction, without a document change; unpublished resumes and a write that stores the same slug and document advance none. The linking resumes are planned first and must be unchanged under the owner lock; after three changed plans the request answers public_state_busy and changes nothing. A slug rename holds the old slug for 180 days and consumes the shared slug limiter. Slug release requires recent primary proof and, for an enrolled account, recent second-factor proof. Writes share the resume write limiter. Every response uses Cache-Control no-store, no-transform.
+         * @description Omitted optional fields are cleared and absent translations removed. Evidence is never read from or written by this request; the stored document plus 1 KiB per stored evidence item must stay within 96 KiB. Every successful write advances the project revision. When the stored slug or the stored sanitized document changes, every published resume of the caller that links the project advances its revision by one in the same transaction, without a document change; unpublished resumes and a write that stores the same slug and document advance none. The linking resumes are planned first and must be unchanged under the owner lock; after three changed plans the request answers public_state_busy and changes nothing. A slug rename holds the old slug for 180 days and consumes the shared slug limiter. Slug release requires recent primary proof and, for an enrolled account, recent second-factor proof. Writes share the resume write limiter. Every response uses Cache-Control no-store, no-transform.
          */
         put: operations["replaceProject"];
         post?: never;
@@ -703,6 +703,125 @@ export interface paths {
          * @description Deletes the project and holds its slug for 180 days in the same transaction as its replay response. Every resume of the caller that links the project, published or not, loses the link in that transaction: the entry and its text stay, and the resume revision advances by one. The linking resumes are planned first and must be unchanged under the owner lock; after three changed plans the request answers public_state_busy and changes nothing. Requires recent primary proof and, for an enrolled account, recent second-factor proof. Writes share the resume write limiter. No request body is accepted: a non-empty body is request_invalid, and one over 262,144 bytes is body_too_large. Every response uses Cache-Control no-store, no-transform.
          */
         delete: operations["deleteProject"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/evidence/candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The owned library project's server-generated UUIDv7. */
+                id: components["parameters"]["ProjectID"];
+            };
+            cookie?: never;
+        };
+        /**
+         * One page of GitHub items the project can attach
+         * @description Lists one page of the caller's repositories, merged pull requests or releases through the live evidence session. Repository listings drop forks and private repositories, and release listings drop drafts and releases by another author, after fetching, so a page may hold fewer than 30 rows. Each row carries a `candidateId` valid only in this session. `attached` marks a row already on this project: a pull request by repository full name and number, other kinds by item id. Each call is one GitHub request toward the 120 per account per hour. The request must carry a valid `X-CSRF-Token`, given once; otherwise it answers `403 csrf_rejected` before any GitHub request or change to the session's listed candidates. Reads share the resume read limiter. Takes no body. Every response uses Cache-Control no-store, no-transform.
+         */
+        get: operations["listProjectEvidenceCandidates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/evidence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The owned library project's server-generated UUIDv7. */
+                id: components["parameters"]["ProjectID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Attach one GitHub item to a library project
+         * @description Takes exactly one of `link` or `candidateId` with `kind`. A link is trimmed and parsed, never fetched as given: only `https://github.com/{owner}/{repo}`, `/pull/{number}` and `/releases/tag/{tag}`, with an optional trailing slash, are accepted, and a link whose kind differs from `kind` is `422 evidence_unsupported_link`. A `candidateId` must come from a listing of the live session (else `409 evidence_session_required`) with the same `kind` (else `400 request_invalid`). GitHub is read before the transaction through the live evidence session: the repository, then the item, each counted toward the 120 requests per account per hour. Inside the owner-locked transaction the connection generation and a live session of the same epoch must be unchanged, or the request answers `409 evidence_session_required` and stores nothing. The item is stored at the end of the project's order and confirmed. The project revision advances, and every published resume of the caller that links the project advances its revision by one without a document change; the linking resumes are planned first and must be unchanged under the owner lock, and after three changed plans the request answers public_state_busy. A request carrying an `Authorization` header is `400 request_invalid`. Writes share the resume write limiter. Every response uses Cache-Control no-store, no-transform.
+         */
+        post: operations["attachProjectEvidence"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/evidence/order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The owned library project's server-generated UUIDv7. */
+                id: components["parameters"]["ProjectID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Reorder a library project's evidence
+         * @description `order` names every evidence item of the project exactly once, in the new order. An id that is not an item of this project is `404 evidence_not_found`; a missing or repeated id, or more than 10 ids, is `400 request_invalid`. Reads nothing from GitHub and needs no evidence session. The project revision advances, and every published resume of the caller that links the project advances its revision by one without a document change, planned as for attach. An order equal to the current one, including `[]` on a project without evidence, changes nothing: it answers 200 with the current evidence and project revision and an empty `resumeRevisions`, and stores the answer for replay. A request carrying an `Authorization` header is `400 request_invalid`. Writes share the resume write limiter. Every response uses Cache-Control no-store, no-transform.
+         */
+        put: operations["reorderProjectEvidence"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/evidence/{evidenceId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The owned library project's server-generated UUIDv7. */
+                id: components["parameters"]["ProjectID"];
+                /** @description An evidence item's UUID. An unknown id, or one that belongs to another project or account, is `404 evidence_not_found`. */
+                evidenceId: components["parameters"]["EvidenceID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove one evidence item from a library project
+         * @description Deletes the item. An unknown id, or one that belongs to another project or account, is `404 evidence_not_found`. Reads nothing from GitHub and needs no evidence session. The project revision advances, and every published resume of the caller that links the project advances its revision by one without a document change, planned as for attach. No request body is accepted: a non-empty body is `400 request_invalid`. A request carrying an `Authorization` header is `400 request_invalid`. Writes share the resume write limiter. Every response uses Cache-Control no-store, no-transform.
+         */
+        delete: operations["removeProjectEvidence"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{id}/evidence/{evidenceId}/recheck": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The owned library project's server-generated UUIDv7. */
+                id: components["parameters"]["ProjectID"];
+                /** @description An evidence item's UUID. An unknown id, or one that belongs to another project or account, is `404 evidence_not_found`. */
+                evidenceId: components["parameters"]["EvidenceID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check one evidence item again
+         * @description Fetches the item again through the live evidence session, resolving the repository by its stored full name; a rename is followed only when GitHub's `Location` names the stored repository id. When GitHub answers, every field after the item id is rewritten: an item that meets its rule is confirmed and its flag cleared, one that fails it is flagged `rule_failed`, and a 404 or 410 for the item or its repository, or a different repository or item id, flags it `gone`. A transient failure (`409 evidence_session_required`, `429 rate_limited`, `502 evidence_upstream`) changes nothing; a release whose tag or URL exceeds the stored limits is `502 evidence_upstream`. An unknown id, or one that belongs to another project or account, is `404 evidence_not_found`. Inside the owner-locked transaction the connection generation and a live session of the same epoch must be unchanged. The project revision advances, and every published resume of the caller that links the project advances its revision by one without a document change, planned as for attach. No request body is accepted. A request carrying an `Authorization` header is `400 request_invalid`. Writes share the resume write limiter. Every response uses Cache-Control no-store, no-transform.
+         */
+        post: operations["recheckProjectEvidence"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1907,6 +2026,13 @@ export interface components {
             connectedAt: string;
         };
         GitHubEvidenceStatus: {
+            /**
+             * Format: int64
+             * @description The connection generation, `0` when no connection row exists. Advances on every connect, replacement and disconnect and never repeats. Disconnect requires the current value.
+             */
+            generation: number;
+            /** @description Whether any project of the account holds an evidence item, connected or not. Settings asks keep or remove before disconnecting only when it is true. */
+            hasEvidence: boolean;
             /** @description The connection, or `null` when none is connected. */
             connection: components["schemas"]["GitHubConnection"] | null;
             /** @description The live evidence session, or `null` when none is live. */
@@ -1918,11 +2044,26 @@ export interface components {
                 expiresAt: string;
             } | null;
         };
+        GitHubEvidenceStartRequest: {
+            /** @description `/app/projects/{id}` for a project of the caller, with a lowercase UUID. The callback then redirects there; any other string falls back to Settings. */
+            returnTo?: string;
+        };
+        GitHubEvidenceDisconnectResponse: {
+            data: {
+                /**
+                 * Format: int64
+                 * @description The connection generation after the disconnect.
+                 */
+                generation: number;
+                projectRevisions: components["schemas"]["ProjectRevisions"];
+                resumeRevisions: components["schemas"]["ProjectChangedResumes"];
+            };
+        };
         /**
-         * @description Error codes of the GitHub evidence routes beside the existing `request_invalid`, `session_required`, `csrf_rejected`, `method_not_allowed` and `rate_limited` (`429` with `Retry-After` when the start limit is spent). `evidence_unavailable`: the feature is off (`404`) or the server is shutting down (`503`). `evidence_session_required`: no evidence session is live (`409`). `evidence_upstream`: a GitHub error, a GitHub timeout, or the per-account GitHub request budget spent; reserved for routes that answer GitHub results as JSON, since the callback only redirects.
+         * @description Error codes of the GitHub evidence routes beside the existing `request_invalid`, `session_required`, `csrf_rejected`, `method_not_allowed`, `project_not_found`, `idempotency_key_reuse`, `public_state_busy` and `rate_limited` (`429` with `Retry-After`). `evidence_unavailable`: the feature is off (`404`, on every evidence route including the project ones) or the server is shutting down (`503`, start only). `evidence_session_required`: no evidence session is live, a candidate from an ended session, or GitHub's 401 (`409`). `evidence_not_confirmed`: the item fails its rule, or GitHub reports it gone, on attach (`422`). `evidence_duplicate`: the same kind and item id are already on the project (`409`). `evidence_limit`: an eleventh item (`422`). `evidence_unsupported_link`: a link outside the accepted grammar (`422`). `evidence_upstream`: any other GitHub failure (`502`). `evidence_connection_changed`: disconnect named a generation that is no longer current (`409`). `evidence_not_found`: an evidence id that is not an item of the project (`404`).
          * @enum {string}
          */
-        GitHubEvidenceErrorCode: "evidence_unavailable" | "evidence_session_required" | "evidence_upstream";
+        GitHubEvidenceErrorCode: "evidence_unavailable" | "evidence_session_required" | "evidence_not_confirmed" | "evidence_duplicate" | "evidence_limit" | "evidence_unsupported_link" | "evidence_upstream" | "evidence_connection_changed" | "evidence_not_found";
         Capabilities: {
             /** @description At least one provider's login and linking routes are registered; true exactly when `providers` is non-empty. */
             providerLogin: boolean;
@@ -2381,6 +2522,8 @@ export interface components {
         Project: components["schemas"]["ProjectRecord"] & {
             /** @description The caller's resumes whose project entries link this project, in resume list order. */
             linkedResumeIds: string[];
+            /** @description Read-only. Present on every single-project response (create, read, replace and the `412 revision_mismatch` details) while GitHub evidence is on; absent while it is off and always absent from the list. A request never carries it. */
+            evidence?: components["schemas"]["ProjectEvidenceList"];
         };
         ProjectResponse: {
             data: components["schemas"]["Project"];
@@ -2407,6 +2550,93 @@ export interface components {
             id: string;
             revision: components["schemas"]["Revision"];
         }[];
+        /** @description Each project whose revision advanced, with its new revision, in project id order. */
+        ProjectRevisions: {
+            /** Format: uuid */
+            id: string;
+            revision: components["schemas"]["Revision"];
+        }[];
+        /** @enum {string} */
+        ProjectEvidenceKind: "repository" | "pullRequest" | "release";
+        /** @description One evidence item. `confirmed` is derived at read time: the last check met the item's rule, the account has a live connection, and that connection's binding is the one the check ran under. */
+        ProjectEvidence: {
+            /** Format: uuid */
+            id: string;
+            kind: components["schemas"]["ProjectEvidenceKind"];
+            /**
+             * Format: uri
+             * @description Built by the server, always under `https://github.com/`.
+             */
+            url: string;
+            /** @description The repository's full name, at most 200 characters. */
+            repositoryName: string;
+            /** @description GitHub's title as plain text, at most 200 characters. */
+            title: string;
+            /**
+             * Format: date-time
+             * @description Repository `created_at`, pull request `merged_at` or release `published_at`, in UTC.
+             */
+            itemDate: string;
+            /** Format: date-time */
+            checkedAt: string;
+            confirmed: boolean;
+            /**
+             * @description `rule_failed` when the last check fetched the item and it failed its rule, `gone` when GitHub answered 404 or 410 or a different id, or `null`.
+             * @enum {string|null}
+             */
+            flagReason: "rule_failed" | "gone" | null;
+        };
+        /** @description The project's evidence in the owner's order. */
+        ProjectEvidenceList: components["schemas"]["ProjectEvidence"][];
+        ProjectEvidenceCandidate: {
+            /** @description Opaque; valid only for attach in the evidence session that listed it. */
+            candidateId: string;
+            kind: components["schemas"]["ProjectEvidenceKind"];
+            title: string;
+            repository: {
+                /**
+                 * Format: int64
+                 * @description GitHub's repository id; `null` for a pull request, whose search result carries none.
+                 */
+                id: number | null;
+                fullName: string;
+            };
+            /**
+             * Format: date-time
+             * @description Repository `created_at`, pull request `closed_at` or release `published_at`, in UTC.
+             */
+            date: string;
+            /** @description Whether this item is already on the project. */
+            attached: boolean;
+        };
+        ProjectEvidenceCandidatesResponse: {
+            data: {
+                items: components["schemas"]["ProjectEvidenceCandidate"][];
+                /** @description `page + 1` when GitHub returned 30 rows and `page` is below 10, else `null`. */
+                nextPage: number | null;
+                /** @description GitHub's `incomplete_results` for a pull request search; `false` for the other kinds. */
+                incomplete: boolean;
+            };
+        };
+        /** @description Exactly one of `link` or `candidateId`. */
+        ProjectEvidenceAttachRequest: {
+            kind: components["schemas"]["ProjectEvidenceKind"];
+            /** @description A GitHub repository, pull request or release link. */
+            link?: string;
+            /** @description A `candidateId` from a listing of the live session. */
+            candidateId?: string;
+        } & (unknown | unknown);
+        ProjectEvidenceOrderRequest: {
+            /** @description Every evidence id of the project exactly once. */
+            order: string[];
+        };
+        ProjectEvidenceWriteResponse: {
+            data: {
+                evidence: components["schemas"]["ProjectEvidenceList"];
+                projectRevision: components["schemas"]["Revision"];
+                resumeRevisions: components["schemas"]["ProjectChangedResumes"];
+            };
+        };
         ProjectRevisionError: {
             error: {
                 /** @constant */
@@ -2426,10 +2656,14 @@ export interface components {
                 exportedAt: string;
                 account: components["schemas"]["AccountExportProfile"];
                 resumes: components["schemas"]["AccountExportResume"][];
-                projects: components["schemas"]["ProjectRecord"][];
+                projects: components["schemas"]["AccountExportProject"][];
                 /** @description Present only when a GitHub account is connected for evidence: its GitHub user id, login and connected time. Never holds a token. */
                 githubConnection?: components["schemas"]["GitHubConnection"];
             };
+        };
+        AccountExportProject: components["schemas"]["ProjectRecord"] & {
+            /** @description The project's stored evidence, present whether or not GitHub evidence is on. Carries no generation, binding or GitHub account id. */
+            evidence: components["schemas"]["ProjectEvidenceList"];
         };
         AccountExportProfile: {
             /** Format: uuid */
@@ -3209,7 +3443,7 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description `request_invalid`: an unexpected query, body or `keepLinks` value. */
+        /** @description `request_invalid`: an unexpected query or body. */
         GitHubEvidenceRequestInvalid: {
             headers: {
                 [name: string]: unknown;
@@ -3219,7 +3453,60 @@ export interface components {
                  * @example {
                  *       "error": {
                  *         "code": "request_invalid",
-                 *         "message": "keepLinks must be given once as true or false"
+                 *         "message": "this request takes no query or body"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `request_invalid` for a missing, repeated or malformed `keepLinks` or `generation`, any other query parameter, or a body; `idempotency_key_required` or `idempotency_key_invalid` for the `Idempotency-Key` header. Nothing changes. */
+        GitHubEvidenceDisconnectBadRequest: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "request_invalid",
+                 *         "message": "keepLinks must be true or false and generation a whole number, each given once"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `evidence_connection_changed` when `generation` is not the current connection generation, or `idempotency_key_reuse` when the key was used with another `keepLinks` or `generation`. Nothing changes. */
+        GitHubEvidenceDisconnectConflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "evidence_connection_changed",
+                 *         "message": "the GitHub connection has changed"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `rate_limited`: the account's stored idempotency records are at capacity. Nothing changes. Carries `Retry-After` in whole seconds. */
+        GitHubEvidenceIdempotencyLimited: {
+            headers: {
+                /** @description Whole seconds to wait before retrying. */
+                "Retry-After"?: number;
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "rate_limited",
+                 *         "message": "idempotency capacity exceeded"
                  *       }
                  *     }
                  */
@@ -3328,7 +3615,7 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description `document_invalid`: a field breaks its rule, the slug breaks the slug grammar, or the stored JSON exceeds 96 KiB. */
+        /** @description `document_invalid`: a field breaks its rule, the slug breaks the slug grammar, or the stored JSON plus 1 KiB per stored evidence item exceeds 96 KiB. */
         ProjectDocumentInvalid: {
             headers: {
                 [name: string]: unknown;
@@ -3370,6 +3657,268 @@ export interface components {
                 [name: string]: unknown;
             };
             content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description The project's evidence in the owner's order, the advanced project revision, and each published linking resume with its new revision. */
+        ProjectEvidenceWritten: {
+            headers: {
+                ETag: components["headers"]["ProjectETag"];
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "data": {
+                 *         "evidence": [
+                 *           {
+                 *             "id": "018f5b6a-9a3e-7c21-8b1e-000000000061",
+                 *             "kind": "pullRequest",
+                 *             "url": "https://github.com/octocat/hello/pull/42",
+                 *             "repositoryName": "octocat/hello",
+                 *             "title": "Fix the thing",
+                 *             "itemDate": "2026-01-02T03:04:05Z",
+                 *             "checkedAt": "2026-11-17T08:00:00Z",
+                 *             "confirmed": true,
+                 *             "flagReason": null
+                 *           }
+                 *         ],
+                 *         "projectRevision": "8",
+                 *         "resumeRevisions": [
+                 *           {
+                 *             "id": "018f5b6a-9a3e-7c21-8b1e-000000000010",
+                 *             "revision": "12"
+                 *           }
+                 *         ]
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["ProjectEvidenceWriteResponse"];
+            };
+        };
+        /** @description `request_invalid` for a malformed path id, any query, an `Authorization` header, a non-JSON body, or a body that breaks the operation's shape; `idempotency_key_required`, `idempotency_key_invalid` or `precondition_malformed` for the headers. Nothing changes. */
+        ProjectEvidenceBadRequest: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "request_invalid",
+                 *         "message": "request does not match the operation"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `csrf_rejected`: the request carried no valid `X-CSRF-Token`, as a link or a cross-site navigation does. Refused before any GitHub request, any use of the hourly budget and any change to the listed candidates. */
+        ProjectEvidenceCandidatesCsrfRejected: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "csrf_rejected",
+                 *         "message": "CSRF validation failed"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `request_invalid`: a malformed project id, a missing, repeated, non-canonical or out-of-range `kind` or `page`, a `repository` that is missing for `release` or present for another kind, any other query parameter, a body, or an `Authorization` header. */
+        ProjectEvidenceQueryInvalid: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "request_invalid",
+                 *         "message": "request does not match the operation"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `evidence_unavailable` when GitHub evidence is off, answered before any other check, or `project_not_found`, identical for a missing project and another account's project. */
+        ProjectEvidenceProjectNotFound: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "evidence_unavailable",
+                 *         "message": "GitHub evidence is not available"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `evidence_unavailable` when GitHub evidence is off, answered before any other check; `project_not_found`, identical for a missing project and another account's project; or `evidence_not_found` for an evidence id that is not an item of this project. Nothing changes. */
+        ProjectEvidenceItemNotFound: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "evidence_not_found",
+                 *         "message": "evidence item not found"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `evidence_session_required`: no evidence session is live, GitHub answered 401 (the session ends and its token is revoked), or a release listing names a repository id the live session did not list. */
+        ProjectEvidenceSessionRequired: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "evidence_session_required",
+                 *         "message": "no GitHub evidence session is live"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `evidence_session_required` when no evidence session is live, the `candidateId` is not from the live session, GitHub answered 401, or a disconnect or replacement committed during the GitHub read; `evidence_duplicate` when the same kind and item id are already on this project; or `idempotency_key_reuse`. Nothing changes. */
+        ProjectEvidenceAttachConflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "evidence_duplicate",
+                 *         "message": "this item is already on the project"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `idempotency_key_reuse`: the same key arrived with a different request fingerprint. Nothing changes. */
+        ProjectEvidenceIdempotencyConflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "idempotency_key_reuse",
+                 *         "message": "Idempotency-Key was already used with a different request"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `evidence_session_required` when no evidence session is live, GitHub answered 401, or a disconnect or replacement committed during the GitHub read; or `idempotency_key_reuse`. Nothing changes. */
+        ProjectEvidenceRecheckConflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "evidence_session_required",
+                 *         "message": "no GitHub evidence session is live"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `evidence_unsupported_link` for a link outside the accepted grammar, a link whose kind differs from `kind`, or a release whose tag or URL exceeds the stored limits; `evidence_not_confirmed` when the item fails its rule or GitHub answers 404 or 410 for it or its repository; `evidence_limit` for an eleventh item; or `document_invalid` when the stored project JSON plus 1 KiB per item would exceed 96 KiB. Nothing changes. */
+        ProjectEvidenceAttachRejected: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "evidence_not_confirmed",
+                 *         "message": "GitHub does not confirm this item"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `rate_limited`: the route's request limiter, the 120 GitHub requests per account per hour, GitHub's own limit, or the account's idempotency capacity. For GitHub's limit, `Retry-After` is GitHub's `retry-after`, else the time to `x-ratelimit-reset` when `x-ratelimit-remaining` is 0, else 60. Nothing changes. */
+        ProjectEvidenceRateLimited: {
+            headers: {
+                /**
+                 * @description Whole seconds to wait before retrying.
+                 * @example 60
+                 */
+                "Retry-After"?: number;
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "rate_limited",
+                 *         "message": "too many requests; retry later"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `evidence_upstream`: any other GitHub status, a 404 or 410 on a candidate listing, a timeout, an oversized or unparsable body, or a `Location` other than the one controlled rename hop. Nothing stored changes. */
+        ProjectEvidenceUpstream: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "evidence_upstream",
+                 *         "message": "GitHub did not respond as expected"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `body_too_large`: the request body exceeds 16,384 bytes. Rejection precedes decode and any state change. */
+        ProjectEvidenceBodyTooLarge: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "body_too_large",
+                 *         "message": "request body exceeds the 16384 byte limit"
+                 *       }
+                 *     }
+                 */
                 "application/json": components["schemas"]["Error"];
             };
         };
@@ -5332,6 +5881,8 @@ export interface components {
         GrantID: string;
         /** @description The owned library project's server-generated UUIDv7. */
         ProjectID: string;
+        /** @description An evidence item's UUID. An unknown id, or one that belongs to another project or account, is `404 evidence_not_found`. */
+        EvidenceID: string;
         /**
          * @description A resume's id (`resumes.id`, `uuidv7`). A resume owned by another account answers exactly like a missing one.
          * @example 018f5b6a-9a3e-7c21-8b1e-000000000010
@@ -6947,6 +7498,8 @@ export interface operations {
                     /**
                      * @example {
                      *       "data": {
+                     *         "generation": 3,
+                     *         "hasEvidence": true,
                      *         "connection": {
                      *           "githubUserId": 583231,
                      *           "login": "octocat",
@@ -6972,27 +7525,61 @@ export interface operations {
     deleteGitHubEvidence: {
         parameters: {
             query: {
-                /** @description `true` keeps attached evidence as plain links, `false` removes it. Given exactly once; any other value, a missing value or any other query parameter is `400 request_invalid`. */
+                /** @description `true` keeps attached evidence as plain links, `false` removes it from every project. Given exactly once. */
                 keepLinks: "true" | "false";
+                /** @description The generation `GET /github-evidence` reported, as a canonical decimal integer: no sign, and no leading zero except `0` itself. Given exactly once. A missing or malformed value, a repeated parameter or any other query parameter is `400 request_invalid`. */
+                generation: number;
             };
-            header?: never;
+            header: {
+                /**
+                 * @description Client-generated UUID scoping this mutation to `(user, canonical operation identity, key)`. The operation identity contains the method, registered operation, and canonical concrete target values. Replaying the same scoped key with a matching semantic request fingerprint returns the original stored response; a different fingerprint is rejected as a domain conflict.
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 idempotency_key_invalid`, never silently first-wins.
+                 * @example 018f0f3e-9e3a-7000-8000-000000000001
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
             path?: never;
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Disconnected. No body. */
-            204: {
+            /** @description Disconnected. The new generation, each project whose revision advanced and each resume whose revision advanced. */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    /**
+                     * @example {
+                     *       "data": {
+                     *         "generation": 4,
+                     *         "projectRevisions": [
+                     *           {
+                     *             "id": "018f5b6a-9a3e-7c21-8b1e-000000000050",
+                     *             "revision": "7"
+                     *           }
+                     *         ],
+                     *         "resumeRevisions": [
+                     *           {
+                     *             "id": "018f5b6a-9a3e-7c21-8b1e-000000000010",
+                     *             "revision": "12"
+                     *           }
+                     *         ]
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["GitHubEvidenceDisconnectResponse"];
+                };
             };
-            400: components["responses"]["GitHubEvidenceRequestInvalid"];
+            400: components["responses"]["GitHubEvidenceDisconnectBadRequest"];
             401: components["responses"]["GitHubEvidenceSessionMissing"];
             403: components["responses"]["GitHubEvidenceCsrfRejected"];
             404: components["responses"]["GitHubEvidenceUnavailable"];
             405: components["responses"]["GitHubEvidenceMethodNotAllowed"];
+            409: components["responses"]["GitHubEvidenceDisconnectConflict"];
+            429: components["responses"]["GitHubEvidenceIdempotencyLimited"];
+            503: components["responses"]["ProjectPublicStateBusy"];
         };
     };
     postGitHubEvidenceStart: {
@@ -7002,7 +7589,16 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                /**
+                 * @example {
+                 *       "returnTo": "/app/projects/018f5b6a-9a3e-7c21-8b1e-000000000050"
+                 *     }
+                 */
+                "application/json": components["schemas"]["GitHubEvidenceStartRequest"];
+            };
+        };
         responses: {
             /** @description The authorize URL to navigate the browser to. */
             200: {
@@ -7063,7 +7659,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Always redirects to `PUBLIC_ORIGIN` + `/app/settings/sessions?evidence=connected` or `?evidence=failed`. No other value is produced and a failure carries no reason. */
+            /** @description Always redirects to `PUBLIC_ORIGIN` + `/app/projects/{id}` when the start named a project in `returnTo`, the callback carries the starting user's session and the project still belongs to that user, and otherwise to `PUBLIC_ORIGIN` + `/app/settings/sessions`. The query is exactly one `evidence` value: `connected`, `failed`, or `different_account` when the stored connection holds another non-null GitHub user id and the account has evidence, so nothing was replaced. No other value is produced and a failure carries no reason. */
             302: {
                 headers: {
                     /** @example https://aboutme.vn/app/settings/sessions?evidence=connected */
@@ -7744,6 +8340,263 @@ export interface operations {
             428: components["responses"]["ResumePreconditionRequired"];
             429: components["responses"]["ResumeRateLimited"];
             500: components["responses"]["ResumeInternalError"];
+            503: components["responses"]["ProjectPublicStateBusy"];
+        };
+    };
+    listProjectEvidenceCandidates: {
+        parameters: {
+            query: {
+                /** @description Given exactly once. */
+                kind: components["schemas"]["ProjectEvidenceKind"];
+                /** @description A canonical decimal integer from 1 to 10, given exactly once. */
+                page: number;
+                /** @description A GitHub repository id as a canonical decimal integer, from a repository listing of the live session. Required for `release` and refused for the other kinds. An id the session did not list answers `409 evidence_session_required`. */
+                repository?: number;
+            };
+            header?: never;
+            path: {
+                /** @description The owned library project's server-generated UUIDv7. */
+                id: components["parameters"]["ProjectID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One page of candidates. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "data": {
+                     *         "items": [
+                     *           {
+                     *             "candidateId": "Zm9vYmFyYmF6cXV4MDEyMw",
+                     *             "kind": "pullRequest",
+                     *             "title": "Fix the thing",
+                     *             "repository": {
+                     *               "id": null,
+                     *               "fullName": "octocat/hello"
+                     *             },
+                     *             "date": "2026-01-02T03:04:05Z",
+                     *             "attached": false
+                     *           }
+                     *         ],
+                     *         "nextPage": null,
+                     *         "incomplete": false
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["ProjectEvidenceCandidatesResponse"];
+                };
+            };
+            400: components["responses"]["ProjectEvidenceQueryInvalid"];
+            401: components["responses"]["ResumeUnauthorized"];
+            403: components["responses"]["ProjectEvidenceCandidatesCsrfRejected"];
+            404: components["responses"]["ProjectEvidenceProjectNotFound"];
+            405: components["responses"]["ProjectMethodNotAllowed"];
+            409: components["responses"]["ProjectEvidenceSessionRequired"];
+            429: components["responses"]["ProjectEvidenceRateLimited"];
+            500: components["responses"]["ResumeInternalError"];
+            502: components["responses"]["ProjectEvidenceUpstream"];
+        };
+    };
+    attachProjectEvidence: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description Optimistic-concurrency precondition, ETag form: `"r<revision>"` (quotes included, per RFC 9110). Required on every mutation of an existing resume or library project. Resume and project creation have no prior revision and reject an `If-Match` header. A mismatch returns `412 Precondition Failed` with the current revision/document — never `409` (see the write-safety section above).
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 precondition_malformed`, never silently first-wins.
+                 * @example "r42"
+                 */
+                "If-Match": components["parameters"]["IfMatch"];
+                /**
+                 * @description Client-generated UUID scoping this mutation to `(user, canonical operation identity, key)`. The operation identity contains the method, registered operation, and canonical concrete target values. Replaying the same scoped key with a matching semantic request fingerprint returns the original stored response; a different fingerprint is rejected as a domain conflict.
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 idempotency_key_invalid`, never silently first-wins.
+                 * @example 018f0f3e-9e3a-7000-8000-000000000001
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                /** @description The owned library project's server-generated UUIDv7. */
+                id: components["parameters"]["ProjectID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "kind": "pullRequest",
+                 *       "link": "https://github.com/octocat/hello/pull/42"
+                 *     }
+                 */
+                "application/json": components["schemas"]["ProjectEvidenceAttachRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["ProjectEvidenceWritten"];
+            400: components["responses"]["ProjectEvidenceBadRequest"];
+            401: components["responses"]["ResumeUnauthorized"];
+            403: components["responses"]["ResumeCsrfRejected"];
+            404: components["responses"]["ProjectEvidenceProjectNotFound"];
+            405: components["responses"]["ProjectMethodNotAllowed"];
+            409: components["responses"]["ProjectEvidenceAttachConflict"];
+            412: components["responses"]["ProjectRevisionMismatch"];
+            413: components["responses"]["ProjectEvidenceBodyTooLarge"];
+            422: components["responses"]["ProjectEvidenceAttachRejected"];
+            428: components["responses"]["ResumePreconditionRequired"];
+            429: components["responses"]["ProjectEvidenceRateLimited"];
+            500: components["responses"]["ResumeInternalError"];
+            502: components["responses"]["ProjectEvidenceUpstream"];
+            503: components["responses"]["ProjectPublicStateBusy"];
+        };
+    };
+    reorderProjectEvidence: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description Optimistic-concurrency precondition, ETag form: `"r<revision>"` (quotes included, per RFC 9110). Required on every mutation of an existing resume or library project. Resume and project creation have no prior revision and reject an `If-Match` header. A mismatch returns `412 Precondition Failed` with the current revision/document — never `409` (see the write-safety section above).
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 precondition_malformed`, never silently first-wins.
+                 * @example "r42"
+                 */
+                "If-Match": components["parameters"]["IfMatch"];
+                /**
+                 * @description Client-generated UUID scoping this mutation to `(user, canonical operation identity, key)`. The operation identity contains the method, registered operation, and canonical concrete target values. Replaying the same scoped key with a matching semantic request fingerprint returns the original stored response; a different fingerprint is rejected as a domain conflict.
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 idempotency_key_invalid`, never silently first-wins.
+                 * @example 018f0f3e-9e3a-7000-8000-000000000001
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                /** @description The owned library project's server-generated UUIDv7. */
+                id: components["parameters"]["ProjectID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "order": [
+                 *         "018f5b6a-9a3e-7c21-8b1e-000000000062",
+                 *         "018f5b6a-9a3e-7c21-8b1e-000000000061"
+                 *       ]
+                 *     }
+                 */
+                "application/json": components["schemas"]["ProjectEvidenceOrderRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["ProjectEvidenceWritten"];
+            400: components["responses"]["ProjectEvidenceBadRequest"];
+            401: components["responses"]["ResumeUnauthorized"];
+            403: components["responses"]["ResumeCsrfRejected"];
+            404: components["responses"]["ProjectEvidenceItemNotFound"];
+            405: components["responses"]["ProjectMethodNotAllowed"];
+            409: components["responses"]["ProjectEvidenceIdempotencyConflict"];
+            412: components["responses"]["ProjectRevisionMismatch"];
+            413: components["responses"]["ProjectEvidenceBodyTooLarge"];
+            428: components["responses"]["ResumePreconditionRequired"];
+            429: components["responses"]["ProjectEvidenceRateLimited"];
+            500: components["responses"]["ResumeInternalError"];
+            503: components["responses"]["ProjectPublicStateBusy"];
+        };
+    };
+    removeProjectEvidence: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description Optimistic-concurrency precondition, ETag form: `"r<revision>"` (quotes included, per RFC 9110). Required on every mutation of an existing resume or library project. Resume and project creation have no prior revision and reject an `If-Match` header. A mismatch returns `412 Precondition Failed` with the current revision/document — never `409` (see the write-safety section above).
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 precondition_malformed`, never silently first-wins.
+                 * @example "r42"
+                 */
+                "If-Match": components["parameters"]["IfMatch"];
+                /**
+                 * @description Client-generated UUID scoping this mutation to `(user, canonical operation identity, key)`. The operation identity contains the method, registered operation, and canonical concrete target values. Replaying the same scoped key with a matching semantic request fingerprint returns the original stored response; a different fingerprint is rejected as a domain conflict.
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 idempotency_key_invalid`, never silently first-wins.
+                 * @example 018f0f3e-9e3a-7000-8000-000000000001
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                /** @description The owned library project's server-generated UUIDv7. */
+                id: components["parameters"]["ProjectID"];
+                /** @description An evidence item's UUID. An unknown id, or one that belongs to another project or account, is `404 evidence_not_found`. */
+                evidenceId: components["parameters"]["EvidenceID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["ProjectEvidenceWritten"];
+            400: components["responses"]["ProjectEvidenceBadRequest"];
+            401: components["responses"]["ResumeUnauthorized"];
+            403: components["responses"]["ResumeCsrfRejected"];
+            404: components["responses"]["ProjectEvidenceItemNotFound"];
+            405: components["responses"]["ProjectMethodNotAllowed"];
+            409: components["responses"]["ProjectEvidenceIdempotencyConflict"];
+            412: components["responses"]["ProjectRevisionMismatch"];
+            413: components["responses"]["ProjectEvidenceBodyTooLarge"];
+            428: components["responses"]["ResumePreconditionRequired"];
+            429: components["responses"]["ProjectEvidenceRateLimited"];
+            500: components["responses"]["ResumeInternalError"];
+            503: components["responses"]["ProjectPublicStateBusy"];
+        };
+    };
+    recheckProjectEvidence: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description Optimistic-concurrency precondition, ETag form: `"r<revision>"` (quotes included, per RFC 9110). Required on every mutation of an existing resume or library project. Resume and project creation have no prior revision and reject an `If-Match` header. A mismatch returns `412 Precondition Failed` with the current revision/document — never `409` (see the write-safety section above).
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 precondition_malformed`, never silently first-wins.
+                 * @example "r42"
+                 */
+                "If-Match": components["parameters"]["IfMatch"];
+                /**
+                 * @description Client-generated UUID scoping this mutation to `(user, canonical operation identity, key)`. The operation identity contains the method, registered operation, and canonical concrete target values. Replaying the same scoped key with a matching semantic request fingerprint returns the original stored response; a different fingerprint is rejected as a domain conflict.
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 idempotency_key_invalid`, never silently first-wins.
+                 * @example 018f0f3e-9e3a-7000-8000-000000000001
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                /** @description The owned library project's server-generated UUIDv7. */
+                id: components["parameters"]["ProjectID"];
+                /** @description An evidence item's UUID. An unknown id, or one that belongs to another project or account, is `404 evidence_not_found`. */
+                evidenceId: components["parameters"]["EvidenceID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["ProjectEvidenceWritten"];
+            400: components["responses"]["ProjectEvidenceBadRequest"];
+            401: components["responses"]["ResumeUnauthorized"];
+            403: components["responses"]["ResumeCsrfRejected"];
+            404: components["responses"]["ProjectEvidenceItemNotFound"];
+            405: components["responses"]["ProjectMethodNotAllowed"];
+            409: components["responses"]["ProjectEvidenceRecheckConflict"];
+            412: components["responses"]["ProjectRevisionMismatch"];
+            413: components["responses"]["ProjectEvidenceBodyTooLarge"];
+            428: components["responses"]["ResumePreconditionRequired"];
+            429: components["responses"]["ProjectEvidenceRateLimited"];
+            500: components["responses"]["ResumeInternalError"];
+            502: components["responses"]["ProjectEvidenceUpstream"];
             503: components["responses"]["ProjectPublicStateBusy"];
         };
     };

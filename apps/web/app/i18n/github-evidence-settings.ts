@@ -17,6 +17,7 @@ type GitHubEvidenceSettingsCopy = {
   readonly disconnect: string;
   readonly connectedNotice: string;
   readonly failedNotice: string;
+  readonly differentAccountNotice: string;
   readonly errors: {
     readonly unavailable: string;
     readonly sessionEnded: string;
@@ -49,6 +50,9 @@ export const githubEvidenceSettingsCopy: WorkspaceCopy<
     disconnect: 'Ngắt kết nối',
     connectedNotice: 'Đã kết nối GitHub.',
     failedNotice: 'Chưa kết nối được GitHub. Hãy thử lại.',
+    differentAccountNotice:
+      'Tài khoản GitHub này khác tài khoản đã kết nối. '
+      + 'Hãy ngắt kết nối trước.',
     errors: {
       unavailable: 'Hiện chưa dùng được bằng chứng GitHub. Hãy thử lại sau.',
       sessionEnded: 'Phiên GitHub đã kết thúc trước đó.',
@@ -78,6 +82,8 @@ export const githubEvidenceSettingsCopy: WorkspaceCopy<
     disconnect: 'Disconnect',
     connectedNotice: 'GitHub is connected.',
     failedNotice: 'GitHub was not connected. Try again.',
+    differentAccountNotice:
+      'This GitHub account differs from the connected one. Disconnect first.',
     errors: {
       unavailable:
         'GitHub evidence is not available right now. Try again later.',

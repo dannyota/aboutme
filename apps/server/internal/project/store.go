@@ -76,7 +76,7 @@ func (a SlugAdmission) admit() error {
 }
 
 func (s *Store) CreateTx(ctx context.Context, q *store.Queries, owner uuid.UUID, slug string, d Document, now time.Time, admit SlugAdmission) (Project, error) {
-	raw, prepared, err := prepareStored(ctx, q, d)
+	raw, prepared, err := prepareStored(ctx, q, d, uuid.Nil)
 	if err != nil {
 		return Project{}, err
 	}
@@ -110,7 +110,7 @@ func (s *Store) ReplaceTx(ctx context.Context, q *store.Queries, owner, id uuid.
 	if err != nil {
 		return Project{}, err
 	}
-	raw, _, err := prepareStored(ctx, q, d)
+	raw, _, err := prepareStored(ctx, q, d, id)
 	if err != nil {
 		return Project{}, err
 	}
@@ -147,7 +147,7 @@ func (s *Store) ChangeTx(ctx context.Context, q *store.Queries, owner, id uuid.U
 	if err != nil {
 		return Unchanged, err
 	}
-	raw, _, err := prepareStored(ctx, q, d)
+	raw, _, err := prepareStored(ctx, q, d, id)
 	if err != nil {
 		return Unchanged, err
 	}
@@ -205,7 +205,7 @@ func FromRow(row store.Project) (Project, error) {
 	return Project{ID: row.ID, Slug: row.Slug, Revision: row.Revision, Document: d, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt}, nil
 }
 
-func prepareStored(ctx context.Context, q *store.Queries, d Document) (json.RawMessage, Document, error) {
+func prepareStored(ctx context.Context, q *store.Queries, d Document, id uuid.UUID) (json.RawMessage, Document, error) {
 	prepared, err := Prepare(d)
 	if err != nil {
 		return nil, Document{}, err
@@ -218,7 +218,11 @@ func prepareStored(ctx context.Context, q *store.Queries, d Document) (json.RawM
 	if err != nil {
 		return nil, Document{}, fmt.Errorf("project: measure document: %w", err)
 	}
-	if n > MaxStoredBytes {
+	evidence, err := evidenceBytes(ctx, q, id)
+	if err != nil {
+		return nil, Document{}, err
+	}
+	if int(n)+evidence > MaxStoredBytes {
 		return nil, Document{}, ErrInvalid
 	}
 	return raw, prepared, nil

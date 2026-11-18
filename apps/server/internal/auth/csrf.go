@@ -66,6 +66,20 @@ func requireCSRF(allowedOrigin string, mediaTypeAllowed func(http.Header) bool,
 	}
 }
 
+func RequireCSRFToken() api.Middleware {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			sess, ok := SessionFromContext(r.Context())
+			token, tokenOK := singletonSecurityHeader(r.Header, CSRFHeaderName)
+			if !ok || !tokenOK || !validCSRFToken(token, sess.CSRFSecret) {
+				rejectCSRF(w)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 func rejectMultipartMediaType(w http.ResponseWriter) {
 	api.WriteError(w, http.StatusUnsupportedMediaType, "media_type_unsupported", "multipart/form-data is required")
 }

@@ -44,6 +44,7 @@ type liveSession struct {
 	generation int64
 	expiresAt  time.Time
 	timer      *time.Timer
+	memory     *candidateMemory
 }
 
 type issue struct {
@@ -132,7 +133,7 @@ func (r *registry) install(account uuid.UUID, token *heldToken, epoch, generatio
 		previous.timer.Stop()
 		claimed = r.claimLocked(previous.token, claimed)
 	}
-	session := &liveSession{token: token, epoch: epoch, generation: generation, expiresAt: now.Add(r.ttl)}
+	session := &liveSession{token: token, epoch: epoch, generation: generation, expiresAt: now.Add(r.ttl), memory: newCandidateMemory()}
 	session.timer = time.AfterFunc(r.ttl, func() { r.endSession(account, session) })
 	r.sessions[account] = session
 	r.mu.Unlock()

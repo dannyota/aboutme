@@ -33,8 +33,8 @@ func TestProjectTools_LibraryRoundTripThroughTheTools(t *testing.T) {
 	if got.Project["id"] != w.atlas.ID.String() || got.Project["slug"] != "atlas" || !ok || len(linked) != 1 || linked[0] != w.resume.ID.String() {
 		t.Fatalf("get_project = %v, want atlas linked from the world's resume", got.Project)
 	}
-	if _, present := got.Project["evidence"]; present {
-		t.Fatalf("get_project = %v, must carry no evidence field", got.Project)
+	if evidence, isArray := got.Project["evidence"].([]any); !isArray || len(evidence) != 0 {
+		t.Fatalf("get_project = %v, want the read-only evidence array, empty for a project without evidence", got.Project)
 	}
 
 	var created struct {

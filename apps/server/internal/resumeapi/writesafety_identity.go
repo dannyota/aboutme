@@ -15,6 +15,7 @@ import (
 const (
 	idempotencyOperationDomain = "aboutme.idempotency.operation.v1"
 	idempotencyRequestDomain   = "aboutme.idempotency.request.v1"
+	unversionedWire            = 0
 )
 
 func parseMutationHeaders(r *http.Request, requireMatch bool, accepted []int32) (mutationHeaders, *clientError) {
@@ -94,6 +95,10 @@ func requestHash(version int32, precondition string, semanticInputs []string, pa
 	}
 	fields = append(fields, []byte("payload"), payload)
 	return tupleHash(idempotencyRequestDomain, fields)
+}
+
+func AccountWriteIdentity(method, operation string, payload []byte) (string, [32]byte) {
+	return hexDigest(operationHash(method, operation, nil)), requestHash(unversionedWire, "absent", nil, payload)
 }
 
 func callerRequestHash(caller string, version int32, precondition string, semanticInputs []string, payload []byte) [32]byte {

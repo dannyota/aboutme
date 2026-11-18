@@ -38,5 +38,9 @@ func (b boundApply) replace(ctx context.Context, q *store.Queries, changed []res
 	if err != nil {
 		return resume.StoredResponse{}, err
 	}
-	return stored(200, replaceResult{Project: resourceOf(p, links), ChangedResumes: changedResumes(changed)}, map[string]string{"ETag": revisionTag(p.Revision)})
+	one, err := b.service.single(ctx, q, b.actor.owner, p, links)
+	if err != nil {
+		return resume.StoredResponse{}, err
+	}
+	return stored(200, replaceResult{Project: one, ChangedResumes: changedResumes(changed)}, map[string]string{"ETag": revisionTag(p.Revision)})
 }

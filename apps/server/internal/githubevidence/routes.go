@@ -3,6 +3,7 @@ package githubevidence
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"math"
 	"net/http"
@@ -25,8 +26,10 @@ const (
 )
 
 type statusBody struct {
-	Connection *connectionBody `json:"connection"`
-	Session    *sessionBody    `json:"session"`
+	Generation  int64           `json:"generation"`
+	HasEvidence bool            `json:"hasEvidence"`
+	Connection  *connectionBody `json:"connection"`
+	Session     *sessionBody    `json:"session"`
 }
 
 type connectionBody struct {
@@ -37,10 +40,6 @@ type connectionBody struct {
 
 type sessionBody struct {
 	ExpiresAt time.Time `json:"expiresAt"`
-}
-
-type startBody struct {
-	AuthorizeURL string `json:"authorizeUrl"`
 }
 
 func (s *Service) RegisterRoutes(mux *http.ServeMux) {
@@ -95,9 +94,10 @@ func (s *Service) handleStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body statusBody
-	err := s.inAccount(r.Context(), sess, func(_ context.Context, a account) error {
-		body = s.statusSnapshot(a)
-		return nil
+	err := s.inAccount(r.Context(), sess, func(ctx context.Context, a account) error {
+		var snapshotErr error
+		body, snapshotErr = s.statusSnapshot(ctx, a)
+		return snapshotErr
 	})
 	if errors.Is(err, auth.ErrSessionInvalid) {
 		writeSessionRequired(w)
@@ -110,95 +110,26 @@ func (s *Service) handleStatus(w http.ResponseWriter, r *http.Request) {
 	api.WriteData(w, http.StatusOK, body)
 }
 
-func (s *Service) statusSnapshot(a account) statusBody {
+func (s *Service) statusSnapshot(ctx context.Context, a account) (statusBody, error) {
 	var body statusBody
-	var generation int64
-	if row := a.connection; a.found {
-		generation = row.Generation
-		if row.GithubUserID != nil && row.Login != nil && row.ConnectedAt != nil {
-			body.Connection = &connectionBody{GitHubUserID: *row.GithubUserID, Login: *row.Login, ConnectedAt: row.ConnectedAt.UTC()}
-		}
+	if a.found {
+		body.Generation = a.connection.Generation
 	}
+	if row := a.connection; a.connected() {
+		body.Connection = &connectionBody{GitHubUserID: *row.GithubUserID, Login: *row.Login, ConnectedAt: row.ConnectedAt.UTC()}
+	}
+	hasEvidence, err := a.q.AccountHasProjectEvidence(ctx, a.user.ID)
+	if err != nil {
+		return statusBody{}, fmt.Errorf("githubevidence: read evidence presence: %w", err)
+	}
+	body.HasEvidence = hasEvidence
 	if s.hooks.statusRead != nil {
 		s.hooks.statusRead(a.tx)
 	}
-	live, isLive := s.registry.current(a.user.ID)
-	if !isLive {
-		return body
-	}
-	if body.Connection != nil && live.generation == generation && live.epoch == a.user.AuthEpoch && live.expiresAt.After(a.now) {
+	if live, isLive := s.currentSession(a); isLive {
 		body.Session = &sessionBody{ExpiresAt: live.expiresAt.UTC()}
-		return body
 	}
-	s.registry.endSession(a.user.ID, live)
-	return body
-}
-
-func (s *Service) handleStart(w http.ResponseWriter, r *http.Request) {
-	sess, ok := auth.SessionFromContext(r.Context())
-	if !ok {
-		writeSessionRequired(w)
-		return
-	}
-	if !plainRequest(r) {
-		writeRequestInvalid(w, "this request takes no query or body")
-		return
-	}
-	if s.registry.isClosed() {
-		api.WriteError(w, http.StatusServiceUnavailable, unavailableCode, "GitHub evidence is not available")
-		return
-	}
-	if allowed, retry := s.starts.admit(sess.UserID, s.now()); !allowed {
-		writeLimited(w, retry)
-		return
-	}
-	if err := s.transactions.ReapExpired(r.Context()); err != nil {
-		s.logInternal(r, "reap_transactions", err)
-	}
-	row, found, err := s.connection(r, sess.UserID)
-	if err != nil {
-		s.writeInternal(w, r, "read_connection", err)
-		return
-	}
-	var generation int64
-	if found {
-		generation = row.Generation
-	}
-	handle, tx, err := s.transactions.BeginEvidence(r.Context(), sess.UserID, generation, s.callbackURL)
-	if err != nil {
-		s.writeInternal(w, r, "begin_transaction", err)
-		return
-	}
-	auth.SetOAuthTxCookie(w, handle)
-	api.WriteData(w, http.StatusOK, startBody{AuthorizeURL: s.client.authorizeLink(tx.State, tx.PKCEVerifier, s.callbackURL)})
-}
-
-func (s *Service) handleDisconnect(w http.ResponseWriter, r *http.Request) {
-	sess, ok := auth.SessionFromContext(r.Context())
-	if !ok {
-		writeSessionRequired(w)
-		return
-	}
-	if _, valid := keepLinksParam(r); !valid || !emptyBody(r) {
-		writeRequestInvalid(w, "keepLinks must be given once as true or false")
-		return
-	}
-	err := s.inAccount(r.Context(), sess, func(ctx context.Context, a account) error {
-		if _, clearErr := a.q.ClearGitHubConnection(ctx, a.user.ID); clearErr != nil {
-			return clearErr
-		}
-		s.registry.end(a.user.ID)
-		return nil
-	})
-	if errors.Is(err, auth.ErrSessionInvalid) {
-		writeSessionRequired(w)
-		return
-	}
-	if err != nil {
-		s.writeInternal(w, r, "clear_connection", err)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
+	return body, nil
 }
 
 func (s *Service) handleSessionEnd(w http.ResponseWriter, r *http.Request) {
@@ -240,25 +171,6 @@ func (s *Service) connection(r *http.Request, userID uuid.UUID) (store.GithubCon
 		return store.GithubConnection{}, false, err
 	}
 	return row, true, nil
-}
-
-func keepLinksParam(r *http.Request) (bool, bool) {
-	if r.URL.ForceQuery || r.URL.RawQuery == "" {
-		return false, false
-	}
-	query := r.URL.Query()
-	values, ok := query["keepLinks"]
-	if !ok || len(query) != 1 || len(values) != 1 {
-		return false, false
-	}
-	switch values[0] {
-	case "true":
-		return true, true
-	case "false":
-		return false, true
-	default:
-		return false, false
-	}
 }
 
 func plainRequest(r *http.Request) bool {

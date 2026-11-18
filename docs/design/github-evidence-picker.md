@@ -87,7 +87,7 @@ after a rename). Each counts toward the 120 calls per account per hour.
 | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | 401                                                                                | The session ends and its token is revoked; `evidence_session_required`                                                                     |
 | 429, or 403 with `retry-after`, `x-ratelimit-remaining: 0` or a rate-limit message | `rate_limited`; `Retry-After` is GitHub's `retry-after`; else, when `x-ratelimit-remaining` is 0, the time to `x-ratelimit-reset`; else 60 |
-| 404 or 410 for the item or its repository                                          | Attach: `evidence_not_confirmed`. Check again: flagged `gone`                                                                              |
+| 404 or 410 for the item or its repository                                          | Attach: `evidence_not_confirmed`. Check again: flagged `gone`. On a listing: `evidence_upstream`                                           |
 | Any other 4xx or 5xx, a timeout, an oversized or unparsable body                   | `evidence_upstream`; nothing stored changes                                                                                                |
 
 A pasted link is parsed, never fetched as given. Accepted after trimming:
@@ -143,28 +143,36 @@ Session cookie and CSRF only. `kind` is `repository`, `pullRequest` or
   request's candidate date is `closed_at`; attach stores `merged_at`. "Attached"
   matches a pull request by repository full name and number; `nextPage` is
   `page + 1` when GitHub returned 30 rows and `page` is below 10, else `null`.
+  Although it is a read, it requires a valid `X-CSRF-Token` and otherwise
+  answers 403 `csrf_rejected` before any GitHub request, so a link or a
+  cross-site navigation cannot spend the owner's GitHub budget or replace the
+  listed candidates.
 - `POST /api/v1/projects/{id}/evidence` with `{kind, link}` or
   `{kind, candidateId}`; `POST .../{evidenceId}/recheck`;
   `PUT .../evidence/order` with `{order: [evidenceId]}` naming every item once;
   `DELETE .../{evidenceId}`. Each is a library mutation and answers 200 with
-  `{evidence, projectRevision, resumeRevisions}`.
+  `{evidence, projectRevision, resumeRevisions}`. An order equal to the current
+  one, including `{order: []}` on a project without evidence, answers the
+  current state, advances no project or resume revision, and replays like any
+  other write.
 - Project reads and the export's project record gain a read-only `evidence`
   array of
   `{id, kind, url, repositoryName, title, itemDate, checkedAt, confirmed, flagReason}`,
   `flagReason` being `rule_failed`, `gone` or `null`. Export stays version 2;
   the record carries no generation, binding or account id.
 
-| Code                          | Status | When                                                                      |
-| ----------------------------- | ------ | ------------------------------------------------------------------------- |
-| `evidence_unavailable`        | 404    | Capability off, on every evidence route including the project-nested ones |
-| `evidence_session_required`   | 409    | No live session, a candidate from an ended session, or GitHub's 401       |
-| `evidence_not_confirmed`      | 422    | The item fails its rule, or GitHub reports it gone, on attach             |
-| `evidence_duplicate`          | 409    | The same kind and item id are already on this project                     |
-| `evidence_limit`              | 422    | An eleventh item                                                          |
-| `evidence_unsupported_link`   | 422    | A link outside the accepted grammar                                       |
-| `evidence_upstream`           | 502    | Any GitHub failure not listed above                                       |
-| `rate_limited`                | 429    | The hourly budget or GitHub's limit; `Retry-After` gives the seconds      |
-| `evidence_connection_changed` | 409    | Disconnect named a generation that is no longer current                   |
+| Code                          | Status | When                                                                                  |
+| ----------------------------- | ------ | ------------------------------------------------------------------------------------- |
+| `evidence_unavailable`        | 404    | Capability off, on every evidence route including the project-nested ones             |
+| `evidence_session_required`   | 409    | No live session, a candidate from an ended session, or GitHub's 401                   |
+| `evidence_not_confirmed`      | 422    | The item fails its rule, or GitHub reports it gone, on attach                         |
+| `evidence_duplicate`          | 409    | The same kind and item id are already on this project                                 |
+| `evidence_limit`              | 422    | An eleventh item                                                                      |
+| `evidence_unsupported_link`   | 422    | A link outside the accepted grammar                                                   |
+| `evidence_upstream`           | 502    | Any GitHub failure not listed above, and a 404 or 410 on a listing                    |
+| `rate_limited`                | 429    | The hourly budget or GitHub's limit; `Retry-After` gives the seconds                  |
+| `evidence_connection_changed` | 409    | Disconnect named a generation that is no longer current                               |
+| `evidence_not_found`          | 404    | An evidence id that is not an item of this project, on check again, remove or reorder |
 
 **Size.** Each stored item counts as 1 KiB toward the 96 KiB project bound,
 whatever its content and whether or not the capability is on. Attach and every
@@ -192,12 +200,14 @@ transient failure rewrites nothing.
 under [ADR 0006](../adr/0006-transactional-idempotency.md):
 
 - `generation` is required: the top-level integer `GET /api/v1/github-evidence`
-  now reports, 0 when no connection row exists. A different current value
-  answers 409 `evidence_connection_changed`, so a lost response cannot remove
-  evidence attached after a reconnect. No ETag is involved.
-- `Idempotency-Key` is required. The fingerprint covers the route, `keepLinks`
-  and `generation`. A stored replay for the key is answered before the
-  generation check; the same key with a different fingerprint answers the
+  reports beside `hasEvidence`, 0 when no connection row exists. A different
+  current value answers 409 `evidence_connection_changed`, so a lost response
+  cannot remove evidence attached after a reconnect. No ETag is involved.
+- `Idempotency-Key` is required. The fingerprint is the
+  [ADR 0006](../adr/0006-transactional-idempotency.md) tuple that
+  `AccountWriteIdentity` builds, with `if_match` absent and the payload
+  `keepLinks` and `generation`. A stored replay for the key is answered before
+  the generation check; the same key with a different fingerprint answers the
   existing idempotency conflict.
 - When any evidence item exists, the affected set is every live resume linking a
   project with evidence. Planning reads it and acquires and closes the fences
@@ -213,8 +223,8 @@ under [ADR 0006](../adr/0006-transactional-idempotency.md):
   [connection's ending rules](github-evidence.md#evidence-session).
 - It answers 200 with `{generation, projectRevisions, resumeRevisions}`. Open
   editors meet an advanced project revision as any other conflict.
-- Settings asks before disconnecting when evidence exists: keep the items as
-  plain links (the default) or remove them from every project.
+- Settings asks before disconnecting when `hasEvidence` is true: keep the items
+  as plain links (the default) or remove them from every project.
 
 ## Project page
 

@@ -360,7 +360,11 @@ func TestBoundary_MutationsRecheckTheCallersSessionUnderTheLock(t *testing.T) {
 				handler http.HandlerFunc
 				request *http.Request
 			}{
-				{"disconnect", h.svc.handleDisconnect, staleRequest(t, http.MethodDelete, StatusPath+"?keepLinks=true", h.session)},
+				{"disconnect", h.svc.handleDisconnect, func() *http.Request {
+					r := staleRequest(t, http.MethodDelete, StatusPath+disconnectQuery(true, 1), h.session)
+					r.Header.Set("Idempotency-Key", uuid.NewString())
+					return r
+				}()},
 				{"done", h.svc.handleSessionEnd, staleRequest(t, http.MethodPost, SessionEndPath, h.session)},
 			} {
 				rec := httptest.NewRecorder()

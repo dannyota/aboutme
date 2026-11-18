@@ -12,6 +12,7 @@ import {
 } from '../../i18n/github-evidence-settings';
 
 interface EvidenceView {
+  readonly generation: number;
   readonly connection: {
     readonly login: string;
     readonly connectedAt: string;
@@ -26,6 +27,7 @@ type Failure
     | 'session-ended'
     | 'upstream'
     | 'rate-limited'
+    | 'connection-changed'
     | 'failed';
 
 type Outcome<T>
@@ -51,7 +53,9 @@ const loadFailed = ref(false);
 const view = ref<EvidenceView | null>(null);
 const pending = ref(false);
 const failure = ref<Exclude<Failure, 'session-lost'> | null>(null);
-const notice = ref<'connected' | 'failed' | null>(null);
+type Notice = 'connected' | 'failed' | 'different-account';
+
+const notice = ref<Notice | null>(null);
 
 const errorMessage = computed(() => {
   if (failure.value === null) return null;
@@ -62,6 +66,7 @@ const errorMessage = computed(() => {
     'session-ended': errors.sessionEnded,
     'upstream': errors.upstream,
     'rate-limited': errors.rateLimited,
+    'connection-changed': errors.failed,
     'failed': errors.failed,
   };
   return messages[failure.value];
@@ -100,11 +105,19 @@ function expiryFrom(value: unknown): string | null | undefined {
 
 function viewFrom(data: unknown): EvidenceView | undefined {
   if (!isRecord(data) || !isRecord(data.data)) return undefined;
+  const { generation } = data.data;
+  if (
+    typeof generation !== 'number'
+    || !Number.isSafeInteger(generation)
+    || generation < 0
+  ) {
+    return undefined;
+  }
   const connection = connectionFrom(data.data.connection);
   const expiresAt = expiryFrom(data.data.session);
   return connection === undefined || expiresAt === undefined
     ? undefined
-    : { connection, expiresAt };
+    : { generation, connection, expiresAt };
 }
 
 function authorizeUrlFrom(data: unknown): unknown {
@@ -121,6 +134,7 @@ function failureOf(status: number, error: unknown): Failure {
   if (code === 'evidence_session_required') return 'session-ended';
   if (code === 'rate_limited') return 'rate-limited';
   if (code === 'evidence_upstream') return 'upstream';
+  if (code === 'evidence_connection_changed') return 'connection-changed';
   return 'failed';
 }
 
@@ -185,10 +199,16 @@ function endSession(token: string): Promise<Outcome<null>> {
   );
 }
 
-function disconnectAccount(token: string): Promise<Outcome<null>> {
-  return settle(
+function disconnectAccount(
+  generation: number,
+  key: string,
+): (token: string) => Promise<Outcome<null>> {
+  return (token) => settle(
     () => api.DELETE('/github-evidence', {
-      params: { query: { keepLinks: 'true' } },
+      params: {
+        query: { keepLinks: 'true', generation },
+        header: { 'Idempotency-Key': key },
+      },
       headers: { 'X-CSRF-Token': token },
       cache: 'no-store',
     }) as Promise<RawResult>,
@@ -238,7 +258,12 @@ async function perform<T>(
       return;
     }
     failure.value = result.failure;
-    if (result.failure === 'session-ended') await refreshState();
+    if (
+      result.failure === 'session-ended'
+      || result.failure === 'connection-changed'
+    ) {
+      await refreshState();
+    }
   } finally {
     pending.value = false;
   }
@@ -260,13 +285,19 @@ function done(): Promise<void> {
 }
 
 function disconnect(): Promise<void> {
-  return perform(disconnectAccount, refreshState);
+  const current = view.value;
+  if (current === null) return Promise.resolve();
+  return perform(
+    disconnectAccount(current.generation, crypto.randomUUID()),
+    refreshState,
+  );
 }
 
 function readCallbackResult(): void {
   if (!('evidence' in route.query)) return;
   const value = route.query.evidence;
   if (value === 'connected' || value === 'failed') notice.value = value;
+  if (value === 'different_account') notice.value = 'different-account';
   const query = Object.fromEntries(
     Object.entries(route.query).filter(([key]) => key !== 'evidence'),
   );
@@ -324,6 +355,14 @@ onMounted(() => {
       testid="evidence-failed"
     >
       {{ copy.failedNotice }}
+    </StatusBanner>
+    <StatusBanner
+      v-else-if="notice === 'different-account'"
+      focus-on-mount
+      kind="error"
+      testid="evidence-different-account"
+    >
+      {{ copy.differentAccountNotice }}
     </StatusBanner>
     <StatusBanner
       v-if="errorMessage"

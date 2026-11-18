@@ -11,9 +11,10 @@ on a phone.
 
 ## Structure
 
-The bar is the first child of `.public-resume-page`, above `.public-measure`, so
-it spans the full viewport width. An inner row aligns its content with the
-resume text.
+The bar is the first child of `.public-resume-page`, above the sheets. It has no
+ground or bottom rule of its own and sits on the desk of the
+[web layout](public-web-layout.md#page-bar-and-invite), with its inner row at
+the sheet's width and inline padding.
 
 ```html
 <div class="public-toolbar">
@@ -77,8 +78,7 @@ and under Match device when the viewer prefers dark.
 
 | Role                  | Light     | Dark      | Source           |
 | --------------------- | --------- | --------- | ---------------- |
-| Bar ground            | `#FFFFFF` | `#0E0A0D` | Page background  |
-| Bar bottom rule       | `#E3E0F2` | `#2E242C` | Border           |
+| Bar ground            | none      | none      | The desk shows   |
 | Mark                  | `#DE1B5A` | `#E2788F` | Logo mark        |
 | Credit text           | `#55517D` | `#A3959F` | Muted foreground |
 | Credit hover          | `#4336C9` | `#B59BDB` | Link             |
@@ -89,17 +89,20 @@ and under Match device when the viewer prefers dark.
 | Focus ring            | `#1A1650` | `#CDBCD9` | Ring             |
 | Button shadow         | none      | none      |                  |
 
-Measured contrast: the mark 4.76:1 light and 6.85:1 dark; credit text 7.34:1 and
-6.89:1; the button label 16.48:1 light and 12.29:1 dark, 14.49:1 and 10.42:1 on
-the hover fill; the button border is the label color.
+On the desk of the [web layout](public-web-layout.md#page-bar-and-invite) the
+mark measures 3.59:1 light and 6.51:1 dark, the credit text 5.54:1 and 6.55:1,
+and the button label 12.42:1 and 11.68:1. Before the desk, measured contrast
+was: the mark 4.76:1 light and 6.85:1 dark; credit text 7.34:1 and 6.89:1; the
+button label 16.48:1 light and 12.29:1 dark, 14.49:1 and 10.42:1 on the hover
+fill; the button border is the label color.
 
 ## Size and placement
 
 | Property               | Value                                                                                         |
 | ---------------------- | --------------------------------------------------------------------------------------------- |
 | Bar height             | 48 px, or 56 px on a touch screen; 8 px block padding                                         |
-| Inner row width        | the resume measure plus both page margins, centered                                           |
-| Inner inline padding   | the resume's inline padding, `--screen-margin-x`                                              |
+| Inner row width        | the sheet width of the web layout, centered                                                   |
+| Inner inline padding   | the sheet's inline padding                                                                    |
 | Row layout             | brand left, actions right; 16 px gap, 8 px on phones                                          |
 | Wrap                   | one row down to 360 px; below that the row wraps with an 8 px row gap and the actions go last |
 | Credit type            | Be Vietnam Pro 500, 13 px on 20 px; 12 px below 30 rem                                        |
@@ -115,11 +118,9 @@ the hover fill; the button border is the label color.
 
 The buttons match the application `outline` pill at size `sm`.
 
-The padding is `clamp(16px, (page width - measure) / 2, var(--page-margin-x))`,
-the same value as the resume's own inline padding (see
-[web.md](web.md#pagination-and-print)): 16 px on a phone, growing on a tablet,
-the template margin once the full measure fits. So the brand and the text share
-one left edge at every width.
+The padding is the sheet's inline padding from the
+[web layout](public-web-layout.md#sheets), so the brand and the text share one
+left edge at every width.
 
 At 1440 px the brand sits on the resume's left text edge and the button's right
 edge on the resume's right text edge. On a phone the bar keeps a 16 px gutter.
@@ -131,7 +132,7 @@ px the row may wrap, and the actions sit under the credit.
 - The bar is not sticky. It scrolls away with the page, so it never covers the
   resume on any screen. A reader sees it first, where the download is most
   useful, and the page needs no script for it.
-- The resume keeps its own top padding (`--page-margin-y`) under the bar.
+- The first sheet starts below the bar with the sheet gap.
 - When the owner turned PDF download off, the bar drops only Download PDF, at
   the same height. With no available project, the brand stands alone on the
   left.

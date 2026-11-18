@@ -89,8 +89,9 @@ const responseCodes = (operation: any, status: string) => {
 
 describe("project library surface", () => {
   it("declares exactly the five owner library operations", () => {
-    const declared = Object.keys(doc.paths).filter((p) =>
-      p.startsWith("/projects"),
+    const declared = Object.keys(doc.paths).filter(
+      (p) =>
+        p.startsWith("/projects") && !p.startsWith("/projects/{id}/evidence"),
     );
     expect(declared.sort()).toEqual(Object.keys(SURFACE).sort());
     for (const [path, methods] of Object.entries(SURFACE)) {
