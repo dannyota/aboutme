@@ -65,13 +65,17 @@ func (s *Service) mutateEvidence(w http.ResponseWriter, r *http.Request, route e
 		writeError(w, mapError(err))
 		return
 	}
-	result, err := s.links.EditProjectEvidence(r.Context(), resumeapi.ProjectEvidenceEdit{
+	edit := resumeapi.ProjectEvidenceEdit{
 		UserID: call.owner, ProjectID: call.project, Operation: operation, Key: headers.key, RequestHash: fingerprint,
 		Authorize: func(ctx context.Context, q *store.Queries) error { return s.authorizeEvidence(ctx, q, actor, &call) },
 		Apply: func(ctx context.Context, q *store.Queries, changed []resumeapi.ChangedResume) (resume.StoredResponse, error) {
 			return s.applyEvidence(ctx, q, &call, changed)
 		},
-	})
+	}
+	if call.route == evidenceOrder {
+		edit.Change = func(ctx context.Context, q *store.Queries) (project.Change, error) { return orderChange(ctx, q, &call) }
+	}
+	result, err := s.links.EditProjectEvidence(r.Context(), edit)
 	if err != nil {
 		writeError(w, mapError(err))
 		return

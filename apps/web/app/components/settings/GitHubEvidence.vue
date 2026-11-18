@@ -53,7 +53,9 @@ const loadFailed = ref(false);
 const view = ref<EvidenceView | null>(null);
 const pending = ref(false);
 const failure = ref<Exclude<Failure, 'session-lost'> | null>(null);
-const notice = ref<'connected' | 'failed' | null>(null);
+type Notice = 'connected' | 'failed' | 'different-account';
+
+const notice = ref<Notice | null>(null);
 
 const errorMessage = computed(() => {
   if (failure.value === null) return null;
@@ -295,6 +297,7 @@ function readCallbackResult(): void {
   if (!('evidence' in route.query)) return;
   const value = route.query.evidence;
   if (value === 'connected' || value === 'failed') notice.value = value;
+  if (value === 'different_account') notice.value = 'different-account';
   const query = Object.fromEntries(
     Object.entries(route.query).filter(([key]) => key !== 'evidence'),
   );
@@ -352,6 +355,14 @@ onMounted(() => {
       testid="evidence-failed"
     >
       {{ copy.failedNotice }}
+    </StatusBanner>
+    <StatusBanner
+      v-else-if="notice === 'different-account'"
+      focus-on-mount
+      kind="error"
+      testid="evidence-different-account"
+    >
+      {{ copy.differentAccountNotice }}
     </StatusBanner>
     <StatusBanner
       v-if="errorMessage"

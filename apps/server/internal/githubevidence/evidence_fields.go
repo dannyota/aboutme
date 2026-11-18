@@ -13,13 +13,16 @@ import (
 
 const (
 	maxTextCharacters = 200
-	maxTagCharacters  = 255
 	maxURLCharacters  = 300
 )
 
+func unsafeText(r rune) bool {
+	return unicode.In(r, unicode.Cc, unicode.Cf, unicode.Zl, unicode.Zp)
+}
+
 func limitText(text string) string {
 	text = strings.Map(func(r rune) rune {
-		if unicode.IsControl(r) {
+		if unsafeText(r) {
 			return ' '
 		}
 		return r
@@ -28,6 +31,20 @@ func limitText(text string) string {
 		return text
 	}
 	return string([]rune(text)[:maxTextCharacters])
+}
+
+func pullRequestTitle(fullName string, number int64, title string) string {
+	if limited := limitText(title); strings.TrimSpace(limited) != "" {
+		return limited
+	}
+	return limitText(fullName + "#" + strconv.FormatInt(number, 10))
+}
+
+func releaseTitle(name, tag string) string {
+	if limited := limitText(name); strings.TrimSpace(limited) != "" {
+		return limited
+	}
+	return limitText(tag)
 }
 
 func repositoryFields(repo githubRepository) project.EvidenceFields {
@@ -39,30 +56,22 @@ func repositoryFields(repo githubRepository) project.EvidenceFields {
 
 func pullRequestFields(repo githubRepository, pull githubPullRequest) project.EvidenceFields {
 	number := pull.number
-	title := limitText(pull.title)
-	if strings.TrimSpace(title) == "" {
-		title = repo.fullName + "#" + strconv.FormatInt(number, 10)
-	}
 	return project.EvidenceFields{
 		RepositoryID: repo.id, ItemID: pull.id, PullNumber: &number,
 		URL:            githubWebPrefix + repo.fullName + "/pull/" + strconv.FormatInt(number, 10),
-		RepositoryName: limitText(repo.fullName), Title: title, ItemDate: pull.itemDate(),
+		RepositoryName: limitText(repo.fullName), Title: pullRequestTitle(repo.fullName, number, pull.title), ItemDate: pull.itemDate(),
 	}
 }
 
 func releaseFields(repo githubRepository, release githubRelease) (project.EvidenceFields, bool) {
 	tag := release.tag
 	link := githubWebPrefix + repo.fullName + "/releases/tag/" + url.PathEscape(tag)
-	if strings.ContainsRune(tag, 0) || utf8.RuneCountInString(tag) > maxTagCharacters || len(link) > maxURLCharacters {
+	if !validTag(tag) || len(link) > maxURLCharacters {
 		return project.EvidenceFields{}, false
-	}
-	title := limitText(release.name)
-	if strings.TrimSpace(title) == "" {
-		title = limitText(tag)
 	}
 	return project.EvidenceFields{
 		RepositoryID: repo.id, ItemID: release.id, ReleaseTag: &tag, URL: link,
-		RepositoryName: limitText(repo.fullName), Title: title, ItemDate: release.itemDate(),
+		RepositoryName: limitText(repo.fullName), Title: releaseTitle(release.name, tag), ItemDate: release.itemDate(),
 	}, true
 }
 

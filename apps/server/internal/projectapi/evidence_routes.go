@@ -62,7 +62,7 @@ func (s *Service) evidenceHandler(method string, route evidenceRoute) http.Handl
 		}
 		var handler http.Handler
 		if route == evidenceCandidates {
-			handler = s.readLimit(http.HandlerFunc(s.candidates))
+			handler = auth.RequireSameOriginOrCSRF()(s.readLimit(http.HandlerFunc(s.candidates)))
 		} else {
 			handler = s.writeLimit(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { s.mutateEvidence(w, r, route) }))
 		}

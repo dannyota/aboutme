@@ -16,6 +16,8 @@ const (
 	upstreamCode        = "evidence_upstream"
 	rateLimitedCode     = "rate_limited"
 	defaultGitHubRetry  = 60 * time.Second
+	minGitHubRetry      = time.Second
+	maxGitHubRetry      = time.Hour
 )
 
 var (
@@ -88,15 +90,30 @@ func rateLimitedResponse(header http.Header, body []byte) bool {
 }
 
 func githubRetry(header http.Header, now time.Time) time.Duration {
+	return wholeSeconds(min(max(rawGitHubRetry(header, now), minGitHubRetry), maxGitHubRetry))
+}
+
+func rawGitHubRetry(header http.Header, now time.Time) time.Duration {
 	if seconds, err := strconv.ParseInt(strings.TrimSpace(header.Get("Retry-After")), 10, 32); err == nil && seconds >= 0 {
-		return wholeSeconds(time.Duration(seconds) * time.Second)
+		return time.Duration(seconds) * time.Second
 	}
 	if header.Get("X-RateLimit-Remaining") == "0" {
 		if reset, err := strconv.ParseInt(strings.TrimSpace(header.Get("X-RateLimit-Reset")), 10, 64); err == nil {
-			return wholeSeconds(time.Unix(reset, 0).Sub(now))
+			return untilReset(reset, now)
 		}
 	}
 	return defaultGitHubRetry
+}
+
+func untilReset(reset int64, now time.Time) time.Duration {
+	switch seconds := now.Unix(); {
+	case reset <= seconds:
+		return 0
+	case reset > seconds+int64(maxGitHubRetry/time.Second):
+		return maxGitHubRetry
+	default:
+		return time.Unix(reset, 0).Sub(now)
+	}
 }
 
 func wholeSeconds(d time.Duration) time.Duration {

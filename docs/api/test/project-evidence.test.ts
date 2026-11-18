@@ -38,6 +38,7 @@ const STATUSES: Record<string, string[]> = {
     "200",
     "400",
     "401",
+    "403",
     "404",
     "405",
     "409",
@@ -105,10 +106,17 @@ describe("project evidence surface", () => {
     for (const [, method, id, op] of operations()) {
       expect(op.security, id).toEqual(
         method === "get"
-          ? [{ sessionCookie: [] }]
+          ? [{ sessionCookie: [], csrfToken: [] }, { sessionCookie: [] }]
           : [{ sessionCookie: [], csrfToken: [] }],
       );
     }
+  });
+
+  it("refuses a candidates read without same-origin fetch metadata or a token", () => {
+    const op = operation("listProjectEvidenceCandidates");
+    expect(op.description).toContain("`Sec-Fetch-Site: same-origin`");
+    expect(op.description).toContain("`403 csrf_rejected`");
+    expect(codes(op, "403")).toEqual(["csrf_rejected"]);
   });
 
   it("requires If-Match and an idempotency key on every write", () => {

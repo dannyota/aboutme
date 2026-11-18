@@ -81,34 +81,45 @@ func decodeOrder(body []byte) ([]uuid.UUID, error) {
 
 func (s *Service) applyEvidence(ctx context.Context, q *store.Queries, call *evidenceCall, changed []resumeapi.ChangedResume) (resume.StoredResponse, error) {
 	var err error
+	edited := true
 	switch call.route {
 	case evidenceAttach:
 		err = s.attachTx(ctx, q, call)
 	case evidenceRecheck:
 		err = s.recheckTx(ctx, q, call)
 	case evidenceOrder:
-		err = reorderTx(ctx, q, call)
+		edited, err = reorderTx(ctx, q, call)
 	default:
 		err = removeTx(ctx, q, call)
 	}
 	if err != nil {
 		return resume.StoredResponse{}, err
 	}
-	advanced, err := q.AdvanceProjectRevision(ctx, store.AdvanceProjectRevisionParams{
-		ID: call.project, UserID: call.owner, ExpectedRevision: call.revision, UpdatedAt: s.now(),
-	})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return resume.StoredResponse{}, project.ErrNotFound
-	}
-	if err != nil {
-		return resume.StoredResponse{}, fmt.Errorf("projectapi: advance project revision: %w", err)
+	revision := call.revision
+	if edited {
+		if revision, err = s.advanceProject(ctx, q, call); err != nil {
+			return resume.StoredResponse{}, err
+		}
 	}
 	items, err := s.projects.EvidenceTx(ctx, q, call.owner, call.project)
 	if err != nil {
 		return resume.StoredResponse{}, err
 	}
-	result := evidenceResult{Evidence: items, ProjectRevision: advanced.Revision, ResumeRevisions: changedResumes(changed)}
-	return stored(200, result, map[string]string{"ETag": revisionTag(advanced.Revision)})
+	result := evidenceResult{Evidence: items, ProjectRevision: revision, ResumeRevisions: changedResumes(changed)}
+	return stored(200, result, map[string]string{"ETag": revisionTag(revision)})
+}
+
+func (s *Service) advanceProject(ctx context.Context, q *store.Queries, call *evidenceCall) (int64, error) {
+	advanced, err := q.AdvanceProjectRevision(ctx, store.AdvanceProjectRevisionParams{
+		ID: call.project, UserID: call.owner, ExpectedRevision: call.revision, UpdatedAt: s.now(),
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, project.ErrNotFound
+	}
+	if err != nil {
+		return 0, fmt.Errorf("projectapi: advance project revision: %w", err)
+	}
+	return advanced.Revision, nil
 }
 
 func (s *Service) attachTx(ctx context.Context, q *store.Queries, call *evidenceCall) error {
@@ -157,10 +168,33 @@ func (s *Service) recheckTx(ctx context.Context, q *store.Queries, call *evidenc
 	return nil
 }
 
-func reorderTx(ctx context.Context, q *store.Queries, call *evidenceCall) error {
+func orderChange(ctx context.Context, q *store.Queries, call *evidenceCall) (project.Change, error) {
 	rows, err := q.ListProjectEvidence(ctx, store.ListProjectEvidenceParams{UserID: call.owner, ProjectID: call.project})
 	if err != nil {
-		return fmt.Errorf("projectapi: list evidence: %w", err)
+		return project.Unchanged, fmt.Errorf("projectapi: list evidence: %w", err)
+	}
+	if sameOrder(rows, call.order) {
+		return project.Unchanged, nil
+	}
+	return project.DocumentChanged, nil
+}
+
+func sameOrder(rows []store.ListProjectEvidenceRow, order []uuid.UUID) bool {
+	if len(rows) != len(order) {
+		return false
+	}
+	for i, row := range rows {
+		if row.ID != order[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func reorderTx(ctx context.Context, q *store.Queries, call *evidenceCall) (bool, error) {
+	rows, err := q.ListProjectEvidence(ctx, store.ListProjectEvidenceParams{UserID: call.owner, ProjectID: call.project})
+	if err != nil {
+		return false, fmt.Errorf("projectapi: list evidence: %w", err)
 	}
 	stored := make(map[uuid.UUID]bool, len(rows))
 	for _, row := range rows {
@@ -168,20 +202,23 @@ func reorderTx(ctx context.Context, q *store.Queries, call *evidenceCall) error 
 	}
 	for _, id := range call.order {
 		if !stored[id] {
-			return project.ErrEvidenceNotFound
+			return false, project.ErrEvidenceNotFound
 		}
 	}
 	if len(rows) != len(call.order) {
-		return project.ErrEvidenceRequest
+		return false, project.ErrEvidenceRequest
+	}
+	if sameOrder(rows, call.order) {
+		return false, nil
 	}
 	n, err := q.ReorderProjectEvidence(ctx, store.ReorderProjectEvidenceParams{Ids: call.order, ProjectID: call.project})
 	if err != nil {
-		return fmt.Errorf("projectapi: reorder evidence: %w", err)
+		return false, fmt.Errorf("projectapi: reorder evidence: %w", err)
 	}
 	if n != int64(len(rows)) {
-		return project.ErrEvidenceRequest
+		return false, project.ErrEvidenceRequest
 	}
-	return nil
+	return true, nil
 }
 
 func removeTx(ctx context.Context, q *store.Queries, call *evidenceCall) error {

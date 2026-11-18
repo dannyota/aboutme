@@ -356,3 +356,20 @@ func TestExecuteMutation_ReplayIsByteIdenticalAndDoesNotRerun(t *testing.T) {
 		t.Fatalf("operation calls after key reuse = %d, want 1", got)
 	}
 }
+
+func TestAccountWriteIdentity_UsesTheSharedTuples(t *testing.T) {
+	t.Parallel()
+
+	payload := []byte("keepLinks=true&generation=3")
+	operation, fingerprint := AccountWriteIdentity(http.MethodDelete, "deleteGitHubEvidence", payload)
+	wantOperation := tupleHash(idempotencyOperationDomain, [][]byte{[]byte("method"), []byte("DELETE"), []byte("operation"), []byte("deleteGitHubEvidence")})
+	wantFingerprint := tupleHash(idempotencyRequestDomain, [][]byte{
+		[]byte("wire_version"), []byte("0"), []byte("if_match"), []byte("absent"), []byte("payload"), payload,
+	})
+	if operation != hexDigest(wantOperation) || fingerprint != wantFingerprint {
+		t.Fatalf("AccountWriteIdentity = (%s, %s), want (%s, %s)", operation, hexDigest(fingerprint), hexDigest(wantOperation), hexDigest(wantFingerprint))
+	}
+	if _, other := AccountWriteIdentity(http.MethodDelete, "deleteGitHubEvidence", []byte("keepLinks=false&generation=3")); other == fingerprint {
+		t.Fatal("another payload has the same fingerprint")
+	}
+}

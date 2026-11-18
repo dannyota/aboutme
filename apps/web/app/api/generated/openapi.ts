@@ -720,7 +720,7 @@ export interface paths {
         };
         /**
          * One page of GitHub items the project can attach
-         * @description Lists one page of the caller's repositories, merged pull requests or releases through the live evidence session. Repository listings drop forks and private repositories, and release listings drop drafts and releases by another author, after fetching, so a page may hold fewer than 30 rows. Each row carries a `candidateId` valid only in this session. `attached` marks a row already on this project: a pull request by repository full name and number, other kinds by item id. Each call is one GitHub request toward the 120 per account per hour. Reads share the resume read limiter. Takes no body. Every response uses Cache-Control no-store, no-transform.
+         * @description Lists one page of the caller's repositories, merged pull requests or releases through the live evidence session. Repository listings drop forks and private repositories, and release listings drop drafts and releases by another author, after fetching, so a page may hold fewer than 30 rows. Each row carries a `candidateId` valid only in this session. `attached` marks a row already on this project: a pull request by repository full name and number, other kinds by item id. Each call is one GitHub request toward the 120 per account per hour. The request must carry either `Sec-Fetch-Site: same-origin` or a valid `X-CSRF-Token`, each given once; otherwise it answers `403 csrf_rejected` before any GitHub request or change to the session's listed candidates. Reads share the resume read limiter. Takes no body. Every response uses Cache-Control no-store, no-transform.
          */
         get: operations["listProjectEvidenceCandidates"];
         put?: never;
@@ -767,7 +767,7 @@ export interface paths {
         get?: never;
         /**
          * Reorder a library project's evidence
-         * @description `order` names every evidence item of the project exactly once, in the new order. An id that is not an item of this project is `404 evidence_not_found`; a missing or repeated id, or more than 10 ids, is `400 request_invalid`. Reads nothing from GitHub and needs no evidence session. The project revision advances, and every published resume of the caller that links the project advances its revision by one without a document change, planned as for attach. A request carrying an `Authorization` header is `400 request_invalid`. Writes share the resume write limiter. Every response uses Cache-Control no-store, no-transform.
+         * @description `order` names every evidence item of the project exactly once, in the new order. An id that is not an item of this project is `404 evidence_not_found`; a missing or repeated id, or more than 10 ids, is `400 request_invalid`. Reads nothing from GitHub and needs no evidence session. The project revision advances, and every published resume of the caller that links the project advances its revision by one without a document change, planned as for attach. An order equal to the current one, including `[]` on a project without evidence, changes nothing: it answers 200 with the current evidence and project revision and an empty `resumeRevisions`, and stores the answer for replay. A request carrying an `Authorization` header is `400 request_invalid`. Writes share the resume write limiter. Every response uses Cache-Control no-store, no-transform.
          */
         put: operations["reorderProjectEvidence"];
         post?: never;
@@ -3707,6 +3707,23 @@ export interface components {
                  *       "error": {
                  *         "code": "request_invalid",
                  *         "message": "request does not match the operation"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `csrf_rejected`: the request carried neither `Sec-Fetch-Site: same-origin` nor a valid `X-CSRF-Token`, as a cross-site navigation does. Refused before any GitHub request, any use of the hourly budget and any change to the listed candidates. */
+        ProjectEvidenceCandidatesCsrfRejected: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "csrf_rejected",
+                 *         "message": "CSRF validation failed"
                  *       }
                  *     }
                  */
@@ -8377,6 +8394,7 @@ export interface operations {
             };
             400: components["responses"]["ProjectEvidenceQueryInvalid"];
             401: components["responses"]["ResumeUnauthorized"];
+            403: components["responses"]["ProjectEvidenceCandidatesCsrfRejected"];
             404: components["responses"]["ProjectEvidenceProjectNotFound"];
             405: components["responses"]["ProjectMethodNotAllowed"];
             409: components["responses"]["ProjectEvidenceSessionRequired"];

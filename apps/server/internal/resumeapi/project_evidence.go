@@ -16,14 +16,18 @@ type ProjectEvidenceEdit struct {
 	Operation   string
 	Key         uuid.UUID
 	RequestHash [32]byte
+	Change      func(context.Context, *store.Queries) (project.Change, error)
 	Authorize   func(context.Context, *store.Queries) error
 	Apply       func(context.Context, *store.Queries, []ChangedResume) (resume.StoredResponse, error)
 }
 
 func (s *Service) EditProjectEvidence(ctx context.Context, edit ProjectEvidenceEdit) (resume.ExecuteResult, error) {
+	change := edit.Change
+	if change == nil {
+		change = func(context.Context, *store.Queries) (project.Change, error) { return project.DocumentChanged, nil }
+	}
 	return s.ReplaceProject(ctx, ProjectReplacement{
 		UserID: edit.UserID, ProjectID: edit.ProjectID, Operation: edit.Operation, Key: edit.Key, RequestHash: edit.RequestHash,
-		Change:    func(context.Context, *store.Queries) (project.Change, error) { return project.DocumentChanged, nil },
-		Authorize: edit.Authorize, Replace: edit.Apply,
+		Change: change, Authorize: edit.Authorize, Replace: edit.Apply,
 	})
 }

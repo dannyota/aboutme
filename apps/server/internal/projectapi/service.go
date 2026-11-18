@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"danny.vn/aboutme/apps/server/internal/api"
 	"danny.vn/aboutme/apps/server/internal/auth"
@@ -41,6 +42,7 @@ type idempotencyStore interface {
 }
 
 type Service struct {
+	pool        *store.Pool
 	q           *store.Queries
 	projects    *project.Store
 	idempotency idempotencyStore
@@ -52,13 +54,14 @@ type Service struct {
 	now         func() time.Time
 	links       LinkedResumes
 	evidence    EvidenceSource
+	readHook    func()
 }
 
 func New(pool *store.Pool, idem *resume.IdempotencyStore, opts Options) *Service {
 	if opts.Clock == nil {
 		opts.Clock = time.Now
 	}
-	return &Service{q: store.New(pool), projects: project.NewStore(), idempotency: idem, sessions: opts.Sessions, origin: opts.PublicOrigin, readLimit: opts.ReadLimit, writeLimit: opts.WriteLimit, allowSlug: opts.AllowSlug, now: opts.Clock, links: opts.Links, evidence: opts.Evidence}
+	return &Service{pool: pool, q: store.New(pool), projects: project.NewStore(), idempotency: idem, sessions: opts.Sessions, origin: opts.PublicOrigin, readLimit: opts.ReadLimit, writeLimit: opts.WriteLimit, allowSlug: opts.AllowSlug, now: opts.Clock, links: opts.Links, evidence: opts.Evidence}
 }
 
 func (s *Service) RegisterRoutes(mux *http.ServeMux) {
@@ -125,42 +128,60 @@ func (s *Service) read(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) readFor(w http.ResponseWriter, r *http.Request, owner uuid.UUID) {
+	if r.PathValue("id") != "" {
+		s.readOne(w, r, owner)
+		return
+	}
 	links, err := s.links.LinkedResumeIDs(r.Context(), s.q, owner)
 	if err != nil {
 		writeError(w, mapError(err))
 		return
 	}
-	if r.PathValue("id") == "" {
-		projects, listErr := s.projects.ListTx(r.Context(), s.q, owner)
-		if listErr != nil {
-			writeError(w, mapError(listErr))
-			return
-		}
-		out := make([]resource, len(projects))
-		for i, p := range projects {
-			out[i] = resourceOf(p, links)
-		}
-		api.WriteData(w, 200, struct {
-			Projects []resource `json:"projects"`
-		}{Projects: out})
+	projects, err := s.projects.ListTx(r.Context(), s.q, owner)
+	if err != nil {
+		writeError(w, mapError(err))
 		return
 	}
+	out := make([]resource, len(projects))
+	for i, p := range projects {
+		out[i] = resourceOf(p, links)
+	}
+	api.WriteData(w, 200, struct {
+		Projects []resource `json:"projects"`
+	}{Projects: out})
+}
+
+func (s *Service) readOne(w http.ResponseWriter, r *http.Request, owner uuid.UUID) {
 	id, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {
 		writeError(w, requestError())
 		return
 	}
-	p, err := s.projects.GetTx(r.Context(), s.q, owner, id)
+	ctx := r.Context()
+	var one resource
+	options := pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly}
+	err = pgx.BeginTxFunc(ctx, s.pool, options, func(tx pgx.Tx) error {
+		q := s.q.WithTx(tx)
+		links, linksErr := s.links.LinkedResumeIDs(ctx, q, owner)
+		if linksErr != nil {
+			return linksErr
+		}
+		p, getErr := s.projects.GetTx(ctx, q, owner, id)
+		if getErr != nil {
+			return getErr
+		}
+		if s.readHook != nil {
+			s.readHook()
+		}
+		var singleErr error
+		one, singleErr = s.single(ctx, q, owner, p, links)
+		return singleErr
+	})
 	if err != nil {
 		writeError(w, mapError(err))
 		return
 	}
-	one, err := s.single(r.Context(), s.q, owner, p, links)
-	if err != nil {
-		writeError(w, mapError(err))
-		return
-	}
-	w.Header().Set("ETag", revisionTag(p.Revision))
+	w.Header().Set("ETag", revisionTag(one.Revision))
 	api.WriteData(w, 200, one)
 }
 

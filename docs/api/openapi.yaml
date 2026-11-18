@@ -2613,9 +2613,15 @@ paths:
         session. `attached` marks a row already on this project: a pull
         request by repository full name and number, other kinds by item id.
         Each call is one GitHub request toward the 120 per account per hour.
-        Reads share the resume read limiter. Takes no body. Every response
-        uses Cache-Control no-store, no-transform.
+        The request must carry either `Sec-Fetch-Site: same-origin` or a
+        valid `X-CSRF-Token`, each given once; otherwise it answers
+        `403 csrf_rejected` before any GitHub request or change to the
+        session's listed candidates. Reads share the resume read limiter.
+        Takes no body. Every response uses Cache-Control no-store,
+        no-transform.
       security:
+        - sessionCookie: []
+          csrfToken: []
         - sessionCookie: []
       parameters:
         - name: kind
@@ -2669,6 +2675,8 @@ paths:
           $ref: "#/components/responses/ProjectEvidenceQueryInvalid"
         "401":
           $ref: "#/components/responses/ResumeUnauthorized"
+        "403":
+          $ref: "#/components/responses/ProjectEvidenceCandidatesCsrfRejected"
         "404":
           $ref: "#/components/responses/ProjectEvidenceProjectNotFound"
         "405":
@@ -2771,8 +2779,12 @@ paths:
         ids, is `400 request_invalid`. Reads nothing from GitHub and needs no
         evidence session. The project revision advances, and every published
         resume of the caller that links the project advances its revision
-        by one without a document change, planned as for attach. A request
-        carrying an `Authorization` header is `400 request_invalid`. Writes
+        by one without a document change, planned as for attach. An order
+        equal to the current one, including `[]` on a project without
+        evidence, changes nothing: it answers 200 with the current evidence
+        and project revision and an empty `resumeRevisions`, and stores the
+        answer for replay. A request carrying an `Authorization` header is
+        `400 request_invalid`. Writes
         share the resume write limiter. Every response uses Cache-Control
         no-store, no-transform.
       security:
@@ -6074,6 +6086,20 @@ components:
             error:
               code: request_invalid
               message: request does not match the operation
+    ProjectEvidenceCandidatesCsrfRejected:
+      description: >-
+        `csrf_rejected`: the request carried neither
+        `Sec-Fetch-Site: same-origin` nor a valid `X-CSRF-Token`, as a
+        cross-site navigation does. Refused before any GitHub request, any
+        use of the hourly budget and any change to the listed candidates.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: csrf_rejected
+              message: CSRF validation failed
     ProjectEvidenceQueryInvalid:
       description: >-
         `request_invalid`: a malformed project id, a missing, repeated,

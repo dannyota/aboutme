@@ -20,6 +20,7 @@ const (
 	idempotencyCleanupBatch       = 200
 	maxRetainedIdempotencyRecords = 50_000
 	maxRetainedIdempotencyBytes   = 1 << 30
+	idempotencyCommitTimeout      = 5 * time.Second
 )
 
 const (

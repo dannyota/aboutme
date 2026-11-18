@@ -99,11 +99,16 @@ func newLibrary(t *testing.T, pool *store.Pool, sessions *auth.SessionManager) (
 
 func wireEvidence(t *testing.T, h *harness, source projectapi.EvidenceSource) *evidenceHarness {
 	t.Helper()
+	return wireEvidenceWith(t, h, source, h.library)
+}
+
+func wireEvidenceWith(t *testing.T, h *harness, source projectapi.EvidenceSource, links projectapi.LinkedResumes) *evidenceHarness {
+	t.Helper()
 	projector := docmigrate.NewIdentityProjector()
 	pass := func(next http.Handler) http.Handler { return next }
 	projects := projectapi.New(h.pool, resume.NewIdempotencyStore(h.pool), projectapi.Options{
 		Sessions: h.sessions, PublicOrigin: testOrigin, ReadLimit: pass, WriteLimit: pass,
-		AllowSlug: func(uuid.UUID, time.Time) bool { return true }, Links: h.library, Evidence: source,
+		AllowSlug: func(uuid.UUID, time.Time) bool { return true }, Links: links, Evidence: source,
 	})
 	register := []func(*http.ServeMux){h.auth.RegisterRoutes, projects.RegisterRoutes}
 	if svc, ok := source.(*Service); ok {

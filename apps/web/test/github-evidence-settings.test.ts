@@ -579,16 +579,59 @@ describe('GitHub evidence settings', () => {
       .toEqual({ reason: 'denied' }));
   });
 
+  it('shows the different account alert and clears it', async () => {
+    state = connectedIdle;
+    const router = useRouter();
+    const push = vi.spyOn(router, 'push');
+    try {
+      const wrapper = await mountSection(
+        '/app/settings/sessions?evidence=different_account&error=cancelled',
+      );
+
+      const notice = wrapper.get('[data-testid="evidence-different-account"]');
+      expect(notice.text()).toBe(
+        'This GitHub account differs from the connected one. Disconnect first.',
+      );
+      expect(notice.attributes('role')).toBe('alert');
+      expect(wrapper.find('[data-testid="evidence-connected"]').exists())
+        .toBe(false);
+      expect(wrapper.find('[data-testid="evidence-failed"]').exists())
+        .toBe(false);
+      await vi.waitFor(() => expect(router.currentRoute.value.query)
+        .toEqual({ error: 'cancelled' }));
+      expect(push).not.toHaveBeenCalled();
+    } finally {
+      push.mockRestore();
+    }
+  });
+
+  it('shows the different account notice in Vietnamese', async () => {
+    setSiteLocale('vi');
+    state = connectedIdle;
+    const wrapper = await mountSection(
+      '/app/settings/sessions?evidence=different_account',
+    );
+
+    expect(wrapper.get('[data-testid="evidence-different-account"]').text())
+      .toBe('Tài khoản GitHub này khác tài khoản đã kết nối. '
+        + 'Hãy ngắt kết nối trước.');
+    await vi.waitFor(() => expect(useRouter().currentRoute.value.fullPath)
+      .toBe('/app/settings/sessions'));
+  });
+
   it.each([
     ['another value', '?evidence=Connected'],
     ['an empty value', '?evidence='],
     ['a repeated value', '?evidence=connected&evidence=connected'],
+    ['another case', '?evidence=Different_Account'],
   ])('ignores %s and removes the parameter', async (_name, search) => {
     const wrapper = await mountSection(`/app/settings/sessions${search}`);
 
     expect(wrapper.find('[data-testid="evidence-connected"]').exists())
       .toBe(false);
     expect(wrapper.find('[data-testid="evidence-failed"]').exists())
+      .toBe(false);
+    expect(wrapper.find('[data-testid="evidence-different-account"]').exists())
       .toBe(false);
     await vi.waitFor(() => expect(useRouter().currentRoute.value.fullPath)
       .toBe('/app/settings/sessions'));
@@ -755,9 +798,9 @@ describe('GitHub evidence settings', () => {
   it('has every key in both languages', () => {
     const keys = [
       'connect', 'connectedAs', 'connectedNotice', 'connectedOn', 'continue',
-      'disconnect', 'done', 'errors', 'failedNotice', 'loadFailed', 'loading',
-      'noSession', 'notConnected', 'privacy', 'retry', 'sessionOpenUntil',
-      'title',
+      'differentAccountNotice', 'disconnect', 'done', 'errors', 'failedNotice',
+      'loadFailed', 'loading', 'noSession', 'notConnected', 'privacy', 'retry',
+      'sessionOpenUntil', 'title',
     ];
     const errors = [
       'csrfRejected', 'failed', 'rateLimited', 'sessionEnded', 'unavailable',

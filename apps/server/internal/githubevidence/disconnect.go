@@ -1,11 +1,7 @@
 package githubevidence
 
 import (
-	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/binary"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -209,20 +205,6 @@ func disconnectParams(r *http.Request) (bool, int64, bool) {
 }
 
 func disconnectIdentity(keepLinks bool, generation int64) (string, [32]byte) {
-	operation := tupleHash("aboutme.idempotency.operation.v1", "method", http.MethodDelete, "operation", "deleteGitHubEvidence")
-	request := tupleHash("aboutme.idempotency.request.v1", "route", StatusPath,
-		"keepLinks", strconv.FormatBool(keepLinks), "generation", strconv.FormatInt(generation, 10))
-	return hex.EncodeToString(operation[:]), request
-}
-
-func tupleHash(domain string, fields ...string) [32]byte {
-	var encoded bytes.Buffer
-	encoded.WriteString(domain)
-	encoded.WriteByte(0)
-	encoded.Write(binary.BigEndian.AppendUint32(nil, uint32(len(fields)))) //nolint:gosec // six fixed fields
-	for _, field := range fields {
-		encoded.Write(binary.BigEndian.AppendUint32(nil, uint32(len(field)))) //nolint:gosec // names and query values bounded by the request line
-		encoded.WriteString(field)
-	}
-	return sha256.Sum256(encoded.Bytes())
+	payload := "keepLinks=" + strconv.FormatBool(keepLinks) + "&generation=" + strconv.FormatInt(generation, 10)
+	return resumeapi.AccountWriteIdentity(http.MethodDelete, "deleteGitHubEvidence", []byte(payload))
 }

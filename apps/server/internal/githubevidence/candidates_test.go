@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -187,5 +188,36 @@ func TestCandidates_ListingFailuresChangeNothing(t *testing.T) {
 	}
 	if _, err := fx.reader.listReleases(context.Background(), candidateRepository{id: 101, fullName: "octocat/hello"}, testGitHubUserID, 1); !errors.Is(err, errGone) {
 		t.Errorf("release listing of a missing repository error = %v, want gone", err)
+	}
+}
+
+func TestCandidates_TitlesAreLimitedText(t *testing.T) {
+	long := strings.Repeat("x", 250)
+	api := newFakeAPI(t)
+	api.json("/search/issues", http.StatusOK, `{"incomplete_results":false,"items":[`+
+		`{"repository_url":"https://api.github.com/repos/octocat/hello","number":1,"title":"Fix\r\n\u202ethe\u2066thing\u200b","closed_at":"2026-03-04T05:06:07Z"},`+
+		`{"repository_url":"https://api.github.com/repos/octocat/hello","number":2,"title":"`+long+`","closed_at":"2026-03-04T05:06:07Z"},`+
+		`{"repository_url":"https://api.github.com/repos/octocat/hello","number":3,"title":"\u202e\u200f","closed_at":"2026-03-04T05:06:07Z"}]}`)
+	api.json("/repos/octocat/hello/releases", http.StatusOK, `[`+
+		`{"id":1,"tag_name":"v1","name":"First\u2028release\t","draft":false,"prerelease":false,"published_at":"2026-04-05T06:07:08Z","author":{"id":583231,"type":"User"}},`+
+		`{"id":2,"tag_name":"v2","name":"`+long+`","draft":false,"prerelease":false,"published_at":"2026-04-05T06:07:08Z","author":{"id":583231,"type":"User"}},`+
+		`{"id":3,"tag_name":"v3","name":"\u2066\u2069","draft":false,"prerelease":false,"published_at":"2026-04-05T06:07:08Z","author":{"id":583231,"type":"User"}}]`)
+	fx := newReaderFixture(t, api.server.URL, newTransport(), fixedClock())
+	pulls, err := fx.reader.listPullRequests(context.Background(), "octocat", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	releases, err := fx.reader.listReleases(context.Background(), candidateRepository{id: 101, fullName: "octocat/hello"}, testGitHubUserID, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"Fix   the thing ", long[:maxTextCharacters], "octocat/hello#3", "First release ", long[:maxTextCharacters], "v3"}
+	got := []string{}
+	for _, item := range append(pulls.items, releases.items...) {
+		requireNoFormat(t, "candidate title", item.title)
+		got = append(got, item.title)
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("candidate titles = %q, want %q", got, want)
 	}
 }

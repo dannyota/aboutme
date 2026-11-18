@@ -62,7 +62,7 @@ func validTag(tag string) bool {
 		}
 	}
 	for _, r := range tag {
-		if unicode.IsSpace(r) || unicode.IsControl(r) {
+		if unicode.IsSpace(r) || unsafeText(r) {
 			return false
 		}
 	}

@@ -88,3 +88,41 @@ func TestExecuteBeforeCommit_SkippedWhenStorageRollsBack(t *testing.T) {
 		t.Fatalf("hook calls after rolled-back storage = %d, want 0", calls.Load())
 	}
 }
+
+func TestExecuteBeforeCommit_ARequestCanceledInTheHookStillCommits(t *testing.T) {
+	clock := testutil.NewClockAtEpoch()
+	idem, _, q, pool, ctx := newIntegrationIdempotencyStore(t, clock.Now)
+	userID := createTestUser(t, q)
+	key := uuid.New()
+	hash := sha256.Sum256([]byte("canceled in the hook"))
+	request, cancel := context.WithCancel(ctx)
+	defer cancel()
+	var calls atomic.Int32
+	result, err := idem.Execute(request, userID, idempotencyTestRoute, key, hash, func(qtx *store.Queries) (resume.StoredResponse, error) {
+		if _, err := qtx.CreateProject(request, store.CreateProjectParams{
+			UserID: userID, Slug: "canceled-hook", CreatedAt: clock.Now(),
+			Document: json.RawMessage(`{"defaultLanguage":"en","text":{"en":{"name":"Canceled hook"}}}`),
+		}); err != nil {
+			return resume.StoredResponse{}, err
+		}
+		return resume.StoredResponse{Status: 200, Body: json.RawMessage(`{"done":true}`), BeforeCommit: func() {
+			calls.Add(1)
+			cancel()
+		}}, nil
+	})
+	if err != nil || result.Outcome != resume.CommitCommitted || result.Replayed {
+		t.Fatalf("Execute = (%+v, %v), want a fresh commit although the request ended in the hook", result, err)
+	}
+	if calls.Load() != 1 {
+		t.Fatalf("hook calls = %d, want 1", calls.Load())
+	}
+	if _, err = q.GetIdempotencyRecord(ctx, store.GetIdempotencyRecordParams{
+		UserID: userID, Route: idempotencyTestRoute, IdempotencyKey: key,
+	}); err != nil {
+		t.Fatalf("record after a canceled request: %v", err)
+	}
+	var projects int
+	if err = pool.QueryRow(ctx, `SELECT count(*) FROM projects WHERE user_id = $1 AND slug = 'canceled-hook'`, userID).Scan(&projects); err != nil || projects != 1 {
+		t.Fatalf("mutation after a canceled request = %d projects (%v), want 1", projects, err)
+	}
+}

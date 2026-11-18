@@ -48,7 +48,7 @@ func (rd *githubReader) listRepositories(ctx context.Context, page int) (candida
 			continue
 		}
 		out.items = append(out.items, candidate{kind: kindRepository, repository: candidateRepository{id: repo.id, fullName: repo.fullName},
-			itemID: repo.id, title: repo.fullName, date: repo.createdAt})
+			itemID: repo.id, title: limitText(repo.fullName), date: repo.createdAt})
 	}
 	return out, nil
 }
@@ -64,8 +64,9 @@ func (rd *githubReader) listPullRequests(ctx context.Context, login string, page
 	}
 	out := candidatePage{nextPage: nextPage(page, len(search.items)), incomplete: search.incomplete}
 	for _, item := range search.items {
-		out.items = append(out.items, candidate{kind: kindPullRequest, repository: candidateRepository{fullName: item.owner + "/" + item.name},
-			number: item.number, title: item.title, date: item.closedAt})
+		fullName := item.owner + "/" + item.name
+		out.items = append(out.items, candidate{kind: kindPullRequest, repository: candidateRepository{fullName: fullName},
+			number: item.number, title: pullRequestTitle(fullName, item.number, item.title), date: item.closedAt})
 	}
 	return out, nil
 }
@@ -88,12 +89,8 @@ func (rd *githubReader) listReleases(ctx context.Context, repo candidateReposito
 		if !releasedBy(release, account) {
 			continue
 		}
-		title := release.name
-		if title == "" {
-			title = release.tag
-		}
 		out.items = append(out.items, candidate{kind: kindRelease, repository: repo, itemID: release.id, tag: release.tag,
-			title: title, date: release.itemDate()})
+			title: releaseTitle(release.name, release.tag), date: release.itemDate()})
 	}
 	return out, nil
 }
