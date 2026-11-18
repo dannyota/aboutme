@@ -103,6 +103,11 @@ const LINK_ERRORS = new Set<EvidenceNotice['kind']>([
   'unsupported-link', 'not-confirmed', 'duplicate',
 ]);
 
+export function pastedLink(value: string): string {
+  const trimmed = value.trim();
+  return trimmed.startsWith('github.com/') ? `https://${trimmed}` : trimmed;
+}
+
 export function linkKind(link: string): EvidenceKind {
   const path = link.trim().replace(/[?#].*$/u, '').replace(/\/+$/u, '');
   if (/\/pull\/[^/]+$/u.test(path)) return 'pullRequest';
@@ -272,7 +277,7 @@ export function useEvidencePicker(deps: EvidencePickerDeps): EvidencePicker {
   }
 
   async function attachLink(): Promise<void> {
-    const value = link.value.trim();
+    const value = pastedLink(link.value);
     if (
       value === ''
       || locked.value

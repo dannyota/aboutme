@@ -379,10 +379,24 @@ describe('evidence picker', () => {
     });
 
   it.each([
-    ['https://github.com/octocat/hello', 'repository'],
-    ['  https://github.com/octocat/hello/pull/42/ ', 'pullRequest'],
-    ['https://github.com/octocat/hello/releases/tag/v1.0', 'release'],
-  ])('infers the kind of %j as %s', async (link, kind) => {
+    ['https://github.com/octocat/hello', 'repository',
+      'https://github.com/octocat/hello'],
+    ['  https://github.com/octocat/hello/pull/42/ ', 'pullRequest',
+      'https://github.com/octocat/hello/pull/42/'],
+    ['https://github.com/octocat/hello/releases/tag/v1.0', 'release',
+      'https://github.com/octocat/hello/releases/tag/v1.0'],
+    ['github.com/octocat/hello', 'repository',
+      'https://github.com/octocat/hello'],
+    ['  github.com/octocat/hello/pull/42 ', 'pullRequest',
+      'https://github.com/octocat/hello/pull/42'],
+    ['github.com/octocat/hello/releases/tag/v1.0', 'release',
+      'https://github.com/octocat/hello/releases/tag/v1.0'],
+    ['http://github.com/octocat/hello', 'repository',
+      'http://github.com/octocat/hello'],
+    ['www.github.com/octocat/hello', 'repository',
+      'www.github.com/octocat/hello'],
+    ['GitHub.com/octocat/hello', 'repository', 'GitHub.com/octocat/hello'],
+  ])('sends %j as a %s link %j', async (link, kind, sent) => {
     const { evidenceApi } = await mountPicker();
     evidenceApi.attach.mockResolvedValue(written([evidenceItem()], '4'));
     await openPicker();
@@ -391,8 +405,7 @@ describe('evidence picker', () => {
 
     await clickIn('[data-action="evidence-attach-link"]');
 
-    expect(evidenceApi.attach.mock.calls[0]?.[2])
-      .toEqual({ kind, link: link.trim() });
+    expect(evidenceApi.attach.mock.calls[0]?.[2]).toEqual({ kind, link: sent });
     expect(inDocument<HTMLInputElement>('#evidence-link').value).toBe('');
   });
 
