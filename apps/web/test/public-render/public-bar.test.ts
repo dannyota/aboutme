@@ -244,14 +244,17 @@ describe('public page bar row', () => {
   const phone = '@media (width < 30rem)';
 
   it('spans the sheet width with its own inline padding', () => {
-    const inner = style(resumeRules, '.public-toolbar-inner');
-    expect(inner).toMatchObject({
-      'width': 'min(100% - 20px, 46rem)',
-      'margin-inline': 'auto',
-      'padding-inline': 'clamp(6px, 2cqi - 2px, 26px)',
-    });
-    expect(inner).not.toHaveProperty('max-width');
-    expect(inner).not.toHaveProperty('font-size');
+    const shared = style(resumeRules, '.public-toolbar-inner');
+    expect(shared['margin-inline']).toBe('auto');
+    for (const property of ['width', 'max-width', 'padding-inline',
+      'font-size']) {
+      expect(shared, property).not.toHaveProperty(property);
+    }
+    expect(style(resumeRules, '.public-resume-page .public-toolbar-inner'))
+      .toEqual({
+        'width': 'min(100% - 20px, 46rem)',
+        'padding-inline': 'clamp(6px, 2cqi - 2px, 26px)',
+      });
     expect(matching(resumeRules,
       '.public-resume-page[data-columns="2"] .public-toolbar-inner', ''))
       .toEqual([]);
@@ -379,6 +382,18 @@ describe('project page bar', () => {
     expect(page(':root[data-scheme="system"]', system)).toBe(
       bar(':root[data-scheme="system"] .public-toolbar', system),
     );
+  });
+
+  it('overrides every shared bar declaration it inherits', () => {
+    const universal = style(projectRules, '.public-project-page *');
+    for (const selector of ['.public-toolbar', '.public-toolbar-inner',
+      '.public-brand', '.public-mark', '.public-credit']) {
+      const project = style(projectRules, `.public-project-page ${selector}`);
+      expect(Object.entries(style(resumeRules, selector))
+        .filter(([property, value]) =>
+          !(property in project) && universal[property] !== value)
+        .map(([property]) => property), selector).toEqual([]);
+    }
   });
 
   it('keeps the phone gap of the resume page bar', () => {

@@ -122,8 +122,11 @@ body:has(> #public-resume) {
   column-gap: 16px;
   row-gap: 8px;
   min-height: 32px;
-  width: min(100% - 20px, 46rem);
   margin-inline: auto;
+}
+
+.public-resume-page .public-toolbar-inner {
+  width: min(100% - 20px, 46rem);
   padding-inline: clamp(6px, 2cqi - 2px, 26px);
 }
 
