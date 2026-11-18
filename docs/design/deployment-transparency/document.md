@@ -216,8 +216,8 @@ The test `TestDocumentLeaksNothing` in `deploy/observer/internal/document`:
 
 ## Versions
 
-- Narrowing the accepted values keeps version 1 when every document still
-  accepted was valid before, as when the AWS observer paths were removed
+- Narrowing the accepted values keeps version 1 when no current observer writes
+  a removed value, as when the AWS observer paths were removed
   ([ADR 0027](../../adr/0027-deployment-transparency-observer.md#history)).
 - A field added to version 1 must be optional for readers, and is added to the
   schema, the allowlist test, and the page in one change. Readers ignore unknown

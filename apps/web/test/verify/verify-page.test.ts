@@ -185,10 +185,7 @@ describe('verify page states', () => {
 
   it('shows a signed Podman host report as Verified in both languages',
     async () => {
-      const base = fixture('verified');
-      const document = {
-        ...base,
-      };
+      const document = fixture('verified');
       mockResponse = {
         status: 200, body: document, date: freshDate(document),
       };
