@@ -256,9 +256,10 @@ language, from the UTC instant. No stars and no images; static SVG icons only.
   page; the renderer derives the label from `kind` and `confirmed`. Instants are
   UTC RFC 3339 at second precision, and the renderer reads the year and month
   from the string. The server builds `url` itself, always under
-  `https://github.com/`, and turns control characters in text into spaces; the
-  web decoder refuses them. The public read takes the rows in the same statement
-  as the project, and reads none when the capability is off. The web and Go
+  `https://github.com/`, and turns control, format and line or paragraph
+  separator characters (Cc, Cf, Zl, Zp) in text into spaces; the web decoder
+  refuses the same set. The public read takes the rows in the same statement as
+  the project, and reads none when the capability is off. The web and Go
   decoders and the parity corpus change together; the project page format
   version rises to 3.
 - The Go validator admits `a.project-evidence` only on a project page, exactly
