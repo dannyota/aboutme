@@ -70,6 +70,7 @@ Open items that outlived their shipped plans. One line each, with the evidence t
 - Add and review a host procedure for TOTP key re-encryption.
 - Add and review a host procedure for rotating the sign-in-to-view key.
 - Project create and replace charge the slug rate limiter inside the idempotency callback (`allowSlug` in `apps/server/internal/projectapi/mutations.go` and `replace.go`), which [ADR 0006](../adr/0006-transactional-idempotency.md) keeps free of external side effects, so a rolled-back attempt still spends a slot. Move admission outside the callback with a regression at the last free slot.
+- The sign-in gate and project page validators (`apps/server/internal/publicapi/gate.go`, `project_validation.go`) compare `<title>` text with the raw expected title, but the HTML parser turns CR into LF, so an owner name holding a CR would return 503 there. Compare through `parsedLineEndings`, as the resume page does, with a CR and a CRLF case for each. Found by code reading; not reproduced.
 - 141 medium and low rule-stating comments in `deploy/` and `scripts/` stayed in place during the comment sweep because no doc or test owns them. Give each a design or runbook line or a test, then delete the comment; rank deploy order and data handling first.
 
 ## Acceptance evidence gaps

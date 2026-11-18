@@ -118,7 +118,8 @@ Sheets are plain `div` elements with no role or name, have no
   text roles hold the floors. Rules, tracks and tints mix the accent into the
   paper. A header with a tinted surface bleeds to the sheet's top and side
   edges, with the sheet's top radius on its top corners, and keeps the sheet's
-  inline padding inside, so its text lines up with the sections below.
+  inline padding inside, so its text lines up with the sections below. In
+  `forced-colors` mode and in print the band does not bleed.
 - `customization.colorScheme` keeps its meaning: Light, Dark, or Match device
   through `prefers-color-scheme`. No new field.
 
@@ -129,9 +130,10 @@ section heading style, rule and icons, level widget style, date format, section
 order, header alignment for the name and headline, photo position and
 `iconStyle`. A side photo stays beside the text at every width and never
 restacks in sheets: below a 480 px content box it is 66 px wide with a 14 px
-gap, and from 480 px it keeps its normal size. `top` stays on top. The
-continuous restack below 36em still applies outside sheets, and printed and
-paged output keep the side layout as today.
+gap, and from 480 px it keeps its normal size. It aligns to the top of the text,
+on screen and in browser print. `top` stays on top. The continuous restack below
+36em still applies outside sheets, and printed and paged output keep the side
+layout as today.
 
 **Overridden on screen in sheets, and only there:**
 
@@ -140,7 +142,7 @@ paged output keep the side layout as today.
 | `layout.columns`, side tint   | One column; the side column's tint is not drawn                                                            |
 | `header.detailsLayout`        | Contact rows, start-aligned whatever `header.align` says                                                   |
 | Label omitted beside icons    | Rows show the label, except a link with `display` `label`                                                  |
-| `font.baseSizePx`             | `max(baseSizePx, 16px)`; every size keeps its multiple of that base                                        |
+| `font.baseSizePx`             | `max(baseSizePx, 16px)`; every size except the name keeps its multiple of that base                        |
 | Name size                     | At most 1.7em of that base below a 480 px content box, 2em from 480 px, and never above the template's own |
 | `spacing.lineHeight`          | At least 1.5                                                                                               |
 | `font.textAlign` `justify`    | Start-aligned when the container is narrower than 480 px                                                   |
@@ -207,8 +209,9 @@ follows the pane's width.
   the folio count. Each folio carries `data-folio-name` exactly when the
   envelope's `fullName` is not `""`, and its value equals that name; Go builds
   the expected strings and never parses a name. Contact rows stay inside
-  `header.resume-header`, so the `contact_link` check holds. Nothing else
-  changes.
+  `header.resume-header`, so the `contact_link` check holds. The folio name and
+  `<title>` checks compare after the HTML parser's line-ending normalization,
+  where CR and CRLF become LF. Nothing else changes.
 - **Goldens.** Every preset in sheets mode for the one- and two-column starting
   states, owner Light, Dark and Match device. The existing continuous and paged
   goldens stay byte-identical.
