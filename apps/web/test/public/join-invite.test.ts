@@ -156,29 +156,29 @@ describe('joinInvitePlacement', () => {
   });
 });
 
-describe('joinInvitePlacement measures the resume box', () => {
+describe('joinInvitePlacement measures the first sheet', () => {
   function page(measureRight: number, viewport: number): Element {
-    const measure = {
+    const sheet = {
       getBoundingClientRect: () => ({ right: measureRight }),
     };
     return {
       getBoundingClientRect: () => ({ right: viewport }),
       querySelector: (selector: string) =>
-        selector === '.public-measure' ? measure : null,
+        selector === '.resume-sheets > .resume-sheet' ? sheet : null,
     } as unknown as Element;
   }
 
-  it('uses the card when the resume box leaves 360 px on the right', () => {
+  it('uses the card when the first sheet leaves 360 px on the right', () => {
     const win = { innerWidth: 1_920 } as unknown as Window;
     expect(joinInvitePlacement(page(1_920 - 360, 1_920), win)).toBe('card');
   });
 
-  it('uses the bar when the resume box leaves under 360 px', () => {
+  it('uses the bar when the first sheet leaves under 360 px', () => {
     const win = { innerWidth: 1_920 } as unknown as Window;
     expect(joinInvitePlacement(page(1_920 - 359, 1_920), win)).toBe('bar');
   });
 
-  it('falls back to the root when it holds no resume box', () => {
+  it('falls back to the root when it holds no sheet', () => {
     const win = { innerWidth: 1_440 } as unknown as Window;
     const bare = {
       getBoundingClientRect: () => ({ right: 1_440 - 360 }),

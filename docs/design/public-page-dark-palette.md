@@ -53,8 +53,9 @@ Other rules:
   `resolveRenderModel` then computes the dark role set and writes each dark role
   next to its light role at every scope that carries roles (the article, a
   tinted header band, a tinted sidebar), as `--dark-color-<role>`.
-- `.public-resume-page`, and the editor's Web preview sheet, carry
-  `data-color-scheme="dark"` or `"system"`; light carries no attribute.
+- `.public-resume-page` and the sheets article (on the public page and in the
+  editor's Web preview) carry `data-color-scheme="dark"` or `"system"`; light
+  carries no attribute.
 - A screen-only rule in `resumeColorScheme.css`, which `ResumeDocument.vue`
   imports, points each `--color-<role>` at its `--dark-color-<role>` under
   `dark`, and under `system` inside `@media (prefers-color-scheme: dark)`. On
@@ -74,45 +75,49 @@ Other rules:
 
 ## Template mapping
 
-The rule gives these dark values for each preset's own colors, computed by a
-reference model of the rule. The unit test pins the implementation's values, and
-a user's own colors go through the same rule. On the screen sheets of the
-[web layout](public-web-layout.md#paper-and-desk) the ground is the charcoal
-paper and the roles derive against it; the sheets goldens pin those values.
+The rule gives these dark values for each preset's own colors on the charcoal
+paper of the screen sheets of the
+[web layout](public-web-layout.md#paper-and-desk), which every dark public
+surface uses. The unit test and the sheets goldens pin them, and a user's own
+colors go through the same rule. The near-black ground of step 3 remains only
+for continuous mode, which no public screen uses, and the unit test keeps its
+own pins.
 
 | Template           | Ground    | Body      | Heading   | Link      | Tinted region     |
 | ------------------ | --------- | --------- | --------- | --------- | ----------------- |
-| academic-dense     | `#12171c` | `#d9dfe4` | `#aec9e6` | `#aec9e6` | none              |
-| ats-plain          | `#161616` | `#dedede` | `#ebebeb` | `#ebebeb` | none              |
-| classic-serif      | `#151617` | `#dadee6` | `#dbe0e7` | `#92b0e5` | none              |
-| consulting-formal  | `#11171d` | `#d8dfe5` | `#9fbfe6` | `#6a9dd5` | none              |
-| creative-accent    | `#1c1411` | `#e4dcd8` | `#dc5330` | `#dc5330` | `#352019` header  |
-| designer-tag       | `#151711` | `#e0dddb` | `#acba99` | `#778d4e` | none              |
-| editorial-wide     | `#191512` | `#e1ddd7` | `#cbb9a7` | `#b4805a` | none              |
-| elegant-serif-two  | `#1c1315` | `#e3ddd7` | `#db8b99` | `#db8b99` | `#2f2512` sidebar |
-| engineer-compact   | `#10171c` | `#d8dfe6` | `#92bcd4` | `#5a9db9` | none              |
-| executive-band     | `#13161b` | `#d8dfe8` | `#b4c9e6` | `#a6753b` | `#1d2f45` header  |
-| government-formal  | `#161616` | `#dedede` | `#ebebeb` | `#ebebeb` | none              |
-| graduate-friendly  | `#1c1410` | `#e3ddd7` | `#c88262` | `#bc6934` | `#322313` header  |
-| high-contrast      | `#161616` | `#dedede` | `#ebebeb` | `#5085ff` | none              |
-| international-lang | `#171615` | `#e1ddd9` | `#e0dcd9` | `#a79483` | `#2a261d` header  |
-| minimal-air        | `#151617` | `#dadee5` | `#dbdee4` | `#dbdee4` | none              |
-| modern-sidebar     | `#0f171b` | `#d5e0e6` | `#88b7ce` | `#4090a3` | `#1b292f` sidebar |
-| mono-print         | `#161616` | `#dedede` | `#ebebeb` | `#ebebeb` | none              |
-| nordic-muted       | `#12171a` | `#d7dfe8` | `#8fa8bd` | `#63859b` | `#24272a` sidebar |
-| one-page-tight     | `#131619` | `#d8dfe6` | `#aec0cf` | `#8ba6b9` | none              |
-| startup-bold       | `#151617` | `#d8dee8` | `#e8ebf0` | `#e8ebf0` | none              |
+| academic-dense     | `#2a2723` | `#d9dfe4` | `#aec9e6` | `#aec9e6` | none              |
+| ats-plain          | `#2a2723` | `#dedede` | `#ebebeb` | `#ebebeb` | none              |
+| classic-serif      | `#2a2723` | `#dadee6` | `#dbe0e7` | `#92b0e5` | none              |
+| consulting-formal  | `#2a2723` | `#d8dfe5` | `#9fbfe6` | `#6a9dd5` | none              |
+| creative-accent    | `#2a2723` | `#e4dcd8` | `#ec623f` | `#ec623f` | `#49332b` header  |
+| designer-tag       | `#2a2723` | `#e0dddb` | `#acba99` | `#809657` | none              |
+| editorial-wide     | `#2a2723` | `#e1ddd7` | `#cbb9a7` | `#b7835d` | none              |
+| elegant-serif-two  | `#2a2723` | `#e3ddd7` | `#db8b99` | `#db8b99` | `#423724` sidebar |
+| engineer-compact   | `#2a2723` | `#d8dfe6` | `#92bcd4` | `#5a9db9` | none              |
+| executive-band     | `#2a2723` | `#d8dfe8` | `#b4c9e6` | `#b6844a` | `#283a51` header  |
+| government-formal  | `#2a2723` | `#dedede` | `#ebebeb` | `#ebebeb` | none              |
+| graduate-friendly  | `#2a2723` | `#e3ddd7` | `#c88262` | `#cd7844` | `#453625` header  |
+| high-contrast      | `#2a2723` | `#dedede` | `#ebebeb` | `#548aff` | none              |
+| international-lang | `#2a2723` | `#e1ddd9` | `#e0dcd9` | `#a79483` | `#3d392f` header  |
+| minimal-air        | `#2a2723` | `#dadee5` | `#dbdee4` | `#dbdee4` | none              |
+| modern-sidebar     | `#2a2723` | `#d5e0e6` | `#88b7ce` | `#4a99ac` | `#2d3c42` sidebar |
+| mono-print         | `#2a2723` | `#dedede` | `#ebebeb` | `#ebebeb` | none              |
+| nordic-muted       | `#2a2723` | `#d7dfe8` | `#8fa8bd` | `#7093a9` | `#36393d` sidebar |
+| one-page-tight     | `#2a2723` | `#d8dfe6` | `#aec0cf` | `#8ba6b9` | none              |
+| startup-bold       | `#2a2723` | `#d8dee8` | `#e8ebf0` | `#e8ebf0` | none              |
 
-Measured on the dark rule's own ground, across all twenty, on every surface:
-body at least 10.1:1, meta 6.4:1, headings 4.5:1, links 4.5:1, and level and tag
-fills 3.5:1. Link values are those on the ground; a tinted region clamps its
-own.
+Measured on the charcoal paper, across all twenty, on every surface: body at
+least 8.5:1, meta 5.5:1, headings, links and accent text 4.5:1, level and tag
+fills 3.4:1, a fill on its track 3.0:1, tag labels 5.0:1 and rules 1.5:1. Link
+values are those on the paper; a tinted region clamps its own. Sidebar regions
+are computed but not drawn, because sheets have no side tint.
 
 No template needs a hand-made exception. Two rule branches cover the special
 cases:
 
 - **executive-band** is the one preset with a dark authored band (`#16273d`).
-  Step 6 keeps it navy and lifts it to `#1d2f45`, so the band still reads above
-  the near-black ground, and its heading turns light blue rather than white.
+  Step 6 keeps it navy and lifts it to `#283a51`, the paper's lightness plus
+  0.07, so the band still reads above the charcoal paper, and its heading turns
+  light blue rather than white.
 - **Already dark** (step 1) covers a user who picked a dark background in the
   light scheme. No preset does.

@@ -14,8 +14,10 @@ const PAINT: Record<string, readonly [string, string]> = {
   'creative-accent': ['rgb(194, 58, 20)', 'rgb(255, 240, 235)'],
 };
 
-export function rendererTypeRules(template: string): readonly StyleRule[] {
-  const base = RESUME_STYLES[template as keyof typeof RESUME_STYLES][2];
+export function rendererTypeRules(
+  template: string,
+  base: number = RESUME_STYLES[template as keyof typeof RESUME_STYLES][2],
+): readonly StyleRule[] {
   const upper = !['consulting-formal', 'editorial-wide'].includes(template);
   return [{
     selector: '.resume-document:not(.pagination-measurement) '

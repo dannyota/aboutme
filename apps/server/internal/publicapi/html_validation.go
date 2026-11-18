@@ -32,6 +32,7 @@ func publicHTMLRejectionForPage(source []byte, resume publicresume.PublicResume,
 	stylesheets := map[string]bool{}
 	contactLinks := derivedContactLinks(resume)
 	entryPoints := newEntryPointCheck(resume, page)
+	folios := newFolioCheck(resume.Document.PersonalDetails.FullName)
 	rule := ""
 	reject := func(name string) {
 		if rule == "" {
@@ -49,6 +50,10 @@ func publicHTMLRejectionForPage(source []byte, resume publicresume.PublicResume,
 				return
 			}
 			if name := unexpectedResourceAttribute(node); name != "" {
+				reject(name)
+				return
+			}
+			if name := folios.visit(node); name != "" {
 				reject(name)
 				return
 			}
@@ -101,7 +106,7 @@ func publicHTMLRejectionForPage(source []byte, resume publicresume.PublicResume,
 					return
 				}
 			case "title":
-				if title != nil || len(node.Attr) != 0 || textNode(node) != page.Title {
+				if title != nil || len(node.Attr) != 0 || textNode(node) != parsedLineEndings(page.Title) {
 					reject("title")
 					return
 				}
@@ -199,6 +204,9 @@ func publicHTMLRejectionForPage(source []byte, resume publicresume.PublicResume,
 	if name := entryPoints.finish(); name != "" {
 		return name
 	}
+	if name := folios.finish(); name != "" {
+		return name
+	}
 	if title == nil || canonical == nil || main == nil || mainCount != 1 || skipLinks != 1 || externalScripts != 1 {
 		return "required_elements"
 	}
@@ -250,6 +258,10 @@ func attributeCount(node *html.Node, key string) int {
 		}
 	}
 	return count
+}
+
+func parsedLineEndings(text string) string {
+	return strings.ReplaceAll(strings.ReplaceAll(text, "\r\n", "\n"), "\r", "\n")
 }
 
 func textNode(node *html.Node) string {

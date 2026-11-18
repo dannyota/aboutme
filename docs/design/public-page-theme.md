@@ -44,9 +44,9 @@ every item as written on 2026-09-27.
    schemes. It is aboutme chrome shown before the resume, and its closed
    envelope stays unchanged.
 5. **Join invite.** Approved (2026-09-27): the invite on a sign-in resume
-   follows the page's scheme with the bar's tokens, so a light card never sits
-   on a dark page. Its card floats with `--shadow-float`, and its Create action
-   is a main pill (`#594BAD` light, `#7267C0` dark, white label).
+   follows the page's scheme with its own palette, so a light card never sits on
+   a dark page. Its card floats with `--shadow-float`, and its Create action is
+   a main pill (`#594BAD` light, `#7267C0` dark, white label).
 6. **Editor copy and preview.** Approved (2026-09-27): the field copy below, and
    a Web preview that follows the editing device for Match device.
 

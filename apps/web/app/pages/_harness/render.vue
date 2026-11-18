@@ -28,6 +28,7 @@ import { GATE_STYLE } from '../../../server/workers/public-render/gate-style';
 import { resolveFontSelection } from '../../utils/fontCatalog';
 import { fontsReady } from '../../utils/fontsReady';
 import { sanitizeRichText } from '../../utils/sanitizeRichText';
+import { withDarkGround } from './dark-ground-fixture';
 import { withWrappingBody } from './justify-fixture';
 import {
   type EntryPointFixture,
@@ -168,8 +169,8 @@ if (isCorpus) {
   requireAllowedKeys(
     new Set(
       [
-        'align', 'fixture', 'font', 'invite', 'links', 'lng', 'mode', 'paper',
-        'print', 'repeat', 'scheme', 'template', 'zoom',
+        'align', 'fixture', 'font', 'ground', 'invite', 'links', 'lng', 'mode',
+        'paper', 'print', 'repeat', 'scheme', 'template', 'zoom',
       ],
     ),
   );
@@ -312,6 +313,11 @@ if (isCorpus) {
     }
     resolvedDocument.customization.colorScheme
       = requestedScheme as Resume['customization']['colorScheme'];
+  }
+  const requestedGround = singleton('ground');
+  if (requestedGround !== undefined) {
+    if (requestedGround !== 'dark' || resolvedMode !== 'public') badQuery();
+    withDarkGround(resolvedDocument);
   }
   if (resolvedMode === 'public') withWrappingBody(resolvedDocument);
   const requestedLinks = singleton('links');
@@ -597,6 +603,10 @@ body.resume-print .harness-paper {
 
 .harness-render[data-render-mode="public"] {
   width: auto;
+}
+
+:where(html:not(.harness-gate)) body:has(.public-resume-page) {
+  background: transparent;
 }
 
 .harness-corpus {

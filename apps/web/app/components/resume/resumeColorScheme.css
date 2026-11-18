@@ -21,8 +21,6 @@
   }
 
   [data-color-scheme="dark"] .public-toolbar {
-    --toolbar-ground: #0e0a0d;
-    --toolbar-border: #2e242c;
     --toolbar-mark: #e2788f;
     --toolbar-credit: #a3959f;
     --toolbar-credit-hover: #b59bdb;
@@ -33,7 +31,7 @@
   }
 
   :root:has(.public-resume-page[data-color-scheme="dark"]) a[href="#public-resume"]:focus {
-    background: #0e0a0d;
+    background: #141210;
     color: #b59bdb;
     outline-color: #cdbcd9;
   }
@@ -62,8 +60,6 @@
   }
 
   [data-color-scheme="system"] .public-toolbar {
-    --toolbar-ground: #0e0a0d;
-    --toolbar-border: #2e242c;
     --toolbar-mark: #e2788f;
     --toolbar-credit: #a3959f;
     --toolbar-credit-hover: #b59bdb;
@@ -74,7 +70,7 @@
   }
 
   :root:has(.public-resume-page[data-color-scheme="system"]) a[href="#public-resume"]:focus {
-    background: #0e0a0d;
+    background: #141210;
     color: #b59bdb;
     outline-color: #cdbcd9;
   }

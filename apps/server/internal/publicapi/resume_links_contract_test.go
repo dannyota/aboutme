@@ -149,6 +149,13 @@ func TestResumeLinksCasesKeepTheirPurpose(t *testing.T) {
 		t.Fatalf("en-no-available-project: want a project section, projectsUrl and no projectLinks; got %+v %q", none.ProjectLinks, none.ProjectsURL)
 	}
 
+	hostile := requests["en-hostile-name"]
+	if hostile.PublicResume.Document.PersonalDetails.FullName != hostileCorpusName || !hostile.DiscoveryEnabled ||
+		!strings.Contains(hostileCorpusName, "\r\n") || !strings.Contains(strings.ReplaceAll(hostileCorpusName, "\r\n", ""), "\r") ||
+		!strings.ContainsAny(hostileCorpusName, "<&\"'") || !strings.Contains(hostileCorpusName, " · ") || !strings.Contains(hostileCorpusName, " / ") {
+		t.Fatalf("en-hostile-name: want a discoverable resume named with markup, separators and both carriage return spellings; got %q", hostile.PublicResume.Document.PersonalDetails.FullName)
+	}
+
 	vi := requests["vi-linked-entries"]
 	if vi.PublicResume.Lng != "vi" || vi.Preview.Locale != "vi_VN" || len(vi.ProjectLinks) != 2 {
 		t.Fatalf("vi-linked-entries: want a Vietnamese resume with two links; got lng %q, locale %q, %+v", vi.PublicResume.Lng, vi.Preview.Locale, vi.ProjectLinks)

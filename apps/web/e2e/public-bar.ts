@@ -20,8 +20,10 @@ export async function expectBarPaint(
 ): Promise<void> {
   const color = BAR_COLORS[dark ? 'dark' : 'light'];
   const bar = page.locator('.public-toolbar');
-  await expect(bar, message).toHaveCSS('background-color', color.ground);
-  await expect(bar, message).toHaveCSS('border-bottom-color', color.border);
+  await expect(bar, message).toHaveCSS('background-color', NO_FILL);
+  await expect(bar, message).toHaveCSS('border-bottom-style', 'none');
+  await expect(bar, message).toHaveCSS('padding-top', '8px');
+  await expect(bar, message).toHaveCSS('padding-bottom', '8px');
   await expect(page.locator('.public-mark'), message)
     .toHaveCSS('color', color.mark);
   await expect(page.locator('.public-credit'), message)

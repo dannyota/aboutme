@@ -455,17 +455,12 @@ export const RESUME_STYLES = {
 } as const;
 
 export function resumeContract(
-  template: string, language: 'vi' | 'en', dark = false,
+  template: string, language: 'vi' | 'en',
 ): ScreenContract {
   const style = RESUME_STYLES[template as keyof typeof RESUME_STYLES];
   const document = '.resume-document:not(.pagination-measurement)';
   const root = `:nth-match(${document}, 1)`;
   const title = language === 'vi' ? 'Nguyễn Thị Minh Châu' : 'Ada Lovelace';
-  const grounds: Record<string, string> = {
-    'classic-serif': 'rgb(21, 22, 23)', 'modern-sidebar': 'rgb(15, 23, 27)',
-    'editorial-wide': 'rgb(25, 21, 18)', 'creative-accent': 'rgb(28, 20, 17)',
-    'executive-band': 'rgb(19, 22, 27)',
-  };
   return {
     root,
     text: `${document} :is(.resume-name,.resume-headline,.entry-title,`
@@ -477,11 +472,9 @@ export function resumeContract(
     constrained: '.resume-page:not(.pagination-measurement)',
     faces: [style[0], style[1]],
     type: [root, `"${style[0]}", "${style[1]}"`, style[0]],
-    paint: [root, 'background-color', dark
-      ? grounds[template]!
-      : template === 'editorial-wide'
-        ? 'rgb(250, 248, 243)'
-        : 'rgb(255, 255, 255)'],
+    paint: [root, 'background-color', template === 'editorial-wide'
+      ? 'rgb(250, 248, 243)'
+      : 'rgb(255, 255, 255)'],
     copy: [`${document} .resume-name`, title],
     aria: [`${document} .resume-name`, `- heading "${title}" [level=1]`],
     image: `${document} .resume-photo img`,

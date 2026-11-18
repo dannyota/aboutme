@@ -3,8 +3,6 @@ import type { Resume } from '@aboutme/schema';
 import { computed, provide } from 'vue';
 
 import type { components } from '../../api/generated/openapi';
-import LayoutColumns from '../resume/LayoutColumns.vue';
-import ResumeHeader from '../resume/ResumeHeader.vue';
 import { ResumeLngKey } from '../resume/formatDate';
 import {
   NO_PROJECT_LINKS,
@@ -12,6 +10,7 @@ import {
   ProjectLinksKey,
 } from '../resume/projectLinks';
 import { resolveRenderModel } from '../resume/resolveRenderModel';
+import ResumeSheets from '../resume/ResumeSheets.vue';
 import PublicDownloadLink from './PublicDownloadLink.vue';
 import PublicMark from './PublicMark.vue';
 
@@ -57,7 +56,7 @@ const colorScheme = computed<'dark' | 'system' | undefined>(() => {
 
 const model = computed(() => resolveRenderModel(document.value, {
   lng: props.publicResume.lng,
-  mode: 'continuous',
+  mode: 'sheets',
   ...(colorScheme.value === undefined
     ? {}
     : { colorScheme: colorScheme.value }),
@@ -81,24 +80,12 @@ const creditLabel = computed(() =>
   vietnamese.value ? 'Tạo bằng aboutme.vn' : 'Built with aboutme.vn');
 const downloadHref = computed(() =>
   `/api/v1/public/resumes/${props.publicResume.slug}/pdf`);
-
-const rootStyle = computed(() => ({
-  ...model.value.styles.root,
-  fontSynthesis: 'none',
-  printColorAdjust: 'exact' as const,
-  WebkitPrintColorAdjust: 'exact' as const,
-}));
 </script>
 
 <template>
-  <!-- The public page centres the resume at a readable measure; the editor
-       preview and print never render this wrapper (docs/design/web.md). The
-       article stays identical to the print document's. -->
   <div
     class="public-resume-page"
-    :data-columns="model.columns"
     :data-color-scheme="colorScheme"
-    :style="rootStyle"
   >
     <div class="public-toolbar">
       <div class="public-toolbar-inner">
@@ -130,21 +117,6 @@ const rootStyle = computed(() => ({
         />
       </div>
     </div>
-    <div class="public-measure">
-      <article
-        class="resume-document"
-        :lang="model.lng"
-        :style="rootStyle"
-      >
-        <div :style="model.styles.header">
-          <ResumeHeader
-            :personal-details="model.personalDetails"
-            :header="model.header"
-            :photo="model.photo"
-          />
-        </div>
-        <LayoutColumns :model="model" />
-      </article>
-    </div>
+    <ResumeSheets :model="model" />
   </div>
 </template>

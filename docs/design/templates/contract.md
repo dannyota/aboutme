@@ -179,10 +179,9 @@ and details) sit side by side:
   the photo stays at its edge.
 - `detailsLayout` and `iconStyle` apply inside the text block unchanged.
 - With no photo, the setting has no effect.
-- On a continuous or sheets page shown narrower than 36em (576 px), a side photo
-  stacks above the text, as with `top`. The rule is a screen media query.
-  Printed and paged output, the PDF and the paged preview, always keeps the side
-  layout.
+- Below a 36em (576 px) container, a continuous page stacks a side photo above
+  the text; print and paged output is wider and keeps it beside. Sheets never
+  restack it ([web layout](../public-web-layout.md#inside-a-sheet)).
 - A template switch keeps the owner's `photoPosition`, or its absence, as it
   keeps `font.textAlign`. A preset with no header gets the default header
   (`left`, `inline`, `outline`) plus the kept position, which renders the same

@@ -214,7 +214,7 @@ describe('owner page title and emoji favicon', () => {
   });
 });
 
-describe('public page measure and PDF download', () => {
+describe('public page bar and PDF download', () => {
   const downloadLink = (html: string) => {
     const anchor = /<a class="public-download" href="([^"]*)">(.*?)<\/a>/su
       .exec(html);
@@ -317,14 +317,98 @@ describe('public page measure and PDF download', () => {
       expect(html.indexOf(markElement!)).toBeGreaterThan(brandStart);
       expect(creditStart).toBeGreaterThan(brandStart);
     });
+});
 
-  it('marks the column count for the public measure', async () => {
-    const one = await renderPublicResume(request(), VERSIONS);
-    expect(one).toContain('<div class="public-resume-page" data-columns="1"');
+describe('public page sheets', () => {
+  const twoColumns = () => {
     const value = request();
-    value.publicResume.document.customization.layout.columns = 2;
-    const two = await renderPublicResume(value, VERSIONS);
-    expect(two).toContain('<div class="public-resume-page" data-columns="2"');
+    const document = value.publicResume.document;
+    document.customization.layout.columns = 2;
+    document.content = {
+      ...document.content,
+      skill: {
+        sectionType: 'skill',
+        entries: [{ id: '00000000-0000-4000-8000-000000000011', name: 'Go' }],
+      },
+      language: {
+        sectionType: 'language',
+        entries: [
+          { id: '00000000-0000-4000-8000-000000000012', name: 'English' },
+        ],
+      },
+      work: {
+        sectionType: 'work',
+        entries: [
+          { id: '00000000-0000-4000-8000-000000000013', jobTitle: 'Engineer' },
+        ],
+      },
+    } as typeof document.content;
+    document.customization.layout.sections.main = ['profile', 'work'];
+    document.customization.layout.sections.sidebar = ['skill', 'language'];
+    return value;
+  };
+  const page = async (value = request()) => new JSDOM(
+    await renderPublicResume(value, VERSIONS),
+  ).window.document.querySelector('.public-resume-page')!;
+
+  it('puts the bar and one sheets article in the page, with no measure',
+    async () => {
+      const root = await page();
+      expect([...root.children].map((child) => child.className)).toEqual([
+        'public-toolbar', 'resume-document resume-sheets',
+      ]);
+      expect(root.querySelector('.public-measure')).toBeNull();
+      expect(root.getAttribute('style')).toBeNull();
+      expect(root.hasAttribute('data-columns')).toBe(false);
+      const article = root.querySelector('article')!;
+      expect(article.getAttribute('lang')).toBe('en');
+      expect(article.getAttribute('style')).toContain('--paper-color-surface:');
+      expect(article.getAttribute('style')).toContain('font-synthesis:none;');
+    });
+
+  it('renders two columns as one column of sheets with no aside',
+    async () => {
+      const root = await page(twoColumns());
+      expect(root.querySelector('.layout-two-columns')).toBeNull();
+      expect(root.querySelector('aside')).toBeNull();
+      const sheets = [...root.querySelectorAll('article > .resume-sheet')];
+      expect(sheets.map((sheet) => [
+        sheet.querySelectorAll('.resume-section').length,
+        [...sheet.querySelectorAll('.entry-title')]
+          .map((title) => title.textContent),
+      ])).toEqual([[1, []], [1, ['Engineer']], [2, ['Go', 'English']]]);
+    });
+
+  it('ends each sheet with a hidden folio naming the owner and the page',
+    async () => {
+      const root = await page(twoColumns());
+      const folios = [...root.querySelectorAll('.resume-folio')];
+      expect(folios.map((folio) => [
+        folio.parentElement?.lastElementChild === folio,
+        folio.getAttribute('aria-hidden'),
+        folio.getAttribute('data-folio-name'),
+        folio.getAttribute('data-folio-page'),
+        folio.textContent,
+      ])).toEqual([1, 2, 3].map((index) => [
+        true, 'true', 'Ada <&> Lovelace', `${index} / 3`, '',
+      ]));
+    });
+
+  it('omits the folio name for an empty full name', async () => {
+    const value = request();
+    value.publicResume.document.personalDetails.fullName = '';
+    const folio = (await page(value)).querySelector('.resume-folio')!;
+    expect(folio.hasAttribute('data-folio-name')).toBe(false);
+    expect(folio.getAttribute('data-folio-page')).toBe('1 / 1');
+  });
+
+  it('keeps the contact rows inside the resume header', async () => {
+    const root = await page();
+    const rows = [...root.querySelectorAll('.contact-chip--sheets')];
+    expect(rows.length).toBe(7);
+    for (const row of rows) {
+      expect(row.closest('header.resume-header')).not.toBeNull();
+    }
   });
 });
 
@@ -340,10 +424,13 @@ describe('owner color scheme', () => {
 
   it('marks a dark page and writes its dark roles inline', async () => {
     const html = await renderPublicResume(withScheme('dark'), VERSIONS);
-    expect(pageTag(html)).toContain(
-      '<div class="public-resume-page" data-columns="1" '
-      + 'data-color-scheme="dark" style="',
+    expect(pageTag(html)).toBe(
+      '<div class="public-resume-page" data-color-scheme="dark">',
     );
+    const article = /<article class="resume-document resume-sheets"[^>]*>/u
+      .exec(html)?.[0] ?? '';
+    expect(article).toContain(' lang="en" style="');
+    expect(article.endsWith(' data-color-scheme="dark">')).toBe(true);
     expect(html).toMatch(/--dark-color-surface:#[0-9a-f]{6};/u);
     expect(html).toMatch(/--dark-color-heading:#[0-9a-f]{6};/u);
   });
@@ -377,7 +464,7 @@ describe('owner color scheme', () => {
       const light = await renderPublicResume(withScheme(undefined), VERSIONS);
       const dark = await renderPublicResume(withScheme('dark'), VERSIONS);
       const stripped = dark
-        .replace(' data-color-scheme="dark"', '')
+        .replaceAll(' data-color-scheme="dark"', '')
         .replace(/--dark-color-[a-z-]+:#[0-9a-f]{6};/gu, '');
       expect(stripped).toBe(light);
     });

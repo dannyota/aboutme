@@ -256,7 +256,7 @@ describe('EditorPreview', () => {
   });
 
   it(
-    'switches to the continuous Web document and hides the paged sheet mark',
+    'switches to the Web sheets on the desk with no sheet frame or canvas',
     async () => {
       const accepted = acceptedFixture();
       const wrapper = mount(EditorPreview, {
@@ -266,6 +266,10 @@ describe('EditorPreview', () => {
         },
         global: { stubs: { ResumeDocument: true } },
       });
+      const pane = () => wrapper.get('[data-testid="preview-scroll"]');
+      expect(pane().classes()).toEqual(expect.arrayContaining([
+        'bg-editor-canvas', 'p-6', 'max-[42rem]:p-4',
+      ]));
 
       await wrapper.get('[data-mode="web"]').trigger('click');
 
@@ -275,13 +279,24 @@ describe('EditorPreview', () => {
         .toBe('false');
       expect(
         wrapper.getComponent({ name: 'ResumeDocument' }).props('context'),
-      ).toEqual({ lng: 'en', mode: 'continuous', nameHeading: 'p' });
+      ).toEqual({ lng: 'en', mode: 'sheets', nameHeading: 'p' });
       expect(wrapper.find('[data-testid="page-count"]').exists()).toBe(false);
-      const sheet = wrapper.get('[data-testid="preview-sheet"]');
-      expect(sheet.attributes('data-sheet-zoom')).toBeUndefined();
-      expect(sheet.attributes('data-scaled-width')).toBeUndefined();
-      expect(sheet.attributes('style') ?? '').not.toContain('zoom');
-      expect(sheet.find('.scaled-sheet').exists()).toBe(false);
+      expect(wrapper.find('[data-testid="preview-sheet"]').exists())
+        .toBe(false);
+      expect(wrapper.find('.preview-sheet').exists()).toBe(false);
+      expect(wrapper.find('.scaled-sheet').exists()).toBe(false);
+      for (const name of ['bg-editor-canvas', 'p-6', 'max-[42rem]:p-4']) {
+        expect(pane().classes(), name).not.toContain(name);
+      }
+      const web = wrapper.get('[data-testid="preview-web"]');
+      expect(web.element.parentElement).toBe(pane().element);
+      for (const name of ['bg-white', 'overflow-hidden', 'rounded-full']) {
+        expect(web.classes(), name).not.toContain(name);
+      }
+      expect(web.classes().some((name) => name.startsWith('shadow')))
+        .toBe(false);
+      expect(web.classes().some((name) => name.startsWith('rounded')))
+        .toBe(false);
     },
   );
 
@@ -308,7 +323,7 @@ describe('EditorPreview', () => {
       .toBe('true');
     expect(
       second.getComponent({ name: 'ResumeDocument' }).props('context'),
-    ).toEqual({ lng: 'en', mode: 'continuous', nameHeading: 'p' });
+    ).toEqual({ lng: 'en', mode: 'sheets', nameHeading: 'p' });
     second.unmount();
   });
 
@@ -970,7 +985,7 @@ describe('EditorPreview zoom controls', () => {
     });
 });
 
-describe('EditorPreview Web margins', () => {
+describe('EditorPreview Web sheets', () => {
   async function mountMode(mode: 'pdf' | 'web', columns: 1 | 2) {
     window.localStorage.setItem('aboutme.editorPreviewMode', mode);
     const accepted = acceptedFixture();
@@ -984,11 +999,13 @@ describe('EditorPreview Web margins', () => {
   }
 
   it.each([1, 2] as const)(
-    'marks the Web sheet with its %s column measure',
+    'renders %s columns as sheets with no column hook',
     async (columns) => {
       const wrapper = await mountMode('web', columns);
-      expect(wrapper.get('[data-testid="preview-sheet"]')
-        .attributes('data-web-columns')).toBe(String(columns));
+      expect(wrapper.find('[data-web-columns]').exists()).toBe(false);
+      expect(
+        wrapper.getComponent({ name: 'ResumeDocument' }).props('context'),
+      ).toMatchObject({ mode: 'sheets' });
       wrapper.unmount();
     },
   );

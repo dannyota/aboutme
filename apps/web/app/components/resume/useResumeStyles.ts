@@ -1,4 +1,5 @@
 import type { Customization } from '@aboutme/schema';
+import type { CSSProperties } from 'vue';
 
 import { resolveFontSelection } from '../../utils/fontCatalog';
 import {
@@ -12,6 +13,7 @@ import {
   resolvePageGeometry,
   type ResolvedPageGeometry,
 } from './pageMetrics';
+import { DARK_PAPER, lightPaper } from './paper';
 
 export type ResumeStyleTokens = Customization;
 
@@ -21,6 +23,13 @@ export interface ResumeStyles {
   sidebar?: Record<string, string>;
   page: ResolvedPageGeometry;
 }
+
+export interface ResumeStyleOptions {
+  readonly sheets?: boolean;
+}
+
+const SHEET_TYPE_FLOOR_PX = 16;
+const SHEET_LINE_HEIGHT_FLOOR = 1.5;
 
 type SurfaceTarget = NonNullable<Customization['layout']['surfaceTarget']>;
 
@@ -94,13 +103,66 @@ const colorRoles = (
   };
 };
 
-const darkRoles = (roles: Record<string, string>): Record<string, string> =>
+const scopedRoles = (
+  roles: Record<string, string>,
+  prefix: string,
+): Record<string, string> =>
   Object.fromEntries(
     Object.entries(roles).map(([name, value]) => [
-      name.replace('--color-', '--dark-color-'),
+      name.replace('--color-', prefix),
       value,
     ]),
   );
+
+const darkRoles = (roles: Record<string, string>): Record<string, string> =>
+  scopedRoles(roles, '--dark-color-');
+
+const paperRoles = (
+  tokens: ResumeStyleTokens,
+  target: SurfaceTarget,
+): Record<string, string> => {
+  const paper = lightPaper(tokens.colors);
+  return {
+    ...scopedRoles(colorRoles(tokens, paper), '--paper-color-'),
+    '--paper-color-surface-header':
+      target === 'header' ? tokens.colors.surface! : paper,
+    '--paper-color-surface-sidebar':
+      target === 'sidebar' ? tokens.colors.surface! : paper,
+  };
+};
+
+const fontSizes = (base: number, prefix: string): Record<string, string> => ({
+  [`${prefix}base`]: `${base}px`,
+  [`${prefix}name`]: `${base * 2}px`,
+  [`${prefix}headline`]: `${base * 1.15}px`,
+  [`${prefix}heading`]: `${base * 1.1}px`,
+  [`${prefix}title`]: `${base}px`,
+  [`${prefix}subtitle`]: `${base}px`,
+  [`${prefix}body`]: `${base}px`,
+  [`${prefix}meta`]: `${Math.max(base * 0.9, 9)}px`,
+});
+
+const SHEET_NAME_EM = 2;
+const SHEET_NAME_NARROW_EM = 1.7;
+
+const roundPx = (value: number): string =>
+  `${Math.round(value * 1000) / 1000}px`;
+
+const sheetTokens = (tokens: ResumeStyleTokens): Record<string, string> => {
+  const floored = Math.max(tokens.font.baseSizePx, SHEET_TYPE_FLOOR_PX);
+  const name = tokens.font.baseSizePx * 2;
+  return {
+    ...fontSizes(floored, '--sheet-fs-'),
+    '--sheet-fs-name': roundPx(Math.min(name, floored * SHEET_NAME_EM)),
+    '--sheet-fs-name-narrow':
+      roundPx(Math.min(name, floored * SHEET_NAME_NARROW_EM)),
+    '--body-align-narrow': tokens.font.textAlign === 'justify'
+      ? 'start'
+      : tokens.font.textAlign ?? 'left',
+    '--headline-margin-inline':
+      (tokens.header?.align ?? 'left') === 'center' ? 'auto' : '0',
+  };
+};
 
 const headingTransform = (
   style: Customization['heading']['style'],
@@ -114,8 +176,9 @@ const headingTransform = (
 function darkScopes(
   tokens: ResumeStyleTokens,
   target: SurfaceTarget,
+  paper?: string,
 ): { root: Record<string, string>; region?: Record<string, string> } {
-  const colors = darkColors(tokens.colors);
+  const colors = darkColors(tokens.colors, paper);
   const scheme: ColorScheme
     = isDarkBackground(tokens.colors) ? 'light' : 'dark';
   const dark = { ...tokens, colors };
@@ -139,13 +202,18 @@ export function useResumeStyles(
   tokens: ResumeStyleTokens,
   lng = 'en',
   colorScheme?: 'dark' | 'system',
+  options: ResumeStyleOptions = {},
 ): ResumeStyles {
+  const sheets = options.sheets === true;
   const page = resolvePageGeometry(tokens);
   const target = effectiveSurfaceTarget(tokens);
   const pageSurface = tokens.colors.background;
   const dark = colorScheme === undefined
     ? undefined
-    : darkScopes(tokens, target);
+    : darkScopes(tokens, target, sheets ? DARK_PAPER : undefined);
+  const lineHeight = sheets
+    ? Math.max(tokens.spacing.lineHeight, SHEET_LINE_HEIGHT_FLOOR)
+    : tokens.spacing.lineHeight;
   const root = {
     ...colorRoles(tokens, pageSurface),
     '--color-surface-header':
@@ -153,16 +221,10 @@ export function useResumeStyles(
     '--color-surface-sidebar':
       target === 'sidebar' ? tokens.colors.surface! : pageSurface,
     ...dark?.root,
+    ...(sheets ? paperRoles(tokens, target) : {}),
     '--font-family': resolveFontSelection(tokens.font.family).cssStack,
-    '--fs-base': `${tokens.font.baseSizePx}px`,
-    '--fs-name': `${tokens.font.baseSizePx * 2}px`,
-    '--fs-headline': `${tokens.font.baseSizePx * 1.15}px`,
-    '--fs-heading': `${tokens.font.baseSizePx * 1.1}px`,
-    '--fs-title': `${tokens.font.baseSizePx}px`,
-    '--fs-subtitle': `${tokens.font.baseSizePx}px`,
-    '--fs-body': `${tokens.font.baseSizePx}px`,
-    '--fs-meta': `${Math.max(tokens.font.baseSizePx * 0.9, 9)}px`,
-    '--lh-body': String(tokens.spacing.lineHeight),
+    ...fontSizes(tokens.font.baseSizePx, '--fs-'),
+    '--lh-body': String(lineHeight),
     '--body-align': tokens.font.textAlign ?? 'left',
     '--body-hyphens': tokens.font.textAlign === 'justify' ? 'auto' : 'manual',
     '--lh-heading': '1.2',
@@ -200,6 +262,7 @@ export function useResumeStyles(
     '--tag-padding': '0.15em 0.5em',
     '--tag-radius': '3px',
     '--icon-size': '1em',
+    ...(sheets ? sheetTokens(tokens) : {}),
   };
   const styles: ResumeStyles = { root, page };
   if (target === 'header') {
@@ -217,6 +280,15 @@ export function useResumeStyles(
   }
   return styles;
 }
+
+export const articleStyle = (
+  root: Record<string, string>,
+): CSSProperties => ({
+  ...root,
+  fontSynthesis: 'none',
+  printColorAdjust: 'exact',
+  WebkitPrintColorAdjust: 'exact',
+});
 
 export function renderPageRule(page: ResumeStyles['page']): string {
   const size = page.format === 'a4' ? '210mm 297mm' : '8.5in 11in';

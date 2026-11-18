@@ -3,6 +3,7 @@ package publicapi
 import (
 	"bytes"
 	"context"
+	stdhtml "html"
 	"io"
 	"log/slog"
 	"net/http"
@@ -218,6 +219,36 @@ func TestPublicHTMLAcceptsOnlyTheStoredTitleAndFavicon(t *testing.T) {
 	withDefaultTitle := strings.Replace(strings.Replace(valid, `<title>Ada &amp; &lt;friends&gt;</title>`, `<title>Ada — Resume</title>`, 1), customOGTitle, ogTitle, 1)
 	if rule := publicHTMLRejectionForPage([]byte(withDefaultTitle), resume, noIcon, origin, jsonLD, false); rule != "favicon" {
 		t.Fatalf("icon without the setting: rule = %q, want favicon", rule)
+	}
+}
+
+func TestPublicHTMLTitleMatchesTheParsedLineEndings(t *testing.T) {
+	origin := mustPublicOrigin(t)
+	for _, test := range []struct{ name, fullName, title, want string }{
+		{"carriage return and line feed in the name", "Ada\r\nLovelace", "Ada\r\nLovelace — Resume", ""},
+		{"carriage return in the name", "Ada\rLovelace", "Ada\rLovelace — Resume", ""},
+		{"line feed written for the carriage return", "Ada\rLovelace", "Ada\nLovelace — Resume", ""},
+		{"carriage return dropped from the name", "Ada\r\nLovelace", "AdaLovelace — Resume", "title"},
+		{"carriage return as a space", "Ada\rLovelace", "Ada Lovelace — Resume", "title"},
+		{"line feed doubled", "Ada\r\nLovelace", "Ada\n\nLovelace — Resume", "title"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			resume := publicresume.PublicResume{Slug: "ada", Revision: "1",
+				Document: publicresume.PublicResumeDocument{PersonalDetails: publicresume.PublicPersonalDetails{FullName: test.fullName}}}
+			jsonLD, err := publicformat.JSONLD(resume, origin, false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			valid := validHTML(stdhtml.EscapeString(test.fullName), "https://aboutme.example/ada", "1", "")
+			from := "<title>" + stdhtml.EscapeString(test.fullName) + " — Resume</title>"
+			if !strings.Contains(valid, from) {
+				t.Fatalf("fixture lacks its title %q", from)
+			}
+			candidate := strings.Replace(valid, from, "<title>"+stdhtml.EscapeString(test.title)+"</title>", 1)
+			if got := publicHTMLRejection([]byte(candidate), resume, origin, jsonLD, false); got != test.want {
+				t.Fatalf("rule = %q, want %q", got, test.want)
+			}
+		})
 	}
 }
 

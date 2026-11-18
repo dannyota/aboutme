@@ -26,10 +26,15 @@ function mountInvite(
 function mountInviteOnPage(measureRight: number) {
   const root = document.createElement('main');
   root.getBoundingClientRect = () => ({ right: window.innerWidth }) as DOMRect;
-  const measure = document.createElement('div');
-  measure.className = 'public-measure';
-  measure.getBoundingClientRect = () => ({ right: measureRight }) as DOMRect;
-  root.append(measure);
+  const article = document.createElement('article');
+  article.className = 'resume-document resume-sheets';
+  for (const right of [measureRight, window.innerWidth]) {
+    const sheet = document.createElement('div');
+    sheet.className = 'resume-sheet';
+    sheet.getBoundingClientRect = () => ({ right }) as DOMRect;
+    article.append(sheet);
+  }
+  root.append(article);
   document.body.append(root);
   const wrapper = mount(JoinInvite, {
     attachTo: document.body,
@@ -205,7 +210,7 @@ describe('JoinInvite', () => {
         .toBe('999px');
     });
 
-  it('places the card from the resume box, not the page root', async () => {
+  it('places the card from the first sheet, not the page root', async () => {
     const wrapper = mountInviteOnPage(1_440 - 400);
     await vi.advanceTimersByTimeAsync(20_000);
     await wrapper.vm.$nextTick();
@@ -213,7 +218,7 @@ describe('JoinInvite', () => {
       .toBe('card');
   });
 
-  it('places the bar when the resume box leaves under 360 px', async () => {
+  it('places the bar when the first sheet leaves under 360 px', async () => {
     const wrapper = mountInviteOnPage(1_440 - 200);
     await vi.advanceTimersByTimeAsync(20_000);
     await wrapper.vm.$nextTick();

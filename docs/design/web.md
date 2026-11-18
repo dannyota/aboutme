@@ -154,7 +154,10 @@ markup. The UI never displays token or code material.
 ## Pure renderer
 
 The contract is `(currentDocument, renderContext) -> deterministic HTML`.
-`renderContext` contains only explicit presentation input: pagination mode, the
+`renderContext` contains only explicit presentation input: pagination mode
+(`continuous`, `paged`, or the screen-only `sheets` of the
+[web layout](public-web-layout.md), which the public app and the editor's Web
+preview select while the render envelope stays `continuous`), the
 server-normalized resume language, an already-authorized photo URL when needed,
 and, only for an embed that owns its own page `h1` (the homepage sample, a
 template thumbnail), a `nameHeading: 'p'` override so the resume name renders as

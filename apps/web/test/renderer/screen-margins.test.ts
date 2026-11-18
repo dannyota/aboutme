@@ -38,24 +38,38 @@ describe('screen margin stylesheet', () => {
     expect(margins).not.toContain('@media print');
   });
 
-  it('reaches the continuous public, editor, and gallery surfaces', () => {
-    const selectors = /([^{}]+)\{\s*padding: var\(--screen-margin-y\)/u
-      .exec(margins)?.[1] ?? '';
-    expect(selectors).toContain('.public-resume-page .resume-document');
-    expect(selectors).toContain(
-      '.preview-sheet[data-web-columns] .resume-document',
-    );
-    expect(selectors).toContain(
+  const selectorsOf = (declaration: string): string[] =>
+    (new RegExp(`([^{}]+)\\{\\s*${declaration}`, 'u').exec(margins)?.[1] ?? '')
+      .split(',').map((part) => part.trim()).filter(Boolean);
+
+  it('reaches only the continuous template detail paper', () => {
+    expect(selectorsOf('padding: var\\(--screen-margin-y\\)')).toEqual([
+      '.template-paper[data-web-columns] .resume-document:not(.resume-sheets)',
+    ]);
+    expect(selectorsOf('--screen-measure: 52em;')).toEqual([
       '.template-paper[data-web-columns] .resume-document',
-    );
+    ]);
+    expect(selectorsOf('--screen-measure: 70em;')).toEqual([
+      '.template-paper[data-web-columns="2"] .resume-document',
+    ]);
+    expect(margins).not.toContain('.preview-sheet');
+    expect(margins).not.toContain('data-columns');
   });
 
-  it('keeps the page bar on the left edge of the body', () => {
-    expect(source).toMatch(
-      /\.public-toolbar-inner \{[^}]*padding-inline: var\(--screen-margin-x\)/u,
-    );
-    expect(source).not.toContain('padding-inline: 16px;');
-  });
+  it('keeps the public page the container of the bar and the sheet gap',
+    () => {
+      expect(selectorsOf('container-type: inline-size;')).toEqual([
+        '.public-resume-page', '.template-paper[data-web-columns]',
+      ]);
+    });
+
+  it('measures the page bar from the sheet width, not the screen margins',
+    () => {
+      expect(source).toMatch(
+        /\.public-toolbar-inner \{[^}]*padding-inline: clamp\(6px, 2cqi - 2px/u,
+      );
+      expect(source).not.toContain('var(--screen-margin-x)');
+    });
 
   it('keeps the document padding that print and the PDF use', () => {
     expect(source).toContain(
@@ -64,10 +78,8 @@ describe('screen margin stylesheet', () => {
   });
 });
 
-describe('EditorPreview Web sheet hook', () => {
-  it('marks the sheet with the column count in Web mode only', () => {
-    expect(editorPreview).toContain(
-      ':data-web-columns="previewMode === \'web\'',
-    );
+describe('EditorPreview Web sheets', () => {
+  it('leaves the column hook to the continuous surfaces', () => {
+    expect(editorPreview).not.toContain('data-web-columns');
   });
 });

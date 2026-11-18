@@ -42,7 +42,54 @@ const PAGE_EMOJI = '\u{1F680}';
 const PDF_NAME = 'Public-proof-resume-Resume.pdf';
 const PUBLIC_PROOF_DESCRIPTION = 'Engineer, Example Corp';
 const PUBLIC_PROOF_IMAGE_ALT = 'Public proof resume';
+const PUBLIC_PROOF_NAME = 'Public proof resume';
+const DARK_DESK = 'rgb(20, 18, 16)';
+const DARK_PAPER = '#2a2723';
+const DARK_SHEET_SHADOW = [
+  'rgba(0, 0, 0, 0.14) 0px 0px 0px 0.5px',
+  'rgba(0, 0, 0, 0.08) 0px 1px 2px 0px',
+  'rgba(0, 0, 0, 0.2) 0px 10px 26px -8px',
+  'rgba(0, 0, 0, 0.22) 0px 32px 60px -28px',
+].join(', ');
 let createdID: string | undefined;
+
+function rgbOf(hex: string): string {
+  const channels = [1, 3, 5].map((start) =>
+    Number.parseInt(hex.slice(start, start + 2), 16));
+  return `rgb(${channels.join(', ')})`;
+}
+
+function oklchLightness(hex: string): number {
+  const [r, g, b] = [1, 3, 5].map((start) => {
+    const value = Number.parseInt(hex.slice(start, start + 2), 16) / 255;
+    return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+  }) as [number, number, number];
+  const l = Math.cbrt(0.4122214708 * r + 0.5363770262 * g + 0.0514459929 * b);
+  const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+  const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+  return 0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s;
+}
+
+function darkPaper(background: string): string {
+  const ground = background.toLowerCase();
+  return rgbOf(oklchLightness(ground) < 0.5 ? ground : DARK_PAPER);
+}
+
+function sheetGeometry(width: number) {
+  const clamp = (low: number, value: number, high: number): number =>
+    Math.min(Math.max(value, low), high);
+  return {
+    width: Math.min(width - 20, 736),
+    padding: [
+      clamp(28, width * 0.06, 60),
+      clamp(22, width * 0.09, 84),
+      clamp(20, width * 0.03, 30),
+      clamp(22, width * 0.09, 84),
+    ],
+    radius: clamp(14, width * 0.015, 18),
+    gap: clamp(14, width * 0.025, 26),
+  };
+}
 
 let currentStage = 'none';
 
@@ -929,6 +976,20 @@ test('proves a published resume hydrates in a real browser', async ({
     await waitForHydration(publicPage, 'public-resume');
 
     stage('public-styling');
+    const authored = await publicPage.evaluate(async (href) => {
+      const response = await fetch(href, { cache: 'no-store' });
+      const body = await response.json() as {
+        data?: { document?: { customization?: { colors?: {
+          background?: unknown;
+        }; }; }; };
+      };
+      return {
+        status: response.status,
+        background: body.data?.document?.customization?.colors?.background,
+      };
+    }, `/api/v1/public/resumes/${publishedSlug}`);
+    expect(authored.status).toBe(200);
+    expect(authored.background).toMatch(/^#[0-9a-fA-F]{6}$/u);
     const styling = await publicPage.evaluate(() => {
       const sheets = [...document.styleSheets].map((sheet) => ({
         href: sheet.href === null ? '' : new URL(sheet.href).pathname,
@@ -936,15 +997,85 @@ test('proves a published resume hydrates in a real browser', async ({
         rules: sheet.cssRules.length,
       }));
       const resume = document.querySelector('.resume-document');
-      if (resume === null) return { sheets, resume: null };
+      const bar = document.querySelector('.public-toolbar');
+      const row = document.querySelector('.public-toolbar-inner');
+      if (resume === null || bar === null || row === null) {
+        return { sheets, layout: null };
+      }
       const computed = getComputedStyle(resume);
+      const box = resume.getBoundingClientRect();
+      const barStyle = getComputedStyle(bar);
+      const rowBox = row.getBoundingClientRect();
+      const page = resume.parentElement;
       return {
         sheets,
-        resume: {
-          boxSizing: computed.boxSizing,
-          paddingLeft: computed.paddingLeft,
-          fontFamily: computed.fontFamily,
-          fontVariable: computed.getPropertyValue('--font-family').trim(),
+        layout: {
+          desk: getComputedStyle(document.documentElement).backgroundColor,
+          viewport: document.documentElement.clientWidth,
+          pageGround: page === null
+            ? ''
+            : getComputedStyle(page).backgroundColor,
+          resume: {
+            sheetsMode: resume.classList.contains('resume-sheets'),
+            parent: page?.classList.contains('public-resume-page') ?? false,
+            inMain: resume.closest('main#public-resume') !== null,
+            left: box.left,
+            width: box.width,
+            boxSizing: computed.boxSizing,
+            padding: [computed.paddingTop, computed.paddingRight,
+              computed.paddingBottom, computed.paddingLeft],
+            ground: computed.backgroundColor,
+            container: computed.containerType,
+            fontFamily: computed.fontFamily,
+            fontVariable: computed.getPropertyValue('--font-family').trim(),
+          },
+          bar: {
+            inMain: bar.closest('main#public-resume') !== null,
+            outside: !resume.contains(bar),
+            before: (bar.compareDocumentPosition(resume)
+              & Node.DOCUMENT_POSITION_FOLLOWING) !== 0,
+            ground: barStyle.backgroundColor,
+            rule: [barStyle.borderBottomStyle, barStyle.borderBottomWidth],
+            rowLeft: rowBox.left,
+            rowRight: rowBox.right,
+            bottom: bar.getBoundingClientRect().bottom,
+          },
+          pages: [...resume.children].map((sheet) => {
+            const css = getComputedStyle(sheet);
+            const rect = sheet.getBoundingClientRect();
+            const folio = sheet.lastElementChild;
+            const pseudo = (which: '::before' | '::after') => folio === null
+              ? 'none'
+              : getComputedStyle(folio, which).content;
+            return {
+              sheet: sheet.classList.contains('resume-sheet'),
+              boxSizing: css.boxSizing,
+              left: rect.left,
+              right: rect.right,
+              top: rect.top,
+              bottom: rect.bottom,
+              width: rect.width,
+              padding: [css.paddingTop, css.paddingRight, css.paddingBottom,
+                css.paddingLeft].map((value) => parseFloat(value)),
+              radius: [css.borderTopLeftRadius, css.borderTopRightRadius,
+                css.borderBottomLeftRadius, css.borderBottomRightRadius]
+                .map((value) => parseFloat(value)),
+              shadow: css.boxShadow,
+              ground: css.backgroundColor,
+              overflow: [css.overflowX, css.overflowY],
+              folio: folio === null
+                ? null
+                : {
+                    folio: folio.classList.contains('resume-folio'),
+                    hidden: folio.getAttribute('aria-hidden'),
+                    name: folio.getAttribute('data-folio-name'),
+                    page: folio.getAttribute('data-folio-page'),
+                    text: folio.textContent,
+                    before: pseudo('::before'),
+                    after: pseudo('::after'),
+                  },
+            };
+          }),
         },
       };
     });
@@ -962,13 +1093,70 @@ test('proves a published resume hydrates in a real browser', async ({
     expect(scriptURL).toMatch(
       /^\/_nuxt\/assets\/public-resume\.mjs\?v=[0-9a-f]{16}$/u,
     );
-    expect(styling.resume).not.toBeNull();
-    expect(styling.resume?.boxSizing).toBe('border-box');
-    expect(styling.resume?.paddingLeft).not.toBe('0px');
-    expect(styling.resume?.fontVariable).not.toBe('');
+    expect(styling.layout).not.toBeNull();
+    const layout = styling.layout!;
+    expect(layout.resume.sheetsMode).toBe(true);
+    expect(layout.resume.parent).toBe(true);
+    expect(layout.resume.inMain).toBe(true);
+    expect(layout.resume.boxSizing).toBe('border-box');
+    expect(layout.resume.padding.slice(1)).toEqual(['0px', '0px', '0px']);
+    expect(Math.abs(layout.resume.left)).toBeLessThanOrEqual(1);
+    expect(Math.abs(layout.resume.width - layout.viewport))
+      .toBeLessThanOrEqual(1);
+    expect(layout.resume.container).toBe('inline-size');
+    expect(layout.desk).toBe(DARK_DESK);
+    expect(layout.resume.ground).toBe(DARK_DESK);
+    expect(layout.pageGround).toBe('rgba(0, 0, 0, 0)');
+    expect(layout.resume.fontVariable).not.toBe('');
     // Computed font-family drops quotes around single-word family names (CSSOM serialization).
     const unquoted = (value?: string): string => (value ?? '').replaceAll('"', '');
-    expect(unquoted(styling.resume?.fontFamily)).toBe(unquoted(styling.resume?.fontVariable));
+    expect(unquoted(layout.resume.fontFamily)).toBe(unquoted(layout.resume.fontVariable));
+
+    const geometry = sheetGeometry(layout.resume.width);
+    const near = (value: number, target: number): boolean =>
+      Math.abs(value - target) <= 1;
+    expect(near(parseFloat(layout.resume.padding[0]!), geometry.gap)).toBe(true);
+    const centre = layout.resume.left + layout.resume.width / 2;
+    const paper = darkPaper(authored.background as string);
+    expect(paper).not.toBe(DARK_DESK);
+    expect(layout.pages.length).toBe(2);
+    layout.pages.forEach((sheet, index) => {
+      expect(sheet.sheet, `sheet ${index + 1}`).toBe(true);
+      expect(sheet.boxSizing, `sheet ${index + 1}`).toBe('border-box');
+      expect(sheet.ground, `sheet ${index + 1} paper`).toBe(paper);
+      expect(sheet.shadow, `sheet ${index + 1} shadow`).toBe(DARK_SHEET_SHADOW);
+      expect(sheet.overflow, `sheet ${index + 1}`).toEqual(['visible', 'visible']);
+      expect({
+        width: near(sheet.width, geometry.width),
+        centred: Math.abs((sheet.left + sheet.right) / 2 - centre) <= 2,
+        padding: sheet.padding.every((value, side) =>
+          near(value, geometry.padding[side]!)),
+        radius: sheet.radius.every((value) => near(value, geometry.radius)),
+        gap: near(sheet.top - (index === 0
+          ? layout.bar.bottom
+          : layout.pages[index - 1]!.bottom), geometry.gap),
+      }, `sheet ${index + 1} geometry`).toEqual({
+        width: true, centred: true, padding: true, radius: true, gap: true,
+      });
+      expect(sheet.folio, `sheet ${index + 1} folio`).toEqual({
+        folio: true,
+        hidden: 'true',
+        name: PUBLIC_PROOF_NAME,
+        page: `${index + 1} / ${layout.pages.length}`,
+        text: '',
+        before: expect.stringMatching(/^\S.* \/ ""$/u),
+        after: expect.stringMatching(/^\S.* \/ ""$/u),
+      });
+    });
+    expect(layout.bar).toMatchObject({
+      inMain: true,
+      outside: true,
+      before: true,
+      ground: 'rgba(0, 0, 0, 0)',
+      rule: ['none', '0px'],
+    });
+    expect(near(layout.bar.rowLeft, layout.pages[0]!.left)).toBe(true);
+    expect(near(layout.bar.rowRight, layout.pages[0]!.right)).toBe(true);
 
     stage('public-skip-link');
     const skip = publicPage.getByRole('link', { name: 'Skip to content' });
