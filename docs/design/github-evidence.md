@@ -125,7 +125,8 @@ months, which is why it is dropped at once.
   one or all sessions, a password change and self-deletion. Operations that
   carry another proof keep that proof and run under the same user lock: a
   password reset, an operator's deletion and the epoch change inside them. Only
-  expiry and shutdown end a session outside the boundary.
+  expiry, shutdown and GitHub's 401 on an evidence read end a session outside
+  the boundary.
 - Every path that changes the evidence connection or session, or tells the
   server that the account's sessions ended, keeps three rules:
   1. It checks its authority under its locks. It reads the clock once, after the
@@ -208,9 +209,9 @@ MCP tool reaches them.
   owner-locked transaction they require the same connection generation and a
   live session of the same epoch, so a disconnect or replacement that commits
   during the fetch wins.
-- `candidateId` is an opaque string the server derives from the kind and
-  GitHub's repository and item ids; it is valid only in the session that listed
-  it. Shapes, the export, error codes and statuses are in the
+- `candidateId` is a random opaque id that the live session keeps in memory with
+  the item it names; it is valid only in the session that listed it. Shapes, the
+  export, error codes and statuses are in the
   [picker design](github-evidence-picker.md#api-contract).
 - With evidence off, every route answers 404 `evidence_unavailable`. Start
   answers 503 `evidence_unavailable` once shutdown has begun. "Done" without a

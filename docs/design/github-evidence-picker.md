@@ -193,9 +193,9 @@ transient failure rewrites nothing.
 under [ADR 0006](../adr/0006-transactional-idempotency.md):
 
 - `generation` is required: the top-level integer `GET /api/v1/github-evidence`
-  now reports, 0 when no connection row exists. A different current value
-  answers 409 `evidence_connection_changed`, so a lost response cannot remove
-  evidence attached after a reconnect. No ETag is involved.
+  reports beside `hasEvidence`, 0 when no connection row exists. A different
+  current value answers 409 `evidence_connection_changed`, so a lost response
+  cannot remove evidence attached after a reconnect. No ETag is involved.
 - `Idempotency-Key` is required. The fingerprint covers the route, `keepLinks`
   and `generation`. A stored replay for the key is answered before the
   generation check; the same key with a different fingerprint answers the
@@ -214,8 +214,8 @@ under [ADR 0006](../adr/0006-transactional-idempotency.md):
   [connection's ending rules](github-evidence.md#evidence-session).
 - It answers 200 with `{generation, projectRevisions, resumeRevisions}`. Open
   editors meet an advanced project revision as any other conflict.
-- Settings asks before disconnecting when evidence exists: keep the items as
-  plain links (the default) or remove them from every project.
+- Settings asks before disconnecting when `hasEvidence` is true: keep the items
+  as plain links (the default) or remove them from every project.
 
 ## Project page
 
