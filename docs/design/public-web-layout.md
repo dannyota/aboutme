@@ -79,10 +79,12 @@ folio sits at the sheet's foot in letterspaced capitals at 0.7 em in the meta
 color.
 
 **Geometry.** There is one resume article. In sheets mode it is the page root's
-child at full width with no padding, it is the inline-size container, and the
-sheets are its children, so their container units measure the page width (the
-preview pane in the editor). Each sheet's content box is a container too, and
-the 480 px rules for the side photo and justified text measure it, so both
+child at full width with no inline or bottom padding; its top padding is the
+sheet gap, `clamp(14px, 2.5cqi, 26px)`, below the page bar on the public page
+and at the top of the editor's Web preview. It is the inline-size container, and
+the sheets are its children, so their container units measure the page width
+(the preview pane in the editor). Each sheet's content box is a container too,
+and the 480 px rules for the side photo and justified text measure it, so both
 follow the text width.
 
 | Property    | Value                                                                                                            |
@@ -135,7 +137,7 @@ paged output keep the side layout as today.
 | ----------------------------- | ------------------------------------------------------------------- |
 | `layout.columns`, side tint   | One column; the side column's tint is not drawn                     |
 | `header.detailsLayout`        | Contact rows, start-aligned whatever `header.align` says            |
-| Label omitted beside icons    | Rows always show the label                                          |
+| Label omitted beside icons    | Rows show the label, except a link with `display` `label`           |
 | `font.baseSizePx`             | `max(baseSizePx, 16px)`; every size keeps its multiple of that base |
 | `spacing.lineHeight`          | At least 1.5                                                        |
 | `font.textAlign` `justify`    | Start-aligned when the container is narrower than 480 px            |
@@ -154,10 +156,11 @@ sizes are emitted only in sheets mode. The PDF keeps every value exactly.
 - The value.
 
 The value is the link under today's rules (ADR 0013), and its anchor text is
-still the value. A link with a `display` keeps the label column and the leader,
-and its display text is the anchor text. A pseudo-element of the anchor
-stretches its hit area over the whole row, and `:focus-visible` outlines the row
-in `--color-link`. A long value wraps below the label with
+still the value; a `short` or `full` display keeps the label column and the
+leader. A link whose `display` is `label` is one anchor showing the label, with
+no separate label column and no leader. A pseudo-element of the anchor stretches
+its hit area over the whole row, and `:focus-visible` outlines the row in
+`--color-link`. A long value wraps below the label with
 `overflow-wrap: anywhere`, and a wrapped value has no leader. Label columns are
 not aligned across rows. Location is a row without a link. Rows stay inside
 `header.resume-header`.

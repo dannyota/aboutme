@@ -53,8 +53,9 @@ Other rules:
   `resolveRenderModel` then computes the dark role set and writes each dark role
   next to its light role at every scope that carries roles (the article, a
   tinted header band, a tinted sidebar), as `--dark-color-<role>`.
-- `.public-resume-page`, and the editor's Web preview sheet, carry
-  `data-color-scheme="dark"` or `"system"`; light carries no attribute.
+- `.public-resume-page` and the sheets article (on the public page and in the
+  editor's Web preview) carry `data-color-scheme="dark"` or `"system"`; light
+  carries no attribute.
 - A screen-only rule in `resumeColorScheme.css`, which `ResumeDocument.vue`
   imports, points each `--color-<role>` at its `--dark-color-<role>` under
   `dark`, and under `system` inside `@media (prefers-color-scheme: dark)`. On
