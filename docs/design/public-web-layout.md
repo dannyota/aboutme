@@ -1,9 +1,10 @@
 # Public resume web layout
 
-Status: proposed. The owner chose the "separate sheets" direction from mockups
-on 2026-11-18, with the defaults under [Owner decisions](#owner-decisions). It
-amends [ADR 0020](../adr/0020-application-visual-identity.md) for the public
-page and the editor's Web preview on screen. The document contract
+Status: Accepted (2026-11-18). The owner chose the "separate sheets" direction
+from mockups on 2026-11-18, with the defaults under
+[Owner decisions](#owner-decisions). It amends
+[ADR 0020](../adr/0020-application-visual-identity.md) for the public page and
+the editor's Web preview on screen. The document contract
 ([ADR 0004](../adr/0004-resume-document-contract.md)), the render envelope and
 the PDF are unchanged.
 
@@ -27,7 +28,7 @@ On 2026-11-18 the owner chose:
 5. Contacts as labelled rows with dotted leaders, not large Call and Email
    buttons.
 6. Browser print of the public page prints the one-column resume flat; the PDF
-   remains the faithful print (pending the owner's confirmation).
+   remains the faithful print.
 
 ## Where it applies
 

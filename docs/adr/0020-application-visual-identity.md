@@ -1,8 +1,8 @@
 # 0020: Application visual identity: the seal, the canvas, and the resume ground
 
 Status: Accepted (2026-09-04, 2026-09-24, 2026-09-27, 2026-09-28, 2026-11-01,
-2026-11-15). The owner chose each direction, including the public page color
-scheme below.
+2026-11-15, 2026-11-18). The owner chose each direction, including the public
+page color scheme below.
 
 ## Context
 
@@ -184,14 +184,14 @@ authored ground.
 
 ### Amendment: paper sheets on screen (2026-11-18)
 
-Proposed with the [public web layout](../design/public-web-layout.md), from the
+Accepted with the [public web layout](../design/public-web-layout.md), from the
 owner's choice of the "separate sheets" mockup on 2026-11-18. On screen the
 public resume and the editor's Web preview set the resume on rounded paper
 sheets on a desk: warm paper (`#faf6ec`) in Light when the template's ground is
 white, charcoal (`#2a2723`) in Dark, an authored tinted or dark paper kept. The
 resume is one column there, with a 16 px body floor, the template's fonts,
 accents and heading styles, and contacts as rows. The PDF keeps every value
-exactly. The Decision text above takes effect when this amendment is accepted.
+exactly.
 
 ### Amendment: the 2026-11-15 identity
 
