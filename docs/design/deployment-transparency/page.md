@@ -93,8 +93,8 @@ Shown in both languages under the heading "Trang này chứng minh gì" / "What 
 proves":
 
 - It names the GreenNode host itself as the reporter. A host report is weaker
-  than ECS's platform API report and does not prove host honesty. Before a
-  document loads, the text names no platform.
+  than a report from an independent platform API and does not prove host
+  honesty. Before a document loads, the text names no platform.
 - It covers the code, not settings or secrets.
 - A verified build means GitHub built it from public source, not that the source
   has no bugs.

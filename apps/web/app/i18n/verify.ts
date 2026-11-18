@@ -279,8 +279,8 @@ export const verifyCopy: Readonly<Record<Locale, VerifyCopy>> = {
       ],
       notLabel: 'Không chứng minh',
       not: [
-        'Yếu hơn báo cáo từ API của ECS: máy chủ tự báo cáo, không chứng minh '
-        + 'máy chủ trung thực.',
+        'Yếu hơn báo cáo từ API của một nền tảng độc lập: máy chủ tự báo cáo, '
+        + 'không chứng minh máy chủ trung thực.',
         'Trang nói về mã nguồn, không nói về cấu hình hay bí mật.',
         'Bản dựng đã kiểm chứng nghĩa là GitHub dựng nó từ mã nguồn công khai, '
         + 'không có nghĩa mã nguồn không có lỗi.',
@@ -447,8 +447,8 @@ export const verifyCopy: Readonly<Record<Locale, VerifyCopy>> = {
       ],
       notLabel: 'It does not prove',
       not: [
-        'This is weaker than an ECS API report: the host reports itself and '
-        + 'does not prove its honesty.',
+        'This is weaker than a report from an independent platform API: the '
+        + 'host reports itself and does not prove its honesty.',
         'It covers the code, not settings or secrets.',
         'A verified build means GitHub built it from public source, not that '
         + 'the source has no bugs.',

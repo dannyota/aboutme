@@ -292,9 +292,10 @@ px icon column 10 px from the text.
 
 "Chứng minh" / "It proves", with `check` in `--link`:
 
-The list states that the host reports itself, with weaker trust than ECS. Before
-a document loads, the lists name no platform ([page.md](page.md#limits)). A
-GitHub build claim applies only to an image whose signature was checked.
+The list states that the host reports itself, with weaker trust than an
+independent platform API. Before a document loads, the lists name no platform
+([page.md](page.md#limits)). A GitHub build claim applies only to an image whose
+signature was checked.
 
 - Máy chủ GreenNode tự báo cáo các mã băm Podman đang chạy và số bản sao. / The
   GreenNode host itself reports the running Podman digests and replica counts.
@@ -305,8 +306,8 @@ GitHub build claim applies only to an image whose signature was checked.
 "Không chứng minh" / "It does not prove", with `minus` in muted, holds the three
 sentences from [page.md](page.md#limits). Vietnamese:
 
-- Yếu hơn báo cáo từ API của ECS: máy chủ tự báo cáo, không chứng minh máy chủ
-  trung thực.
+- Yếu hơn báo cáo từ API của một nền tảng độc lập: máy chủ tự báo cáo, không
+  chứng minh máy chủ trung thực.
 - Trang nói về mã nguồn, không nói về cấu hình hay bí mật.
 - Bản dựng đã kiểm chứng nghĩa là GitHub dựng nó từ mã nguồn công khai, không có
   nghĩa mã nguồn không có lỗi.

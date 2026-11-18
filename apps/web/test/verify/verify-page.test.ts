@@ -156,7 +156,9 @@ describe('verify page states', () => {
       expect(limits.text()).toContain(
         'Một container kiểm chứng trên cùng máy chủ đối chiếu chữ ký image',
       );
-      expect(limits.text()).toContain('Yếu hơn báo cáo từ API của ECS');
+      expect(limits.text())
+        .toContain('Yếu hơn báo cáo từ API của một nền tảng độc lập');
+      expect(limits.text()).not.toContain('ECS');
       expect(limits.text()).not.toContain('AWS');
       expect(vietnamese.get('[data-testid="verify-components"]').text())
         .toContain('sha256:');
@@ -179,7 +181,9 @@ describe('verify page states', () => {
       expect(englishLimits.text()).toContain(
         'An observer container on that same host checks image signatures',
       );
-      expect(englishLimits.text()).toContain('weaker than an ECS API report');
+      expect(englishLimits.text())
+        .toContain('weaker than a report from an independent platform API');
+      expect(englishLimits.text()).not.toContain('ECS');
       expect(englishLimits.text()).not.toContain('AWS');
     });
 
