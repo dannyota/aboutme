@@ -21,9 +21,8 @@ const copy = computed(() => projectEvidenceCopy[props.locale]);
 const listing = computed(() => props.picker.listing(props.kind));
 const choosing = computed(() =>
   props.kind === 'release' && props.picker.repository.value === null);
-const disabled = computed(() => props.picker.locked.value
-  || props.picker.atLimit.value
-  || props.picker.attaching.value !== null);
+const disabled = computed(() =>
+  props.picker.blocked.value || props.picker.atLimit.value);
 const failure = computed(() => listing.value.failure === null
   ? ''
   : evidenceNoticeText(listing.value.failure, props.locale));
@@ -99,7 +98,7 @@ async function attach(candidate: EvidenceCandidate): Promise<void> {
           <Button
             v-else
             :id="rowId(candidate, 'attach')"
-            :aria-describedby="picker.locked.value
+            :aria-describedby="picker.unsaved.value
               ? 'evidence-save-first'
               : undefined"
             :aria-labelledby="`${rowId(candidate, 'attach')} ${

@@ -164,6 +164,21 @@ describe('project evidence writes', () => {
         .toEqual([['3', 'e1'], ['3', 'e2'], ['4', 'e3']]);
     });
 
+  it('drops the key after a body the server finds too large', async () => {
+    const { evidenceApi, evidence } = await setup();
+    evidenceApi.attach
+      .mockResolvedValueOnce(evidenceFailed('too-large'))
+      .mockResolvedValueOnce(evidenceFailed('upstream'));
+    const body = { kind: 'repository', link: 'https://github.com/a/b' } as const;
+
+    expect(await evidence.attach(body))
+      .toEqual({ kind: 'failed', notice: { kind: 'failed' } });
+    await evidence.attach(body);
+
+    expect(evidenceApi.attach.mock.calls.map((call) => call[3]))
+      .toEqual(['e1', 'e2']);
+  });
+
   it('sends one write at a time', async () => {
     const { evidenceApi, evidence } = await setup();
     const answer = held<Awaited<ReturnType<typeof evidenceApi.recheck>>>();

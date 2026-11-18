@@ -1,5 +1,6 @@
 import {
-  computed, onMounted, ref, watch, type ComputedRef, type Ref,
+  computed, getCurrentScope, onMounted, onScopeDispose, ref, watch,
+  type ComputedRef, type Ref,
 } from 'vue';
 
 import type {
@@ -44,7 +45,8 @@ export interface Listing {
 
 export interface EvidencePickerDeps {
   readonly evidence: Pick<
-    ProjectEvidenceController, 'attach' | 'items' | 'locked' | 'atLimit'
+    ProjectEvidenceController,
+    'attach' | 'items' | 'unsaved' | 'locked' | 'atLimit' | 'pending'
   >;
   readonly project: () => Project | null;
   readonly api: Pick<ProjectEvidenceApi, 'candidates'>;
@@ -52,12 +54,14 @@ export interface EvidencePickerDeps {
   readonly auth: ProjectAuth;
   readonly now?: () => number;
   readonly navigate?: (url: string) => unknown;
+  readonly onProjectGone?: () => void;
 }
 
 export interface ShowOptions {
   readonly tab?: PickerTab;
   readonly outcome?: PickerOutcome | null;
   readonly sessionEnded?: boolean;
+  readonly opener?: HTMLElement | null;
 }
 
 export interface EvidencePicker {
@@ -74,7 +78,11 @@ export interface EvidencePicker {
   readonly startFailure: Ref<GitHubEvidenceFailure | null>;
   readonly atLimit: ComputedRef<boolean>;
   readonly locked: ComputedRef<boolean>;
+  readonly unsaved: ComputedRef<boolean>;
+  readonly busy: ComputedRef<boolean>;
+  readonly blocked: ComputedRef<boolean>;
   readonly firstAttach: ComputedRef<boolean>;
+  opener(): HTMLElement | null;
   listing(tab: EvidenceKind): Listing;
   isAttached(candidate: EvidenceCandidate): boolean;
   show(options?: ShowOptions): void;
@@ -108,11 +116,36 @@ export function pastedLink(value: string): string {
   return trimmed.startsWith('github.com/') ? `https://${trimmed}` : trimmed;
 }
 
+function linkPath(link: string): string {
+  const trimmed = link.trim();
+  try {
+    return new URL(trimmed).pathname;
+  } catch {
+    const slash = trimmed.indexOf('/');
+    return slash === -1 ? '' : trimmed.slice(slash).replace(/[?#].*$/u, '');
+  }
+}
+
 export function linkKind(link: string): EvidenceKind {
-  const path = link.trim().replace(/[?#].*$/u, '').replace(/\/+$/u, '');
-  if (/\/pull\/[^/]+$/u.test(path)) return 'pullRequest';
-  if (/\/releases\/tag\/[^/]+$/u.test(path)) return 'release';
+  const segments = linkPath(link).split('/').filter((part) => part !== '');
+  if (segments.length === 4 && segments[2] === 'pull') return 'pullRequest';
+  if (
+    segments.length === 5
+    && segments[2] === 'releases'
+    && segments[3] === 'tag'
+  ) return 'release';
   return 'repository';
+}
+
+export function focusAfterPicker(opener: HTMLElement | null): void {
+  const usable = (element: HTMLElement | null): element is HTMLElement =>
+    element !== null
+    && element.isConnected
+    && !(element instanceof HTMLButtonElement && element.disabled);
+  const add = document.getElementById('project-evidence-add');
+  const target = [opener, add].find(usable)
+    ?? document.getElementById('project-evidence-title');
+  target?.focus();
 }
 
 function listingFailure(
@@ -157,9 +190,21 @@ export function useEvidencePicker(deps: EvidencePickerDeps): EvidencePicker {
   const startFailure = ref<GitHubEvidenceFailure | null>(null);
   const limitHit = ref(false);
   const listings = ref<Readonly<Record<string, Listing>>>({});
+  let opener: HTMLElement | null = null;
+  let epoch = 0;
+  let disposed = false;
+  if (getCurrentScope() !== undefined) {
+    onScopeDispose(() => {
+      disposed = true;
+    });
+  }
 
   const atLimit = computed(() => deps.evidence.atLimit.value || limitHit.value);
   const locked = computed(() => deps.evidence.locked.value);
+  const unsaved = computed(() => deps.evidence.unsaved.value);
+  const busy = computed(() => deps.evidence.pending.value !== null);
+  const blocked = computed(() =>
+    locked.value || busy.value || attaching.value !== null);
   const firstAttach = computed(() => deps.evidence.items.value.length === 0);
 
   function keyOf(kind: EvidenceKind): string | null {
@@ -185,6 +230,7 @@ export function useEvidencePicker(deps: EvidencePickerDeps): EvidencePicker {
     if (key === null || project === null) return;
     const current = listings.value[key] ?? IDLE;
     if (current.status === 'loading') return;
+    const started = epoch;
     put(key, { ...current, status: 'loading', failure: null });
     const query: CandidateQuery = kind === 'release' && chosen !== null
       ? { kind, page, repository: chosen.id }
@@ -193,6 +239,13 @@ export function useEvidencePicker(deps: EvidencePickerDeps): EvidencePicker {
       ? { kind: 'failed', failure: 'session-lost', retryAfter: null } as const
       : await sendWithCsrf(deps.auth, ownerId, (csrfToken) =>
           deps.api.candidates(project.id, query, csrfToken));
+    if (disposed || started !== epoch) return;
+    if (result.kind === 'failed' && result.failure === 'project-not-found') {
+      put(key, current);
+      open.value = false;
+      deps.onProjectGone?.();
+      return;
+    }
     if (result.kind === 'ok') {
       put(key, {
         status: 'ready',
@@ -236,6 +289,15 @@ export function useEvidencePicker(deps: EvidencePickerDeps): EvidencePicker {
     ensure(next);
   }
 
+  watch(() => deps.evidence.items.value.map((item) => item.id),
+    (next, previous) => {
+      if (!previous.some((id) => !next.includes(id))) return;
+      epoch += 1;
+      listings.value = {};
+      attached.value = [];
+      if (open.value) ensure(tab.value);
+    });
+
   function chooserKind(kind: EvidenceKind): EvidenceKind {
     return kind === 'release' && repository.value === null
       ? 'repository'
@@ -245,9 +307,7 @@ export function useEvidencePicker(deps: EvidencePickerDeps): EvidencePicker {
   async function attachCandidate(
     candidate: EvidenceCandidate,
   ): Promise<boolean> {
-    if (locked.value || atLimit.value || attaching.value !== null) {
-      return false;
-    }
+    if (blocked.value || atLimit.value) return false;
     attaching.value = candidate.candidateId;
     notice.value = null;
     const result = await deps.evidence.attach({
@@ -278,12 +338,7 @@ export function useEvidencePicker(deps: EvidencePickerDeps): EvidencePicker {
 
   async function attachLink(): Promise<void> {
     const value = pastedLink(link.value);
-    if (
-      value === ''
-      || locked.value
-      || atLimit.value
-      || attaching.value !== null
-    ) return;
+    if (value === '' || blocked.value || atLimit.value) return;
     attaching.value = 'link';
     notice.value = null;
     linkError.value = null;
@@ -310,21 +365,25 @@ export function useEvidencePicker(deps: EvidencePickerDeps): EvidencePicker {
   async function continueWithGitHub(): Promise<void> {
     const project = deps.project();
     const ownerId = deps.auth.user.value?.id;
-    if (locked.value || starting.value || project === null) return;
+    if (
+      locked.value
+      || busy.value
+      || starting.value
+      || project === null
+    ) return;
     starting.value = true;
     startFailure.value = null;
     const result = ownerId === undefined
       ? { kind: 'failed', failure: 'session-lost' } as const
       : await sendWithCsrf(deps.auth, ownerId, (csrfToken) =>
           deps.github.start(csrfToken, `/app/projects/${project.id}`));
-    starting.value = false;
-    if (result.kind !== 'ok') {
-      startFailure.value = result.failure;
-      return;
-    }
-    const url = validateAuthorizeUrl('github', result.value);
+    if (disposed) return;
+    const url = result.kind === 'ok'
+      ? validateAuthorizeUrl('github', result.value)
+      : null;
     if (url === null) {
-      startFailure.value = 'failed';
+      starting.value = false;
+      startFailure.value = result.kind === 'ok' ? 'failed' : result.failure;
       return;
     }
     await navigate(url);
@@ -344,11 +403,16 @@ export function useEvidencePicker(deps: EvidencePickerDeps): EvidencePicker {
     startFailure,
     atLimit,
     locked,
+    unsaved,
+    busy,
+    blocked,
     firstAttach,
+    opener: () => opener,
     listing: (kind) => listing(chooserKind(kind)),
     isAttached: (candidate) => candidate.attached
       || attached.value.includes(candidate.candidateId),
     show(options = {}) {
+      opener = options.opener ?? null;
       if (options.tab !== undefined) tab.value = options.tab;
       if (options.sessionEnded === true) sessionEnded.value = true;
       outcome.value = options.outcome ?? null;

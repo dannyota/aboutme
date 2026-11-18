@@ -311,4 +311,99 @@ describe('project editor evidence section', () => {
     expect([...document.body.querySelectorAll('[data-evidence-item]')]
       .map((row) => row.getAttribute('data-evidence-item'))).toEqual([E2]);
   });
+
+  it('disables Change address and Delete while an evidence write runs',
+    async () => {
+      let answer: (value: unknown) => void = () => {};
+      evidenceApi.recheck.mockReturnValue(new Promise((resolve) => {
+        answer = resolve;
+      }) as never);
+      await mountEditor();
+      const address = inDocument<HTMLButtonElement>('#project-change-address');
+      const remove = inDocument<HTMLButtonElement>('#project-delete');
+
+      inDocument(
+        `[data-evidence-item="${E1}"] [data-action="evidence-recheck"]`,
+      ).click();
+      await flushPromises();
+
+      expect([address.disabled, remove.disabled]).toEqual([true, true]);
+      answer(written(two(), '4'));
+      await flushPromises();
+      expect([address.disabled, remove.disabled]).toEqual([false, false]);
+    });
+
+  it('returns focus to the Check again that opened the dialog', async () => {
+    evidenceApi.recheck.mockResolvedValue(evidenceFailed('session-required'));
+    evidenceApi.candidates.mockResolvedValue(
+      evidenceFailed('session-required'),
+    );
+    await mountEditor();
+    const recheck = inDocument<HTMLButtonElement>(
+      `[data-evidence-item="${E2}"] [data-action="evidence-recheck"]`,
+    );
+    recheck.focus();
+    recheck.click();
+    await flushPromises();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(inDocument('[data-testid="evidence-session-ended"]')).toBeTruthy();
+    expect(dialog()?.contains(document.activeElement)).toBe(true);
+    document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'Escape', bubbles: true,
+    }));
+    await flushPromises();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(dialog()).toBeNull();
+    expect(document.activeElement).toBe(recheck);
+  });
+
+  it('returns focus to Add after a dialog the return reopened', async () => {
+    await mountEditor(undefined, `/app/projects/${PROJECT}?evidence=connected`);
+    expect(dialog()).not.toBeNull();
+
+    document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'Escape', bubbles: true,
+    }));
+    await flushPromises();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(document.activeElement?.id).toBe('project-evidence-add');
+  });
+
+  it('shows no save-first hint in the changed-elsewhere state', async () => {
+    evidenceApi.remove.mockResolvedValue(stale(project({
+      id: PROJECT, revision: '9', evidence: two(),
+    })));
+    await mountEditor();
+
+    inDocument(`[data-evidence-item="${E1}"] [data-action="evidence-remove"]`)
+      .click();
+    await flushPromises();
+
+    expect(inDocument('[data-testid="project-notice"]').textContent)
+      .toContain('This project changed elsewhere.');
+    expect(inDocument<HTMLButtonElement>(
+      `[data-evidence-item="${E1}"] [data-action="evidence-recheck"]`,
+    ).disabled).toBe(true);
+    expect(document.body.querySelector(
+      '[data-testid="project-evidence-save-first"]',
+    )).toBeNull();
+  });
+
+  it('shows the not-found view when a listing finds no project', async () => {
+    await mountEditor();
+    evidenceApi.candidates.mockResolvedValue(
+      evidenceFailed('project-not-found'),
+    );
+
+    inDocument('#project-evidence-add').click();
+    await flushPromises();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(document.body.querySelector('[data-testid="project-not-found"]'))
+      .not.toBeNull();
+    expect(dialog()).toBeNull();
+  });
 });

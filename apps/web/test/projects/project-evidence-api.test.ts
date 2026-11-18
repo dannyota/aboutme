@@ -196,6 +196,7 @@ describe('project evidence API answers', () => {
     [400, 'request_invalid', 'invalid'],
     [401, 'session_required', 'session-lost'],
     [403, 'csrf_rejected', 'csrf-rejected'],
+    [413, 'body_too_large', 'too-large'],
     [500, 'internal', 'unavailable'],
     [412, 'revision_mismatch', 'unavailable'],
   ] as const)('maps %i %s on a write', async (status, code, failure) => {

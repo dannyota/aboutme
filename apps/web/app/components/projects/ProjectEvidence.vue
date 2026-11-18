@@ -7,23 +7,26 @@ import type { Locale } from '@/i18n/locale';
 import { projectEvidenceCopy } from '@/i18n/project-evidence';
 import { projectsCopy } from '@/i18n/projects';
 import { evidenceNoticeText } from './evidenceText';
-import type { ProjectEvidenceController } from './projectEvidenceState';
+import type {
+  ProjectEvidenceController,
+  SectionOutcome,
+} from './projectEvidenceState';
 import ProjectEvidenceItem from './ProjectEvidenceItem.vue';
 
 const props = defineProps<{
   readonly controller: ProjectEvidenceController;
   readonly locale: Locale;
 }>();
-const emit = defineEmits<{ add: [] }>();
+const emit = defineEmits<{ add: [opener: HTMLElement] }>();
 
 const list = ref<HTMLElement | null>(null);
 const heading = ref<HTMLElement | null>(null);
 const copy = computed(() => projectEvidenceCopy[props.locale]);
 const saveFirst = computed(() => projectsCopy[props.locale].saveFirst);
 const items = computed(() => props.controller.items.value);
-const locked = computed(() => props.controller.locked.value);
-const busy = computed(() =>
-  locked.value || props.controller.pending.value !== null);
+const unsaved = computed(() => props.controller.unsaved.value);
+const busy = computed(() => props.controller.locked.value
+  || props.controller.pending.value !== null);
 const status = computed(() => {
   const current = props.controller.status.value;
   return current === null ? '' : evidenceNoticeText(current, props.locale);
@@ -35,7 +38,12 @@ function control(id: string, action: string): HTMLButtonElement | null {
   ) ?? null;
 }
 
-async function settleFocus(id: string, actions: readonly string[]) {
+async function settleFocus(
+  outcome: SectionOutcome,
+  id: string,
+  actions: readonly string[],
+): Promise<void> {
+  if (outcome === 'session-ended' || outcome === 'closed') return;
   await nextTick();
   const target = actions.map((action) => control(id, action))
     .find((button) => button !== null && !button.disabled);
@@ -43,20 +51,26 @@ async function settleFocus(id: string, actions: readonly string[]) {
 }
 
 async function move(id: string, step: -1 | 1): Promise<void> {
-  await props.controller.move(id, step);
+  const outcome = await props.controller.move(id, step);
   const first = step === -1 ? 'evidence-move-up' : 'evidence-move-down';
   const second = step === -1 ? 'evidence-move-down' : 'evidence-move-up';
-  await settleFocus(id, [first, second]);
+  await settleFocus(outcome, id, [first, second]);
 }
 
 async function recheck(id: string): Promise<void> {
-  await props.controller.recheck(id);
-  await settleFocus(id, ['evidence-recheck']);
+  await settleFocus(await props.controller.recheck(id), id,
+    ['evidence-recheck']);
 }
 
 async function remove(id: string): Promise<void> {
-  await props.controller.remove(id);
-  await settleFocus(id, ['evidence-remove']);
+  await settleFocus(await props.controller.remove(id), id,
+    ['evidence-remove']);
+}
+
+function add(event: MouseEvent): void {
+  if (event.currentTarget instanceof HTMLElement) {
+    emit('add', event.currentTarget);
+  }
 }
 </script>
 
@@ -75,7 +89,7 @@ async function remove(id: string): Promise<void> {
       {{ copy.section }}
     </h2>
     <p
-      v-if="locked"
+      v-if="unsaved"
       id="project-evidence-save-first"
       class="text-sm"
       data-testid="project-evidence-save-first"
@@ -92,7 +106,7 @@ async function remove(id: string): Promise<void> {
       <ProjectEvidenceItem
         v-for="(item, index) in items"
         :key="item.id"
-        :described-by="locked ? 'project-evidence-save-first' : undefined"
+        :described-by="unsaved ? 'project-evidence-save-first' : undefined"
         :disabled="busy"
         :first="index === 0"
         :item="item"
@@ -116,7 +130,7 @@ async function remove(id: string): Promise<void> {
         :disabled="controller.atLimit.value"
         type="button"
         variant="outline"
-        @click="emit('add')"
+        @click="add"
       >
         <Plus aria-hidden="true" />
         {{ copy.add }}

@@ -579,6 +579,63 @@ describe('GitHub evidence settings', () => {
     expect(routes()).toEqual(['GET /api/v1/github-evidence']);
   });
 
+  it('focuses Connect after Keep links disconnects', async () => {
+    state = { ...connectedIdle, hasEvidence: true };
+    serve({
+      'DELETE /api/v1/github-evidence?keepLinks=true&generation=3': () => {
+        state = disconnected;
+        return json(200, disconnectedBody);
+      },
+    });
+    const wrapper = await mountSection('/app/settings/sessions', true);
+
+    await click(wrapper, 'evidence-disconnect');
+    document.body.querySelector<HTMLElement>(
+      '[data-action="evidence-keep-links"]',
+    )!.click();
+    await flushPromises();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await flushPromises();
+
+    await vi.waitFor(() => expect(document.activeElement)
+      .toBe(wrapper.get('[data-testid="evidence-connect"]').element));
+  });
+
+  it('focuses the error after Remove from every project fails', async () => {
+    state = { ...connectedIdle, hasEvidence: true };
+    serve({
+      'DELETE /api/v1/github-evidence?keepLinks=false&generation=3': () =>
+        problem(500, 'internal'),
+    });
+    const wrapper = await mountSection('/app/settings/sessions', true);
+
+    await click(wrapper, 'evidence-disconnect');
+    document.body.querySelector<HTMLElement>(
+      '[data-action="evidence-remove-links"]',
+    )!.click();
+    await flushPromises();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await flushPromises();
+
+    await vi.waitFor(() => expect(document.activeElement)
+      .toBe(wrapper.get('[data-testid="evidence-error"]').element));
+    expect(wrapper.get('[data-testid="evidence-error"]').text())
+      .toBe('Something went wrong. Please try again.');
+  });
+
+  it('says to try again when the published resumes are busy', async () => {
+    state = connectedIdle;
+    serve({
+      [disconnectRoute]: () => problem(503, 'public_state_busy'),
+    });
+    const wrapper = await mountSection();
+
+    await click(wrapper, 'evidence-disconnect');
+
+    expect(wrapper.get('[data-testid="evidence-error"]').text())
+      .toBe('That could not finish right now. Try again.');
+  });
+
   it('uses a new key for a different choice', async () => {
     state = { ...connectedIdle, hasEvidence: true };
     const keep = 'DELETE /api/v1/github-evidence?keepLinks=true&generation=3';

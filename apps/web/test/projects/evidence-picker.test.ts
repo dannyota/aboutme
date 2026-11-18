@@ -7,6 +7,8 @@ import EvidenceDialog from '../../app/components/projects/EvidenceDialog.vue';
 import ProjectEvidence
   from '../../app/components/projects/ProjectEvidence.vue';
 import {
+  focusAfterPicker,
+  linkKind,
   useEvidencePicker,
   type EvidencePicker,
 } from '../../app/components/projects/evidencePickerState';
@@ -117,6 +119,7 @@ async function mountPicker(options: Setup = {}) {
       .mockResolvedValue({ kind: 'ok', value: AUTHORIZE }),
   };
   const navigate = vi.fn();
+  const closed = vi.fn();
   api.read.mockResolvedValue(ok(loaded));
   evidenceApi.candidates.mockImplementation(async (_id, query) =>
     query.kind === 'pullRequest' ? page(pulls) : page(repositories));
@@ -152,13 +155,15 @@ async function mountPicker(options: Setup = {}) {
           : h(ProjectEvidence, {
               controller: evidence,
               locale: locale.value,
-              onAdd: () => picker.show(),
+              onAdd: (opener: HTMLElement) => picker.show({ opener }),
             }),
         h(EvidenceDialog, {
           picker,
           locale: locale.value,
-          onClosed: () => document.getElementById('project-evidence-add')
-            ?.focus(),
+          onClosed: () => {
+            closed();
+            focusAfterPicker(picker.opener());
+          },
         }),
       ]);
     },
@@ -169,7 +174,9 @@ async function mountPicker(options: Setup = {}) {
   });
   mounted.push(wrapper);
   await flushPromises();
-  return { wrapper, api, evidenceApi, github, navigate, ...fakes, ...context };
+  return {
+    wrapper, api, evidenceApi, github, navigate, closed, ...fakes, ...context,
+  };
 }
 
 async function openPicker() {
@@ -629,5 +636,172 @@ describe('evidence picker', () => {
 
     expect(query('[data-testid="evidence-dialog"]')).toBeNull();
     expect(document.activeElement?.id).toBe('project-evidence-add');
+  });
+
+  it('offers Attach again after the attached item leaves the project',
+    async () => {
+      const { evidenceApi } = await mountPicker();
+      const attachedItem = evidenceItem({
+        kind: 'repository', title: 'octocat/hello',
+        url: 'https://github.com/octocat/hello',
+        repositoryName: 'octocat/hello',
+      });
+      evidenceApi.attach.mockResolvedValue(written([attachedItem], '4'));
+      evidenceApi.remove.mockResolvedValue(written([], '5'));
+      await openPicker();
+      await clickIn('[data-action="evidence-attach"]');
+      expect(texts('[data-evidence-attached]'))
+        .toEqual(['Attached', 'Attached']);
+      document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', {
+        key: 'Escape', bubbles: true,
+      }));
+      await flushPromises();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      await clickIn('[data-action="evidence-remove"]');
+      await openPicker();
+
+      expect(evidenceApi.candidates.mock.calls.map((call) => call[1]))
+        .toEqual([
+          { kind: 'repository', page: 1 },
+          { kind: 'repository', page: 1 },
+        ]);
+      expect(texts('[data-evidence-attached]')).toEqual(['Attached']);
+      expect(document.body.querySelector(
+        `[data-evidence-candidate="${id(1)}"] [data-action="evidence-attach"]`,
+      )).not.toBeNull();
+    });
+
+  it('disables Attach and the link submit while a section write runs',
+    async () => {
+      const { evidenceApi } = await mountPicker({
+        loaded: project({ id: PROJECT, evidence: [evidenceItem()] }),
+      });
+      let answer: (value: never) => void = () => {};
+      evidenceApi.recheck.mockReturnValue(new Promise((resolve) => {
+        answer = resolve;
+      }));
+      await clickIn('[data-action="evidence-recheck"]');
+      await openPicker();
+
+      expect(inDocument<HTMLButtonElement>('[data-action="evidence-attach"]')
+        .disabled).toBe(true);
+      await selectTab('Paste a link');
+      await typeLink('https://github.com/octocat/hello');
+      const submit = inDocument<HTMLButtonElement>(
+        '[data-action="evidence-attach-link"]',
+      );
+      expect(submit.disabled).toBe(true);
+      answer(written([evidenceItem()], '4') as never);
+      await flushPromises();
+
+      expect(submit.disabled).toBe(false);
+      expect(evidenceApi.attach).not.toHaveBeenCalled();
+    });
+
+  it('starts GitHub once and keeps Continue busy after a good reply',
+    async () => {
+      const { evidenceApi, github, navigate } = await mountPicker();
+      evidenceApi.candidates.mockResolvedValue(
+        evidenceFailed('session-required'),
+      );
+      await openPicker();
+
+      await clickIn('[data-action="evidence-continue"]');
+      await clickIn('[data-action="evidence-continue"]');
+
+      expect(github.start).toHaveBeenCalledTimes(1);
+      expect(navigate).toHaveBeenCalledTimes(1);
+      expect(inDocument<HTMLButtonElement>('[data-action="evidence-continue"]')
+        .disabled).toBe(true);
+    });
+
+  it('never navigates after the page is gone', async () => {
+    const { evidenceApi, github, navigate, wrapper } = await mountPicker();
+    evidenceApi.candidates.mockResolvedValue(
+      evidenceFailed('session-required'),
+    );
+    let answer: (value: never) => void = () => {};
+    github.start.mockReturnValue(new Promise((resolve) => {
+      answer = resolve;
+    }));
+    await openPicker();
+    await clickIn('[data-action="evidence-continue"]');
+
+    wrapper.unmount();
+    mounted.pop();
+    answer({ kind: 'ok', value: AUTHORIZE } as never);
+    await flushPromises();
+
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it('keeps the picker open with focus inside when the breakpoint is crossed',
+    async () => {
+      const { picker, closed } = await mountPicker();
+      await openPicker();
+      await selectTab('Pull requests');
+
+      await resize(false);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await flushPromises();
+
+      expect(picker.open.value).toBe(true);
+      expect(closed).not.toHaveBeenCalled();
+      const sheet = inDocument('[data-slot="sheet-content"]');
+      expect(sheet.contains(document.activeElement)).toBe(true);
+      expect(document.activeElement?.textContent?.trim())
+        .toBe('Pull requests');
+    });
+
+  it.each([
+    ['a save runs', (context: Awaited<ReturnType<typeof mountPicker>>) => {
+      context.api.replace.mockReturnValue(new Promise(() => {}));
+      void context.editor.save();
+    }],
+    ['the project changed elsewhere',
+      (context: Awaited<ReturnType<typeof mountPicker>>) => {
+        context.editor.markStale(project({ id: PROJECT, revision: '9' }));
+      }],
+  ])('disables Attach without the save-first hint while %s', async (
+    _name, arrange,
+  ) => {
+    const context = await mountPicker();
+    await openPicker();
+    arrange(context);
+    await flushPromises();
+
+    expect(inDocument<HTMLButtonElement>('[data-action="evidence-attach"]')
+      .disabled).toBe(true);
+    expect(query('[data-testid="evidence-save-first"]')).toBeNull();
+    expect(query('[data-testid="project-evidence-save-first"]')).toBeNull();
+    expect(inDocument('[data-action="evidence-attach"]')
+      .getAttribute('aria-describedby')).toBeNull();
+  });
+
+  it.each([
+    ['https://github.com/octocat/hello', 'repository'],
+    ['https://github.com/octocat/hello/', 'repository'],
+    ['https://github.com/octocat/hello/pull/42', 'pullRequest'],
+    ['https://github.com/octocat/hello/pull/42/', 'pullRequest'],
+    ['https://github.com/octocat/hello/releases/tag/v1.0', 'release'],
+    ['https://github.com/pull/repo', 'repository'],
+    ['https://github.com/octocat/releases/tag/v1', 'repository'],
+    ['https://github.com/a/b/c/pull/1', 'repository'],
+    ['https://github.com/a/b/pull/1/files', 'repository'],
+    ['https://github.com/a/b/issues/1', 'repository'],
+    ['www.github.com/octocat/hello/pull/42', 'pullRequest'],
+    ['https://github.com/a/b/pull/1?x=1#y', 'pullRequest'],
+    ['not a link', 'repository'],
+  ] as const)('classifies %j as %s by its path segments', (link, kind) => {
+    expect(linkKind(link)).toBe(kind);
+  });
+
+  it('bounds the link field at 300 characters', async () => {
+    await mountPicker();
+    await openPicker();
+    await selectTab('Paste a link');
+
+    expect(query('#evidence-link')?.getAttribute('maxlength')).toBe('300');
   });
 });

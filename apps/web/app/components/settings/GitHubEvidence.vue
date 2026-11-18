@@ -17,6 +17,7 @@ import {
   githubEvidenceSettingsCopy,
 } from '../../i18n/github-evidence-settings';
 import { privacySettingsCopy } from '../../i18n/privacy-settings';
+import { projectsCopy } from '../../i18n/projects';
 
 type Failure = Exclude<GitHubEvidenceFailure, 'session-lost'>;
 type Notice = 'connected' | 'failed' | 'different-account';
@@ -38,6 +39,9 @@ const failure = ref<Failure | null>(null);
 const notice = ref<Notice | null>(null);
 const asking = ref(false);
 const disconnectButton = ref<{ $el?: HTMLElement } | null>(null);
+const connectButton = ref<{ $el?: HTMLElement } | null>(null);
+const errorBanner = ref<{ focus?: () => void } | null>(null);
+let cancelled = false;
 let intent: {
   readonly keepLinks: boolean;
   readonly generation: number;
@@ -54,6 +58,7 @@ const errorMessage = computed(() => {
     'upstream': errors.upstream,
     'rate-limited': errors.rateLimited,
     'connection-changed': errors.connectionChanged,
+    'busy': projectsCopy[locale.value].tryAgain,
     'failed': errors.failed,
   };
   return messages[failure.value];
@@ -163,22 +168,37 @@ async function sendDisconnect(keepLinks: boolean): Promise<void> {
   }
 }
 
-function disconnect(): Promise<void> {
+async function disconnect(): Promise<void> {
   if (view.value?.hasEvidence === true) {
     asking.value = true;
-    return Promise.resolve();
+    return;
   }
-  return sendDisconnect(true);
+  await sendDisconnect(true);
+  await focusAfterDisconnect();
 }
 
-function choose(keepLinks: boolean | null): Promise<void> {
+async function focusAfterDisconnect(): Promise<void> {
+  await nextTick();
+  if (errorMessage.value !== null) {
+    errorBanner.value?.focus?.();
+    return;
+  }
+  (disconnectButton.value ?? connectButton.value)?.$el?.focus();
+}
+
+async function choose(keepLinks: boolean | null): Promise<void> {
   asking.value = false;
-  return keepLinks === null ? Promise.resolve() : sendDisconnect(keepLinks);
+  cancelled = keepLinks === null;
+  if (keepLinks === null) return;
+  await sendDisconnect(keepLinks);
+  await focusAfterDisconnect();
 }
 
 async function restoreFocus(): Promise<void> {
+  if (!cancelled) return;
+  cancelled = false;
   await nextTick();
-  if (!pending.value) disconnectButton.value?.$el?.focus();
+  disconnectButton.value?.$el?.focus();
 }
 
 function readCallbackResult(): void {
@@ -254,6 +274,7 @@ onMounted(() => {
     </StatusBanner>
     <StatusBanner
       v-if="errorMessage"
+      ref="errorBanner"
       kind="error"
       testid="evidence-error"
     >
@@ -363,6 +384,7 @@ onMounted(() => {
       </p>
       <div>
         <Button
+          ref="connectButton"
           data-testid="evidence-connect"
           :disabled="!csrfToken || pending"
           type="button"

@@ -19,6 +19,7 @@ export type GitHubEvidenceFailure
     | 'upstream'
     | 'rate-limited'
     | 'connection-changed'
+    | 'busy'
     | 'failed';
 
 export type GitHubEvidenceOutcome<T>
@@ -99,6 +100,7 @@ function failureOf(status: number, error: unknown): GitHubEvidenceFailure {
   if (code === 'rate_limited') return 'rate-limited';
   if (code === 'evidence_upstream') return 'upstream';
   if (code === 'evidence_connection_changed') return 'connection-changed';
+  if (status === 503 && code === 'public_state_busy') return 'busy';
   return 'failed';
 }
 

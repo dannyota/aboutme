@@ -13,6 +13,7 @@ import DateRangeField from '@/components/editor/forms/DateRangeField.vue';
 import type { FieldIntent } from '@/components/editor/forms/fieldIntent';
 import EvidenceDialog from '@/components/projects/EvidenceDialog.vue';
 import {
+  focusAfterPicker,
   useEvidencePicker,
   useEvidenceReturn,
 } from '@/components/projects/evidencePickerState';
@@ -111,7 +112,13 @@ const evidence = useProjectEvidence(editor, changed, {
   api: evidenceApi,
   projects: api,
   auth,
-  onSessionEnded: () => picker.show({ sessionEnded: true }),
+  onSessionEnded: (evidenceId) => picker.show({
+    sessionEnded: true,
+    opener: document.querySelector<HTMLElement>(
+      `[data-evidence-item="${CSS.escape(evidenceId)}"] `
+      + '[data-action="evidence-recheck"]',
+    ),
+  }),
 });
 const picker = useEvidencePicker({
   evidence,
@@ -119,7 +126,11 @@ const picker = useEvidencePicker({
   api: evidenceApi,
   github: createGitHubEvidenceApi(),
   auth,
+  onProjectGone: () => {
+    editor.view.value = 'not-found';
+  },
 });
+const evidenceWriting = computed(() => evidence.pending.value !== null);
 const showEvidence = computed(() =>
   githubEvidence.value && evidence.available.value);
 useEvidenceReturn(picker, computed(() =>
@@ -213,17 +224,13 @@ function removeLanguage(): void {
 }
 
 async function save(): Promise<void> {
-  if (evidence.pending.value !== null) return;
+  if (evidenceWriting.value) return;
   const held = drafts.flushAll();
   await editor.save(held ? [{ path: 'dates', code: 'date-range-order' }] : []);
 }
 
-function focusEvidenceAdd(): void {
-  void nextTick(() => {
-    const add = document.getElementById('project-evidence-add');
-    if (add instanceof HTMLButtonElement && !add.disabled) add.focus();
-    else document.getElementById('project-evidence-title')?.focus();
-  });
+function focusEvidenceOpener(): void {
+  void nextTick(() => focusAfterPicker(picker.opener()));
 }
 
 function closeRelease(): void {
@@ -476,7 +483,7 @@ function closeRelease(): void {
         v-if="showEvidence"
         :controller="evidence"
         :locale="locale"
-        @add="picker.show()"
+        @add="(opener) => picker.show({ opener })"
       />
 
       <ProjectResumes
@@ -510,6 +517,7 @@ function closeRelease(): void {
         <div>
           <Button
             id="project-change-address"
+            :disabled="evidenceWriting"
             type="button"
             variant="outline"
             @click="releaseKind = 'address'"
@@ -535,6 +543,7 @@ function closeRelease(): void {
         <div>
           <Button
             id="project-delete"
+            :disabled="evidenceWriting"
             type="button"
             variant="destructive"
             @click="releaseKind = 'delete'"
@@ -553,8 +562,7 @@ function closeRelease(): void {
       >
         <StateMark :state="saveMark" />
         <Button
-          :disabled="!changed || editor.saving.value
-            || evidence.pending.value !== null"
+          :disabled="!changed || editor.saving.value || evidenceWriting"
           data-action="project-save"
           type="submit"
         >
@@ -589,7 +597,7 @@ function closeRelease(): void {
       v-if="showEvidence"
       :locale="locale"
       :picker="picker"
-      @closed="focusEvidenceAdd"
+      @closed="focusEvidenceOpener"
     />
   </main>
 </template>

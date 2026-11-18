@@ -52,7 +52,7 @@ export interface ProjectEvidenceDeps {
   readonly auth: ProjectAuth;
   readonly uuid?: () => string;
   readonly now?: () => number;
-  readonly onSessionEnded?: () => void;
+  readonly onSessionEnded?: (evidenceId: string) => void;
 }
 
 export type EvidenceEditor = Pick<
@@ -60,17 +60,20 @@ export type EvidenceEditor = Pick<
   'view' | 'loaded' | 'saving' | 'notice' | 'adoptEvidence' | 'markStale'
 >;
 
+export type SectionOutcome = AttachOutcome['kind'];
+
 export interface ProjectEvidenceController {
   readonly available: ComputedRef<boolean>;
   readonly items: ComputedRef<readonly ProjectEvidence[]>;
+  readonly unsaved: ComputedRef<boolean>;
   readonly locked: ComputedRef<boolean>;
   readonly atLimit: ComputedRef<boolean>;
   readonly pending: Ref<string | null>;
   readonly status: Ref<EvidenceNotice | null>;
   attach(body: AttachBody): Promise<AttachOutcome>;
-  move(id: string, step: -1 | 1): Promise<void>;
-  recheck(id: string): Promise<void>;
-  remove(id: string): Promise<void>;
+  move(id: string, step: -1 | 1): Promise<SectionOutcome>;
+  recheck(id: string): Promise<SectionOutcome>;
+  remove(id: string): Promise<SectionOutcome>;
 }
 
 type Send = (
@@ -127,7 +130,8 @@ export function useProjectEvidence(
     editor.loaded.value?.evidence !== undefined);
   const items = computed<readonly ProjectEvidence[]>(() =>
     editor.loaded.value?.evidence ?? []);
-  const locked = computed(() => changed.value
+  const unsaved = computed(() => changed.value);
+  const locked = computed(() => unsaved.value
     || editor.saving.value
     || editor.notice.value === 'changed-elsewhere');
   const atLimit = computed(() => items.value.length >= EVIDENCE_LIMIT);
@@ -249,15 +253,17 @@ export function useProjectEvidence(
     target: string,
     intent: Intent,
     send: (projectId: string) => Send,
-  ): Promise<void> {
+  ): Promise<SectionOutcome> {
     const outcome = await write(target, intent, send);
     if (outcome.kind === 'failed') status.value = outcome.notice;
-    if (outcome.kind === 'session-ended') deps.onSessionEnded?.();
+    if (outcome.kind === 'session-ended') deps.onSessionEnded?.(target);
+    return outcome.kind;
   }
 
   return {
     available,
     items,
+    unsaved,
     locked,
     atLimit,
     pending,
@@ -269,10 +275,10 @@ export function useProjectEvidence(
       const order = items.value.map((item) => item.id);
       const index = order.indexOf(id);
       const next = index + step;
-      if (index === -1 || next < 0 || next >= order.length) return;
+      if (index === -1 || next < 0 || next >= order.length) return 'refused';
       order[index] = order[next]!;
       order[next] = id;
-      await sectionWrite(id, { op: 'order', order }, (projectId) =>
+      return sectionWrite(id, { op: 'order', order }, (projectId) =>
         (revision, key, csrfToken) =>
           deps.api.reorder(projectId, revision, order, key, csrfToken));
     },

@@ -47,6 +47,7 @@ export type EvidenceFailure
     | 'limit'
     | 'unsupported-link'
     | 'size'
+    | 'too-large'
     | 'upstream'
     | 'rate-limited'
     | 'busy'
@@ -149,6 +150,7 @@ function failureOf(response: Response, error: unknown): EvidenceResult<never> {
   }
   if (status === 401) return failed('session-lost');
   if (status === 400) return failed('invalid');
+  if (status === 413) return failed('too-large');
   const failure = CODES[`${status} ${code}`] ?? 'unavailable';
   return failure === 'rate-limited'
     ? failed(failure, parseRetryAfter(response.headers.get('Retry-After')))

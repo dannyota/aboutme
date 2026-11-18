@@ -19,9 +19,8 @@ const error = computed(() => {
   const notice = props.picker.linkError.value;
   return notice === null ? undefined : evidenceNoticeText(notice, props.locale);
 });
-const disabled = computed(() => props.picker.locked.value
+const disabled = computed(() => props.picker.blocked.value
   || props.picker.atLimit.value
-  || props.picker.attaching.value !== null
   || props.picker.link.value.trim() === '');
 </script>
 
@@ -45,6 +44,7 @@ const disabled = computed(() => props.picker.locked.value
         :aria-invalid="invalid"
         autocomplete="off"
         inputmode="url"
+        maxlength="300"
         :model-value="picker.link.value"
         type="url"
         @update:model-value="picker.setLink(String($event))"
@@ -52,7 +52,7 @@ const disabled = computed(() => props.picker.locked.value
     </FormField>
     <div>
       <Button
-        :aria-describedby="picker.locked.value
+        :aria-describedby="picker.unsaved.value
           ? 'evidence-save-first'
           : undefined"
         data-action="evidence-attach-link"

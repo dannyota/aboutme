@@ -84,7 +84,7 @@ function onOpenAutoFocus(event: Event): void {
 
 function onCloseAutoFocus(event: Event): void {
   event.preventDefault();
-  emit('closed');
+  if (!props.picker.open.value) emit('closed');
 }
 </script>
 
@@ -151,7 +151,7 @@ function onCloseAutoFocus(event: Event): void {
         {{ copy.limit }}
       </p>
       <p
-        v-if="picker.locked.value"
+        v-if="picker.unsaved.value"
         id="evidence-save-first"
         class="text-sm"
         data-testid="evidence-save-first"
@@ -200,11 +200,12 @@ function onCloseAutoFocus(event: Event): void {
             </p>
             <div>
               <Button
-                :aria-describedby="picker.locked.value
+                :aria-describedby="picker.unsaved.value
                   ? 'evidence-save-first'
                   : undefined"
                 data-action="evidence-continue"
-                :disabled="picker.locked.value || picker.starting.value"
+                :disabled="picker.locked.value || picker.busy.value
+                  || picker.starting.value"
                 type="button"
                 @click="picker.continueWithGitHub()"
               >

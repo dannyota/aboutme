@@ -1703,3 +1703,77 @@ mutationTest('evidence picker rejects horizontal overflow at 320 px',
     expect(await pickerFits(page), 'Picker fit at 320px.').toBe(false);
     await restore();
   });
+
+async function focusInPicker(page: Page): Promise<string | null> {
+  return page.evaluate(() => {
+    const picker = document.querySelector('[data-testid="evidence-dialog"]');
+    const active = document.activeElement;
+    if (picker === null || active === null || !picker.contains(active)) {
+      return null;
+    }
+    return [
+      active.tagName, active.id, active.getAttribute('data-action'),
+      active.textContent?.trim(),
+    ].join('|');
+  });
+}
+
+async function expectFocusCycle(
+  page: Page,
+  key: 'Tab' | 'Shift+Tab',
+): Promise<void> {
+  const first = await focusInPicker(page);
+  expect(first, `Focus starts in the picker before ${key}.`).not.toBeNull();
+  const seen = new Set([first]);
+  for (let step = 1; step <= 40; step += 1) {
+    await page.keyboard.press(key);
+    const current = await focusInPicker(page);
+    expect(current, `${key} ${step} stays in the picker.`).not.toBeNull();
+    if (current === first) {
+      expect(seen.size, `${key} visits more than one control.`)
+        .toBeGreaterThan(2);
+      return;
+    }
+    seen.add(current);
+  }
+  throw new Error(`${key} never cycled back to the first control.`);
+}
+
+for (const width of [1280, 390]) {
+  test(`evidence: Tab and Shift+Tab cycle inside the picker at ${width} px`,
+    async ({ page }) => {
+      await openPickerAt(page, width);
+      await expect.poll(() => focusInPicker(page), 'Focus moves in.')
+        .not.toBeNull();
+
+      await expectFocusCycle(page, 'Tab');
+      await expectFocusCycle(page, 'Shift+Tab');
+    });
+}
+
+for (const [value, text] of [
+  ['failed', 'GitHub was not connected. Try again.'],
+  ['different_account',
+    'This GitHub account differs from the connected one. Disconnect first.'],
+] as const) {
+  test(`evidence: the ${value} return reopens the picker with its notice`,
+    async ({ page }) => {
+      const { evidence } = await open(page,
+        `/app/projects/${FIRST}?tab=a&evidence=${value}`,
+        evidenceLibrary([]), { evidence: {} });
+
+      const outcome = picker(page).getByTestId('evidence-outcome');
+      await expect(outcome).toContainText(text);
+      await expect(page).toHaveURL(`/app/projects/${FIRST}?tab=a`);
+      await expect(picker(page).getByRole('tab', { name: 'Repositories' }))
+        .toHaveAttribute('aria-selected', 'true');
+      const settings = outcome.getByRole('link', { name: 'Settings' });
+      if (value === 'different_account') {
+        await expect(settings)
+          .toHaveAttribute('href', '/app/settings/sessions');
+      } else {
+        await expect(settings).toHaveCount(0);
+      }
+      expect(evidence!.reads).toEqual(['?kind=repository&page=1']);
+    });
+}
