@@ -61,7 +61,7 @@ the [scaling contract](scaling/README.md) and
 | Showcase listing requests per IP                         | ≤ 60/min                                                                                                                                                          | Showcase route limiter                                   |
 | Showcase listings per page / page number                 | 12 / 1 to 100                                                                                                                                                     | Showcase route                                           |
 | pgx pool size                                            | ≤ 20 per app task; 12 once a second replica serves                                                                                                                | pgx pool configuration                                   |
-| GitHub evidence cleanup at shutdown                      | ≤ 6 s from the signal: exchanges cancelled, every held token revoked once within the 5 s request bound; inside Podman's 10 s container stop                       | `internal/githubevidence`                                |
+| GitHub evidence cleanup at shutdown                      | ≤ 6 s from the signal: exchanges cancelled, every held token revoked once within the 5 s request bound; inside the 20 s [server stop](#server-stop) budget        | `internal/githubevidence`                                |
 | GitHub evidence session                                  | ≤ 30 min, one per account, in memory only; ≤ 10 starts per account per hour                                                                                       | `internal/githubevidence`                                |
 | GitHub evidence requests per account                     | ≤ 120/h across sessions, counted before sending; 5 s and 512 KiB per response; no retry                                                                           | `internal/githubevidence`                                |
 | GitHub evidence listings                                 | 30 rows per page; pages 1 to 10 per kind                                                                                                                          | Candidates route                                         |
@@ -267,6 +267,32 @@ Notes on rows whose reason is not obvious:
 - **Realtime.** Queue overflow disconnects a slow consumer so its next
   unconditional read repairs it. The two-second write deadline fits inside the
   five-second revocation drain.
+
+## Server stop
+
+One budget starts when the server sees `SIGTERM` or `SIGINT`. Each step has a
+deadline measured from that moment, so the process exits before Podman sends
+`SIGKILL` even when a connection stays open or a render ignores cancellation.
+`apps/server/cmd/server/serve.go` enforces the server rows; the Vietnam host
+units and deploy scripts enforce the rest.
+
+| Step, in order                               | Deadline from the signal                                                                                                                                            |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Owner and public realtime streams            | Closed when the drain starts, so they do not hold it                                                                                                                |
+| Public and private-print HTTP drains         | 10 s each, in parallel; then remaining connections are closed                                                                                                       |
+| Print queue close                            | Renders are cancelled with `ErrClosed` at the signal; the wait for them ends at 10 s, beside the drains                                                             |
+| GitHub evidence cleanup                      | 6 s, its own row above; its wait also ends at 12 s                                                                                                                  |
+| Background worker joins                      | 12 s                                                                                                                                                                |
+| View count final flush                       | 18 s, and at most 10 s for its write                                                                                                                                |
+| Database pool close                          | 20 s; the server budget ends here                                                                                                                                   |
+| Podman `--stop-timeout` on `aboutme-server`  | 22 s, then `SIGKILL`                                                                                                                                                |
+| systemd `TimeoutStopSec` on `aboutme-server` | 25 s                                                                                                                                                                |
+| `aboutme_stop_edge` client timeout           | 28 s plus 1 s kill                                                                                                                                                  |
+| Edge transition holding the retention lock   | ≤ 43 s with its state checks; a waiting retention pass has a 60 s lock wait and a 1 min start timeout, so at least 15 s remain for the pass (about 5 s on the host) |
+
+Each limit nests inside the next. The final flush ends before the pool closes,
+so no count write runs on a closed pool. Podman 4.9 rejects the Quadlet
+`StopTimeout=` key, so the stop timeout goes through `PodmanArgs=`.
 
 ## CIMD
 

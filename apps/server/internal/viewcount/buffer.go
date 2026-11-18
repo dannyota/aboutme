@@ -131,9 +131,6 @@ func (c *Counter) Run(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			if err := c.Flush(context.WithoutCancel(ctx)); err != nil { //nolint:contextcheck // The final flush must outlive the canceled run context.
-				c.logger.Warn("viewcount: final flush dropped counts")
-			}
 			return
 		case <-ticker.C:
 			if err := c.Flush(ctx); err != nil {

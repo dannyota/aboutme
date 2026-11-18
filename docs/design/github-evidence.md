@@ -114,9 +114,9 @@ months, which is why it is dropped at once.
 - On shutdown, evidence cleanup starts at the signal, alongside the HTTP drains.
   In-flight code exchanges are cancelled, and every held token gets its one
   revocation attempt in parallel. Cleanup ends within 6 seconds of the signal
-  (the 5-second request bound plus 1 second), so it fits inside Podman's
-  10-second container stop. A callback that arrives after the signal does no
-  exchange and redirects with `evidence=failed`.
+  (the 5-second request bound plus 1 second), so it fits inside the server's
+  [stop budget](budgets.md#server-stop). A callback that arrives after the
+  signal does no exchange and redirects with `evidence=failed`.
 - One account boundary orders every change: the account's user row lock in a
   database transaction. The evidence routes lock the user, the caller's session,
   then the GitHub connection row. Session-authenticated operations revalidate

@@ -338,14 +338,47 @@ func TestFlushDropsTheBatchOnStoreError(t *testing.T) {
 	}
 }
 
-func TestRunFlushesOnShutdown(t *testing.T) {
+func TestRunLeavesTheFinalFlushToTheShutdownBudget(t *testing.T) {
 	f := newFixture(t, 0)
 	f.view(anon("203.0.113.40"), 9*time.Second, EdgeLabels{})
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	f.counter.Run(ctx)
+	if len(f.store.days) != 0 {
+		t.Fatalf("days after Run stopped = %+v, want none before the final flush", f.store.days)
+	}
+	if err := f.counter.Flush(context.Background()); err != nil {
+		t.Fatalf("final Flush error = %v", err)
+	}
 	if len(f.store.days) != 1 || f.store.days[0].Counted != 1 {
-		t.Fatalf("days after shutdown = %+v, want one counted view", f.store.days)
+		t.Fatalf("days after the final flush = %+v, want one counted view", f.store.days)
+	}
+}
+
+type blockingStore struct {
+	*fakeStore
+}
+
+func (blockingStore) AddCounts(ctx context.Context, _ []DayCell, _ []SignalCell) error {
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+func TestFlushEndsAtTheCallersDeadline(t *testing.T) {
+	f := newFixture(t, 0)
+	f.view(anon("203.0.113.41"), 9*time.Second, EdgeLabels{})
+	f.counter.store = blockingStore{f.store}
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- f.counter.Flush(ctx) }()
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("Flush error = %v, want deadline exceeded", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Flush outlived its caller's deadline")
 	}
 }
 

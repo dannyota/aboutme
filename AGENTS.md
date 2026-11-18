@@ -78,7 +78,7 @@ The owner talks to the primary agent, which runs as `manager` in `.claude/settin
 
 |Tool|Where|Agents with model and effort|
 |-|-|-|
-|Claude Code|`.claude/agents/`|`manager` (primary; the owner chooses its model); latest-Opus subagents for implementation, troubleshooting, QA, and independent review; Opus or Fable for UI design ([workflow](instructions/workflow.md#models-and-ownership))|
+|Claude Code|`.claude/agents/`|`manager` (primary; the owner chooses its model); latest-Opus subagents for implementation, troubleshooting, QA, and independent review; Opus or Fable for UI design, and Fable never writes code ([workflow](instructions/workflow.md#models-and-ownership))|
 |Codex (optional)|`.codex/agents/`|`implementer` (`gpt-6.1-terra` xhigh, workspace-write), `troubleshooter` (`gpt-6.1-terra` xhigh, workspace-write, root cause and fix), `code_reviewer` (`gpt-6.1-sol` xhigh, read-only), `design_reviewer` (`gpt-6.1-sol` xhigh, read-only), `qa` (`gpt-6.1-terra` xhigh, workspace-write), `explorer` (`gpt-6-luna` low, read-only), `designer` (`gpt-6-astra` high, workspace-write)|
 
 The table gives role defaults; dispatch overrides and independent reviews follow [workflow](instructions/workflow.md#models-and-ownership). Codex `workspace-write` roles get network access and run their own bounded checks through the managed lock; read-only roles get network only with `--search`. Set model and effort explicitly on every Codex dispatch. Track these agent definitions; keep other local tool settings ignored.
