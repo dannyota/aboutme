@@ -143,11 +143,18 @@ Session cookie and CSRF only. `kind` is `repository`, `pullRequest` or
   request's candidate date is `closed_at`; attach stores `merged_at`. "Attached"
   matches a pull request by repository full name and number; `nextPage` is
   `page + 1` when GitHub returned 30 rows and `page` is below 10, else `null`.
+  Although it is a read, it requires a valid `X-CSRF-Token` and otherwise
+  answers 403 `csrf_rejected` before any GitHub request, so a link or a
+  cross-site navigation cannot spend the owner's GitHub budget or replace the
+  listed candidates.
 - `POST /api/v1/projects/{id}/evidence` with `{kind, link}` or
   `{kind, candidateId}`; `POST .../{evidenceId}/recheck`;
   `PUT .../evidence/order` with `{order: [evidenceId]}` naming every item once;
   `DELETE .../{evidenceId}`. Each is a library mutation and answers 200 with
-  `{evidence, projectRevision, resumeRevisions}`.
+  `{evidence, projectRevision, resumeRevisions}`. An order equal to the current
+  one, including `{order: []}` on a project without evidence, answers the
+  current state, advances no project or resume revision, and replays like any
+  other write.
 - Project reads and the export's project record gain a read-only `evidence`
   array of
   `{id, kind, url, repositoryName, title, itemDate, checkedAt, confirmed, flagReason}`,
@@ -196,9 +203,11 @@ under [ADR 0006](../adr/0006-transactional-idempotency.md):
   reports beside `hasEvidence`, 0 when no connection row exists. A different
   current value answers 409 `evidence_connection_changed`, so a lost response
   cannot remove evidence attached after a reconnect. No ETag is involved.
-- `Idempotency-Key` is required. The fingerprint covers the route, `keepLinks`
-  and `generation`. A stored replay for the key is answered before the
-  generation check; the same key with a different fingerprint answers the
+- `Idempotency-Key` is required. The fingerprint is the
+  [ADR 0006](../adr/0006-transactional-idempotency.md) tuple that
+  `AccountWriteIdentity` builds, with `if_match` absent and the payload
+  `keepLinks` and `generation`. A stored replay for the key is answered before
+  the generation check; the same key with a different fingerprint answers the
   existing idempotency conflict.
 - When any evidence item exists, the affected set is every live resume linking a
   project with evidence. Planning reads it and acquires and closes the fences
