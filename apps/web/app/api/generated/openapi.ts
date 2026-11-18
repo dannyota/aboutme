@@ -720,7 +720,7 @@ export interface paths {
         };
         /**
          * One page of GitHub items the project can attach
-         * @description Lists one page of the caller's repositories, merged pull requests or releases through the live evidence session. Repository listings drop forks and private repositories, and release listings drop drafts and releases by another author, after fetching, so a page may hold fewer than 30 rows. Each row carries a `candidateId` valid only in this session. `attached` marks a row already on this project: a pull request by repository full name and number, other kinds by item id. Each call is one GitHub request toward the 120 per account per hour. The request must carry either `Sec-Fetch-Site: same-origin` or a valid `X-CSRF-Token`, each given once; otherwise it answers `403 csrf_rejected` before any GitHub request or change to the session's listed candidates. Reads share the resume read limiter. Takes no body. Every response uses Cache-Control no-store, no-transform.
+         * @description Lists one page of the caller's repositories, merged pull requests or releases through the live evidence session. Repository listings drop forks and private repositories, and release listings drop drafts and releases by another author, after fetching, so a page may hold fewer than 30 rows. Each row carries a `candidateId` valid only in this session. `attached` marks a row already on this project: a pull request by repository full name and number, other kinds by item id. Each call is one GitHub request toward the 120 per account per hour. The request must carry a valid `X-CSRF-Token`, given once; otherwise it answers `403 csrf_rejected` before any GitHub request or change to the session's listed candidates. Reads share the resume read limiter. Takes no body. Every response uses Cache-Control no-store, no-transform.
          */
         get: operations["listProjectEvidenceCandidates"];
         put?: never;
@@ -3713,7 +3713,7 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description `csrf_rejected`: the request carried neither `Sec-Fetch-Site: same-origin` nor a valid `X-CSRF-Token`, as a cross-site navigation does. Refused before any GitHub request, any use of the hourly budget and any change to the listed candidates. */
+        /** @description `csrf_rejected`: the request carried no valid `X-CSRF-Token`, as a link or a cross-site navigation does. Refused before any GitHub request, any use of the hourly budget and any change to the listed candidates. */
         ProjectEvidenceCandidatesCsrfRejected: {
             headers: {
                 [name: string]: unknown;

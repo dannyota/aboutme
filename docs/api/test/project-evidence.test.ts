@@ -102,19 +102,17 @@ describe("project evidence surface", () => {
     }
   });
 
-  it("uses the cookie session only, with CSRF on every write", () => {
-    for (const [, method, id, op] of operations()) {
-      expect(op.security, id).toEqual(
-        method === "get"
-          ? [{ sessionCookie: [], csrfToken: [] }, { sessionCookie: [] }]
-          : [{ sessionCookie: [], csrfToken: [] }],
-      );
+  it("uses the cookie session only, with CSRF on every operation", () => {
+    for (const [, , id, op] of operations()) {
+      expect(op.security, id).toEqual([{ sessionCookie: [], csrfToken: [] }]);
     }
   });
 
-  it("refuses a candidates read without same-origin fetch metadata or a token", () => {
+  it("refuses a candidates read without a valid CSRF token", () => {
     const op = operation("listProjectEvidenceCandidates");
-    expect(op.description).toContain("`Sec-Fetch-Site: same-origin`");
+    expect(op.security).toEqual([{ sessionCookie: [], csrfToken: [] }]);
+    expect(op.description).toContain("valid `X-CSRF-Token`");
+    expect(op.description).not.toContain("Sec-Fetch-Site");
     expect(op.description).toContain("`403 csrf_rejected`");
     expect(codes(op, "403")).toEqual(["csrf_rejected"]);
   });

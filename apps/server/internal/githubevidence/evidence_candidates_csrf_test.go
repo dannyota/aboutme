@@ -37,6 +37,7 @@ func TestEvidenceCandidates_ACrossSiteListingIsRefusedBeforeGitHub(t *testing.T)
 	listed := eh.listed("kind=repository&page=1").Items[0].CandidateID
 	reads, spent := len(eh.gh.readCalls()), eh.spentRequests()
 	for name, header := range map[string]http.Header{
+		"same-origin":           {"Sec-Fetch-Site": {"same-origin"}},
 		"cross-site":            {"Sec-Fetch-Site": {"cross-site"}},
 		"same-site":             {"Sec-Fetch-Site": {"same-site"}},
 		"none":                  {"Sec-Fetch-Site": {"none"}},
@@ -63,7 +64,7 @@ func TestEvidenceCandidates_ACrossSiteListingIsRefusedBeforeGitHub(t *testing.T)
 	}
 }
 
-func TestEvidenceCandidates_ASameOriginFetchOrATokenLists(t *testing.T) {
+func TestEvidenceCandidates_AValidTokenLists(t *testing.T) {
 	eh := newEvidenceHarness(t)
 	requireOutcome(t, eh.connect(eh.raw, eh.session), outcomeConnected)
 	eh.gh.readJSON("/user/repos", http.StatusOK, `[`+repositoryJSON+`]`)
@@ -71,9 +72,9 @@ func TestEvidenceCandidates_ASameOriginFetchOrATokenLists(t *testing.T) {
 		csrf   string
 		header http.Header
 	}{
-		"same-origin fetch":              {"", http.Header{"Sec-Fetch-Site": {"same-origin"}}},
-		"token without fetch metadata":   {csrfFor(eh.session), nil},
-		"token with cross-site metadata": {csrfFor(eh.session), http.Header{"Sec-Fetch-Site": {"cross-site"}}},
+		"token without fetch metadata":    {csrfFor(eh.session), nil},
+		"token with same-origin metadata": {csrfFor(eh.session), http.Header{"Sec-Fetch-Site": {"same-origin"}}},
+		"token with cross-site metadata":  {csrfFor(eh.session), http.Header{"Sec-Fetch-Site": {"cross-site"}}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			spent := eh.spentRequests()
