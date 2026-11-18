@@ -8,7 +8,8 @@ The primary session runs as `manager`. It plans, briefs, verifies each worker it
 |-|-|
 |Design, documents, and decisions|The primary|
 |Implementation, troubleshooting with its fix, and QA proofs|Latest Claude Opus, currently Opus 5.5, as a subagent of the primary or of the Ubuntu host session|
-|UI design, visual direction, and frontend implementation (owner, 2026-11-15)|Claude Opus or Fable as such a subagent|
+|UI design and visual direction (owner, 2026-11-15)|Claude Opus or Fable as such a subagent|
+|Frontend implementation|Latest Claude Opus as such a subagent; Fable never writes code (owner, 2026-11-18)|
 |Independent review and fix confirmation: code, architecture and contract designs, adversarial passes|A fresh latest-Opus subagent of the primary (owner, 2026-11-18)|
 |Exploration, searches, summaries, mechanical reading|An Explore subagent|
 |A second model family, when the primary judges it worth the cost|Codex roles through `scripts/codex-agent.sh` (optional)|
