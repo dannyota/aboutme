@@ -58,7 +58,7 @@ func run(ctx context.Context, settings config) (resultErr error) {
 
 	server, done, err := startPrivateServer(ctx, queue)
 	if err != nil {
-		if closeErr := queue.Close(); closeErr != nil {
+		if closeErr := queue.Shutdown(context.WithoutCancel(ctx)); closeErr != nil {
 			return errors.New("shutdown_failed")
 		}
 		return errors.New("private_server_failed")
@@ -73,7 +73,7 @@ func run(ctx context.Context, settings config) (resultErr error) {
 		defer cancel()
 		shutdownErr := server.Shutdown(shutdownCtx)
 		serveErr := <-done
-		queueErr := queue.Close()
+		queueErr := queue.Shutdown(context.WithoutCancel(parent))
 		if shutdownErr != nil || serveErr != nil || queueErr != nil {
 			return errors.New("shutdown_failed")
 		}

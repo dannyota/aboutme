@@ -79,7 +79,15 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("create database pool: %w", err)
 	}
-	defer pool.Close(context.Background())
+	stopping := false
+	defer func() {
+		if stopping {
+			return
+		}
+		closeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), shutdownTimeout)
+		defer cancel()
+		pool.Close(closeCtx)
+	}()
 	queries := store.New(pool)
 	coordinator, err := app.NewPublicState(ctx, queries)
 	if err != nil {
@@ -130,12 +138,16 @@ func run() error {
 	if printRenderer == nil {
 		logger.Info("print and PDF rendering is unavailable on this platform", "platform", platformruntime.GOOS)
 	}
-	closePrintQueue := func() {
-		if closeErr := printQueue.Close(); closeErr != nil {
+	defer func() {
+		if stopping {
+			return
+		}
+		closeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), shutdownTimeout)
+		defer cancel()
+		if closeErr := printQueue.Shutdown(closeCtx); closeErr != nil {
 			logger.Error("close print queue failed")
 		}
-	}
-	defer closePrintQueue()
+	}()
 	printHandler, err := app.PrivatePrintHandler(printQueue, printRenderer != nil)
 	if err != nil {
 		return errors.New("initialize private print handler")
@@ -269,18 +281,21 @@ func run() error {
 	evidenceClosed := evidence.Run(evidenceCtx)
 
 	logger.Info("starting", "env", cfg.Env)
-	err = servePair(ctx, logger, ln, handler, printListener, printHandler, closePrintQueue)
-	stopEvidence()
-	<-evidenceClosed
-	if shutdownErr := evidence.Shutdown(context.WithoutCancel(ctx)); shutdownErr != nil {
-		logger.Error("github evidence shutdown did not finish revocations")
-	}
-	cancelWorker()
-	stopViews()
-	<-workerDone
-	<-listenerDone
-	<-totpHealthDone
-	<-cardsDone
-	<-viewsDone
-	return err
+	stopping = true
+	return serveUntilStopped(ctx, logger, serverStopBudget(), ln, handler, printListener, printHandler, stopSteps{
+		closeStreams:  hub.Close,
+		stopRendering: printQueue.Shutdown,
+		stopEvidence: func(stopCtx context.Context) error {
+			stopEvidence()
+			<-evidenceClosed
+			return evidence.Shutdown(stopCtx)
+		},
+		stopWorkers: func() {
+			cancelWorker()
+			stopViews()
+		},
+		joins:      []<-chan struct{}{workerDone, listenerDone, totpHealthDone, cardsDone, viewsDone},
+		flushViews: views.Counter.Flush,
+		closePool:  pool.Close,
+	})
 }

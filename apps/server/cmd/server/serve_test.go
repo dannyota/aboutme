@@ -35,7 +35,9 @@ func TestServePairSeparatesPublicAndPrivateRoutesAndJoins(t *testing.T) {
 	var stops atomic.Int32
 	done := make(chan error, 1)
 	go func() {
-		done <- servePair(ctx, slog.New(slog.NewTextHandler(io.Discard, nil)), publicListener, publicMux, privateListener, privateMux, func() { stops.Add(1) })
+		_, serveErr := servePair(ctx, slog.New(slog.NewTextHandler(io.Discard, nil)), serverStopBudget(), publicListener, publicMux, privateListener, privateMux,
+			func() {}, func(context.Context) error { stops.Add(1); return nil })
+		done <- serveErr
 	}()
 	client := &http.Client{Timeout: time.Second}
 	for _, check := range []struct {
@@ -112,7 +114,7 @@ func TestServe_DrainsInFlightMCPRequestBeforeReturning(t *testing.T) {
 
 	serveDone := make(chan error, 1)
 	go func() {
-		serveDone <- serve(ctx, logger, ln, handler)
+		serveDone <- serveHTTP(ctx, logger, ln, &http.Server{Handler: handler, ReadHeaderTimeout: 5 * time.Second}, shutdownTimeout)
 	}()
 
 	reqDone := make(chan error, 1)
@@ -139,7 +141,7 @@ func TestServe_DrainsInFlightMCPRequestBeforeReturning(t *testing.T) {
 
 	select {
 	case err := <-serveDone:
-		t.Fatalf("serve() returned before the in-flight request completed; shutdown did not drain: %v", err)
+		t.Fatalf("serveHTTP() returned before the in-flight request completed; shutdown did not drain: %v", err)
 	case <-time.After(100 * time.Millisecond):
 	}
 	if completed.Load() {
@@ -151,10 +153,10 @@ func TestServe_DrainsInFlightMCPRequestBeforeReturning(t *testing.T) {
 	select {
 	case err := <-serveDone:
 		if err != nil {
-			t.Fatalf("serve() error: %v", err)
+			t.Fatalf("serveHTTP() error: %v", err)
 		}
 	case <-time.After(5 * time.Second):
-		t.Fatal("serve() did not return after the in-flight request completed")
+		t.Fatal("serveHTTP() did not return after the in-flight request completed")
 	}
 
 	if !completed.Load() {

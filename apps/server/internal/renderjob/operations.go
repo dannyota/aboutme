@@ -129,6 +129,10 @@ func (q *Queue) Ready() error {
 }
 
 func (q *Queue) Close() error {
+	return q.Shutdown(context.Background())
+}
+
+func (q *Queue) Shutdown(ctx context.Context) error {
 	q.closeOnce.Do(func() {
 		q.mu.Lock()
 		q.closed = true
@@ -138,11 +142,26 @@ func (q *Queue) Close() error {
 			attempts = append(attempts, active)
 		}
 		q.mu.Unlock()
-		for _, active := range attempts {
-			<-active.done
+		if len(attempts) == 0 {
+			close(q.closeDone)
+			return
 		}
-		close(q.closeDone)
+		go func() {
+			for _, active := range attempts {
+				<-active.done
+			}
+			close(q.closeDone)
+		}()
 	})
-	<-q.closeDone
-	return nil
+	select {
+	case <-q.closeDone:
+		return nil
+	default:
+	}
+	select {
+	case <-q.closeDone:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }

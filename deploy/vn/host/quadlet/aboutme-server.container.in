@@ -30,7 +30,7 @@ Secret=smtp-password,type=env,target=SMTP_PASSWORD
 Volume=/run/postgresql:/run/postgresql
 Volume=/var/lib/aboutme/privacy-notice:/var/lib/aboutme/privacy-notice:ro
 AddCapability=SYS_ADMIN
-PodmanArgs=--init --shm-size=128m --memory=512m
+PodmanArgs=--init --shm-size=128m --memory=512m --stop-timeout=22
 Ulimit=core=0:0
 HealthCmd=wget -q -O /dev/null http://127.0.0.1:8080/healthz
 HealthInterval=10s
@@ -43,6 +43,7 @@ ExecStartPre=/usr/local/lib/aboutme/fence.sh check @RELEASE_NUMBER@ aboutme-serv
 Restart=on-failure
 RestartSec=5
 TimeoutStartSec=300
+TimeoutStopSec=25s
 
 [Install]
 WantedBy=multi-user.target
