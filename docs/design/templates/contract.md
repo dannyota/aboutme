@@ -179,12 +179,9 @@ and details) sit side by side:
   the photo stays at its edge.
 - `detailsLayout` and `iconStyle` apply inside the text block unchanged.
 - With no photo, the setting has no effect.
-- On a continuous page shown narrower than 36em (576 px), a side photo stacks
-  above the text, as with `top`. The rule is a container query on the resume's
-  width; printed and paged output, the PDF and the paged preview, is wider than
-  36em and keeps the side layout. In the sheets of the
-  [web layout](../public-web-layout.md#inside-a-sheet) a side photo never
-  restacks: below a 480 px content box it is 66 px wide with a 14 px gap.
+- Below a 36em (576 px) container, a continuous page stacks a side photo above
+  the text; print and paged output is wider and keeps it beside. Sheets never
+  restack it ([web layout](../public-web-layout.md#inside-a-sheet)).
 - A template switch keeps the owner's `photoPosition`, or its absence, as it
   keeps `font.textAlign`. A preset with no header gets the default header
   (`left`, `inline`, `outline`) plus the kept position, which renders the same
