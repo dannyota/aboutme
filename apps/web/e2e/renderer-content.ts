@@ -19,7 +19,7 @@ const WRAPPED_WORK = [
 
 export async function expectRendererContent(
   page: Page, language: 'vi' | 'en', justify = false,
-  template = 'modern-sidebar',
+  template = 'modern-sidebar', sheets = false,
 ): Promise<void> {
   const fixture = language === 'vi' ? 'vn-full' : 'full';
   const resume = JSON.parse(await readFile(resolve(import.meta.dirname,
@@ -74,13 +74,13 @@ export async function expectRendererContent(
       : detail.value;
     const label = detail.label || defaults[detail.type]!;
     const icons = ['engineer-compact', 'modern-sidebar'].includes(template);
-    const showLabel = detail.display !== 'label'
-      && (!icons || Boolean(detail.label) || detail.type === 'custom');
+    const showLabel = sheets || (detail.display !== 'label'
+      && (!icons || Boolean(detail.label) || detail.type === 'custom'));
     await expect(chip.locator('.contact-label'), 'Renderer contact label.')
       .toHaveCount(showLabel ? 1 : 0);
     if (showLabel) {
       await expect(chip.locator('.contact-label'), 'Renderer contact label.')
-        .toHaveText(`${label}:`);
+        .toHaveText(sheets ? label : `${label}:`);
     }
     await expect(chip.locator(':scope > :last-child'),
       'Renderer contact content.').toHaveText(shown);

@@ -8,7 +8,7 @@ const JOIN_INVITE_CLOSED_MS = 90 * 24 * 60 * 60 * 1000;
 const CARD_MIN_VIEWPORT_WIDTH = 1_024;
 const CARD_MIN_RIGHT_MARGIN = 360;
 
-const JOIN_INVITE_MEASURE_SELECTOR = '.public-measure';
+const JOIN_INVITE_SHEET_SELECTOR = '.resume-sheets > .resume-sheet';
 
 const JOIN_INVITE_BAR_BAND = '56px';
 export const JOIN_INVITE_BAR_HEIGHT
@@ -132,8 +132,8 @@ export function joinInvitePlacement(
   window_: Window = window,
 ): JoinInvitePlacement {
   if (window_.innerWidth < CARD_MIN_VIEWPORT_WIDTH) return 'bar';
-  const measure = root.querySelector(JOIN_INVITE_MEASURE_SELECTOR) ?? root;
-  const rect = measure.getBoundingClientRect();
+  const sheet = root.querySelector(JOIN_INVITE_SHEET_SELECTOR) ?? root;
+  const rect = sheet.getBoundingClientRect();
   const rightMargin = window_.innerWidth - rect.right;
   return rightMargin >= CARD_MIN_RIGHT_MARGIN ? 'card' : 'bar';
 }

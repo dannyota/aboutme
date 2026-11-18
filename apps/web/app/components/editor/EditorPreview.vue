@@ -86,7 +86,7 @@ const colorScheme = computed<'dark' | 'system' | undefined>(() => {
 const context = computed(() => ({
   lng: props.lng,
   mode: previewMode.value === 'web'
-    ? 'continuous' as const
+    ? 'sheets' as const
     : 'paged' as const,
   nameHeading: 'p' as const,
   ...(props.photoUrl === undefined ? {} : { photoUrl: props.photoUrl }),
@@ -335,8 +335,11 @@ onBeforeUnmount(() => {
     </div>
     <div
       ref="previewRoot"
-      class="overflow-auto bg-editor-canvas p-6 max-[42rem]:p-4"
-      :class="showZoomControls ? 'pb-18' : undefined"
+      class="overflow-auto"
+      :class="previewMode === 'web'
+        ? undefined
+        : ['bg-editor-canvas p-6 max-[42rem]:p-4',
+           showZoomControls ? 'pb-18' : undefined]"
       data-testid="preview-scroll"
       tabindex="0"
       @wheel="onPreviewWheel"
@@ -350,46 +353,43 @@ onBeforeUnmount(() => {
         {{ copy.previewUnavailable }}
       </p>
       <div
+        v-else-if="previewMode === 'web'"
+        class="preview-web flex min-h-full flex-col"
+        data-testid="preview-web"
+      >
+        <ResumeDocument
+          :context="context"
+          :document="projected"
+        />
+        <p
+          v-if="photoStatus !== ''"
+          class="px-4 py-3 text-sm text-muted-foreground"
+          data-photo-state
+          role="status"
+        >
+          {{ photoStatus }}
+        </p>
+      </div>
+      <div
         v-else
-        :class="previewMode === 'web' ? 'w-full' : 'mx-auto w-fit'"
+        class="mx-auto w-fit"
       >
         <div
-          class="preview-sheet rounded-[var(--radius-sheet)]
+          class="preview-sheet rounded-[var(--radius-sheet)] bg-white
             shadow-[var(--shadow-paper)]"
-          :class="[
-            colorScheme === undefined ? 'bg-white' : undefined,
-            previewMode === 'web' ? 'overflow-hidden' : undefined,
-          ]"
-          :data-color-scheme="colorScheme"
-          :data-web-columns="previewMode === 'web'
-            ? document.customization.layout.columns
-            : undefined"
-          :data-scaled-width="
-            previewMode === 'pdf' ? scaledWidth.toFixed(2) : undefined
-          "
-          :data-sheet-zoom="
-            previewMode === 'pdf' ? sheetZoom.toFixed(4) : undefined
-          "
+          :data-scaled-width="scaledWidth.toFixed(2)"
+          :data-sheet-zoom="sheetZoom.toFixed(4)"
           data-testid="preview-sheet"
         >
-          <ScaledSheet
-            v-if="previewMode === 'pdf'"
-            :scale="sheetZoom"
-          >
+          <ScaledSheet :scale="sheetZoom">
             <ResumeDocument
               :context="context"
               :document="projected"
             />
           </ScaledSheet>
-          <ResumeDocument
-            v-else
-            :context="context"
-            :document="projected"
-          />
         </div>
         <div class="mt-3 flex flex-wrap items-center gap-3">
           <p
-            v-if="previewMode === 'pdf'"
             class="inline-flex items-center gap-1.5 text-sm
               text-muted-foreground"
             data-testid="page-count"
@@ -411,7 +411,7 @@ onBeforeUnmount(() => {
             {{ pageCountText }}
           </p>
           <PDFOpenButton
-            v-if="previewMode === 'pdf' && pdfController !== undefined"
+            v-if="pdfController !== undefined"
             :controller="pdfController"
           />
           <p
@@ -445,6 +445,15 @@ onBeforeUnmount(() => {
 </template>
 
 <style>
+.preview-web {
+  container-type: inline-size;
+}
+
+.preview-web > .resume-document.resume-sheets {
+  flex: 1 0 auto;
+  padding-block-start: clamp(14px, 2.5cqi, 26px);
+}
+
 .preview-sheet:has(.paged-resume) {
   background: transparent;
   box-shadow: none;

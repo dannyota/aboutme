@@ -5,7 +5,8 @@ import {
   expectScreen, measureTextContainment, resumeContract,
 } from './display-assertions';
 
-import { BAR_COLORS, expectBarPaint } from './public-bar';
+import { expectBarPaint } from './public-bar';
+import { DESK, rgb, sheetsContract } from './public-sheets';
 import { applyStyleMutation, mutationTest } from './style-mutation';
 import {
   denyExternalRequests,
@@ -325,50 +326,42 @@ test.describe('public page measure', () => {
           if (element === null) throw new Error(`Missing ${selector}`);
           return element.getBoundingClientRect();
         };
-        const paragraph = document.querySelector('.entry-body p');
-        if (paragraph === null) throw new Error('Missing body paragraph');
-        const range = document.createRange();
-        range.selectNodeContents(paragraph);
-        const rects = [...range.getClientRects()];
-        const lines = new Set(rects.map((rect) => Math.round(rect.top))).size;
-        const textWidth = rects.reduce((sum, rect) => sum + rect.width, 0);
-        const averageCharacter
-          = textWidth / (paragraph.textContent ?? '').length;
+        const inner = document.querySelector('.public-toolbar-inner')!;
+        const padding = parseFloat(getComputedStyle(inner).paddingLeft);
+        const row = inner.getBoundingClientRect();
+        const sheet = box('.resume-sheets > .resume-sheet');
         const link = box('.public-download');
-        const measure = box('.public-measure');
         return {
           page: box('.public-resume-page').width,
           bar: box('.public-toolbar').width,
-          measure: { left: measure.left, right: measure.right },
-          charsPerLine: paragraph.getBoundingClientRect().width
-            / averageCharacter,
-          lines,
+          sheet: { left: sheet.left, right: sheet.right, top: sheet.top },
+          row: { left: row.left, right: row.right },
+          brandLeft: box('.public-brand').left,
+          padding,
           linkRight: link.right,
           linkTop: link.top,
           linkHeight: link.height,
-          articleTop: box('.resume-document').top,
         };
       });
+      const sheetWidth = Math.min(cell.width - 20, 736);
+      const inset = Math.min(Math.max(cell.width * 0.02, 6), 26);
       expect(geometry.page).toBe(cell.width);
       expect(geometry.bar).toBe(cell.width);
-      expect(geometry.linkTop).toBeLessThan(geometry.articleTop);
+      expect(geometry.linkTop).toBeLessThan(geometry.sheet.top);
       expect(geometry.linkHeight).toBeLessThanOrEqual(32);
-      if (cell.width === 390) {
-        expect(geometry.measure.left).toBe(0);
-        expect(geometry.measure.right).toBe(390);
-        expect(geometry.linkRight).toBeLessThan(390);
-      } else {
-        const left = geometry.measure.left;
-        const right = cell.width - geometry.measure.right;
-        if (cell.width === 2560) expect(left).toBeGreaterThan(400);
-        else expect(left).toBeGreaterThan(0);
-        expect(Math.abs(left - right)).toBeLessThanOrEqual(1);
-        expect(geometry.lines).toBeGreaterThan(1);
-        if (cell.width === 2560) {
-          expect(geometry.charsPerLine).toBeGreaterThanOrEqual(88);
-          expect(geometry.charsPerLine).toBeLessThanOrEqual(112);
-        }
-      }
+      expect(Math.abs(geometry.sheet.right - geometry.sheet.left
+        - sheetWidth)).toBeLessThanOrEqual(1);
+      expect(Math.abs(geometry.sheet.left
+        - (cell.width - geometry.sheet.right))).toBeLessThanOrEqual(2);
+      expect(Math.abs(geometry.row.left - geometry.sheet.left))
+        .toBeLessThanOrEqual(1);
+      expect(Math.abs(geometry.row.right - geometry.sheet.right))
+        .toBeLessThanOrEqual(1);
+      expect(Math.abs(geometry.padding - inset)).toBeLessThanOrEqual(0.5);
+      expect(Math.abs(geometry.brandLeft - geometry.sheet.left - inset))
+        .toBeLessThanOrEqual(1);
+      expect(Math.abs(geometry.sheet.right - inset - geometry.linkRight))
+        .toBeLessThanOrEqual(1);
       await page.emulateMedia({ media: 'print' });
       await expect(page.locator('.public-toolbar')).toBeHidden();
       await page.emulateMedia({ media: 'screen' });
@@ -395,68 +388,23 @@ test.describe('public page measure', () => {
       for (const paragraph of await paragraphs.all()) {
         await assertRendererText(paragraph);
       }
-      await expectScreen(page, resumeContract(cell.template, 'vi', dark));
+      await expectScreen(page, sheetsContract(cell.template, 'vi', dark));
     });
-  }
-});
-
-test.describe('public page screen margins', () => {
-  const MM_TO_PX = 96 / 25.4;
-  const TEMPLATES_MARGIN_X = { 'classic-serif': 25, 'editorial-wide': 35 };
-
-  for (const template of ['classic-serif', 'editorial-wide'] as const) {
-    for (const width of [390, 768, 1024, 1440]) {
-      test(`${template} at ${width}`, async ({ page }) => {
-        await page.setViewportSize({ width, height: 900 });
-        const response = await page.goto(
-          `/_harness/render?fixture=vn-full&template=${template}&mode=public`,
-        );
-        expect(response?.ok()).toBe(true);
-        await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
-
-        const geometry = await page.evaluate(() => {
-          const article = document.querySelector('.resume-document');
-          const mark = document.querySelector('.public-mark');
-          if (article === null || mark === null) throw new Error('Missing');
-          const style = getComputedStyle(article);
-          const left = Number.parseFloat(style.paddingLeft);
-          const right = Number.parseFloat(style.paddingRight);
-          const box = article.getBoundingClientRect();
-          return {
-            client: document.documentElement.clientWidth,
-            fontSize: Number.parseFloat(style.fontSize),
-            left,
-            markLeft: mark.getBoundingClientRect().left,
-            right,
-            textLeft: box.left + left,
-            text: box.width - left - right,
-          };
-        });
-        const margin = TEMPLATES_MARGIN_X[template] * MM_TO_PX;
-        const expected = Math.min(
-          margin,
-          Math.max(16, (geometry.client - 52 * geometry.fontSize) / 2),
-        );
-        expect(geometry.left).toBeCloseTo(expected, 0);
-        expect(geometry.right).toBeCloseTo(expected, 0);
-        expect(geometry.markLeft).toBeCloseTo(geometry.textLeft, 0);
-        if (width === 390) {
-          expect(geometry.left).toBe(16);
-          expect(geometry.text).toBeGreaterThanOrEqual(geometry.client - 32.5);
-        }
-        if (width === 1440) expect(geometry.left).toBeCloseTo(margin, 0);
-      });
-    }
   }
 });
 
 interface PublicSurfaces {
   readonly article: string;
   readonly bar: string;
+  readonly desk: string;
   readonly header: string;
+  readonly paper: string;
   readonly rootScheme: string;
   readonly schemeAttribute: string | null;
 }
+
+const NO_FILL = 'rgba(0, 0, 0, 0)';
+const WHITE = 'rgb(255, 255, 255)';
 
 async function openPublic(
   page: Page,
@@ -485,7 +433,9 @@ async function readSurfaces(page: Page): Promise<PublicSurfaces> {
     return {
       article: paint('.resume-document'),
       bar: paint('.public-toolbar'),
+      desk: getComputedStyle(document.documentElement).backgroundColor,
       header: paint('.resume-header'),
+      paper: paint('.resume-sheet'),
       rootScheme: getComputedStyle(document.documentElement).colorScheme,
       schemeAttribute: document
         .querySelector('.public-resume-page')
@@ -501,22 +451,26 @@ test.describe('public page color scheme', () => {
         await openPublic(page, template, undefined);
         const light = await readSurfaces(page);
         expect(light.schemeAttribute).toBeNull();
+        expect(light.desk).toBe(rgb(DESK.light));
 
         await openPublic(page, template, 'dark');
         const dark = await readSurfaces(page);
         expect(dark.schemeAttribute).toBe('dark');
-        expect(dark.article).not.toBe(light.article);
+        expect(dark.paper).not.toBe(light.paper);
+        expect(dark.desk).toBe(rgb(DESK.dark));
         if (template === 'executive-band') {
           expect(dark.header).not.toBe(light.header);
         }
-        expect(light.bar).toBe(BAR_COLORS.light.ground);
-        expect(dark.bar).toBe(BAR_COLORS.dark.ground);
+        expect(light.bar).toBe(NO_FILL);
+        expect(dark.bar).toBe(NO_FILL);
         expect(dark.rootScheme).toBe('dark');
 
         await page.emulateMedia({ media: 'print' });
         const printed = await readSurfaces(page);
-        expect(printed.article).toBe(light.article);
-        expect(printed.header).toBe(light.header);
+        expect(printed.article).toBe(WHITE);
+        expect(printed.header).toBe(template === 'executive-band'
+          ? 'rgb(22, 39, 61)'
+          : WHITE);
         expect(printed.rootScheme).not.toBe('dark');
       });
   }
@@ -533,19 +487,21 @@ test.describe('public page color scheme', () => {
     await openPublic(page, 'classic-serif', 'system');
     const matchLight = await readSurfaces(page);
     expect(matchLight.schemeAttribute).toBe('system');
-    expect(matchLight.article).toBe(light.article);
+    expect(matchLight.paper).toBe(light.paper);
+    expect(matchLight.desk).toBe(light.desk);
     expect(matchLight.bar).toBe(light.bar);
     expect(matchLight.rootScheme).not.toBe('dark');
 
     await page.emulateMedia({ colorScheme: 'dark' });
     const matchDark = await readSurfaces(page);
-    expect(matchDark.article).toBe(dark.article);
+    expect(matchDark.paper).toBe(dark.paper);
+    expect(matchDark.desk).toBe(dark.desk);
     expect(matchDark.header).toBe(dark.header);
     expect(matchDark.bar).toBe(dark.bar);
     expect(matchDark.rootScheme).toBe('dark');
 
     await page.emulateMedia({ media: 'print' });
-    expect((await readSurfaces(page)).article).toBe(light.article);
+    expect((await readSurfaces(page)).article).toBe(WHITE);
   });
 
   test('a light page ignores a dark viewer preference', async ({ page }) => {
@@ -555,7 +511,8 @@ test.describe('public page color scheme', () => {
     await page.emulateMedia({ colorScheme: 'dark' });
     const preferred = await readSurfaces(page);
     expect(preferred.schemeAttribute).toBeNull();
-    expect(preferred.article).toBe(light.article);
+    expect(preferred.paper).toBe(light.paper);
+    expect(preferred.desk).toBe(light.desk);
     expect(preferred.bar).toBe(light.bar);
   });
 });

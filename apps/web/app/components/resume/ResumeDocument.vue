@@ -93,23 +93,15 @@ body:has(> #public-resume) {
 .public-resume-page {
   box-sizing: border-box;
   min-height: 100vh;
-  background: var(--color-surface);
 }
 
-.public-measure {
-  box-sizing: border-box;
-  max-width: calc(52em + 2 * var(--page-margin-x));
-  margin-inline: auto;
-  font-size: var(--fs-body);
-}
-
-.public-resume-page[data-columns="2"] .public-measure {
-  max-width: calc(70em + 2 * var(--page-margin-x));
+@media screen {
+  .public-resume-page > .public-toolbar + .resume-sheets {
+    padding-block-start: clamp(14px, 2.5cqi, 26px);
+  }
 }
 
 .public-toolbar {
-  --toolbar-ground: #ffffff;
-  --toolbar-border: #e3e0f2;
   --toolbar-mark: #de1b5a;
   --toolbar-credit: #55517d;
   --toolbar-credit-hover: #4336c9;
@@ -118,9 +110,7 @@ body:has(> #public-resume) {
   --toolbar-button-hover-fill: #f1effa;
   --toolbar-focus-ring: #1a1650;
   box-sizing: border-box;
-  padding-block: 8px 7px;
-  background: var(--toolbar-ground);
-  border-bottom: 1px solid var(--toolbar-border);
+  padding-block: 8px;
 }
 
 .public-toolbar-inner {
@@ -132,14 +122,9 @@ body:has(> #public-resume) {
   column-gap: 16px;
   row-gap: 8px;
   min-height: 32px;
-  max-width: calc(52em + 2 * var(--page-margin-x));
+  width: min(100% - 20px, 46rem);
   margin-inline: auto;
-  padding-inline: var(--screen-margin-x);
-  font-size: var(--fs-body);
-}
-
-.public-resume-page[data-columns="2"] .public-toolbar-inner {
-  max-width: calc(70em + 2 * var(--page-margin-x));
+  padding-inline: clamp(6px, 2cqi, 26px);
 }
 
 @media (width < 40rem) {

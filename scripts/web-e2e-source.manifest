@@ -494,6 +494,7 @@ apps/web/app/lib/showcaseQuery.ts
 apps/web/app/lib/utils.ts
 apps/web/app/middleware/signed-in.global.ts
 apps/web/app/pages/[...slug].vue
+apps/web/app/pages/_harness/dark-ground-fixture.ts
 apps/web/app/pages/_harness/entry-point-fixtures.ts
 apps/web/app/pages/_harness/justify-fixture.ts
 apps/web/app/pages/_harness/photo-fixture.ts
@@ -563,6 +564,7 @@ apps/web/e2e/chrome-details.ts
 apps/web/e2e/chrome.spec.ts
 apps/web/e2e/corpus.spec.ts
 apps/web/e2e/display-assertions.ts
+apps/web/e2e/editor-web-sheets.ts
 apps/web/e2e/entry-points.spec.ts
 apps/web/e2e/filter-sheet-details.ts
 apps/web/e2e/fixtures/deployment/mismatch-invalid.json
@@ -602,6 +604,8 @@ apps/web/e2e/project-page-details.ts
 apps/web/e2e/project-pages.spec.ts
 apps/web/e2e/projects.spec.ts
 apps/web/e2e/public-bar.ts
+apps/web/e2e/public-sheets-tests.ts
+apps/web/e2e/public-sheets.ts
 apps/web/e2e/renderer-content.ts
 apps/web/e2e/renderer-details.ts
 apps/web/e2e/renderer-membership.ts

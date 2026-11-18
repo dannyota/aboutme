@@ -21,8 +21,6 @@
   }
 
   [data-color-scheme="dark"] .public-toolbar {
-    --toolbar-ground: #0e0a0d;
-    --toolbar-border: #2e242c;
     --toolbar-mark: #e2788f;
     --toolbar-credit: #a3959f;
     --toolbar-credit-hover: #b59bdb;
@@ -62,8 +60,6 @@
   }
 
   [data-color-scheme="system"] .public-toolbar {
-    --toolbar-ground: #0e0a0d;
-    --toolbar-border: #2e242c;
     --toolbar-mark: #e2788f;
     --toolbar-credit: #a3959f;
     --toolbar-credit-hover: #b59bdb;

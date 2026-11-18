@@ -320,6 +320,26 @@ describe('resume page entry points', () => {
 
 describe('resume page HTML parity with the shared corpus', () => {
   it.each(corpus.cases.map((entry) => [entry.name, entry] as const))(
+    'holds the sheets with numbered folios in the corpus HTML for %s',
+    (_name, entry) => {
+      const page = new JSDOM(entry.html!).window.document;
+      const fullName = ((entry.envelope.publicResume as Envelope)
+        .document as { personalDetails: { fullName: string } })
+        .personalDetails.fullName;
+      const sheets = page.querySelectorAll(
+        '.public-resume-page > article.resume-sheets > .resume-sheet',
+      );
+      expect(sheets.length).toBeGreaterThan(1);
+      expect([...page.querySelectorAll('.resume-folio')].map((folio) => [
+        folio.getAttribute('data-folio-name'),
+        folio.getAttribute('data-folio-page'),
+      ])).toEqual([...sheets].map((_sheet, index) => [
+        fullName, `${index + 1} / ${sheets.length}`,
+      ]));
+    },
+  );
+
+  it.each(corpus.cases.map((entry) => [entry.name, entry] as const))(
     'renders exactly the corpus HTML for %s',
     async (_name, entry) => {
       expect(corpus.styleVersion).toBe(VERSIONS.style);

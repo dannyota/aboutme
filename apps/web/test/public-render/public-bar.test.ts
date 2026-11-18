@@ -12,8 +12,6 @@ import { lastIndex, matching, parseCss, style } from './css-rules';
 type Palette = Readonly<Record<string, string>>;
 
 const LIGHT: Palette = {
-  '--toolbar-ground': '#ffffff',
-  '--toolbar-border': '#e3e0f2',
   '--toolbar-mark': '#de1b5a',
   '--toolbar-credit': '#55517d',
   '--toolbar-credit-hover': '#4336c9',
@@ -24,8 +22,6 @@ const LIGHT: Palette = {
 };
 
 const DARK: Palette = {
-  '--toolbar-ground': '#0e0a0d',
-  '--toolbar-border': '#2e242c',
   '--toolbar-mark': '#e2788f',
   '--toolbar-credit': '#a3959f',
   '--toolbar-credit-hover': '#b59bdb',
@@ -34,6 +30,20 @@ const DARK: Palette = {
   '--toolbar-button-hover-fill': '#251b23',
   '--toolbar-focus-ring': '#cdbcd9',
 };
+
+const PROJECT_LIGHT: Palette = {
+  '--toolbar-ground': '#ffffff',
+  '--toolbar-border': '#e3e0f2',
+  ...LIGHT,
+};
+
+const PROJECT_DARK: Palette = {
+  '--toolbar-ground': '#0e0a0d',
+  '--toolbar-border': '#2e242c',
+  ...DARK,
+};
+
+const DESK = { light: '#e6dfd0', dark: '#141210' } as const;
 
 const VISUALLY_HIDDEN = {
   'position': 'absolute',
@@ -102,12 +112,11 @@ describe('public page bar tokens', () => {
     }
   });
 
-  it('meets the contrast the design measured', () => {
-    for (const [palette, expected] of [
-      [LIGHT, [4.76, 7.34, 16.48, 14.49]],
-      [DARK, [6.85, 6.89, 12.29, 10.42]],
+  it('meets the contrast the design measured on the desk', () => {
+    for (const [palette, ground, expected] of [
+      [LIGHT, DESK.light, [3.59, 5.54, 12.42, 14.49]],
+      [DARK, DESK.dark, [6.51, 6.55, 11.68, 10.42]],
     ] as const) {
-      const ground = palette['--toolbar-ground']!;
       const label = palette['--toolbar-button-label']!;
       const measured = [
         contrast(palette['--toolbar-mark']!, ground),
@@ -136,12 +145,30 @@ describe('public page bar tokens', () => {
       });
   });
 
-  it('paints the bar, mark and credit from its tokens', () => {
-    expect(style(resumeRules, '.public-toolbar')).toMatchObject({
-      'background': 'var(--toolbar-ground)',
-      'border-bottom': '1px solid var(--toolbar-border)',
-      'padding-block': '8px 7px',
-    });
+  it('sits on the desk with no ground or rule of its own', () => {
+    const bar = style(resumeRules, '.public-toolbar');
+    expect(bar['padding-block']).toBe('8px');
+    for (const property of ['background', 'background-color', 'border',
+      'border-bottom', 'border-block-end']) {
+      expect(bar, property).not.toHaveProperty(property);
+    }
+    for (const rules of [resumeRules, schemeRules]) {
+      for (const rule of rules) {
+        expect(Object.keys(rule.body), rule.selector).not.toEqual(
+          expect.arrayContaining(['--toolbar-ground']),
+        );
+        expect(Object.keys(rule.body), rule.selector).not.toEqual(
+          expect.arrayContaining(['--toolbar-border']),
+        );
+      }
+    }
+    const page = style(resumeRules, '.public-resume-page');
+    expect(page).not.toHaveProperty('background');
+    expect(page).not.toHaveProperty('background-color');
+    expect(matching(resumeRules, '.public-measure', '')).toEqual([]);
+  });
+
+  it('paints the mark and credit from its tokens', () => {
     expect(style(resumeRules, '.public-mark').color)
       .toBe('var(--toolbar-mark)');
     expect(style(resumeRules, '.public-credit')).toMatchObject({
@@ -216,6 +243,28 @@ describe('public page bar download labels', () => {
 describe('public page bar row', () => {
   const phone = '@media (width < 30rem)';
 
+  it('spans the sheet width with its own inline padding', () => {
+    const inner = style(resumeRules, '.public-toolbar-inner');
+    expect(inner).toMatchObject({
+      'width': 'min(100% - 20px, 46rem)',
+      'margin-inline': 'auto',
+      'padding-inline': 'clamp(6px, 2cqi, 26px)',
+    });
+    expect(inner).not.toHaveProperty('max-width');
+    expect(inner).not.toHaveProperty('font-size');
+    expect(matching(resumeRules,
+      '.public-resume-page[data-columns="2"] .public-toolbar-inner', ''))
+      .toEqual([]);
+  });
+
+  it('starts the first sheet below the bar with the sheet gap', () => {
+    expect(style(resumeRules,
+      '.public-resume-page > .public-toolbar + .resume-sheets',
+      '@media screen')).toEqual({
+      'padding-block-start': 'clamp(14px, 2.5cqi, 26px)',
+    });
+  });
+
   it('lays the brand and actions out in one wrapping row', () => {
     expect(style(resumeRules, '.public-toolbar-inner')).toMatchObject({
       'display': 'flex',
@@ -259,17 +308,18 @@ describe('public page bar row', () => {
 describe('project page bar', () => {
   const bar = '.public-project-page .public-toolbar';
 
-  it('declares the same light tokens as the resume page bar', () => {
-    expect(tokens(style(projectRules, bar))).toEqual(LIGHT);
+  it('keeps its ground and rule beside the resume page bar tokens', () => {
+    expect(tokens(style(projectRules, bar))).toEqual(PROJECT_LIGHT);
   });
 
   it('takes the dark column for a dark page and Match device', () => {
     expect(tokens(style(projectRules,
       ':root[data-scheme="dark"] .public-toolbar', '@media screen')))
-      .toEqual(DARK);
+      .toEqual(PROJECT_DARK);
     expect(tokens(style(projectRules,
       ':root[data-scheme="system"] .public-toolbar',
-      '@media screen and (prefers-color-scheme:dark)'))).toEqual(DARK);
+      '@media screen and (prefers-color-scheme:dark)')))
+      .toEqual(PROJECT_DARK);
   });
 
   it('paints the bar, mark and credit from its tokens', () => {

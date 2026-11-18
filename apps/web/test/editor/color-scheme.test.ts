@@ -250,15 +250,16 @@ describe('EditorPreview color scheme', () => {
   }
 
   it.each(['dark', 'system'] as const)(
-    'shows %s on the Web preview sheet and passes it in the context',
+    'passes %s to the Web sheets, which paint it without a frame',
     async (scheme) => {
       const wrapper = await mountPreview(scheme, 'web');
-      expect(wrapper.get('[data-testid="preview-sheet"]')
-        .attributes('data-color-scheme')).toBe(scheme);
+      expect(wrapper.find('[data-testid="preview-sheet"]').exists())
+        .toBe(false);
+      expect(wrapper.find('[data-color-scheme]').exists()).toBe(false);
       expect(wrapper.get('[data-probe]').attributes('data-scheme'))
         .toBe(scheme);
       expect(wrapper.get('[data-probe]').attributes('data-mode'))
-        .toBe('continuous');
+        .toBe('sheets');
     },
   );
 
@@ -266,19 +267,22 @@ describe('EditorPreview color scheme', () => {
     'keeps a %s scheme light on the Web preview',
     async (scheme) => {
       const wrapper = await mountPreview(scheme, 'web');
-      expect(wrapper.get('[data-testid="preview-sheet"]')
-        .attributes('data-color-scheme')).toBeUndefined();
+      expect(wrapper.find('[data-testid="preview-sheet"]').exists())
+        .toBe(false);
       expect(wrapper.get('[data-probe]').attributes('data-scheme'))
         .toBeUndefined();
+      expect(wrapper.get('[data-probe]').attributes('data-mode'))
+        .toBe('sheets');
     },
   );
 
-  it.each(['dark', 'system'] as const)(
-    'keeps the PDF preview light for %s',
+  it.each(['dark', 'system', 'light', undefined] as const)(
+    'keeps the white PDF sheet light for %s',
     async (scheme) => {
       const wrapper = await mountPreview(scheme, 'pdf');
-      expect(wrapper.get('[data-testid="preview-sheet"]')
-        .attributes('data-color-scheme')).toBeUndefined();
+      const sheet = wrapper.get('[data-testid="preview-sheet"]');
+      expect(sheet.attributes('data-color-scheme')).toBeUndefined();
+      expect(sheet.classes('bg-white')).toBe(true);
       expect(wrapper.get('[data-probe]').attributes('data-scheme'))
         .toBeUndefined();
       expect(wrapper.get('[data-probe]').attributes('data-mode'))
@@ -286,26 +290,14 @@ describe('EditorPreview color scheme', () => {
     },
   );
 
-  it.each([
-    ['dark', 'web', false],
-    ['system', 'web', false],
-    ['dark', 'pdf', true],
-    [undefined, 'web', true],
-    ['light', 'web', true],
-  ] as const)(
-    'keeps bg-white only without a scheme (%s, %s mode)',
-    async (scheme, mode, hasWhite) => {
-      const wrapper = await mountPreview(scheme, mode);
-      expect(wrapper.get('[data-testid="preview-sheet"]')
-        .classes('bg-white')).toBe(hasWhite);
-    },
-  );
-
   it('shows the scheme when the reader switches from PDF to Web', async () => {
     const wrapper = await mountPreview('dark', 'pdf');
     await wrapper.get('[data-mode="web"]').trigger('click');
-    expect(wrapper.get('[data-testid="preview-sheet"]')
-      .attributes('data-color-scheme')).toBe('dark');
+    expect(wrapper.find('[data-testid="preview-sheet"]').exists()).toBe(false);
+    expect(wrapper.get('[data-probe]').attributes('data-scheme'))
+      .toBe('dark');
+    expect(wrapper.get('[data-probe]').attributes('data-mode'))
+      .toBe('sheets');
   });
 });
 

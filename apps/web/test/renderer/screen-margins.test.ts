@@ -50,12 +50,13 @@ describe('screen margin stylesheet', () => {
     );
   });
 
-  it('keeps the page bar on the left edge of the body', () => {
-    expect(source).toMatch(
-      /\.public-toolbar-inner \{[^}]*padding-inline: var\(--screen-margin-x\)/u,
-    );
-    expect(source).not.toContain('padding-inline: 16px;');
-  });
+  it('measures the page bar from the sheet width, not the screen margins',
+    () => {
+      expect(source).toMatch(
+        /\.public-toolbar-inner \{[^}]*padding-inline: clamp\(6px, 2cqi, 26px/u,
+      );
+      expect(source).not.toContain('var(--screen-margin-x)');
+    });
 
   it('keeps the document padding that print and the PDF use', () => {
     expect(source).toContain(
@@ -64,10 +65,8 @@ describe('screen margin stylesheet', () => {
   });
 });
 
-describe('EditorPreview Web sheet hook', () => {
-  it('marks the sheet with the column count in Web mode only', () => {
-    expect(editorPreview).toContain(
-      ':data-web-columns="previewMode === \'web\'',
-    );
+describe('EditorPreview Web sheets', () => {
+  it('leaves the column hook to the continuous surfaces', () => {
+    expect(editorPreview).not.toContain('data-web-columns');
   });
 });

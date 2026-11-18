@@ -1,5 +1,6 @@
 // @vitest-environment node
 
+import type { Resume } from '@aboutme/schema';
 import { readFileSync } from 'node:fs';
 
 import { JSDOM } from 'jsdom';
@@ -9,6 +10,7 @@ import { describe, expect, it } from 'vitest';
 
 import PrintResumeApp from '../../app/components/print/PrintResumeApp.vue';
 import PublicResumeApp from '../../app/components/public/PublicResumeApp.vue';
+import ResumeDocument from '../../app/components/resume/ResumeDocument.vue';
 import { PRINT_FAILURE } from '../../server/utils/print/envelope';
 import {
   printTitle,
@@ -95,27 +97,40 @@ describe('resume language in shared renderers', () => {
 });
 
 describe('private print Vue document', () => {
-  it('keeps exact shared-renderer parity with public SSR', async () => {
-    const envelope = printEnvelope();
-    const shared = await renderToString(createSSRApp({
-      render: () => h(PublicResumeApp, {
-        publicResume: {
-          slug: 'parity-only',
-          revision: envelope.revision,
-          lng: envelope.lng,
-          downloadEnabled: false,
-          document: envelope.document,
-        },
-        homeHref: 'https://aboutme.example/',
-      }),
-    }));
-    const article = /<article class="resume-document"[\s\S]*<\/article>/u
-      .exec(shared)?.[0];
-    expect(article).toBeDefined();
-    const html = await renderPrintResume(envelope);
-    expect(html).toContain(article);
-    expect(html).toContain('<title>Ada Lovelace - Resume</title>');
-  });
+  it('keeps the public sheets and the print document on one renderer',
+    async () => {
+      const envelope = printEnvelope();
+      const shared = (mode: 'continuous' | 'sheets') => renderToString(
+        createSSRApp({
+          render: () => h(ResumeDocument, {
+            document: envelope.document as unknown as Resume,
+            context: { lng: envelope.lng, mode },
+          }),
+        }),
+      );
+      const page = await renderToString(createSSRApp({
+        render: () => h(PublicResumeApp, {
+          publicResume: {
+            slug: 'parity-only',
+            revision: envelope.revision,
+            lng: envelope.lng,
+            downloadEnabled: false,
+            document: envelope.document,
+          },
+          homeHref: 'https://aboutme.example/',
+        }),
+      }));
+      const sheets = await shared('sheets');
+      expect(sheets)
+        .toMatch(/^<article class="resume-document resume-sheets"/u);
+      expect(page).toContain(sheets);
+      const continuous = await shared('continuous');
+      expect(continuous).toMatch(/^<article class="resume-document"/u);
+      const html = await renderPrintResume(envelope);
+      expect(html).toContain(continuous);
+      expect(html).not.toContain('resume-sheets');
+      expect(html).toContain('<title>Ada Lovelace - Resume</title>');
+    });
 
   it(
     'renders the shared continuous renderer with fixed print framing',

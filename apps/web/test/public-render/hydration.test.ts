@@ -123,6 +123,44 @@ describe('public resume hydration', () => {
     expect(root.firstElementChild).toBe(original);
   });
 
+  it('hydrates the sheets and renames the folios on a live revision',
+    async () => {
+      document.body.innerHTML = [
+        '<main id="public-resume" data-revision="1">',
+        await ssrRoot('1'),
+        '</main>',
+      ].join('');
+      const root = document.querySelector<HTMLElement>('#public-resume')!;
+      const article = root.querySelector('article.resume-sheets');
+      const folios = () => [...root.querySelectorAll('.resume-folio')]
+        .map((folio) => [
+          folio.getAttribute('data-folio-name'),
+          folio.getAttribute('data-folio-page'),
+        ]);
+      expect(article).not.toBeNull();
+      expect(folios()).toEqual([['Ada Lovelace', '1 / 1']]);
+      await hydratePublicResume(root, 'ada1', '1', async () => resume('1'));
+      expect(root.querySelector('article.resume-sheets')).toBe(article);
+
+      const source = new FakeEventSource();
+      createPublicResumeRealtime({
+        root,
+        slug: 'ada1',
+        revision: '1',
+        read: async () => ({
+          kind: 'complete',
+          resume: resume('2'),
+          etag: '"r2"',
+        }),
+        eventSourceFactory: () => source,
+        reload: vi.fn(),
+      }).start();
+      source.emitRevision('2');
+      await Promise.resolve();
+      await nextTick();
+      expect(folios()).toEqual([['Grace Hopper', '1 / 1']]);
+    });
+
   it('hydrates a dark page and follows the scheme on a live revision',
     async () => {
       const dark = (revision: string, scheme: 'dark' | undefined) => {
@@ -144,6 +182,8 @@ describe('public resume hydration', () => {
       const root = document.querySelector<HTMLElement>('#public-resume')!;
       const page = () => root.querySelector('.public-resume-page');
       expect(page()?.getAttribute('data-color-scheme')).toBe('dark');
+      expect(root.querySelector('article.resume-sheets')
+        ?.getAttribute('data-color-scheme')).toBe('dark');
       await hydratePublicResume(
         root,
         'ada1',
@@ -170,6 +210,7 @@ describe('public resume hydration', () => {
       await Promise.resolve();
       await nextTick();
       expect(page()?.hasAttribute('data-color-scheme')).toBe(false);
+      expect(root.querySelector('[data-color-scheme]')).toBeNull();
       expect(root.innerHTML).not.toContain('--dark-color');
     });
 
