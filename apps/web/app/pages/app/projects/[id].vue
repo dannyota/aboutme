@@ -231,8 +231,11 @@ async function save(): Promise<void> {
 
 function focusEvidenceOpener(): void {
   void nextTick(() => {
-    if (editor.notice.value === null) focusAfterPicker(picker.opener());
-    else notice.value?.focus?.();
+    if (evidence.stale.value || editor.notice.value === 'session-lost') {
+      notice.value?.focus?.();
+    } else {
+      focusAfterPicker(picker.opener());
+    }
   });
 }
 

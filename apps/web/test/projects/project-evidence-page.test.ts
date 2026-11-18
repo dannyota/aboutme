@@ -8,6 +8,7 @@ import {
   EVIDENCE_IDS,
   evidenceFailed,
   evidenceItem,
+  failed,
   fakeApi,
   fakeEvidenceApi,
   ok,
@@ -248,6 +249,30 @@ describe('project editor evidence section', () => {
     expect(dialog()).toBeNull();
     expect(document.activeElement?.id).toBe('project-evidence-add');
   });
+
+  it('returns focus to Add after a failed save left a try-again notice',
+    async () => {
+      const wrapper = await mountEditor();
+      await typeInto('#project-en-name', 'Typed');
+      api.replace.mockResolvedValue(failed('unavailable'));
+      await wrapper.get('[data-testid="project-form"]').trigger('submit');
+      await flushPromises();
+      expect(inDocument('[data-testid="project-notice"]').textContent)
+        .toContain('Try again');
+
+      inDocument('#project-evidence-add').click();
+      await flushPromises();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(dialog()?.contains(document.activeElement)).toBe(true);
+      document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', {
+        key: 'Escape', bubbles: true,
+      }));
+      await flushPromises();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(dialog()).toBeNull();
+      expect(document.activeElement?.id).toBe('project-evidence-add');
+    });
 
   it('starts Continue with the server project id', async () => {
     evidenceApi.candidates.mockResolvedValue(
