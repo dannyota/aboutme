@@ -59,26 +59,14 @@ function clone(name: string): Loose {
 }
 
 describe('page state from each fixture', () => {
-  it.each([
-    ['ecs', 'aws', 'ap-southeast-1', ''],
-    ['kubernetes', 'greennode', 'HCM03', ''],
-    ['podman', 'greennode', 'HCM03', '-amd64'],
-  ])('keeps verified %s SBOM asset links', (
-    orchestrator, provider, region, suffix,
-  ) => {
+  it('keeps verified amd64 SBOM asset links', () => {
     const value = clone('verified');
-    value.platform = { provider, orchestrator, region };
-    for (const entry of value.components) {
-      for (const image of entry.running_images) {
-        image.links.sbom = image.links.sbom.replace(
-          '.spdx.json', `${suffix}.spdx.json`,
-        );
-      }
-    }
     const document = decoded(value);
     for (const [index, entry] of document.components.entries()) {
       expect(entry.runningImages[0]!.links.sbom)
         .toBe(value.components[index].running_images[0].links.sbom);
+      expect(entry.runningImages[0]!.links.sbom)
+        .toMatch(/-amd64\.spdx\.json$/u);
     }
     expect(pageState(
       { kind: 'decoded', result: { kind: 'document', document } },
@@ -88,9 +76,6 @@ describe('page state from each fixture', () => {
 
   it('renders a Podman host report with unchecked evidence', () => {
     const value = clone('verified');
-    value.platform = {
-      provider: 'greennode', orchestrator: 'podman', region: 'HCM03',
-    };
     value.release = null;
     value.summary = 'unverified';
     for (const entry of value.components) {
@@ -111,20 +96,9 @@ describe('page state from each fixture', () => {
       .toBe(value.components[0].running_images[0].digest);
   });
 
-  it('distinguishes ECS, Kubernetes, and an absent report', () => {
-    expect(reportingPlatform(decoded(raw('verified')))).toBe('aws-ecs');
-    const value = clone('verified');
-    value.platform = {
-      provider: 'greennode', orchestrator: 'kubernetes', region: 'HCM03',
-    };
-    expect(reportingPlatform(decoded(value))).toBe('kubernetes');
+  it('names the host for a document and no platform without one', () => {
+    expect(reportingPlatform(decoded(raw('verified')))).toBe('host');
     expect(reportingPlatform(null)).toBe('unknown');
-    value.platform.orchestrator = 'unknown';
-    expect(decodeDeploymentDocument(value).kind).toBe('invalid');
-    value.platform = {
-      provider: 'aws', orchestrator: 'podman', region: 'ap-southeast-1',
-    };
-    expect(decodeDeploymentDocument(value).kind).toBe('invalid');
   });
 
   it('shows loading, then unavailable after a failed fetch', () => {
@@ -341,6 +315,23 @@ describe('closed decoding', () => {
       value.components[0].running_images[0].links.build
         = 'https://example.com/actions/runs/1/attempts/1';
     }],
+    ['the aws provider', (value: Loose) => {
+      value.platform.provider = 'aws';
+    }],
+    ['the ecs orchestrator', (value: Loose) => {
+      value.platform.orchestrator = 'ecs';
+    }],
+    ['the kubernetes orchestrator', (value: Loose) => {
+      value.platform.orchestrator = 'kubernetes';
+    }],
+    ['an AWS region', (value: Loose) => {
+      value.platform.region = 'ap-southeast-1';
+    }],
+    ['an unsuffixed SBOM asset', (value: Loose) => {
+      value.components[0].running_images[0].links.sbom
+        = 'https://github.com/dannyota/aboutme/releases/download/v0.6.0/'
+          + 'aboutme-server.spdx.json';
+    }],
     ['an unsupported SBOM architecture', (value: Loose) => {
       value.components[0].running_images[0].links.sbom
         = 'https://github.com/dannyota/aboutme/releases/download/v0.6.5/'
@@ -500,9 +491,6 @@ describe('chain view', () => {
 
   it('uses the running image start times when there is no release', () => {
     const value = clone('unverified');
-    value.platform = {
-      provider: 'greennode', orchestrator: 'podman', region: 'HCM03',
-    };
     for (const component of value.components) {
       for (const image of component.running_images) {
         image.version = null;

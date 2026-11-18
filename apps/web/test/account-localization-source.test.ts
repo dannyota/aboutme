@@ -33,6 +33,7 @@ const catalogNames = new Set([
 const coveredSources = [
   'components/auth/PasswordSettings.vue',
   'components/settings/ConnectedAgents.vue',
+  'components/settings/EvidenceDisconnectDialog.vue',
   'components/settings/GitHubEvidence.vue',
   'components/settings/LinkedIdentities.vue',
   'components/settings/PrivacySettings.vue',

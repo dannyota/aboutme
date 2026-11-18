@@ -9,6 +9,7 @@ import {
 } from '../../app/composables/useProjects';
 import {
   answered,
+  evidenceItem,
   failed,
   fakeApi,
   fakeAuth,
@@ -244,6 +245,45 @@ describe('project editor', () => {
     expect(editor.draft.value?.text.en?.name).toBe(
       'Shop typed during the save',
     );
+  });
+
+  it('adopts evidence and its revision without touching the draft',
+    async () => {
+      const { editor, api } = await editorSetup(project({ evidence: [] }));
+      const generation = editor.generation.value;
+      editor.draft.value!.text.en!.name = 'Typed';
+      editor.markStale(project({ revision: '8' }));
+      const draft = editor.draft.value;
+
+      editor.adoptEvidence([evidenceItem()], '4');
+
+      expect(editor.loaded.value?.evidence).toEqual([evidenceItem()]);
+      expect(editor.loaded.value?.revision).toBe('4');
+      expect(editor.loaded.value?.text).toEqual(project().text);
+      expect(editor.draft.value).toBe(draft);
+      expect(editor.draft.value?.text.en?.name).toBe('Typed');
+      expect(editor.generation.value).toBe(generation);
+      expect(editor.dirty.value).toBe(true);
+      expect(editor.notice.value).toBe('changed-elsewhere');
+      expect(editor.saveFailed.value).toBe(true);
+      expect(api.read).toHaveBeenCalledTimes(1);
+    });
+
+  it('saves with the revision an evidence write adopted', async () => {
+    const { editor, api } = await editorSetup(project({ evidence: [] }));
+    editor.adoptEvidence([evidenceItem()], '4');
+    editor.draft.value!.text.en!.name = 'Shop';
+    expect(editor.dirty.value).toBe(true);
+    api.replace.mockResolvedValue(ok(project({
+      revision: '5', evidence: [evidenceItem()],
+      text: { en: { name: 'Shop', role: 'Lead engineer' } },
+    })));
+
+    await editor.save();
+
+    expect(api.replace.mock.calls[0]?.[1]).toBe('4');
+    expect(editor.loaded.value?.revision).toBe('5');
+    expect(editor.dirty.value).toBe(false);
   });
 
   it('loads, edits and saves a project that already has dates', async () => {

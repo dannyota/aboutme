@@ -6,8 +6,14 @@ import { registerCapabilities } from '../support/capabilities';
 
 export const reauthCalls: unknown[] = [];
 
-export function registerSignedIn(): void {
-  registerCapabilities({ providerLogin: false, agentAccess: false });
+export function registerSignedIn(
+  options: { githubEvidence?: boolean } = {},
+): void {
+  registerCapabilities({
+    providerLogin: false,
+    agentAccess: false,
+    githubEvidence: options.githubEvidence ?? false,
+  });
   registerEndpoint('/api/v1/me', () => ({
     data: {
       user: {

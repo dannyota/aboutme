@@ -2,7 +2,16 @@ import { CURRENT_VERSION } from '@aboutme/schema/released';
 import { computed, ref } from 'vue';
 import { vi } from 'vitest';
 
-import type { Project } from '../../app/components/projects/projectDocument';
+import type {
+  Project,
+  ProjectEvidence,
+} from '../../app/components/projects/projectDocument';
+import type {
+  EvidenceCandidate,
+  EvidenceFailure,
+  EvidenceResult,
+  ProjectEvidenceApi,
+} from '../../app/composables/projectEvidenceApi';
 import type {
   ProjectAuth,
   ProjectFailure,
@@ -121,5 +130,75 @@ export function sequence(prefix = 'k'): () => string {
   return () => {
     next += 1;
     return `${prefix}${next}`;
+  };
+}
+
+export const EVIDENCE_IDS = [
+  '0190f000-0000-7000-8000-000000000e01',
+  '0190f000-0000-7000-8000-000000000e02',
+  '0190f000-0000-7000-8000-000000000e03',
+] as const;
+
+export function evidenceItem(
+  overrides: Partial<ProjectEvidence> = {},
+): ProjectEvidence {
+  return {
+    id: EVIDENCE_IDS[0],
+    kind: 'pullRequest',
+    url: 'https://github.com/octocat/hello/pull/42',
+    repositoryName: 'octocat/hello',
+    title: 'Fix the thing',
+    itemDate: '2026-01-02T03:04:05Z',
+    checkedAt: '2026-11-17T08:00:00Z',
+    confirmed: true,
+    flagReason: null,
+    ...overrides,
+  };
+}
+
+export function candidate(
+  overrides: Partial<EvidenceCandidate> = {},
+): EvidenceCandidate {
+  return {
+    candidateId: 'Zm9vYmFyYmF6cXV4MDEyMw',
+    kind: 'repository',
+    title: 'octocat/hello',
+    repository: { id: 101, fullName: 'octocat/hello' },
+    date: '2025-03-04T05:06:07Z',
+    attached: false,
+    ...overrides,
+  };
+}
+
+export function written(
+  evidence: readonly ProjectEvidence[],
+  projectRevision: string,
+): EvidenceResult<{
+  evidence: ProjectEvidence[];
+  projectRevision: string;
+}> {
+  return { kind: 'ok', value: { evidence: [...evidence], projectRevision } };
+}
+
+export function evidenceFailed(
+  failure: EvidenceFailure,
+  retryAfter: number | null = null,
+): EvidenceResult<never> {
+  return { kind: 'failed', failure, retryAfter };
+}
+
+export function fakeEvidenceApi() {
+  const unavailable = evidenceFailed('unavailable');
+  return {
+    candidates: vi.fn<ProjectEvidenceApi['candidates']>()
+      .mockResolvedValue(unavailable),
+    attach: vi.fn<ProjectEvidenceApi['attach']>()
+      .mockResolvedValue(unavailable),
+    recheck: vi.fn<ProjectEvidenceApi['recheck']>()
+      .mockResolvedValue(unavailable),
+    reorder: vi.fn<ProjectEvidenceApi['reorder']>()
+      .mockResolvedValue(unavailable),
+    remove: vi.fn<ProjectEvidenceApi['remove']>()
+      .mockResolvedValue(unavailable),
   };
 }

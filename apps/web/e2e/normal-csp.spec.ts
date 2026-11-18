@@ -822,3 +822,109 @@ test('the create resume dialog fits a 1280x720 viewport and scrolls', async ({
   await blank.click();
   await expect(blank).toHaveAttribute('aria-pressed', 'true');
 });
+
+test('evidence: settings asks keep or remove before a disconnect and sends '
+  + 'the choice with the generation it read', async ({ page }) => {
+  const probe = await trackCsp(page);
+  const external = await denyExternalRequests(page);
+  await page.context().addCookies([{
+    name: 'aboutme-locale', value: 'en', url: 'http://127.0.0.1:20092',
+  }]);
+  await mockSignedInSession(page, { githubEvidence: true });
+  await page.route('**/api/v1/sessions', async (route) => {
+    await route.fulfill({ status: 200, json: { data: [] } });
+  });
+  await page.route('**/api/v1/me/second-factor', async (route) => {
+    await route.fulfill({
+      status: 200,
+      json: {
+        data: {
+          enabled: false,
+          passkeys: [],
+          totpEnabled: false,
+          recoveryCodesRemaining: 0,
+        },
+      },
+    });
+  });
+  let status: Record<string, unknown> = {
+    generation: 3,
+    hasEvidence: true,
+    connection: {
+      githubUserId: 583231,
+      login: 'octocat',
+      connectedAt: '2026-11-15T08:30:00Z',
+    },
+    session: null,
+  };
+  const disconnects: {
+    readonly query: string;
+    readonly key: string | null;
+    readonly csrf: string | null;
+  }[] = [];
+  await page.route(/\/api\/v1\/github-evidence(?:\?.*)?$/u, async (route) => {
+    const request = route.request();
+    if (request.method() === 'GET') {
+      await route.fulfill({ status: 200, json: { data: status } });
+      return;
+    }
+    disconnects.push({
+      query: new URL(request.url()).search,
+      key: request.headers()['idempotency-key'] ?? null,
+      csrf: request.headers()['x-csrf-token'] ?? null,
+    });
+    if (disconnects.length === 1) {
+      status = { ...status, generation: 4 };
+      await route.fulfill({
+        status: 409,
+        json: {
+          error: { code: 'evidence_connection_changed', message: 'fixed' },
+        },
+      });
+      return;
+    }
+    status = { generation: 5, hasEvidence: true, connection: null,
+      session: null };
+    await route.fulfill({
+      status: 200,
+      json: {
+        data: { generation: 5, projectRevisions: [], resumeRevisions: [] },
+      },
+    });
+  });
+
+  await page.goto('/app/settings/sessions');
+  const section = page.getByTestId('github-evidence');
+  const disconnect = section.getByRole('button', { name: 'Disconnect' });
+  const ask = page.getByRole('alertdialog', {
+    name: 'Keep the attached items as plain links?',
+  });
+  await disconnect.click();
+  await expect(ask.getByRole('button', { name: 'Keep links' }))
+    .toBeFocused();
+  await ask.getByRole('button', { name: 'Cancel' }).click();
+  await expect(ask).toBeHidden();
+  await expect(disconnect).toBeFocused();
+  expect(disconnects).toEqual([]);
+
+  await disconnect.click();
+  await ask.getByRole('button', { name: 'Keep links' }).click();
+  const error = section.getByTestId('evidence-error');
+  await expect(error).toHaveText('The GitHub connection just changed. The '
+    + 'status has been reloaded; try again.');
+  await expect(error).toBeFocused();
+
+  await disconnect.click();
+  await ask.getByRole('button', { name: 'Remove from every project' })
+    .click();
+  await expect(section.getByRole('button', { name: 'Connect GitHub' }))
+    .toBeFocused();
+  expect(disconnects.map((entry) => [entry.query, entry.csrf])).toEqual([
+    ['?keepLinks=true&generation=3', 'csp-test-token'],
+    ['?keepLinks=false&generation=4', 'csp-test-token'],
+  ]);
+  expect(disconnects[1]?.key).not.toBe(disconnects[0]?.key);
+
+  await expectCspClean(probe, ['a status of 409']);
+  expect(external).toEqual([]);
+});

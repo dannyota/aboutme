@@ -156,7 +156,7 @@ func Build(in Input) (*Document, error) {
 		slices.SortStableFunc(imgs, func(a, b platform.Image) int { return a.RunningSince.Compare(b.RunningSince) })
 		c := Component{Name: name, Image: platform.ImageRepository(name), RunningImages: []RunningImage{}}
 		for _, img := range imgs {
-			c.RunningImages = append(c.RunningImages, runningImage(name, in.Platform.Orchestrator, img, in.Evidence[img.Digest]))
+			c.RunningImages = append(c.RunningImages, runningImage(name, img, in.Evidence[img.Digest]))
 		}
 		doc.Components = append(doc.Components, c)
 	}
@@ -165,7 +165,7 @@ func Build(in Input) (*Document, error) {
 	return doc, nil
 }
 
-func runningImage(component, orchestrator string, img platform.Image, ev verify.Evidence) RunningImage {
+func runningImage(component string, img platform.Image, ev verify.Evidence) RunningImage {
 	repo := platform.ImageRepository(component)
 	ri := RunningImage{
 		Digest:       img.Digest,
@@ -212,11 +212,7 @@ func runningImage(component, orchestrator string, img platform.Image, ev verify.
 	ri.Links.TransparencyLog = optional(fmt.Sprintf("https://search.sigstore.dev/?logIndex=%d", p.LogIndex))
 	if sbomStatus == verify.Verified {
 		ri.Links.Release = optional(SourceRepository + "/releases/tag/" + p.Version)
-		asset := imageBase(repo)
-		if orchestrator == "podman" {
-			asset += "-amd64"
-		}
-		ri.Links.SBOM = optional(fmt.Sprintf("%s/releases/download/%s/%s.spdx.json", SourceRepository, p.Version, asset))
+		ri.Links.SBOM = optional(fmt.Sprintf("%s/releases/download/%s/%s-amd64.spdx.json", SourceRepository, p.Version, imageBase(repo)))
 	}
 	return ri
 }

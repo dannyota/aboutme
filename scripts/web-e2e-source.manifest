@@ -158,7 +158,12 @@ apps/web/app/components/preview/cardLayout.ts
 apps/web/app/components/preview/preview-card.css
 apps/web/app/components/print/PrintResumeApp.vue
 apps/web/app/components/print/vue-style.d.ts
+apps/web/app/components/projects/EvidenceCandidates.vue
+apps/web/app/components/projects/EvidenceDialog.vue
+apps/web/app/components/projects/EvidenceLinkForm.vue
 apps/web/app/components/projects/ProjectCreateDialog.vue
+apps/web/app/components/projects/ProjectEvidence.vue
+apps/web/app/components/projects/ProjectEvidenceItem.vue
 apps/web/app/components/projects/ProjectLanguageDialog.vue
 apps/web/app/components/projects/ProjectLeaveDialog.vue
 apps/web/app/components/projects/ProjectList.vue
@@ -166,7 +171,10 @@ apps/web/app/components/projects/ProjectReleaseDialog.vue
 apps/web/app/components/projects/ProjectResumes.vue
 apps/web/app/components/projects/ProjectTechnologies.vue
 apps/web/app/components/projects/ProjectTextFields.vue
+apps/web/app/components/projects/evidencePickerState.ts
+apps/web/app/components/projects/evidenceText.ts
 apps/web/app/components/projects/projectDocument.ts
+apps/web/app/components/projects/projectEvidenceState.ts
 apps/web/app/components/projects/projectFromEntry.ts
 apps/web/app/components/projects/projectIssues.ts
 apps/web/app/components/projects/projectLinks.ts
@@ -226,6 +234,7 @@ apps/web/app/components/resume/sections/WorkSection.vue
 apps/web/app/components/resume/sheetGroups.ts
 apps/web/app/components/resume/useResumeStyles.ts
 apps/web/app/components/settings/ConnectedAgents.vue
+apps/web/app/components/settings/EvidenceDisconnectDialog.vue
 apps/web/app/components/settings/GitHubEvidence.vue
 apps/web/app/components/settings/LinkedIdentities.vue
 apps/web/app/components/settings/PrivacySettings.vue
@@ -358,9 +367,11 @@ apps/web/app/components/views/ViewsFilteredBreakdown.vue
 apps/web/app/components/views/ViewsLinkPreviews.vue
 apps/web/app/components/views/ViewsResumeCard.vue
 apps/web/app/composables/agentGrants.ts
+apps/web/app/composables/githubEvidenceApi.ts
 apps/web/app/composables/identitySettings.ts
 apps/web/app/composables/passwordSettings.ts
 apps/web/app/composables/privacySettings.ts
+apps/web/app/composables/projectEvidenceApi.ts
 apps/web/app/composables/projectsApi.ts
 apps/web/app/composables/providerAuthorization.ts
 apps/web/app/composables/secondFactorPending.ts
@@ -450,6 +461,7 @@ apps/web/app/i18n/meta.ts
 apps/web/app/i18n/password-settings.ts
 apps/web/app/i18n/pdf.ts
 apps/web/app/i18n/privacy-settings.ts
+apps/web/app/i18n/project-evidence.ts
 apps/web/app/i18n/project-pages.ts
 apps/web/app/i18n/projects.ts
 apps/web/app/i18n/publish.ts
@@ -600,6 +612,7 @@ apps/web/e2e/print-mutations.spec.ts
 apps/web/e2e/print-pdf.spec.ts
 apps/web/e2e/print-text-containment.ts
 apps/web/e2e/print.spec.ts
+apps/web/e2e/project-evidence-fake.ts
 apps/web/e2e/project-page-details.ts
 apps/web/e2e/project-pages.spec.ts
 apps/web/e2e/projects.spec.ts

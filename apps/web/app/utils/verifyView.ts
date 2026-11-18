@@ -14,17 +14,12 @@ import {
 export type ChipKind
   = | 'match' | 'updating' | 'not_rechecked' | 'not_verified' | 'failed';
 export type ConnectorKind = 'agree' | 'updating' | 'unknown' | 'disagree';
-export type ReportingPlatform = 'aws-ecs' | 'kubernetes' | 'host' | 'unknown';
+export type ReportingPlatform = 'host' | 'unknown';
 
 export function reportingPlatform(
   document: DeploymentDocument | null,
 ): ReportingPlatform {
-  if (document?.orchestrator === 'podman') return 'host';
-  if (document?.orchestrator === 'kubernetes') return 'kubernetes';
-  if (document?.provider === 'aws' && document.orchestrator === 'ecs') {
-    return 'aws-ecs';
-  }
-  return 'unknown';
+  return document === null ? 'unknown' : 'host';
 }
 
 export interface ChainView {

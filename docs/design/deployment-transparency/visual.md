@@ -113,12 +113,12 @@ match the one before it." It is an `ol` of four steps. Each step has a 40 px
 `--muted` disk with a 20 px icon and a border, a 13 px label, a 16 px weight 600
 value, a 13 px muted line, and a state chip.
 
-| Step    | Icon                    | Label VI / EN       | Value                        | Muted line                                                                          |
-| ------- | ----------------------- | ------------------- | ---------------------------- | ----------------------------------------------------------------------------------- |
-| Source  | `git-commit-horizontal` | Mã nguồn / Source   | Version                      | `dannyota/aboutme` @ short commit, both links                                       |
-| Build   | `workflow`              | Bản dựng / Build    | GitHub Actions               | "release-images, lần chạy / run {id}", a link                                       |
-| Image   | `package`               | Image / Image       | `ghcr.io/dannyota/aboutme-*` | "3 image, đã được GitHub ký" / "3 images, signed by GitHub"                         |
-| Running | `server`                | Đang chạy / Running | aboutme.vn                   | "AWS Singapore, {n} bản sao, từ 09:41" / "AWS Singapore, {n} replicas, since 09:41" |
+| Step    | Icon                    | Label VI / EN       | Value                        | Muted line                                                                              |
+| ------- | ----------------------- | ------------------- | ---------------------------- | --------------------------------------------------------------------------------------- |
+| Source  | `git-commit-horizontal` | Mã nguồn / Source   | Version                      | `dannyota/aboutme` @ short commit, both links                                           |
+| Build   | `workflow`              | Bản dựng / Build    | GitHub Actions               | "release-images, lần chạy / run {id}", a link                                           |
+| Image   | `package`               | Image / Image       | `ghcr.io/dannyota/aboutme-*` | "3 image, đã được GitHub ký" / "3 images, signed by GitHub"                             |
+| Running | `server`                | Đang chạy / Running | aboutme.vn                   | "GreenNode HCM03, {n} bản sao, từ 09:41" / "GreenNode HCM03, {n} replicas, since 09:41" |
 
 The Image value is 14 px monospace with a break opportunity after `dannyota/`.
 Per-component digests live in the component rows, not in the chain. The short
@@ -292,22 +292,22 @@ px icon column 10 px from the text.
 
 "Chứng minh" / "It proves", with `check` in `--link`:
 
-The following AWS wording applies to ECS reports. Podman and Kubernetes use the
-reporter-specific text in [page.md](page.md#limits). Podman states that the host
-reports itself, with weaker trust than ECS. A GitHub build claim applies only to
-an image whose signature was checked.
+The list states that the host reports itself, with weaker trust than an
+independent platform API. Before a document loads, the lists name no platform
+([page.md](page.md#limits)). A GitHub build claim applies only to an image whose
+signature was checked.
 
-- AWS báo cáo đúng các mã băm này đang chạy, với số bản sao như trên. / AWS
-  reports these exact digests as running, with these replica counts.
-- GitHub đã dựng và ký từng image từ commit công khai được nêu, và chữ ký nằm
-  trong nhật ký công khai của Sigstore. / GitHub built and signed each image
-  from the named public commit, and the signature is in the public Sigstore log.
+- Máy chủ GreenNode tự báo cáo các mã băm Podman đang chạy và số bản sao. / The
+  GreenNode host itself reports the running Podman digests and replica counts.
+- Một container kiểm chứng trên cùng máy chủ đối chiếu chữ ký image với GitHub
+  và Sigstore. / An observer container on that same host checks image signatures
+  against GitHub and Sigstore.
 
 "Không chứng minh" / "It does not prove", with `minus` in muted, holds the three
 sentences from [page.md](page.md#limits). Vietnamese:
 
-- Trang cho thấy những gì AWS báo cáo đang chạy, không chứng minh bản thân máy
-  chủ trung thực.
+- Yếu hơn báo cáo từ API của một nền tảng độc lập: máy chủ tự báo cáo, không
+  chứng minh máy chủ trung thực.
 - Trang nói về mã nguồn, không nói về cấu hình hay bí mật.
 - Bản dựng đã kiểm chứng nghĩa là GitHub dựng nó từ mã nguồn công khai, không có
   nghĩa mã nguồn không có lỗi.
