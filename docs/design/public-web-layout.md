@@ -166,13 +166,13 @@ not aligned across rows. Location is a row without a link. Rows stay inside
 
 The [page bar](public-page-bar.md) has no ground of its own and no bottom rule
 and sits on the desk inside `main`, outside the article. Its inner row spans the
-sheet's outer width with inline padding `clamp(6px, 2cqi, 26px)`, so on a phone
-the row starts 16 px from the edge (10 px of desk plus 6 px) and keeps one row.
-Its scoped tokens measure, on the light and dark desks: credit text 5.54:1 and
-6.55:1, mark 3.59:1 and 6.51:1, button label 12.42:1 and 11.68:1. The sign-in
-join invite floats on the desk with its own palette and is placed against the
-first sheet with today's breakpoints. Project pages keep the bar with its ground
-and rule.
+sheet's outer width with inline padding `clamp(6px, 2cqi - 2px, 26px)`, so on a
+phone the row starts 16 px from the edge (10 px of desk plus 6 px) and keeps one
+row. Its scoped tokens measure, on the light and dark desks: credit text 5.54:1
+and 6.55:1, mark 3.59:1 and 6.51:1, button label 12.42:1 and 11.68:1. The
+sign-in join invite floats on the desk with its own palette and is placed
+against the first sheet with today's breakpoints. Project pages keep the bar
+with its ground and rule.
 
 ## Print
 

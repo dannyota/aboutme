@@ -103,7 +103,7 @@ fill; the button border is the label color.
 | ---------------------- | --------------------------------------------------------------------------------------------- |
 | Bar height             | 48 px, or 56 px on a touch screen; 8 px block padding at top and bottom                       |
 | Inner row width        | the sheet width of the web layout, centered                                                   |
-| Inner inline padding   | `clamp(6px, 2cqi, 26px)`                                                                      |
+| Inner inline padding   | `clamp(6px, 2cqi - 2px, 26px)`                                                                |
 | Row layout             | brand left, actions right; 16 px gap, 8 px on phones                                          |
 | Wrap                   | one row down to 360 px; below that the row wraps with an 8 px row gap and the actions go last |
 | Credit type            | Be Vietnam Pro 500, 13 px on 20 px; 12 px below 30 rem                                        |
@@ -121,8 +121,8 @@ The buttons match the application `outline` pill at size `sm`.
 
 The row spans the sheet's outer width from the
 [web layout](public-web-layout.md#sheets) with inline padding
-`clamp(6px, 2cqi, 26px)`, so on a phone the row starts 16 px from the edge: 10
-px of desk plus 6 px.
+`clamp(6px, 2cqi - 2px, 26px)`, so on a phone the row starts 16 px from the
+edge: 10 px of desk plus 6 px.
 
 At 1440 px the brand sits 26 px inside the first sheet's left edge and the
 button's right edge 26 px inside its right edge. On a phone the bar keeps a 16
