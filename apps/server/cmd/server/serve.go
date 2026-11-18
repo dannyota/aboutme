@@ -21,6 +21,7 @@ func serverStopBudget() stopBudget {
 }
 
 type stopSteps struct {
+	closeStreams  func()
 	stopRendering func(context.Context) error
 	stopEvidence  func(context.Context) error
 	stopWorkers   func()
@@ -32,7 +33,7 @@ type stopSteps struct {
 func serveUntilStopped(ctx context.Context, logger *slog.Logger, budget stopBudget, publicListener net.Listener, publicHandler http.Handler,
 	printListener net.Listener, printHandler http.Handler, steps stopSteps,
 ) error {
-	start, err := servePair(ctx, logger, budget, publicListener, publicHandler, printListener, printHandler, steps.stopRendering)
+	start, err := servePair(ctx, logger, budget, publicListener, publicHandler, printListener, printHandler, steps.closeStreams, steps.stopRendering)
 	detached := context.WithoutCancel(ctx)
 
 	evidenceCtx, cancel := context.WithDeadline(detached, start.Add(budget.join))
@@ -70,16 +71,16 @@ func serveUntilStopped(ctx context.Context, logger *slog.Logger, budget stopBudg
 }
 
 func servePair(ctx context.Context, logger *slog.Logger, budget stopBudget, publicListener net.Listener, publicHandler http.Handler,
-	printListener net.Listener, printHandler http.Handler, stopRendering func(context.Context) error,
+	printListener net.Listener, printHandler http.Handler, closeStreams func(), stopRendering func(context.Context) error,
 ) (time.Time, error) {
 	serverCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	results := make(chan error, 2)
-	go func() {
-		results <- serveHTTP(serverCtx, logger, publicListener, &http.Server{
-			Handler: publicHandler, ReadHeaderTimeout: 5 * time.Second,
-		}, budget.drain)
-	}()
+	publicServer := &http.Server{Handler: publicHandler, ReadHeaderTimeout: 5 * time.Second}
+	if closeStreams != nil {
+		publicServer.RegisterOnShutdown(closeStreams)
+	}
+	go func() { results <- serveHTTP(serverCtx, logger, publicListener, publicServer, budget.drain) }()
 	go func() {
 		results <- serveHTTP(serverCtx, logger, printListener, &http.Server{
 			Handler: printHandler, ReadHeaderTimeout: 5 * time.Second,
@@ -105,13 +106,6 @@ func servePair(ctx context.Context, logger *slog.Logger, budget stopBudget, publ
 		first = errors.Join(first, <-results)
 	}
 	return start, first
-}
-
-func serve(ctx context.Context, logger *slog.Logger, ln net.Listener, handler http.Handler) error {
-	return serveHTTP(ctx, logger, ln, &http.Server{
-		Handler:           handler,
-		ReadHeaderTimeout: 5 * time.Second,
-	}, shutdownTimeout)
 }
 
 func serveHTTP(ctx context.Context, logger *slog.Logger, ln net.Listener, srv *http.Server, drain time.Duration) error {

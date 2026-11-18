@@ -283,6 +283,7 @@ func run() error {
 	logger.Info("starting", "env", cfg.Env)
 	stopping = true
 	return serveUntilStopped(ctx, logger, serverStopBudget(), ln, handler, printListener, printHandler, stopSteps{
+		closeStreams:  hub.Close,
 		stopRendering: printQueue.Shutdown,
 		stopEvidence: func(stopCtx context.Context) error {
 			stopEvidence()

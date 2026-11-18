@@ -77,7 +77,7 @@ aboutme_stop_edge() {
   # Missing units on first deploy are harmless only with positive stable-state
   # proof from aboutme_edge_transition after the command returns.
   local unit result rc=0
-  timeout --kill-after=1s 35 systemctl stop "$@" || rc=$?
+  timeout --kill-after=1s 28 systemctl stop "$@" || rc=$?
   for unit in "$@"; do
     result=$(timeout --kill-after=1s 1 systemctl show --all --property=ActiveState --property=Job "$unit") || {
       if ((rc == 124 || rc == 137)); then return "$rc"; fi

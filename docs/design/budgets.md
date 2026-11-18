@@ -276,18 +276,19 @@ deadline measured from that moment, so the process exits before Podman sends
 `apps/server/cmd/server/serve.go` enforces the server rows; the Vietnam host
 units and deploy scripts enforce the rest.
 
-| Step, in order                               | Deadline from the signal                                                       |
-| -------------------------------------------- | ------------------------------------------------------------------------------ |
-| Public and private print HTTP drains         | 10 s each, in parallel; then remaining connections are closed                  |
-| Print queue close                            | 10 s, beside the drains; a render still running after it gets `ErrClosed`      |
-| GitHub evidence cleanup                      | 6 s, its own row above; its wait also ends at 12 s                             |
-| Background worker joins                      | 12 s                                                                           |
-| View count final flush                       | 18 s, and at most 10 s for its write                                           |
-| Database pool close                          | 20 s; the server budget ends here                                              |
-| Podman `--stop-timeout` on `aboutme-server`  | 25 s, then `SIGKILL`                                                           |
-| systemd `TimeoutStopSec` on `aboutme-server` | 30 s                                                                           |
-| `aboutme_stop_edge` client timeout           | 35 s plus 1 s kill                                                             |
-| Edge transition under the retention lock     | ≤ 50 s with its state checks, inside the 65 s `flock` wait of a retention pass |
+| Step, in order                               | Deadline from the signal                                                                                                                                            |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Owner and public realtime streams            | Closed when the drain starts, so they do not hold it                                                                                                                |
+| Public and private-print HTTP drains         | 10 s each, in parallel; then remaining connections are closed                                                                                                       |
+| Print queue close                            | Renders are cancelled with `ErrClosed` at the signal; the wait for them ends at 10 s, beside the drains                                                             |
+| GitHub evidence cleanup                      | 6 s, its own row above; its wait also ends at 12 s                                                                                                                  |
+| Background worker joins                      | 12 s                                                                                                                                                                |
+| View count final flush                       | 18 s, and at most 10 s for its write                                                                                                                                |
+| Database pool close                          | 20 s; the server budget ends here                                                                                                                                   |
+| Podman `--stop-timeout` on `aboutme-server`  | 22 s, then `SIGKILL`                                                                                                                                                |
+| systemd `TimeoutStopSec` on `aboutme-server` | 25 s                                                                                                                                                                |
+| `aboutme_stop_edge` client timeout           | 28 s plus 1 s kill                                                                                                                                                  |
+| Edge transition holding the retention lock   | ≤ 43 s with its state checks; a waiting retention pass has a 60 s lock wait and a 1 min start timeout, so at least 15 s remain for the pass (about 5 s on the host) |
 
 Each limit nests inside the next. The final flush ends before the pool closes,
 so no count write runs on a closed pool. Podman 4.9 rejects the Quadlet

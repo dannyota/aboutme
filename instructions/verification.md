@@ -34,6 +34,7 @@ The owner's Ubuntu host (8 CPUs, shared with other projects' VMs) runs the check
 |`apps/server/`, Go schema output, migrations, `docs/api/`|`make server-vet server-test server-test-db`, and `make api-check` for the API contract|
 |Authentication, sessions, editor, publish, or exports flows|the affected `make dev-https-<group>-check` proofs after `make dev-https`|
 |`deploy/vn/`|`gh workflow run vn-infra.yml --ref <branch>`; those tests need a hosted root runner|
+|`apps/server/cmd/server/serve.go`|Also `gh workflow run vn-infra.yml --ref <branch>`: `deploy/vn/tests/deploy-safety-test.sh` reads its stop budget|
 
 ### Pin maintenance
 
