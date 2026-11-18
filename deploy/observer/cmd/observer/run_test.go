@@ -64,7 +64,7 @@ func TestRunPublishesOnSuccess(t *testing.T) {
 	pub := &fakePublisher{}
 	obs := &observer{
 		lister:    lister,
-		info:      platform.Info{Provider: "aws", Orchestrator: "ecs", Region: "ap-southeast-1"},
+		info:      platform.Info{Provider: "greennode", Orchestrator: "podman", Region: "HCM03"},
 		verifier:  checker,
 		publisher: pub,
 		build:     document.BuildInfo{},

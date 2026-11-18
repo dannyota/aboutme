@@ -124,9 +124,6 @@ describe('verify page states', () => {
       const base = fixture('unverified');
       const document = {
         ...base,
-        platform: {
-          provider: 'greennode', orchestrator: 'podman', region: 'HCM03',
-        },
         components: base.components.map((component) => ({
           ...component,
           running_images: component.running_images.map((image) => ({
@@ -159,7 +156,9 @@ describe('verify page states', () => {
       expect(limits.text()).toContain(
         'Một container kiểm chứng trên cùng máy chủ đối chiếu chữ ký image',
       );
-      expect(limits.text()).toContain('Yếu hơn báo cáo từ API của ECS');
+      expect(limits.text())
+        .toContain('Yếu hơn báo cáo từ API của một nền tảng độc lập');
+      expect(limits.text()).not.toContain('ECS');
       expect(limits.text()).not.toContain('AWS');
       expect(vietnamese.get('[data-testid="verify-components"]').text())
         .toContain('sha256:');
@@ -182,19 +181,15 @@ describe('verify page states', () => {
       expect(englishLimits.text()).toContain(
         'An observer container on that same host checks image signatures',
       );
-      expect(englishLimits.text()).toContain('weaker than an ECS API report');
+      expect(englishLimits.text())
+        .toContain('weaker than a report from an independent platform API');
+      expect(englishLimits.text()).not.toContain('ECS');
       expect(englishLimits.text()).not.toContain('AWS');
     });
 
   it('shows a signed Podman host report as Verified in both languages',
     async () => {
-      const base = fixture('verified');
-      const document = {
-        ...base,
-        platform: {
-          provider: 'greennode', orchestrator: 'podman', region: 'HCM03',
-        },
-      };
+      const document = fixture('verified');
       mockResponse = {
         status: 200, body: document, date: freshDate(document),
       };
@@ -226,28 +221,22 @@ describe('verify page states', () => {
       expect(englishLimits.text()).not.toContain('AWS');
     });
 
-  it('keeps AWS wording for an ECS report and names Kubernetes separately',
+  it('names no platform before a document loads, then the GreenNode host',
     async () => {
       serveFixture('verified');
       setSiteLocale('en');
-      const aws = await mountVerify();
-      expect(aws.get('[data-testid="verify-limits"]').text())
-        .toContain('AWS reports these exact digests');
+      const pending = await mountSuspended(VerifyPage);
+      mounted.push(pending);
+      const before = pending.get('[data-testid="verify-limits"]').text();
+      expect(before).toContain(
+        'The deployment document identifies the platform reporting',
+      );
+      expect(before).not.toContain('GreenNode');
 
-      const document = {
-        ...fixture('verified'),
-        platform: {
-          provider: 'greennode', orchestrator: 'kubernetes', region: 'HCM03',
-        },
-      };
-      mockResponse = {
-        status: 200, body: document, date: freshDate(document),
-      };
-      const kubernetes = await mountVerify();
-      expect(kubernetes.get('[data-testid="verify-limits"]').text())
-        .toContain('The Kubernetes API reports');
-      expect(kubernetes.get('[data-testid="verify-limits"]').text())
-        .not.toContain('AWS reports');
+      const loaded = await mountVerify();
+      const after = loaded.get('[data-testid="verify-limits"]').text();
+      expect(after).toContain('The GreenNode host itself reports');
+      expect(after).not.toContain('AWS');
     });
 
   it('shows Loading before the fetch resolves, with no mark', async () => {
@@ -420,33 +409,6 @@ describe('verify page states', () => {
     );
     expect(wrapper.get('[data-step="image"]').text())
       .not.toContain('đã được GitHub ký');
-  });
-
-  it('keeps pending signature wording for ECS and Kubernetes in both '
-    + 'languages', async () => {
-    for (const orchestrator of ['ecs', 'kubernetes']) {
-      const base = fixture('unverified');
-      const document = {
-        ...base,
-        platform: { provider: 'aws', orchestrator, region: 'ap-southeast-1' },
-      };
-      mockResponse = {
-        status: 200, body: document, date: freshDate(document),
-      };
-      for (const locale of ['vi', 'en'] as const) {
-        setSiteLocale(locale);
-        const wrapper = await mountVerify();
-        expect(status(wrapper).text()).toContain(locale === 'vi'
-          ? 'Chưa kiểm tra xong chữ ký của caddy. '
-          + 'Trang tự làm mới sau một phút.'
-          : 'The signature check for caddy hasn\'t finished. '
-            + 'The page refreshes in a minute.');
-        expect(wrapper.get('[data-step="image"]').text())
-          .not.toContain(locale === 'vi'
-            ? 'đã được GitHub ký'
-            : 'signed by GitHub');
-      }
-    }
   });
 
   it('shows Rolling out with its pill and the Updating chain', async () => {

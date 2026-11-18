@@ -5,9 +5,9 @@
   "site": "https://aboutme.vn",
   "source_repository": "https://github.com/dannyota/aboutme",
   "platform": {
-    "provider": "aws",
-    "orchestrator": "ecs",
-    "region": "ap-southeast-1"
+    "provider": "greennode",
+    "orchestrator": "podman",
+    "region": "HCM03"
   },
   "observed_at": "2026-10-02T03:14:05Z",
   "stale_after": "2026-10-02T03:17:05Z",
@@ -39,7 +39,7 @@
             "release": "https://github.com/dannyota/aboutme/releases/tag/v0.6.0",
             "build": "https://github.com/dannyota/aboutme/actions/runs/36218940587/attempts/1",
             "provenance": "https://api.github.com/repos/dannyota/aboutme/attestations/sha256:fdafc11f142a7df36d8182dc9fca9cfc0121adeaf2265e2336961c45c46f8181?predicate_type=provenance",
-            "sbom": "https://github.com/dannyota/aboutme/releases/download/v0.6.0/aboutme-server.spdx.json",
+            "sbom": "https://github.com/dannyota/aboutme/releases/download/v0.6.0/aboutme-server-amd64.spdx.json",
             "transparency_log": "https://search.sigstore.dev/?logIndex=2965228543"
           }
         }
@@ -70,7 +70,7 @@
             "release": "https://github.com/dannyota/aboutme/releases/tag/v0.6.0",
             "build": "https://github.com/dannyota/aboutme/actions/runs/36218940587/attempts/1",
             "provenance": "https://api.github.com/repos/dannyota/aboutme/attestations/sha256:69fcd5586c87e195a4a5eb5f8f99e1ac554038428655dc6297c6b9cba29db12b?predicate_type=provenance",
-            "sbom": "https://github.com/dannyota/aboutme/releases/download/v0.6.0/aboutme-web.spdx.json",
+            "sbom": "https://github.com/dannyota/aboutme/releases/download/v0.6.0/aboutme-web-amd64.spdx.json",
             "transparency_log": "https://search.sigstore.dev/?logIndex=2965228611"
           }
         }

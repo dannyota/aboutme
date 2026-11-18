@@ -37,7 +37,7 @@ func TestLoadConfigIgnoresAWSRegion(t *testing.T) {
 
 func TestLoadConfigRequiresPlatform(t *testing.T) {
 	clearObserverEnv(t)
-	t.Setenv("OBSERVER_REGION", "ap-southeast-1")
+	t.Setenv("OBSERVER_REGION", "HCM03")
 
 	if _, err := loadConfig(); err == nil {
 		t.Fatal("loadConfig: got nil error with no OBSERVER_PLATFORM")
@@ -47,7 +47,7 @@ func TestLoadConfigRequiresPlatform(t *testing.T) {
 func TestLoadConfigRejectsUnknownPlatform(t *testing.T) {
 	clearObserverEnv(t)
 	t.Setenv("OBSERVER_PLATFORM", "unknown")
-	t.Setenv("OBSERVER_REGION", "ap-southeast-1")
+	t.Setenv("OBSERVER_REGION", "HCM03")
 
 	if _, err := loadConfig(); err == nil {
 		t.Fatal("loadConfig: got nil error for unknown OBSERVER_PLATFORM")
@@ -59,7 +59,7 @@ func TestLoadConfigRejectsRemovedPlatforms(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			clearObserverEnv(t)
 			t.Setenv("OBSERVER_PLATFORM", name)
-			t.Setenv("OBSERVER_REGION", "ap-southeast-1")
+			t.Setenv("OBSERVER_REGION", "HCM03")
 			t.Setenv("OBSERVER_BUCKET", "aboutme-prod-transparency")
 			t.Setenv("OBSERVER_CLUSTER", "aboutme-prod")
 			t.Setenv("OBSERVER_APP_SERVICE", "aboutme-prod-app")

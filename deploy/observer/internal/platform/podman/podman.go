@@ -73,9 +73,6 @@ func parse(body []byte, now time.Time) ([]platform.Image, time.Time, error) {
 	if err := json.Unmarshal(body, &doc); err != nil {
 		return nil, time.Time{}, errors.New("invalid observation JSON")
 	}
-	if doc.Platform.Provider != "greennode" || doc.Platform.Orchestrator != "podman" {
-		return nil, time.Time{}, errors.New("observation is not greennode/podman")
-	}
 	observed, err := time.Parse(time.RFC3339, doc.ObservedAt)
 	if err != nil || observed.Before(now.Add(-180*time.Second)) || observed.After(now.Add(60*time.Second)) {
 		return nil, time.Time{}, errors.New("observation timestamp is invalid or outside freshness bounds")

@@ -48,12 +48,12 @@ primitives. Top to bottom:
    transparency log entry, the build run, and the GitHub CLI manual.
 6. **Limits:** three plain sentences ([below](#limits)).
 
-| Step    | Value shown                                          | Match when                                              |
-| ------- | ---------------------------------------------------- | ------------------------------------------------------- |
-| Source  | `dannyota/aboutme`, tag, short commit, links         | The signed certificate names this repository and tag    |
-| Build   | "GitHub Actions, release-images", run link           | The signer workflow matches the expected identity       |
-| Image   | `ghcr.io/dannyota/aboutme-*`, short digest           | The signed subject equals the digest                    |
-| Running | "aboutme.vn, AWS Singapore", replicas, running since | The platform reports that digest; the document is fresh |
+| Step    | Value shown                                            | Match when                                              |
+| ------- | ------------------------------------------------------ | ------------------------------------------------------- |
+| Source  | `dannyota/aboutme`, tag, short commit, links           | The signed certificate names this repository and tag    |
+| Build   | "GitHub Actions, release-images", run link             | The signer workflow matches the expected identity       |
+| Image   | `ghcr.io/dannyota/aboutme-*`, short digest             | The signed subject equals the digest                    |
+| Running | "aboutme.vn, GreenNode HCM03", replicas, running since | The platform reports that digest; the document is fresh |
 
 A digest shows as `sha256:d1c33a0a…945c` (the first 8 and last 4 hex characters)
 in a monospace face. The full value is in the accessible name and the copy
@@ -92,9 +92,8 @@ The owner reviews the Vietnamese copy before release, as for the privacy notice.
 Shown in both languages under the heading "Trang này chứng minh gì" / "What this
 proves":
 
-- It names the reporter from the document's platform fields: AWS for ECS,
-  Kubernetes API for Kubernetes, or the GreenNode host itself for Podman. A host
-  report is weaker than ECS's platform API report and does not prove host
+- It names the GreenNode host itself as the reporter. A host report is weaker
+  than a report from an independent platform API and does not prove host
   honesty. Before a document loads, the text names no platform.
 - It covers the code, not settings or secrets.
 - A verified build means GitHub built it from public source, not that the source

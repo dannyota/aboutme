@@ -55,8 +55,8 @@ export interface Release {
 }
 
 export interface DeploymentDocument {
-  readonly provider: 'aws' | 'greennode';
-  readonly orchestrator: 'ecs' | 'kubernetes' | 'podman';
+  readonly provider: 'greennode';
+  readonly orchestrator: 'podman';
   readonly region: string;
   readonly observedAt: string;
   readonly staleAfter: string;
@@ -74,7 +74,7 @@ const DIGEST = /^sha256:[0-9a-f]{64}$/u;
 const VERSION = /^v[0-9]+\.[0-9]+\.[0-9]+$/u;
 const COMMIT = /^[0-9a-f]{40}$/u;
 const TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/u;
-const REGION = /^(?:ap-southeast-1|[A-Z]{2,4}[0-9]{2})$/u;
+const REGION = /^[A-Z]{2,4}[0-9]{2}$/u;
 const REPO = 'https://github\\.com/dannyota/aboutme';
 const SEMVER = 'v[0-9]+\\.[0-9]+\\.[0-9]+';
 const LINK_PATTERNS = {
@@ -87,7 +87,7 @@ const LINK_PATTERNS = {
     + 'sha256:[0-9a-f]{64}\\?predicate_type=provenance$', 'u'),
   sbom: new RegExp(
     `^${REPO}/releases/download/${SEMVER}/aboutme-(?:server|web|caddy)`
-    + '(?:-amd64)?\\.spdx\\.json$', 'u'),
+    + '-amd64\\.spdx\\.json$', 'u'),
   transparencyLog: /^https:\/\/search\.sigstore\.dev\/\?logIndex=[0-9]{1,20}$/u,
 } as const;
 
@@ -219,11 +219,9 @@ export function decodeDeploymentDocument(value: unknown): DecodeResult {
     constant(raw.source_repository, 'https://github.com/dannyota/aboutme');
     const platform = record(raw.platform);
     const provider = platform.provider;
-    if (provider !== 'aws' && provider !== 'greennode') refuse();
+    if (provider !== 'greennode') refuse();
     const orchestrator = platform.orchestrator;
-    if (orchestrator !== 'ecs' && orchestrator !== 'kubernetes'
-      && orchestrator !== 'podman') refuse();
-    if (orchestrator === 'podman' && provider !== 'greennode') refuse();
+    if (orchestrator !== 'podman') refuse();
     if (typeof raw.summary !== 'string') refuse();
     if (!Array.isArray(raw.components) || raw.components.length > 4) refuse();
     const components = raw.components.map(component);

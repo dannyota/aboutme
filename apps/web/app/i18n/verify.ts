@@ -272,14 +272,15 @@ export const verifyCopy: Readonly<Record<Locale, VerifyCopy>> = {
       heading: 'Trang này chứng minh gì',
       provesLabel: 'Chứng minh',
       proves: [
-        'AWS báo cáo đúng các mã băm này đang chạy, với số bản sao như trên.',
-        'GitHub đã dựng và ký từng image từ commit công khai được nêu, và chữ '
-        + 'ký nằm trong nhật ký công khai của Sigstore.',
+        'Máy chủ GreenNode tự báo cáo các mã băm Podman đang chạy và số bản '
+        + 'sao.',
+        'Một container kiểm chứng trên cùng máy chủ đối chiếu chữ ký image với '
+        + 'GitHub và Sigstore.',
       ],
       notLabel: 'Không chứng minh',
       not: [
-        'Trang cho thấy những gì AWS báo cáo đang chạy, không chứng minh bản '
-        + 'thân máy chủ trung thực.',
+        'Yếu hơn báo cáo từ API của một nền tảng độc lập: máy chủ tự báo cáo, '
+        + 'không chứng minh máy chủ trung thực.',
         'Trang nói về mã nguồn, không nói về cấu hình hay bí mật.',
         'Bản dựng đã kiểm chứng nghĩa là GitHub dựng nó từ mã nguồn công khai, '
         + 'không có nghĩa mã nguồn không có lỗi.',
@@ -439,15 +440,15 @@ export const verifyCopy: Readonly<Record<Locale, VerifyCopy>> = {
       heading: 'What this proves',
       provesLabel: 'It proves',
       proves: [
-        'AWS reports these exact digests as running, with these replica '
-        + 'counts.',
-        'GitHub built and signed each image from the named public commit, and '
-        + 'the signature is in the public Sigstore log.',
+        'The GreenNode host itself reports the running Podman digests and '
+        + 'replica counts.',
+        'An observer container on that same host checks image signatures '
+        + 'against GitHub and Sigstore.',
       ],
       notLabel: 'It does not prove',
       not: [
-        'It shows what AWS reports is running, not proof that the server '
-        + 'itself is honest.',
+        'This is weaker than a report from an independent platform API: the '
+        + 'host reports itself and does not prove its honesty.',
         'It covers the code, not settings or secrets.',
         'A verified build means GitHub built it from public source, not that '
         + 'the source has no bugs.',
@@ -462,57 +463,33 @@ export function verifyLimits(
   reporter: ReportingPlatform,
 ): VerifyCopy['limits'] {
   const base = verifyCopy[locale].limits;
-  if (reporter === 'aws-ecs') return base;
+  if (reporter === 'host') return base;
   const vi = locale === 'vi';
-  const reports = {
-    host: vi
-      ? 'Máy chủ GreenNode tự báo cáo các mã băm Podman đang chạy '
-      + 'và số bản sao.'
-      : 'The GreenNode host itself reports the running Podman digests '
-        + 'and replica counts.',
-    kubernetes: vi
-      ? 'API của Kubernetes báo cáo các mã băm đang chạy và số bản sao.'
-      : 'The Kubernetes API reports the running digests and replica counts.',
-    unknown: vi
-      ? 'Tài liệu triển khai cho biết nền tảng nào báo cáo '
-      + 'các mã băm đang chạy.'
-      : 'The deployment document identifies the platform reporting '
-        + 'the running digests.',
-  };
-  const trust = reporter === 'host'
-    ? (vi
-        ? 'Yếu hơn báo cáo từ API của ECS: máy chủ tự báo cáo, '
-        + 'không chứng minh máy chủ trung thực.'
-        : 'This is weaker than an ECS API report: the host reports itself '
-          + 'and does not prove its honesty.')
-    : (vi
-        ? 'Báo cáo của nền tảng không chứng minh máy chủ trung thực.'
-        : 'A platform report does not prove the server is honest.');
-  const signatures = reporter === 'host'
-    ? (vi
-        ? 'Một container kiểm chứng trên cùng máy chủ đối chiếu chữ ký image '
-        + 'với GitHub và Sigstore.'
-        : 'An observer container on that same host checks image signatures '
-          + 'against GitHub and Sigstore.')
-    : (vi
+  return {
+    ...base,
+    proves: [
+      vi
+        ? 'Tài liệu triển khai cho biết nền tảng nào báo cáo '
+        + 'các mã băm đang chạy.'
+        : 'The deployment document identifies the platform reporting '
+          + 'the running digests.',
+      vi
         ? 'Chỉ image có chữ ký đã kiểm chứng mới được xác nhận do GitHub dựng '
         + 'từ commit công khai, với chữ ký trong nhật ký Sigstore.'
         : 'Only images with verified signatures are confirmed as built by '
           + 'GitHub from the public commit, with signatures '
-          + 'in the Sigstore log.');
-  return {
-    ...base,
-    proves: [reports[reporter], signatures],
-    not: [trust, ...base.not.slice(1)],
+          + 'in the Sigstore log.',
+    ],
+    not: [
+      vi
+        ? 'Báo cáo của nền tảng không chứng minh máy chủ trung thực.'
+        : 'A platform report does not prove the server is honest.',
+      ...base.not.slice(1),
+    ],
   };
 }
 
 export function platformPlace(document: DeploymentDocument): string {
-  if (document.provider === 'aws') {
-    return document.region === 'ap-southeast-1'
-      ? 'AWS Singapore'
-      : `AWS ${document.region}`;
-  }
   return `GreenNode ${document.region}`;
 }
 

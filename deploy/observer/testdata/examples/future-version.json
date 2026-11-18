@@ -5,9 +5,9 @@
   "site": "https://aboutme.vn",
   "source_repository": "https://github.com/dannyota/aboutme",
   "platform": {
-    "provider": "aws",
-    "orchestrator": "ecs",
-    "region": "ap-southeast-1"
+    "provider": "greennode",
+    "orchestrator": "podman",
+    "region": "HCM03"
   },
   "observed_at": "2027-03-01T00:00:00Z",
   "stale_after": "2027-03-01T00:03:00Z",
