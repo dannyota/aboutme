@@ -69,19 +69,61 @@ describe('sheets contact rows', () => {
     expect(wrapper.get('a').text()).toBe('scholar.example.com/ada');
   });
 
-  it('uses the display text as anchor text and keeps the label column', () => {
-    const labelled = row(detail('github', 'https://github.com/ada', {
-      display: 'label',
-    }));
-    expect(labelled.get('.contact-label').text()).toBe('GitHub');
-    expect(labelled.get('.contact-value a').text()).toBe('GitHub');
-    expect(labelled.get('a').attributes('href')).toBe('https://github.com/ada');
-    const full = row(detail('twitter', 'https://x.com/ada', {
-      display: 'full',
-    }));
-    expect(full.get('.contact-label').text()).toBe('X');
-    expect(full.get('.contact-value a').text()).toBe('https://x.com/ada');
-  });
+  it.each([
+    ['github', 'https://github.com/ada', undefined, 'GitHub'],
+    ['custom', 'https://scholar.example.com/ada', 'Google Scholar',
+      'Google Scholar'],
+  ] as const)(
+    'shows a %s link with the label display as one anchor in the label',
+    (type, value, label, text) => {
+      const wrapper = row(detail(type, value, {
+        display: 'label', ...(label === undefined ? {} : { label }),
+      }));
+      expect([...wrapper.element.children].map((child) => child.className))
+        .toEqual(['contact-label']);
+      expect(wrapper.find('.contact-value').exists()).toBe(false);
+      const anchors = wrapper.findAll('a');
+      expect(anchors).toHaveLength(1);
+      expect(anchors[0]!.text()).toBe(text);
+      expect(anchors[0]!.attributes('href')).toBe(value);
+      expect(anchors[0]!.attributes('rel')).toBe('noopener noreferrer');
+      expect(anchors[0]!.element.parentElement)
+        .toBe(wrapper.get('.contact-label').element);
+      expect(wrapper.get('.contact-label svg.resume-icon').exists()).toBe(true);
+      expect(wrapper.text()).toBe(text);
+    },
+  );
+
+  it('shows a label-display link without an icon when the style is none',
+    () => {
+      const wrapper = row(detail('github', 'https://github.com/ada', {
+        display: 'label',
+      }), 'none');
+      expect(wrapper.find('svg').exists()).toBe(false);
+      const label = wrapper.get('.contact-label').element;
+      expect([...label.children].map((child) => child.tagName))
+        .toEqual(['A']);
+      expect(label.textContent).toBe('GitHub');
+    });
+
+  it.each([
+    ['twitter', 'https://x.com/ada', 'full', 'X', 'https://x.com/ada'],
+    ['website', 'https://ada.example.com/', 'short', 'Website',
+      'ada.example.com'],
+    ['email', 'ada@example.com', 'label', 'Email', 'ada@example.com'],
+    ['website', 'http://ada.example.com', 'label', 'Website',
+      'http://ada.example.com'],
+  ] as const)(
+    'keeps the label column and the value for a %s with the %s display',
+    (type, value, display, label, shown) => {
+      const wrapper = row(detail(type, value, { display }));
+      expect([...wrapper.element.children].map((child) => child.className))
+        .toEqual(['contact-label', 'contact-value']);
+      expect(wrapper.get('.contact-label').text()).toBe(label);
+      expect(wrapper.get('.contact-label').find('a').exists()).toBe(false);
+      expect(wrapper.get('.contact-value').text()).toBe(shown);
+    },
+  );
 
   it('renders location as a row without a link', () => {
     const wrapper = row(detail('location', 'Hà Nội, Việt Nam'));
@@ -150,6 +192,13 @@ describe('sheets header contact rows', () => {
       expect(wrapper.get('.resume-details').classes())
         .toContain('details-rows');
       expect(wrapper.findAll('.contact-label')).toHaveLength(shown.length);
+      const labelDisplay = shown.filter((item) => item.display === 'label');
+      expect(labelDisplay.length).toBeGreaterThan(0);
+      expect(wrapper.findAll('.contact-value'))
+        .toHaveLength(shown.length - labelDisplay.length);
+      expect(wrapper.findAll('.contact-label > a').map((anchor) =>
+        anchor.attributes('href'))).toEqual(labelDisplay.map((item) =>
+        item.value));
     },
   );
 });

@@ -106,7 +106,7 @@ func publicHTMLRejectionForPage(source []byte, resume publicresume.PublicResume,
 					return
 				}
 			case "title":
-				if title != nil || len(node.Attr) != 0 || textNode(node) != page.Title {
+				if title != nil || len(node.Attr) != 0 || textNode(node) != parsedLineEndings(page.Title) {
 					reject("title")
 					return
 				}
@@ -258,6 +258,10 @@ func attributeCount(node *html.Node, key string) int {
 		}
 	}
 	return count
+}
+
+func parsedLineEndings(text string) string {
+	return strings.ReplaceAll(strings.ReplaceAll(text, "\r\n", "\n"), "\r", "\n")
 }
 
 func textNode(node *html.Node) string {

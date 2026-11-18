@@ -325,7 +325,8 @@ describe('resume page HTML parity with the shared corpus', () => {
       const page = new JSDOM(entry.html!).window.document;
       const fullName = ((entry.envelope.publicResume as Envelope)
         .document as { personalDetails: { fullName: string } })
-        .personalDetails.fullName;
+        .personalDetails.fullName.replaceAll('\r\n', '\n')
+        .replaceAll('\r', '\n');
       const sheets = page.querySelectorAll(
         '.public-resume-page > article.resume-sheets > .resume-sheet',
       );

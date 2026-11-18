@@ -73,11 +73,28 @@ const shownValue = computed(() => {
     v-if="row"
     class="contact-chip contact-chip--sheets"
   >
-    <span class="contact-label"><Icon
+    <span
+      v-if="display === 'label' && href !== null"
+      class="contact-label"
+    ><Icon
+      v-if="iconStyle === 'outline'"
+      :icon-key="iconKey"
+    /><a
+      :href="href"
+      rel="noopener noreferrer"
+      style="color: var(--color-link); text-decoration: underline"
+    >{{ label }}</a></span>
+    <span
+      v-else
+      class="contact-label"
+    ><Icon
       v-if="iconStyle === 'outline'"
       :icon-key="iconKey"
     />{{ label }}</span>
-    <span class="contact-value"><a
+    <span
+      v-if="display !== 'label'"
+      class="contact-value"
+    ><a
       v-if="href !== null"
       :href="href"
       rel="noopener noreferrer"

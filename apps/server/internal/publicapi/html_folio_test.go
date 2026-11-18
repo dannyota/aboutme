@@ -63,6 +63,9 @@ func TestPublicHTMLAcceptsFoliosInOrder(t *testing.T) {
 		{"separators in the name", "Ada · Lovelace / 2 / 3", 2},
 		{"whitespace-only name", "   ", 2},
 		{"escaped characters", `Ada "<&>" Lovelace`, 2},
+		{"carriage return and line feed in the name", "Ada\r\nLovelace", 2},
+		{"carriage return in the name", "Ada\rLovelace", 2},
+		{"both line endings in the name", "Ada\r\n\rLovelace\n", 3},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			page, resume, jsonLD := folioPage(t, test.fullName, folioSequence(test.fullName, test.total))
@@ -100,6 +103,9 @@ func TestPublicHTMLRejectsBrokenFolios(t *testing.T) {
 		{"whitespace-only name absent", "   ", unnamedFolio("1 / 1")},
 		{"whitespace-only name emptied", "   ", folioMarkup(` data-folio-name="" data-folio-page="1 / 1"`)},
 		{"whitespace-only name shortened", "   ", namedFolio(" ", "1 / 1")},
+		{"carriage return dropped from the name", "Ada\r\nLovelace", namedFolio("AdaLovelace", "1 / 1")},
+		{"carriage return as a space", "Ada\rLovelace", namedFolio("Ada Lovelace", "1 / 1")},
+		{"line feed doubled", "Ada\r\nLovelace", namedFolio("Ada\n\nLovelace", "1 / 1")},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			page, resume, jsonLD := folioPage(t, test.fullName, test.folios)

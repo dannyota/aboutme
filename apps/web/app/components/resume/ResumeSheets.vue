@@ -14,6 +14,9 @@ const props = defineProps<{
 const sheets = computed(() =>
   groupSheets([...props.model.main, ...props.model.sidebar]));
 const rootStyle = computed(() => articleStyle(props.model.styles.root));
+const band = computed(() => props.model.styles.header === undefined
+  ? {}
+  : { class: 'resume-sheet-band' });
 </script>
 
 <template>
@@ -31,6 +34,7 @@ const rootStyle = computed(() => articleStyle(props.model.styles.root));
       <div class="resume-sheet-body">
         <div
           v-if="sheet.header"
+          v-bind="band"
           :style="model.styles.header"
         >
           <ResumeHeader

@@ -1,3 +1,27 @@
+@property --sheet-pad-top {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+
+@property --sheet-pad-inline {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+
+@property --sheet-pad-bottom {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+
+@property --sheet-radius {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+
 .resume-document.resume-sheets {
   --sheet-desk: #e6dfd0;
   --sheet-shadow: 74 54 22;
@@ -5,6 +29,10 @@
 
 .resume-document.resume-sheets .resume-sheet-body {
   container-type: inline-size;
+}
+
+.resume-document.resume-sheets .resume-header[data-photo-position] .resume-photo {
+  align-self: start;
 }
 
 .resume-document.resume-sheets .details-rows {
@@ -129,10 +157,14 @@
   }
 
   .resume-document.resume-sheets .resume-sheet {
+    --sheet-pad-top: clamp(28px, 6cqi, 60px);
+    --sheet-pad-inline: clamp(22px, 9cqi, 84px);
+    --sheet-pad-bottom: clamp(20px, 3cqi, 30px);
+    --sheet-radius: clamp(14px, 1.5cqi, 18px);
     width: min(100% - 20px, 46rem);
     margin: 0 auto clamp(14px, 2.5cqi, 26px);
-    padding: clamp(28px, 6cqi, 60px) clamp(22px, 9cqi, 84px) clamp(20px, 3cqi, 30px);
-    border-radius: clamp(14px, 1.5cqi, 18px);
+    padding: var(--sheet-pad-top) var(--sheet-pad-inline) var(--sheet-pad-bottom);
+    border-radius: var(--sheet-radius);
     background: var(--color-surface);
     box-shadow:
       0 0 0 0.5px rgb(var(--sheet-shadow) / 0.14),
@@ -156,6 +188,13 @@
 
   .resume-document.resume-sheets .contact-chip--sheets {
     min-height: 44px;
+    padding-block: max(0px, (44px - 1lh) / 2);
+  }
+
+  @container (width < 480px) {
+    .resume-document.resume-sheets .resume-header {
+      --fs-name: var(--sheet-fs-name-narrow);
+    }
   }
 
   .resume-document.resume-sheets .resume-folio {
@@ -173,11 +212,23 @@
   .resume-document.resume-sheets .resume-folio::before {
     content: attr(data-folio-name);
     content: attr(data-folio-name) / "";
+    min-width: 0;
   }
 
   .resume-document.resume-sheets .resume-folio::after {
     content: attr(data-folio-page);
     content: attr(data-folio-page) / "";
+    flex: none;
+    white-space: nowrap;
+  }
+}
+
+@media screen and (forced-colors: none) {
+  .resume-document.resume-sheets .resume-sheet-band > .resume-header {
+    margin: calc(-1 * var(--sheet-pad-top)) calc(-1 * var(--sheet-pad-inline)) var(--gap-header);
+    padding: var(--sheet-pad-top) var(--sheet-pad-inline) var(--sheet-pad-bottom);
+    border-start-start-radius: var(--sheet-radius);
+    border-start-end-radius: var(--sheet-radius);
   }
 }
 

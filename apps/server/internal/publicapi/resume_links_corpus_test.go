@@ -49,7 +49,10 @@ type resumeLinksSource struct {
 	prepare           func(entries []schema.ProjectEntry)
 	print             bool
 	blankName         string
+	fullName          string
 }
+
+const hostileCorpusName = "Đỗ <b>Nam</b> & \"Hoàng\" · 2 / 3\r\nO'Brien\rNam"
 
 func resumeLinksSources() []resumeLinksSource {
 	hidden := true
@@ -72,6 +75,10 @@ func resumeLinksSources() []resumeLinksSource {
 		{
 			name: "vi-linked-entries", sample: "engineer-compact.vi.json", lng: "vi", revision: 12,
 			linked: []string{"vn-address-kit", "nextjs-perf-checklist"},
+		},
+		{
+			name: "en-hostile-name", sample: "engineer-compact.en.json", lng: "en", revision: 13, discoverable: true,
+			fullName: hostileCorpusName,
 		},
 	}
 }
@@ -98,6 +105,9 @@ func resumeLinksSourceDocument(t *testing.T, source resumeLinksSource) schema.Re
 	}
 	if source.prepare != nil {
 		source.prepare(section.ProjectEntries)
+	}
+	if source.fullName != "" {
+		document.PersonalDetails.FullName = &source.fullName
 	}
 	document.Content["project"] = section
 	return document

@@ -156,11 +156,15 @@ describe('sheets geometry on screen', () => {
     const sheet = declarations(rule(screen, `${ARTICLE} .resume-sheet`));
     expect(sheet).toContain('width: min(100% - 20px, 46rem)');
     expect(sheet).toContain('margin: 0 auto clamp(14px, 2.5cqi, 26px)');
+    expect(sheet).toContain('--sheet-pad-top: clamp(28px, 6cqi, 60px)');
+    expect(sheet).toContain('--sheet-pad-inline: clamp(22px, 9cqi, 84px)');
+    expect(sheet).toContain('--sheet-pad-bottom: clamp(20px, 3cqi, 30px)');
+    expect(sheet).toContain('--sheet-radius: clamp(14px, 1.5cqi, 18px)');
     expect(sheet).toContain(
-      'padding: clamp(28px, 6cqi, 60px) clamp(22px, 9cqi, 84px) '
-      + 'clamp(20px, 3cqi, 30px)',
+      'padding: var(--sheet-pad-top) var(--sheet-pad-inline) '
+      + 'var(--sheet-pad-bottom)',
     );
-    expect(sheet).toContain('border-radius: clamp(14px, 1.5cqi, 18px)');
+    expect(sheet).toContain('border-radius: var(--sheet-radius)');
     expect(sheet).toContain('background: var(--color-surface)');
     const shadow = sheet.find((item) => item.startsWith('box-shadow:'))!;
     expect(shadow.replace(/\s+/gu, ' ')).toBe(
@@ -169,6 +173,31 @@ describe('sheets geometry on screen', () => {
       + '0 10px 26px -8px rgb(var(--sheet-shadow) / 0.2), '
       + '0 32px 60px -28px rgb(var(--sheet-shadow) / 0.22)',
     );
+  });
+
+  it.each(['--sheet-pad-top', '--sheet-pad-inline', '--sheet-pad-bottom',
+    '--sheet-radius'])(
+    'registers %s as a length so the sheet resolves its container units',
+    (name) => {
+      expect(declarations(rule(top, `@property ${name}`))).toEqual([
+        'syntax: "<length>"',
+        'inherits: true',
+        'initial-value: 0px',
+      ]);
+    },
+  );
+
+  it('bleeds a tinted header band to the sheet top and sides', () => {
+    const band = rulesIn('@media screen and (forced-colors: none)');
+    expect(declarations(rule(band,
+      `${ARTICLE} .resume-sheet-band > .resume-header`))).toEqual([
+      'margin: calc(-1 * var(--sheet-pad-top)) '
+      + 'calc(-1 * var(--sheet-pad-inline)) var(--gap-header)',
+      'padding: var(--sheet-pad-top) var(--sheet-pad-inline) '
+      + 'var(--sheet-pad-bottom)',
+      'border-start-start-radius: var(--sheet-radius)',
+      'border-start-end-radius: var(--sheet-radius)',
+    ]);
   });
 
   it('never hides a sheet overflow', () => {
@@ -261,8 +290,21 @@ describe('type, measure and rows on screen', () => {
 
   it('gives each contact row a 44 px target on screen only', () => {
     expect(declarations(rule(screen, `${ARTICLE} .contact-chip--sheets`)))
-      .toEqual(['min-height: 44px']);
+      .toEqual([
+        'min-height: 44px',
+        'padding-block: max(0px, (44px - 1lh) / 2)',
+      ]);
     screenOnly('44px');
+  });
+
+  it('caps the name below a 480 px content box on screen only', () => {
+    const narrowScreen = atRules('@media screen').flatMap((block) =>
+      block.children.filter((child) =>
+        child.prelude === '@container (width < 480px)'))
+      .flatMap((block) => block.children);
+    expect(declarations(rule(narrowScreen, `${ARTICLE} .resume-header`)))
+      .toEqual(['--fs-name: var(--sheet-fs-name-narrow)']);
+    screenOnly('--sheet-fs-name-narrow');
   });
 });
 
@@ -325,6 +367,15 @@ describe('contact rows', () => {
   });
 });
 
+describe('side photo', () => {
+  it('aligns a side photo to the start of the header', () => {
+    expect(declarations(rule(
+      top,
+      `${ARTICLE} .resume-header[data-photo-position] .resume-photo`,
+    ))).toEqual(['align-self: start']);
+  });
+});
+
 describe('narrow content box', () => {
   it('keeps a side photo beside the text at 66 px with a 14 px gap', () => {
     expect(declarations(rule(
@@ -359,13 +410,16 @@ describe('folio', () => {
   });
 
   it.each([
-    ['::before', 'data-folio-name'],
-    ['::after', 'data-folio-page'],
-  ])('draws %s from %s with empty alternative text', (pseudo, attribute) => {
+    ['::before', 'data-folio-name', ['min-width: 0']],
+    ['::after', 'data-folio-page', ['flex: none', 'white-space: nowrap']],
+  ])('draws %s from %s with empty alternative text', (
+    pseudo, attribute, layout,
+  ) => {
     expect(declarations(rule(screen, `${ARTICLE} .resume-folio${pseudo}`)))
       .toEqual([
         `content: attr(${attribute})`,
         `content: attr(${attribute}) / ""`,
+        ...layout,
       ]);
   });
 });

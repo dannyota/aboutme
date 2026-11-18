@@ -212,7 +212,8 @@ describe('sheets overrides', () => {
     expect(root['--sheet-fs-body']).toBe('16px');
     expect(root['--sheet-fs-title']).toBe('16px');
     expect(root['--sheet-fs-subtitle']).toBe('16px');
-    expect(root['--sheet-fs-name']).toBe('32px');
+    expect(root['--sheet-fs-name']).toBe('26px');
+    expect(root['--sheet-fs-name-narrow']).toBe('26px');
     expect(root['--sheet-fs-headline']).toBe(`${16 * 1.15}px`);
     expect(root['--sheet-fs-heading']).toBe(`${16 * 1.1}px`);
     expect(root['--sheet-fs-meta']).toBe(`${16 * 0.9}px`);
@@ -227,6 +228,29 @@ describe('sheets overrides', () => {
     for (const size of SIZES) {
       expect(root[`--sheet-fs-${size}`], size).toBe(root[`--fs-${size}`]);
     }
+  });
+
+  it.each([
+    [13, '26px', '26px'],
+    [14, '28px', '27.2px'],
+    [15, '30px', '27.2px'],
+    [16, '32px', '27.2px'],
+    [18, '36px', '30.6px'],
+  ] as const)(
+    'caps the name of a %i px base at the template size and 1.7em narrow',
+    (baseSizePx, wide, narrow) => {
+      const root = sheets(customize((value) => {
+        value.font.baseSizePx = baseSizePx;
+      })).root;
+      expect(root['--sheet-fs-name']).toBe(wide);
+      expect(root['--sheet-fs-name-narrow']).toBe(narrow);
+      expect(root['--fs-name']).toBe(`${baseSizePx * 2}px`);
+    },
+  );
+
+  it('emits no name cap outside sheets', () => {
+    const root = useResumeStyles(base).root;
+    expect(root['--sheet-fs-name-narrow']).toBeUndefined();
   });
 
   it('raises the line height to at least 1.5', () => {

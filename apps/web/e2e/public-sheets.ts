@@ -22,6 +22,17 @@ export const MEASURE = 'Sheets measure.';
 export const SIDE_PHOTO = 'Sheets side photo.';
 export const PRINT = 'Sheets print.';
 export const FORCED = 'Sheets forced colors.';
+export const FOCUS_RING = 'Sheets contact focus ring.';
+export const LEADER = 'Sheets contact leader.';
+export const FOLIO_LINE = 'Sheets folio page line.';
+export const PRINT_OVERRIDES = 'Sheets print overrides.';
+export const BAND = 'Sheets header band.';
+export const NAME_SIZE = 'Sheets name size.';
+export const RHYTHM = 'Sheets contact rhythm.';
+export const BAND_TEMPLATES = ['creative-accent', 'executive-band',
+  'graduate-friendly', 'international-lang'] as const;
+export const LONG_FOLIO_NAME = 'Nguyễn Thị Minh Châu Tôn Nữ Hoàng Phương Thảo '
+  + 'Trần Lê Bảo Ngọc';
 
 export function rgb(hex: string): string {
   const channels = [1, 3, 5].map((index) =>
@@ -333,6 +344,8 @@ export async function expectSidePhoto(
         photo: photo.width,
         gap: text.left - photo.right,
         side: photo.right <= text.left + 0.5,
+        start: Math.abs(photo.top - text.top),
+        tall: text.height - photo.height,
         fontSize: parseFloat(getComputedStyle(header).fontSize),
       };
     });
@@ -344,6 +357,8 @@ export async function expectSidePhoto(
     .toBeLessThanOrEqual(0.5);
   expect(Math.abs(measured.gap - (narrow ? 14 : 1.25 * measured.fontSize)),
     SIDE_PHOTO).toBeLessThanOrEqual(1);
+  expect(measured.tall, SIDE_PHOTO).toBeGreaterThan(20);
+  expect(measured.start, SIDE_PHOTO).toBeLessThanOrEqual(1);
 }
 
 export async function placeSidePhoto(
@@ -396,4 +411,256 @@ export async function expectForcedBorders(page: Page): Promise<void> {
     await expect(sheet, FORCED).toHaveCSS('border-top-width', '1px');
     await expect(sheet, FORCED).toHaveCSS('border-left-width', '1px');
   }
+}
+
+export async function setFolioName(page: Page, name: string): Promise<void> {
+  await page.locator(`${SHEETS} .resume-folio`).evaluateAll(
+    (folios, value) => {
+      for (const folio of folios) folio.setAttribute('data-folio-name', value);
+    }, name);
+  await expect(page.locator(`${SHEETS} .resume-folio`).first())
+    .toHaveAttribute('data-folio-name', name);
+}
+
+export async function expectFolioPageOnOneLine(page: Page): Promise<void> {
+  const measured = await page.locator(`${SHEETS} > .resume-sheet`)
+    .evaluateAll((sheets) => sheets.map((sheet) => {
+      const folio = sheet.querySelector<HTMLElement>(':scope > .resume-folio')!;
+      const after = getComputedStyle(folio, '::after');
+      const before = getComputedStyle(folio, '::before');
+      const probe = document.createElement('span');
+      probe.textContent = folio.getAttribute('data-folio-page');
+      probe.style.cssText = 'position:absolute;visibility:hidden;'
+        + 'white-space:nowrap;padding:0;border:0';
+      for (const property of ['font-family', 'font-size', 'font-weight',
+        'font-style', 'letter-spacing', 'text-transform']) {
+        probe.style.setProperty(property, after.getPropertyValue(property));
+      }
+      sheet.append(probe);
+      const natural = probe.getBoundingClientRect().width;
+      probe.remove();
+      const size = parseFloat(after.fontSize);
+      const line = after.lineHeight.endsWith('px')
+        ? parseFloat(after.lineHeight)
+        : parseFloat(after.lineHeight) * size;
+      return {
+        line,
+        natural,
+        afterWidth: parseFloat(after.width),
+        beforeHeight: parseFloat(before.height),
+        beforeWidth: parseFloat(before.width),
+        gap: parseFloat(getComputedStyle(folio).columnGap) || 0,
+        width: folio.getBoundingClientRect().width,
+        overflow: folio.scrollWidth - folio.clientWidth,
+      };
+    }));
+  expect(measured.length, FOLIO_LINE).toBeGreaterThan(1);
+  for (const folio of measured) {
+    expect({
+      oneLine: folio.afterWidth >= folio.natural - 0.5,
+      longName: folio.beforeHeight >= 2 * folio.line - 0.5,
+      fits: folio.beforeWidth + folio.gap + folio.afterWidth
+        <= folio.width + 1 && folio.overflow <= 1,
+    }, FOLIO_LINE).toEqual({ oneLine: true, longName: true, fits: true });
+  }
+}
+
+export async function tabToContactLink(
+  page: Page, after: number,
+): Promise<number> {
+  for (let presses = 0; presses < 40; presses += 1) {
+    await page.keyboard.press('Tab');
+    const index = await page.evaluate((selector) => {
+      const active = document.activeElement;
+      if (!(active instanceof HTMLAnchorElement)) return -1;
+      return [...document.querySelectorAll(
+        `${selector} header.resume-header .contact-chip--sheets`,
+      )].findIndex((row) => row.contains(active));
+    }, SHEETS);
+    if (index > after) return index;
+  }
+  return -1;
+}
+
+export async function expectContactFocusRing(page: Page): Promise<void> {
+  const measured = await page.evaluate((selector) => {
+    const active = document.activeElement;
+    const row = active?.closest(
+      `${selector} header.resume-header .contact-chip--sheets`,
+    );
+    if (!(active instanceof HTMLAnchorElement) || row === null
+      || row === undefined) {
+      return null;
+    }
+    const probe = document.createElement('span');
+    probe.style.cssText = 'position:absolute;color:var(--color-link)';
+    row.append(probe);
+    const link = getComputedStyle(probe).color;
+    probe.remove();
+    const css = getComputedStyle(row);
+    const rowBox = row.getBoundingClientRect();
+    const anchorBox = active.getBoundingClientRect();
+    return {
+      focusVisible: active.matches(':focus-visible'),
+      style: css.outlineStyle,
+      width: css.outlineWidth,
+      offset: css.outlineOffset,
+      color: css.outlineColor === link,
+      anchor: getComputedStyle(active).outlineStyle,
+      contains: anchorBox.left >= rowBox.left - 0.5
+        && anchorBox.right <= rowBox.right + 0.5
+        && anchorBox.top >= rowBox.top - 0.5
+        && anchorBox.bottom <= rowBox.bottom + 0.5,
+      painted: link !== 'rgba(0, 0, 0, 0)',
+    };
+  }, SHEETS);
+  expect(measured, FOCUS_RING).not.toBeNull();
+  expect(measured, FOCUS_RING).toEqual({
+    focusVisible: true, style: 'solid', width: '2px', offset: '2px',
+    color: true, anchor: 'none', contains: true, painted: true,
+  });
+}
+
+export async function expectContactLeaders(
+  page: Page, wrapped: boolean,
+): Promise<void> {
+  const rows = await page.locator(
+    `${SHEETS} header.resume-header .contact-chip--sheets`,
+  ).evaluateAll((elements) => elements.map((row) => {
+    const label = row.querySelector(':scope > .contact-label')!;
+    const value = row.querySelector(':scope > .contact-value');
+    const rowBox = row.getBoundingClientRect();
+    const labelBox = label.getBoundingClientRect();
+    const clip = ['clip', 'hidden'].includes(getComputedStyle(row).overflowX);
+    if (value === null) {
+      return {
+        kind: 'label', clip, ok: label.querySelectorAll(':scope > a').length
+          === 1 && Math.abs(labelBox.left - rowBox.left) <= 1,
+      };
+    }
+    const css = getComputedStyle(value);
+    const leader = getComputedStyle(value, '::before');
+    const box = value.getBoundingClientRect();
+    const right = box.left + parseFloat(css.borderLeftWidth)
+      + parseFloat(css.paddingLeft) + parseFloat(leader.marginLeft)
+      + parseFloat(leader.width);
+    const range = document.createRange();
+    range.selectNodeContents(value);
+    const start = Math.min(...[...range.getClientRects()]
+      .filter((rect) => rect.width > 0).map((rect) => rect.left));
+    if (box.top >= labelBox.bottom - 1) {
+      return { kind: 'wrapped', clip, ok: right <= rowBox.left + 1 };
+    }
+    return {
+      kind: 'line', clip,
+      ok: Math.abs(right - start) <= 1 && right - labelBox.right >= 1
+        && leader.content === '""' && leader.borderBottomStyle === 'dotted'
+        && leader.borderBottomWidth === '1px',
+    };
+  }));
+  const count = (kind: string) =>
+    rows.filter((row) => row.kind === kind).length;
+  expect(rows.map((row) => [row.kind, row.clip, row.ok]), LEADER)
+    .toEqual(rows.map((row) => [row.kind, true, true]));
+  expect(count('line'), LEADER).toBeGreaterThan(0);
+  if (wrapped) expect(count('wrapped'), LEADER).toBeGreaterThan(0);
+}
+
+export async function expectHeaderBand(page: Page): Promise<void> {
+  const measured = await page.locator(`${SHEETS} > .resume-sheet`).first()
+    .evaluate((sheet) => {
+      const band = sheet.querySelector(':scope > .resume-sheet-body'
+        + ' > div > header.resume-header');
+      const section = sheet.closest('.resume-sheets')!
+        .querySelector('.resume-section');
+      if (band === null || section === null) return null;
+      const near = (left: number, right: number) =>
+        Math.abs(left - right) <= 1;
+      const sheetBox = sheet.getBoundingClientRect();
+      const box = band.getBoundingClientRect();
+      const sectionBox = section.getBoundingClientRect();
+      const sheetCss = getComputedStyle(sheet);
+      const css = getComputedStyle(band);
+      const radius = parseFloat(sheetCss.borderTopLeftRadius);
+      return {
+        marked: band.parentElement!.className === 'resume-sheet-band',
+        top: near(box.top, sheetBox.top),
+        left: near(box.left, sheetBox.left),
+        right: near(box.right, sheetBox.right),
+        corners: radius >= 14 && [css.borderTopLeftRadius,
+          css.borderTopRightRadius].every((value) =>
+          near(parseFloat(value), radius)),
+        foot: [css.borderBottomLeftRadius, css.borderBottomRightRadius]
+          .every((value) => parseFloat(value) === 0),
+        start: near(box.left + parseFloat(css.borderLeftWidth)
+          + parseFloat(css.paddingLeft), sectionBox.left),
+        end: near(box.right - parseFloat(css.borderRightWidth)
+          - parseFloat(css.paddingRight), sectionBox.right),
+        tinted: css.backgroundColor !== sheetCss.backgroundColor,
+        unclipped: sheetCss.overflowX === 'visible'
+          && sheetCss.overflowY === 'visible',
+      };
+    });
+  expect(measured, BAND).toEqual({
+    marked: true, top: true, left: true, right: true, corners: true, foot: true,
+    start: true, end: true, tinted: true, unclipped: true,
+  });
+}
+
+export function expectedNameSize(template: string, narrow: boolean): number {
+  const preset = TEMPLATES.find(({ id }) => id === template);
+  if (preset === undefined) throw new Error(`Unknown template ${template}`);
+  const base = preset.customization.font.baseSizePx;
+  return Math.min(2 * base, (narrow ? 1.7 : 2) * Math.max(base, 16));
+}
+
+export async function expectNameSize(
+  page: Page, template: string, narrow: boolean,
+): Promise<void> {
+  const measured = await page.locator(`${SHEETS} .resume-name`)
+    .evaluate((name) => ({
+      size: parseFloat(getComputedStyle(name).fontSize),
+      content: name.closest('.resume-sheet-body')!
+        .getBoundingClientRect().width,
+    }));
+  expect(measured.content < 480, NAME_SIZE).toBe(narrow);
+  expect(Math.abs(measured.size - expectedNameSize(template, narrow)),
+    NAME_SIZE).toBeLessThanOrEqual(0.1);
+}
+
+export async function expectContactRhythm(page: Page): Promise<void> {
+  const rows = await page.locator(
+    `${SHEETS} header.resume-header .contact-chip--sheets`,
+  ).evaluateAll((elements) => elements.map((row) => {
+    const rects: DOMRect[] = [];
+    const walker = document.createTreeWalker(row, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node !== null;
+      node = walker.nextNode()) {
+      if ((node.textContent ?? '').trim() === '') continue;
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      rects.push(...[...range.getClientRects()]
+        .filter((rect) => rect.height > 0));
+    }
+    const label = row.querySelector(':scope > .contact-label')!
+      .getBoundingClientRect();
+    const value = row.querySelector(':scope > .contact-value')
+      ?.getBoundingClientRect();
+    return {
+      top: Math.min(...rects.map((rect) => rect.top)),
+      bottom: Math.max(...rects.map((rect) => rect.bottom)),
+      wrapped: value !== undefined && value.top >= label.bottom - 1,
+      height: row.getBoundingClientRect().height,
+    };
+  }));
+  const gaps = rows.slice(1).map((row, index) =>
+    row.top - rows[index]!.bottom);
+  expect(rows.filter((row) => row.wrapped).length, RHYTHM)
+    .toBeGreaterThan(0);
+  expect(rows.filter((row) => !row.wrapped).length, RHYTHM)
+    .toBeGreaterThan(0);
+  expect(gaps.length, RHYTHM).toBeGreaterThan(1);
+  expect(Math.max(...gaps) - Math.min(...gaps), RHYTHM)
+    .toBeLessThanOrEqual(1);
+  expect(rows.every((row) => row.height >= 43.5), RHYTHM).toBe(true);
 }

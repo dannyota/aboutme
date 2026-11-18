@@ -5,11 +5,15 @@ import {
   proveMutation,
 } from './style-mutation';
 import {
-  authoredGround, CONTACT_ROWS, DESK_PAINT, expectContactRows, expectFolios,
-  expectForcedBorders, expectNoOverflow, expectOneColumn, expectPaperAndDesk,
-  expectReadingMeasure, expectSheetGeometry, expectSheetsPrint,
-  expectSidePhoto, FOLIO, FORCED, GEOMETRY, MEASURE, ONE_COLUMN, OVERFLOW,
-  PAPER, placeSidePhoto, PRINT, SHEETS, SIDE_PHOTO, TYPE_FLOOR,
+  authoredGround, BAND, BAND_TEMPLATES, CONTACT_ROWS, DESK_PAINT,
+  expectContactFocusRing, expectContactLeaders, expectContactRhythm,
+  expectContactRows, expectFolioPageOnOneLine, expectFolios,
+  expectForcedBorders, expectHeaderBand, expectNameSize, expectNoOverflow,
+  expectOneColumn, expectPaperAndDesk, expectReadingMeasure,
+  expectSheetGeometry, expectSheetsPrint, expectSidePhoto, FOCUS_RING, FOLIO,
+  FOLIO_LINE, FORCED, GEOMETRY, LEADER, LONG_FOLIO_NAME, MEASURE, NAME_SIZE,
+  ONE_COLUMN, OVERFLOW, PAPER, placeSidePhoto, PRINT, PRINT_OVERRIDES, RHYTHM,
+  SHEETS, setFolioName, SIDE_PHOTO, tabToContactLink, TYPE_FLOOR,
 } from './public-sheets';
 import { denyExternalRequests, waitForImages } from './support';
 
@@ -92,9 +96,75 @@ function geometryTests(): void {
       await expectNoOverflow(page);
       await expectFolios(page, NAMES[language]);
       await expectContactRows(page);
+      await expectContactLeaders(page, width === 320);
       await expectReadingMeasure(page);
     });
   }
+  for (const language of ['vi', 'en'] as const) {
+    test(`sheets folio keeps the page on one line at 320 ${language}`, async ({
+      page,
+    }) => {
+      await openSheets(page, { template: 'modern-sidebar', language,
+        width: 320 });
+      await setFolioName(page, LONG_FOLIO_NAME);
+      await expectFolioPageOnOneLine(page);
+    });
+  }
+  for (const [index, template] of BAND_TEMPLATES.entries()) {
+    const language: Language = index % 2 === 0 ? 'vi' : 'en';
+    const owner: Owner = index === 1 ? 'dark' : 'light';
+    test(`sheets header band of ${template} bleeds to the sheet edges`,
+      async ({ page }) => {
+        await openSheets(page, { template, language, width: 390, owner });
+        await expectHeaderBand(page);
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await expectHeaderBand(page);
+      });
+  }
+  for (const template of ['high-contrast', 'modern-sidebar'] as const) {
+    test(`sheets cap the name of ${template} at 390 and 1440`, async ({
+      page,
+    }) => {
+      await openSheets(page, { template, language: 'en', width: 390 });
+      await expectNameSize(page, template, true);
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await expectNameSize(page, template, false);
+    });
+  }
+  for (const language of ['vi', 'en'] as const) {
+    test(`sheets rows keep an even rhythm at 390 ${language}`, async ({
+      page,
+    }) => {
+      await openSheets(page,
+        { template: 'modern-sidebar', language, width: 390 });
+      await expectContactRhythm(page);
+    });
+  }
+  test('sheets rows ring the whole row on keyboard focus', async ({
+    page,
+  }) => {
+    await openSheets(page,
+      { template: 'modern-sidebar', language: 'en', width: 390 });
+    const rows = page.locator(
+      `${SHEETS} header.resume-header .contact-chip--sheets:has(a)`,
+    );
+    const total = await rows.count();
+    expect(total, FOCUS_RING).toBe(7);
+    let index = -1;
+    for (let visited = 0; visited < total; visited += 1) {
+      index = await tabToContactLink(page, index);
+      expect(index, FOCUS_RING).toBeGreaterThanOrEqual(0);
+      await expectContactFocusRing(page);
+    }
+  });
+  test('sheets print drops the type floor, measure and row height', async ({
+    page,
+  }) => {
+    const authored = await continuousRoles(page, 'classic-serif');
+    await openSheets(page, { template: 'classic-serif', language: 'en',
+      width: 1440, owner: 'dark' });
+    await expectPrintedOverrides(page, authored);
+  });
   for (const contentWidth of [479, 480] as const) {
     test(`sheets side photo at a ${contentWidth} px content box`, async ({
       page,
@@ -193,6 +263,214 @@ function geometryMutations(): void {
   });
 }
 
+interface AuthoredRoles {
+  readonly colors: Readonly<Record<string, string>>;
+  readonly sizes: Readonly<Record<string, number>>;
+}
+
+async function readAuthoredRoles(
+  page: Page, root: string,
+): Promise<AuthoredRoles> {
+  return page.locator(root).first().evaluate((article) => {
+    const css = (selector: string) =>
+      getComputedStyle(article.querySelector(selector)!);
+    const selectors = {
+      name: '.resume-name', heading: '.section-heading h2',
+      title: '.entry-title', body: '.entry-body p', meta: '.entry-meta',
+      link: 'header.resume-header a',
+    };
+    return {
+      colors: Object.fromEntries(Object.entries(selectors)
+        .map(([role, selector]) => [role, css(selector).color])),
+      sizes: Object.fromEntries(['name', 'title', 'body', 'meta']
+        .map((role) => [role, parseFloat(css(
+          selectors[role as keyof typeof selectors]).fontSize)])),
+    };
+  });
+}
+
+async function expectSheetsPrintOverrides(
+  page: Page, authored: AuthoredRoles,
+): Promise<void> {
+  const printed = await readAuthoredRoles(page, SHEETS);
+  const measured = await page.locator(SHEETS).evaluate((root) => ({
+    measure: [...root.querySelectorAll('.entry-body, .resume-headline')]
+      .map((block) => getComputedStyle(block).maxWidth),
+    rows: [...root.querySelectorAll('.contact-chip--sheets')]
+      .map((row) => [getComputedStyle(row).minHeight,
+        row.getBoundingClientRect().height] as const),
+  }));
+  expect(authored.sizes.body, PRINT_OVERRIDES).toBeLessThan(16);
+  expect(printed.colors, PRINT_OVERRIDES).toEqual(authored.colors);
+  for (const [role, size] of Object.entries(authored.sizes)) {
+    expect(Math.abs(printed.sizes[role]! - size), PRINT_OVERRIDES)
+      .toBeLessThanOrEqual(0.1);
+  }
+  expect(measured.measure.length, PRINT_OVERRIDES).toBeGreaterThan(1);
+  expect(measured.measure.every((value) => value === 'none'),
+    PRINT_OVERRIDES).toBe(true);
+  expect(measured.rows.length, PRINT_OVERRIDES).toBe(8);
+  expect(measured.rows.every(([min, height]) =>
+    (min === 'auto' || min === '0px') && height < 43.5), PRINT_OVERRIDES)
+    .toBe(true);
+}
+
+async function continuousRoles(
+  page: Page, template: string,
+): Promise<AuthoredRoles> {
+  const reference = await page.context().newPage();
+  try {
+    await reference.setViewportSize({ width: 1440, height: 900 });
+    const external = await denyExternalRequests(reference);
+    const response = await reference.goto(
+      `/_harness/render?fixture=full&template=${template}&mode=continuous`,
+    );
+    expect(response?.ok()).toBe(true);
+    await expect(reference.locator('[data-fonts-ready="true"]'))
+      .toHaveCount(1);
+    expect(external).toEqual([]);
+    return await readAuthoredRoles(reference,
+      '.resume-document:not(.pagination-measurement)');
+  } finally {
+    await reference.close();
+  }
+}
+
+async function expectPrintedOverrides(
+  page: Page, authored: AuthoredRoles,
+): Promise<void> {
+  const screen = await readAuthoredRoles(page, SHEETS);
+  expect(screen.colors.body, PRINT_OVERRIDES)
+    .not.toBe(authored.colors.body);
+  expect(screen.sizes.body, PRINT_OVERRIDES).toBeGreaterThanOrEqual(16);
+  await page.emulateMedia({ media: 'print' });
+  await expectSheetsPrintOverrides(page, authored);
+}
+
+function rowMutations(): void {
+  const open = (page: Page, width = 320) => openSheets(page,
+    { template: 'modern-sidebar', language: 'en', width });
+  const rows = (page: Page) =>
+    page.locator(`${SHEETS} header.resume-header .contact-chip--sheets`);
+  mutationTest('sheets leader rejects a gap before the value', async ({
+    page,
+  }) => {
+    await open(page);
+    await proveMutation(() => expectContactLeaders(page, true),
+      () => applyStyleMutation(
+        page.locator(`${SHEETS} .contact-chip--sheets .contact-value`),
+        { 'margin-inline-end': '8px' }, '::before'), LEADER);
+  });
+  mutationTest('sheets leader rejects a leader before a wrapped value',
+    async ({ page }) => {
+      await open(page);
+      await proveMutation(() => expectContactLeaders(page, true),
+        () => applyStyleMutation(rows(page),
+          { 'justify-content': 'flex-end' }), LEADER);
+    });
+  const focused = async (page: Page) => {
+    await open(page, 390);
+    expect(await tabToContactLink(page, -1), FOCUS_RING).toBe(0);
+    return rows(page).first();
+  };
+  mutationTest('sheets focus ring rejects a ring in another color', async ({
+    page,
+  }) => {
+    const row = await focused(page);
+    await proveMutation(() => expectContactFocusRing(page),
+      () => applyStyleMutation(row, { 'outline-color': 'rgb(255, 0, 0)' }),
+      FOCUS_RING);
+  });
+  mutationTest('sheets focus ring rejects a row without its ring', async ({
+    page,
+  }) => {
+    const row = await focused(page);
+    await proveMutation(() => expectContactFocusRing(page),
+      () => applyStyleMutation(row, { 'outline-style': 'none' }),
+      FOCUS_RING);
+  });
+  mutationTest('sheets folio rejects a page number that wraps', async ({
+    page,
+  }) => {
+    await open(page);
+    await setFolioName(page, LONG_FOLIO_NAME);
+    await proveMutation(() => expectFolioPageOnOneLine(page),
+      () => applyStyleMutation(page.locator(`${SHEETS} .resume-folio`),
+        { 'flex-shrink': '1', 'white-space': 'normal' }, '::after'),
+      FOLIO_LINE);
+  });
+  mutationTest('sheets side photo rejects a centred photo', async ({
+    page,
+  }) => {
+    await openSheets(page,
+      { template: 'classic-serif', language: 'en', width: 1440 });
+    await placeSidePhoto(page, 480);
+    await proveMutation(() => expectSidePhoto(page, 480),
+      () => applyStyleMutation(page.locator(`${SHEETS} .resume-photo`),
+        { 'align-self': 'center' }), SIDE_PHOTO);
+  });
+}
+
+function bandMutations(): void {
+  const band = (page: Page) => page.locator(
+    `${SHEETS} .resume-sheet-band > header.resume-header`);
+  const open = (page: Page) => openSheets(page,
+    { template: 'executive-band', language: 'en', width: 390 });
+  for (const [name, styles] of [
+    ['an inset band', { 'margin-left': '0px' }],
+    ['square band corners', { 'border-top-left-radius': '0px' }],
+    ['band content off the section start', { 'padding-left': '12px' }],
+  ] as const) {
+    mutationTest(`sheets band rejects ${name}`, async ({ page }) => {
+      await open(page);
+      await proveMutation(() => expectHeaderBand(page),
+        () => applyStyleMutation(band(page), styles), BAND);
+    });
+  }
+  mutationTest('sheets name rejects a name above its cap', async ({
+    page,
+  }) => {
+    await openSheets(page,
+      { template: 'high-contrast', language: 'vi', width: 390 });
+    await proveMutation(() => expectNameSize(page, 'high-contrast', true),
+      () => applyStyleMutation(page.locator(`${SHEETS} .resume-name`),
+        { 'font-size': '36px' }), NAME_SIZE);
+  });
+  mutationTest('sheets rhythm rejects rows without their padding', async ({
+    page,
+  }) => {
+    await openSheets(page,
+      { template: 'modern-sidebar', language: 'en', width: 390 });
+    await proveMutation(() => expectContactRhythm(page),
+      () => applyStyleMutation(
+        page.locator(`${SHEETS} header.resume-header .contact-chip--sheets`),
+        { 'padding-top': '0px', 'padding-bottom': '0px' }), RHYTHM);
+  });
+}
+
+function printMutations(): void {
+  const cases = [
+    ['the type floor', `${SHEETS}`, { '--fs-body': '16px' }],
+    ['the 62ch measure', `${SHEETS} .entry-body`,
+      { 'max-width': ['62ch', /px$/u] }],
+    ['the 44 px row height', `${SHEETS} .contact-chip--sheets`,
+      { 'min-height': '44px' }],
+    ['a paper role', `${SHEETS} .entry-body p`,
+      { color: 'rgb(255, 0, 0)' }],
+  ] as const;
+  for (const [name, selector, styles] of cases) {
+    mutationTest(`sheets print rejects ${name}`, async ({ page }) => {
+      const authored = await continuousRoles(page, 'classic-serif');
+      await openSheets(page, { template: 'classic-serif', language: 'en',
+        width: 1440, owner: 'dark' });
+      await expectPrintedOverrides(page, authored);
+      await proveMutation(() => expectSheetsPrintOverrides(page, authored),
+        () => applyStyleMutation(page.locator(selector), styles),
+        PRINT_OVERRIDES);
+    });
+  }
+}
+
 function folioAndRowMutations(): void {
   const open = (page: Page) => openSheets(page,
     { template: 'modern-sidebar', language: 'vi', width: 390 });
@@ -273,5 +551,8 @@ export function publicSheetsTests(): void {
   geometryTests();
   geometryMutations();
   folioAndRowMutations();
+  rowMutations();
+  bandMutations();
+  printMutations();
   paperMutations();
 }

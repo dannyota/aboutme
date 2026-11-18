@@ -15,7 +15,7 @@ type folioCheck struct {
 }
 
 func newFolioCheck(fullName string) *folioCheck {
-	return &folioCheck{name: fullName, named: fullName != ""}
+	return &folioCheck{name: parsedLineEndings(fullName), named: fullName != ""}
 }
 
 func (c *folioCheck) visit(node *html.Node) string {

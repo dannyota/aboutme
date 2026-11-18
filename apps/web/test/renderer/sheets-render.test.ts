@@ -1,6 +1,7 @@
 // @vitest-environment node
 
 import type { Resume } from '@aboutme/schema';
+import { TEMPLATES } from '@aboutme/schema/templates';
 import { JSDOM } from 'jsdom';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -8,6 +9,7 @@ import { createSSRApp, h } from 'vue';
 import { renderToString } from 'vue/server-renderer';
 import { describe, expect, it } from 'vitest';
 
+import { applyTemplate } from '../../app/components/resume/applyTemplate';
 import { PaginationMeasureKey } from '../../app/components/resume/measure';
 import ResumeDocument from '../../app/components/resume/ResumeDocument.vue';
 import type {
@@ -58,6 +60,37 @@ const named = (fullName: string | undefined): Resume => {
 
 const folios = (document: Document): Element[] =>
   [...document.querySelectorAll('.resume-folio')];
+
+describe('sheets header band', () => {
+  const headerWrapper = (document: Document): Element =>
+    document.querySelector('.resume-sheet-body header.resume-header')!
+      .parentElement!;
+
+  it.each(['creative-accent', 'executive-band', 'graduate-friendly',
+    'international-lang'])('marks the tinted header of %s as a band',
+    async (id) => {
+      const template = TEMPLATES.find((preset) => preset.id === id)!;
+      expect(template.customization.layout.surfaceTarget).toBe('header');
+      const document = full();
+      document.customization = applyTemplate(document.customization,
+        template, document.content, 'en');
+      const wrapper = headerWrapper(await render(document));
+      expect(wrapper.className).toBe('resume-sheet-band');
+      expect(wrapper.getAttribute('style')).toContain('--header-padding');
+    });
+
+  it('leaves an untinted header unmarked', async () => {
+    const wrapper = headerWrapper(await render(full()));
+    expect(wrapper.hasAttribute('class')).toBe(false);
+  });
+
+  it('marks exactly the four presets with a header band', () => {
+    expect(TEMPLATES.filter((preset) =>
+      preset.customization.layout.surfaceTarget === 'header')
+      .map((preset) => preset.id).sort()).toEqual(['creative-accent',
+      'executive-band', 'graduate-friendly', 'international-lang']);
+  });
+});
 
 describe('sheets markup', () => {
   it('renders one article whose children are plain sheet divs', async () => {

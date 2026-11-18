@@ -142,17 +142,27 @@ const fontSizes = (base: number, prefix: string): Record<string, string> => ({
   [`${prefix}meta`]: `${Math.max(base * 0.9, 9)}px`,
 });
 
-const sheetTokens = (tokens: ResumeStyleTokens): Record<string, string> => ({
-  ...fontSizes(
-    Math.max(tokens.font.baseSizePx, SHEET_TYPE_FLOOR_PX),
-    '--sheet-fs-',
-  ),
-  '--body-align-narrow': tokens.font.textAlign === 'justify'
-    ? 'start'
-    : tokens.font.textAlign ?? 'left',
-  '--headline-margin-inline':
-    (tokens.header?.align ?? 'left') === 'center' ? 'auto' : '0',
-});
+const SHEET_NAME_EM = 2;
+const SHEET_NAME_NARROW_EM = 1.7;
+
+const roundPx = (value: number): string =>
+  `${Math.round(value * 1000) / 1000}px`;
+
+const sheetTokens = (tokens: ResumeStyleTokens): Record<string, string> => {
+  const floored = Math.max(tokens.font.baseSizePx, SHEET_TYPE_FLOOR_PX);
+  const name = tokens.font.baseSizePx * 2;
+  return {
+    ...fontSizes(floored, '--sheet-fs-'),
+    '--sheet-fs-name': roundPx(Math.min(name, floored * SHEET_NAME_EM)),
+    '--sheet-fs-name-narrow':
+      roundPx(Math.min(name, floored * SHEET_NAME_NARROW_EM)),
+    '--body-align-narrow': tokens.font.textAlign === 'justify'
+      ? 'start'
+      : tokens.font.textAlign ?? 'left',
+    '--headline-margin-inline':
+      (tokens.header?.align ?? 'left') === 'center' ? 'auto' : '0',
+  };
+};
 
 const headingTransform = (
   style: Customization['heading']['style'],

@@ -11,8 +11,9 @@ import {
 } from './style-mutation';
 import { expectBarPaint } from './public-bar';
 import {
-  authoredGround, expectNoOverflow, expectOneColumn, expectPaperAndDesk,
-  expectSheetGeometry, expectSheetsPrint, rgb, SHEETS, sheetsContract,
+  authoredGround, expectedNameSize, expectNoOverflow, expectOneColumn,
+  expectPaperAndDesk, expectSheetGeometry, expectSheetsPrint, rgb, SHEETS,
+  sheetsContract,
 } from './public-sheets';
 import { publicSheetsTests } from './public-sheets-tests';
 import { expectRendererContent } from './renderer-content';
@@ -457,8 +458,11 @@ async function assertRendererStyles(
       expect(Math.abs(padding[1]! - y * 96 / 25.4), 'Renderer margin y.')
         .toBeLessThanOrEqual(1);
     }
+    const narrow = publicPage && await root.locator('.resume-sheet-body')
+      .first().evaluate((body) => body.getBoundingClientRect().width < 480);
+    const name = publicPage ? expectedNameSize(template, narrow) : base * 2;
     for (const [selector, size, weight] of [
-      ['.resume-name', base * 2, '700'],
+      ['.resume-name', name, '700'],
       ['.resume-headline', base * 1.15, '400'],
       ['.section-heading h2', base * 1.1, '700'],
       ['.entry-title', base, '700'],
