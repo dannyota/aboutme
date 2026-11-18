@@ -128,10 +128,12 @@ Add focused boundary probes in both locales/themes, without repeating PDFs:
 detail stacking), 1023/1024 (filter sheet/desktop rows or rail), 1179/1180
 (Library 4/5). Test showcase results-container widths 859/860 at viewport ≥1024
 for 2/3 columns. Preserve existing 360/375/390/414/430 hero checks and
-704/768/1024/1152 header checks. Public columns and header restack below a 36em
-container width (in the sheets of the [web layout](public-web-layout.md), only
-the header photo restacks): probe `36 × container fontSize` minus 1 px and
-exactly that width, using the fixture's independently specified font size.
+704/768/1024/1152 header checks. Continuous columns and the header photo restack
+below a 36em container width: probe `36 × container fontSize` minus 1 px and
+exactly that width, using the fixture's independently specified font size. In
+the sheets of the [web layout](public-web-layout.md) nothing restacks; probe the
+side photo's 66 px width and 14 px gap at a 479 px content box and its normal
+size at 480 px.
 
 Use the locked Playwright 1.64.0 and its bundled browsers, UTC, device scale 1,
 reduced motion, explicit locale (`vi-VN` or `en-US`), and fixed clocks/data.

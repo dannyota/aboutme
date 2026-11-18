@@ -13,8 +13,9 @@ on a phone.
 
 The bar is the first child of `.public-resume-page`, above the sheets. It has no
 ground or bottom rule of its own and sits on the desk of the
-[web layout](public-web-layout.md#page-bar-and-invite), with its inner row at
-the sheet's width and inline padding.
+[web layout](public-web-layout.md#page-bar-and-invite), inside `main` and
+outside the article, with its inner row at the sheet's outer width. Project
+pages keep the bar with its ground and bottom rule.
 
 ```html
 <div class="public-toolbar">
@@ -100,9 +101,9 @@ fill; the button border is the label color.
 
 | Property               | Value                                                                                         |
 | ---------------------- | --------------------------------------------------------------------------------------------- |
-| Bar height             | 48 px, or 56 px on a touch screen; 8 px block padding                                         |
+| Bar height             | 48 px, or 56 px on a touch screen; 8 px block padding at top and bottom                       |
 | Inner row width        | the sheet width of the web layout, centered                                                   |
-| Inner inline padding   | the sheet's inline padding                                                                    |
+| Inner inline padding   | `clamp(6px, 2cqi, 26px)`                                                                      |
 | Row layout             | brand left, actions right; 16 px gap, 8 px on phones                                          |
 | Wrap                   | one row down to 360 px; below that the row wraps with an 8 px row gap and the actions go last |
 | Credit type            | Be Vietnam Pro 500, 13 px on 20 px; 12 px below 30 rem                                        |
@@ -118,14 +119,15 @@ fill; the button border is the label color.
 
 The buttons match the application `outline` pill at size `sm`.
 
-The padding is the sheet's inline padding from the
-[web layout](public-web-layout.md#sheets), so the brand and the text share one
-left edge at every width.
+The row spans the sheet's outer width from the
+[web layout](public-web-layout.md#sheets) with inline padding
+`clamp(6px, 2cqi, 26px)`, so on a phone the row starts 16 px from the edge: 10
+px of desk plus 6 px.
 
-At 1440 px the brand sits on the resume's left text edge and the button's right
-edge on the resume's right text edge. On a phone the bar keeps a 16 px gutter.
-Both languages fit one row at 360 px on a touch screen with both buttons. At 320
-px the row may wrap, and the actions sit under the credit.
+At 1440 px the brand sits 26 px inside the first sheet's left edge and the
+button's right edge 26 px inside its right edge. On a phone the bar keeps a 16
+px gutter. Both languages fit one row at 360 px on a touch screen with both
+buttons. At 320 px the row may wrap, and the actions sit under the credit.
 
 ## Behavior
 
