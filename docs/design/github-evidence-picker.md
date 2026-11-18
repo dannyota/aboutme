@@ -94,7 +94,9 @@ A pasted link is parsed, never fetched as given. Accepted after trimming:
 `https://github.com/{owner}/{repo}`, `/pull/{number}` and `/releases/tag/{tag}`,
 with an optional trailing slash. `http`, another host, `www.`, more segments, a
 query or a fragment answer `evidence_unsupported_link`. The kind comes from the
-link; a request kind that disagrees answers the same error.
+link; a request kind that disagrees answers the same error. The picker trims the
+input and adds `https://` to one that starts with exactly `github.com/`; any
+other form, such as `http://` or `www.`, reaches the server as typed.
 
 ## Picker
 
