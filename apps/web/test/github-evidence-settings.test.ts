@@ -10,6 +10,7 @@ import SessionsPage from '../app/pages/app/settings/sessions.vue';
 import {
   githubEvidenceSettingsCopy,
 } from '../app/i18n/github-evidence-settings';
+import { designCopy } from './support/evidenceCopy';
 import { setSiteLocale } from './support/locale';
 import { literalGuard, parityViolations } from './support/localizationSource';
 
@@ -178,8 +179,14 @@ registerEndpoint('/api/v1/me/second-factor', () => ({
   data: { enabled: false, passkeys: [], recoveryCodesRemaining: 0 },
 }));
 
-async function mountSection(path = '/app/settings/sessions') {
-  const wrapper = await mountSuspended(GitHubEvidence, { route: path });
+async function mountSection(
+  path = '/app/settings/sessions',
+  attach = false,
+) {
+  const wrapper = await mountSuspended(GitHubEvidence, {
+    route: path,
+    ...(attach ? { attachTo: document.body } : {}),
+  });
   mounted.push(wrapper);
   await flushPromises();
   return wrapper;
@@ -447,8 +454,8 @@ describe('GitHub evidence settings', () => {
   });
 
   it(
-    'keeps one Idempotency-Key across a CSRF retry and makes a new one for '
-    + 'the next Disconnect',
+    'keeps one Idempotency-Key for the same choice and generation until a '
+    + 'definitive answer',
     async () => {
       state = connectedIdle;
       csrfTokens = ['csrf-1', 'csrf-2'];
@@ -456,9 +463,11 @@ describe('GitHub evidence settings', () => {
       serve({
         [disconnectRoute]: () => {
           attempts += 1;
-          return attempts === 1
-            ? problem(403, 'csrf_rejected')
-            : problem(500, 'internal');
+          if (attempts === 1) return problem(403, 'csrf_rejected');
+          if (attempts === 2) return problem(500, 'internal');
+          if (attempts === 3) throw new TypeError('lost');
+          state = disconnected;
+          return json(200, disconnectedBody);
         },
       });
       const wrapper = await mountSection();
@@ -468,53 +477,184 @@ describe('GitHub evidence settings', () => {
         expect(wrapper.find('[data-testid="evidence-error"]').exists())
           .toBe(true));
       await click(wrapper, 'evidence-disconnect');
-      await vi.waitFor(() => expect(attempts).toBe(3));
+      await click(wrapper, 'evidence-disconnect');
+      await vi.waitFor(() => expect(attempts).toBe(4));
 
       const sent = net.requests.filter((request) =>
         route(request) === disconnectRoute);
       expect(sent.map((request) => request.headers.get('X-CSRF-Token')))
-        .toEqual(['csrf-1', 'csrf-2', 'csrf-2']);
+        .toEqual(['csrf-1', 'csrf-2', 'csrf-2', 'csrf-2']);
       const keys = sent.map((request) =>
         request.headers.get('Idempotency-Key'));
-      for (const key of keys) expect(key).toMatch(uuidPattern);
-      expect(keys[1]).toBe(keys[0]);
-      expect(keys[2]).not.toBe(keys[0]);
+      expect(keys[0]).toMatch(uuidPattern);
+      expect(new Set(keys)).toEqual(new Set([keys[0]]));
+      expect(buttonLabels(wrapper)).toEqual(['Connect GitHub']);
     },
   );
 
+  it('asks to keep or remove the items when the account has evidence, '
+    + 'focusing Keep links', async () => {
+    state = { ...connectedIdle, hasEvidence: true };
+    const wrapper = await mountSection('/app/settings/sessions', true);
+
+    await click(wrapper, 'evidence-disconnect');
+    await vi.waitFor(() => expect(document.activeElement?.textContent?.trim())
+      .toBe('Keep links'));
+
+    const dialog = document.body.querySelector('[role="alertdialog"]')!;
+    expect(dialog.querySelector('h2')?.textContent?.trim())
+      .toBe('Keep the attached items as plain links?');
+    expect([...dialog.querySelectorAll('button')].map((button) =>
+      button.textContent?.trim()))
+      .toEqual(['Cancel', 'Remove from every project', 'Keep links']);
+    expect(dialog.querySelector('[data-action="evidence-keep-links"]')
+      ?.getAttribute('data-variant')).toBe('default');
+    expect(dialog.querySelector('[data-action="evidence-remove-links"]')
+      ?.getAttribute('data-variant')).toBe('destructive');
+    expect(routes()).toEqual(['GET /api/v1/github-evidence']);
+  });
+
+  it.each([
+    ['evidence-keep-links', 'true'],
+    ['evidence-remove-links', 'false'],
+  ])('%s sends keepLinks=%s with the generation it read', async (
+    action, keepLinks,
+  ) => {
+    state = { ...connectedIdle, hasEvidence: true, generation: 7 };
+    const target = 'DELETE /api/v1/github-evidence'
+      + `?keepLinks=${keepLinks}&generation=7`;
+    serve({
+      [target]: () => {
+        state = { ...disconnected, generation: 8 };
+        return json(200, disconnectedBody);
+      },
+    });
+    const wrapper = await mountSection('/app/settings/sessions', true);
+
+    await click(wrapper, 'evidence-disconnect');
+    document.body.querySelector<HTMLElement>(`[data-action="${action}"]`)!
+      .click();
+    await flushPromises();
+
+    expect(routes()).toEqual([
+      'GET /api/v1/github-evidence',
+      target,
+      'GET /api/v1/github-evidence',
+    ]);
+    expect(net.requests[1]?.headers.get('Idempotency-Key'))
+      .toMatch(uuidPattern);
+    expect(document.body.querySelector('[role="alertdialog"]')).toBeNull();
+    expect(buttonLabels(wrapper)).toEqual(['Connect GitHub']);
+  });
+
+  it.each([
+    ['Cancel', () => {
+      document.body.querySelector<HTMLElement>(
+        '[data-action="evidence-disconnect-cancel"]',
+      )!.click();
+    }],
+    ['Escape', () => {
+      document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', {
+        key: 'Escape', bubbles: true,
+      }));
+    }],
+  ])('%s sends nothing and returns focus to Disconnect', async (
+    _name, dismiss,
+  ) => {
+    state = { ...connectedIdle, hasEvidence: true };
+    const wrapper = await mountSection('/app/settings/sessions', true);
+    const disconnect = wrapper.get('[data-testid="evidence-disconnect"]');
+    (disconnect.element as HTMLElement).focus();
+
+    await click(wrapper, 'evidence-disconnect');
+    await vi.waitFor(() => expect(document.activeElement?.textContent?.trim())
+      .toBe('Keep links'));
+    dismiss();
+    await flushPromises();
+
+    await vi.waitFor(() => expect(document.body
+      .querySelector('[role="alertdialog"]')).toBeNull());
+    await vi.waitFor(() => expect(document.activeElement)
+      .toBe(disconnect.element));
+    expect(routes()).toEqual(['GET /api/v1/github-evidence']);
+  });
+
+  it('uses a new key for a different choice', async () => {
+    state = { ...connectedIdle, hasEvidence: true };
+    const keep = 'DELETE /api/v1/github-evidence?keepLinks=true&generation=3';
+    const remove = 'DELETE /api/v1/github-evidence?keepLinks=false'
+      + '&generation=3';
+    serve({
+      [keep]: () => problem(500, 'internal'),
+      [remove]: () => problem(500, 'internal'),
+    });
+    const wrapper = await mountSection('/app/settings/sessions', true);
+
+    for (const action of [
+      'evidence-keep-links', 'evidence-keep-links', 'evidence-remove-links',
+    ]) {
+      await click(wrapper, 'evidence-disconnect');
+      document.body.querySelector<HTMLElement>(`[data-action="${action}"]`)!
+        .click();
+      await flushPromises();
+    }
+
+    const sent = net.requests.filter((request) =>
+      route(request).startsWith('DELETE '));
+    expect(sent.map(route)).toEqual([keep, keep, remove]);
+    const keys = sent.map((request) =>
+      request.headers.get('Idempotency-Key'));
+    expect(keys[1]).toBe(keys[0]);
+    expect(keys[2]).not.toBe(keys[0]);
+    expect(keys[2]).toMatch(uuidPattern);
+  });
+
   it(
-    'reads the state again when the connection changed before Disconnect',
+    'reads the state again when the connection changed and asks again with '
+    + 'the new generation',
     async () => {
-      state = connectedIdle;
+      state = { ...connectedIdle, hasEvidence: true };
       serve({
-        [disconnectRoute]: () => {
-          state = { ...connectedIdle, generation: 5 };
+        'DELETE /api/v1/github-evidence?keepLinks=true&generation=3': () => {
+          state = { ...connectedIdle, hasEvidence: true, generation: 5 };
           return problem(409, 'evidence_connection_changed');
         },
       });
-      const wrapper = await mountSection();
+      const wrapper = await mountSection('/app/settings/sessions', true);
 
       await click(wrapper, 'evidence-disconnect');
+      document.body.querySelector<HTMLElement>(
+        '[data-action="evidence-keep-links"]',
+      )!.click();
+      await flushPromises();
 
       expect(routes()).toEqual([
         'GET /api/v1/github-evidence',
-        disconnectRoute,
+        'DELETE /api/v1/github-evidence?keepLinks=true&generation=3',
         'GET /api/v1/github-evidence',
       ]);
-      expect(wrapper.get('[data-testid="evidence-error"]').text())
-        .toBe('Something went wrong. Please try again.');
+      expect(wrapper.get('[data-testid="evidence-error"]').text()).toBe(
+        'The GitHub connection just changed. The status has been reloaded; '
+        + 'try again.',
+      );
       expect(wrapper.text()).not.toContain('raw server detail');
 
       serve({
-        'DELETE /api/v1/github-evidence?keepLinks=true&generation=5': () => {
+        'DELETE /api/v1/github-evidence?keepLinks=false&generation=5': () => {
           state = disconnected;
           return json(200, disconnectedBody);
         },
       });
       await click(wrapper, 'evidence-disconnect');
+      expect(document.body.querySelector('[role="alertdialog"]'))
+        .not.toBeNull();
+      document.body.querySelector<HTMLElement>(
+        '[data-action="evidence-remove-links"]',
+      )!.click();
+      await flushPromises();
 
       expect(routes()).toContain(
-        'DELETE /api/v1/github-evidence?keepLinks=true&generation=5',
+        'DELETE /api/v1/github-evidence?keepLinks=false&generation=5',
       );
       expect(buttonLabels(wrapper)).toEqual(['Connect GitHub']);
     },
@@ -525,6 +665,8 @@ describe('GitHub evidence settings', () => {
     ['a negative generation', { ...notConnected, generation: -1 }],
     ['a fractional generation', { ...notConnected, generation: 1.5 }],
     ['a string generation', { ...notConnected, generation: '3' }],
+    ['no hasEvidence', { generation: 0, connection: null, session: null }],
+    ['a string hasEvidence', { ...notConnected, hasEvidence: 'false' }],
   ])('treats a status with %s as a failed load', async (_name, body) => {
     state = body;
     const wrapper = await mountSection();
@@ -798,13 +940,14 @@ describe('GitHub evidence settings', () => {
   it('has every key in both languages', () => {
     const keys = [
       'connect', 'connectedAs', 'connectedNotice', 'connectedOn', 'continue',
-      'differentAccountNotice', 'disconnect', 'done', 'errors', 'failedNotice',
+      'differentAccountNotice', 'disconnect', 'disconnectAsk',
+      'disconnectKeep', 'disconnectRemove', 'done', 'errors', 'failedNotice',
       'loadFailed', 'loading', 'noSession', 'notConnected', 'privacy', 'retry',
       'sessionOpenUntil', 'title',
     ];
     const errors = [
-      'csrfRejected', 'failed', 'rateLimited', 'sessionEnded', 'unavailable',
-      'upstream',
+      'connectionChanged', 'csrfRejected', 'failed', 'rateLimited',
+      'sessionEnded', 'unavailable', 'upstream',
     ];
     expect(Object.keys(githubEvidenceSettingsCopy).sort())
       .toEqual(['en', 'vi']);
@@ -820,9 +963,30 @@ describe('GitHub evidence settings', () => {
     )).toEqual([]);
   });
 
+  it('uses the design copy for the disconnect ask and a changed connection',
+    () => {
+      const rows = designCopy();
+      type Copy = typeof githubEvidenceSettingsCopy.en;
+      const pairs: [string, (copy: Copy) => string][] = [
+        ['Different account', (copy) => copy.differentAccountNotice],
+        ['Disconnect ask', (copy) => copy.disconnectAsk],
+        ['Disconnect keep', (copy) => copy.disconnectKeep],
+        ['Disconnect remove', (copy) => copy.disconnectRemove],
+        ['Connection changed', (copy) => copy.errors.connectionChanged],
+      ];
+      for (const [key, pick] of pairs) {
+        expect([
+          pick(githubEvidenceSettingsCopy.vi),
+          pick(githubEvidenceSettingsCopy.en),
+        ], key).toEqual(rows.get(key));
+      }
+    });
+
   it('keeps display text in the catalog', () => {
     const { sourceViolations } = literalGuard({});
     expect(sourceViolations('components/settings/GitHubEvidence.vue'))
+      .toEqual([]);
+    expect(sourceViolations('components/settings/EvidenceDisconnectDialog.vue'))
       .toEqual([]);
   });
 });

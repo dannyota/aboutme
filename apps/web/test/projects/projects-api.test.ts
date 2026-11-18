@@ -4,7 +4,13 @@ import {
   createProjectsApi,
   sendWithCsrf,
 } from '../../app/composables/projectsApi';
-import { failed, fakeAuth, ok, project } from './fixtures';
+import {
+  evidenceItem,
+  failed,
+  fakeAuth,
+  ok,
+  project,
+} from './fixtures';
 
 const BASE = 'http://localhost/api/v1';
 
@@ -129,6 +135,32 @@ describe('projects API', () => {
       const { api } = recorder(respond(200, { data: { projects: [{}] } }));
       expect(await api.list()).toEqual(failed('unavailable'));
     });
+
+  it('reads a project with its evidence', async () => {
+    const read = project({ evidence: [evidenceItem()] });
+    const { api } = recorder(respond(200, { data: read }));
+
+    expect(await api.read('project-1')).toEqual(ok(read));
+  });
+
+  it.each([
+    ['a non-array evidence', { evidence: {} }],
+    ['an item with a url outside github.com', {
+      evidence: [evidenceItem({ url: 'http://github.com/octocat/hello' })],
+    }],
+    ['an item without a check date', {
+      evidence: [{ ...evidenceItem(), checkedAt: 'yesterday' }],
+    }],
+    ['an item with a string confirmed', {
+      evidence: [{ ...evidenceItem(), confirmed: 'true' }],
+    }],
+  ])('treats a project with %s as unavailable', async (_name, overrides) => {
+    const { api } = recorder(respond(200, {
+      data: { ...project(), ...overrides },
+    }));
+
+    expect(await api.read('project-1')).toEqual(failed('unavailable'));
+  });
 
   it('refreshes a rotated CSRF token and resends the same request once',
     async () => {

@@ -11,6 +11,12 @@ import TextField from '@/components/app/TextField.vue';
 import ErrorSummary from '@/components/editor/ErrorSummary.vue';
 import DateRangeField from '@/components/editor/forms/DateRangeField.vue';
 import type { FieldIntent } from '@/components/editor/forms/fieldIntent';
+import EvidenceDialog from '@/components/projects/EvidenceDialog.vue';
+import {
+  useEvidencePicker,
+  useEvidenceReturn,
+} from '@/components/projects/evidencePickerState';
+import ProjectEvidence from '@/components/projects/ProjectEvidence.vue';
 import ProjectLanguageDialog
   from '@/components/projects/ProjectLanguageDialog.vue';
 import ProjectLeaveDialog from '@/components/projects/ProjectLeaveDialog.vue';
@@ -26,6 +32,7 @@ import {
   type ProjectTextDraft,
 } from '@/components/projects/projectDocument';
 import { issueMessage, issueTarget } from '@/components/projects/projectIssues';
+import { useProjectEvidence } from '@/components/projects/projectEvidenceState';
 import { takeUnlinked } from '@/components/projects/projectLinks';
 import { useProjectResumes } from '@/components/projects/projectResumesState';
 import { Button } from '@/components/ui/button';
@@ -36,6 +43,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { createGitHubEvidenceApi } from '@/composables/githubEvidenceApi';
+import { createProjectEvidenceApi } from '@/composables/projectEvidenceApi';
 import {
   createProjectsApi,
   createReleaseAction,
@@ -57,7 +66,7 @@ const copy = computed(() => projectsCopy[locale.value]);
 useHead({ title: computed(() => workspaceTitles[locale.value].projects) });
 
 const auth = useAuth();
-const { providerLogin } = useCapabilities();
+const { providerLogin, githubEvidence } = useCapabilities();
 const api = createProjectsApi();
 const editor = useProjectEditor(id, { api, auth });
 const drafts = createFieldDrafts();
@@ -97,6 +106,24 @@ const errors = computed<Record<string, string>>(() => Object.fromEntries(
 const changed = computed(() =>
   editor.dirty.value || drafts.count.value > 0);
 const resumes = useProjectResumes(editor.loaded, changed, { api, auth });
+const evidenceApi = createProjectEvidenceApi();
+const evidence = useProjectEvidence(editor, changed, {
+  api: evidenceApi,
+  projects: api,
+  auth,
+  onSessionEnded: () => picker.show({ sessionEnded: true }),
+});
+const picker = useEvidencePicker({
+  evidence,
+  project: () => editor.loaded.value,
+  api: evidenceApi,
+  github: createGitHubEvidenceApi(),
+  auth,
+});
+const showEvidence = computed(() =>
+  githubEvidence.value && evidence.available.value);
+useEvidenceReturn(picker, computed(() =>
+  showEvidence.value && editor.view.value === 'ready'));
 const notLinked = takeUnlinked(id);
 const saveMark = computed(() => {
   if (editor.saving.value) return 'saving';
@@ -186,8 +213,17 @@ function removeLanguage(): void {
 }
 
 async function save(): Promise<void> {
+  if (evidence.pending.value !== null) return;
   const held = drafts.flushAll();
   await editor.save(held ? [{ path: 'dates', code: 'date-range-order' }] : []);
+}
+
+function focusEvidenceAdd(): void {
+  void nextTick(() => {
+    const add = document.getElementById('project-evidence-add');
+    if (add instanceof HTMLButtonElement && !add.disabled) add.focus();
+    else document.getElementById('project-evidence-title')?.focus();
+  });
 }
 
 function closeRelease(): void {
@@ -436,6 +472,13 @@ function closeRelease(): void {
         />
       </section>
 
+      <ProjectEvidence
+        v-if="showEvidence"
+        :controller="evidence"
+        :locale="locale"
+        @add="picker.show()"
+      />
+
       <ProjectResumes
         :controller="resumes"
         :project="loaded"
@@ -510,7 +553,8 @@ function closeRelease(): void {
       >
         <StateMark :state="saveMark" />
         <Button
-          :disabled="!changed || editor.saving.value"
+          :disabled="!changed || editor.saving.value
+            || evidence.pending.value !== null"
           data-action="project-save"
           type="submit"
         >
@@ -540,6 +584,12 @@ function closeRelease(): void {
       :action="action"
       :copy="copy"
       @close="closeRelease"
+    />
+    <EvidenceDialog
+      v-if="showEvidence"
+      :locale="locale"
+      :picker="picker"
+      @closed="focusEvidenceAdd"
     />
   </main>
 </template>

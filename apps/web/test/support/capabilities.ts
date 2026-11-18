@@ -9,6 +9,7 @@ export interface CapabilityFlags {
   passkeyEnrollment?: boolean;
   totpEnrollment?: boolean;
   signInToView?: boolean;
+  githubEvidence?: boolean;
 }
 
 export function registerCapabilities(
@@ -29,6 +30,7 @@ export function registerCapabilities(
         passkeyEnrollment: flags.passkeyEnrollment ?? false,
         totpEnrollment: flags.totpEnrollment ?? false,
         signInToView: flags.signInToView ?? false,
+        githubEvidence: flags.githubEvidence ?? false,
       },
     };
   });

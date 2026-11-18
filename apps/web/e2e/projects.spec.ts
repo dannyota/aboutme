@@ -2,7 +2,16 @@ import { CURRENT_VERSION } from '@aboutme/schema/released';
 import { expect, test, type Page } from '@playwright/test';
 
 import { expectScreen, type ScreenContract } from './display-assertions';
-import { screenMutationTests } from './style-mutation';
+import {
+  fakeEvidence,
+  type EvidenceItem,
+  type EvidenceOptions,
+} from './project-evidence-fake';
+import {
+  applyStyleMutation,
+  mutationTest,
+  screenMutationTests,
+} from './style-mutation';
 import {
   chromeScreenContract,
   denyExternalRequests,
@@ -29,6 +38,7 @@ interface Project {
   repositoryUrl?: string;
   demoUrl?: string;
   linkedResumeIds: string[];
+  evidence?: EvidenceItem[];
 }
 
 interface Write {
@@ -79,6 +89,7 @@ interface LibraryOptions {
   readonly otherTab?: Page;
   readonly lostWrites?: number;
   readonly csrfRejectedWrites?: number;
+  readonly evidence?: EvidenceOptions;
 }
 
 const BACKEND = '0190f000-0000-7000-8000-0000000000b1';
@@ -285,6 +296,7 @@ async function fakeLibrary(
       ...body!, id: current.id, createdAt: current.createdAt,
       revision: String(Number(current.revision) + 1),
       updatedAt: '2026-11-11T01:00:00Z', linkedResumeIds: [],
+      ...(current.evidence === undefined ? {} : { evidence: current.evidence }),
     };
     projects.set(current.id, next);
     const changedResumes = linkedTo(current.id)
@@ -445,11 +457,17 @@ async function open(
   await page.context().addCookies([{
     name: 'aboutme-locale', value: 'en', url: 'http://127.0.0.1:20092',
   }]);
-  for (const tab of tabs) await mockSignedInSession(tab);
+  const capabilities = options.evidence === undefined
+    ? {}
+    : { githubEvidence: true };
+  for (const tab of tabs) await mockSignedInSession(tab, capabilities);
   const library = await fakeLibrary(tabs, initial, options);
+  const evidence = options.evidence === undefined
+    ? undefined
+    : await fakeEvidence(page, library.projects, options.evidence);
   await page.goto(path);
   await page.evaluate(() => document.fonts.ready);
-  return library;
+  return { ...library, evidence };
 }
 
 const library = () => [
@@ -1340,3 +1358,348 @@ test('both screens fit 320 px without horizontal overflow', async ({
 });
 
 screenMutationTests('projects list', openListAt320, listContract());
+
+const E1 = '0190f000-0000-7000-8000-0000000000e1';
+const E2 = '0190f000-0000-7000-8000-0000000000e2';
+
+function cid(index: number): string {
+  return `candidate${String(index).padStart(13, '0')}`;
+}
+
+function evidenceItem(
+  id: string,
+  title: string,
+  url: string,
+): EvidenceItem {
+  return {
+    id, kind: 'pullRequest', url, title,
+    repositoryName: new URL(url).pathname.split('/').slice(1, 3).join('/'),
+    itemDate: '2026-01-02T03:04:05Z', checkedAt: '2026-11-17T08:00:00Z',
+    confirmed: true, flagReason: null,
+  };
+}
+
+function evidenceLibrary(evidence: EvidenceItem[]): Project[] {
+  return [{ ...seed(FIRST, 'Shop site', '2026-11-01T00:00:00Z'), evidence }];
+}
+
+const twoItems = () => [
+  evidenceItem(E1, 'First fix', 'https://github.com/acme/site/pull/1'),
+  evidenceItem(E2, 'Second fix', 'https://github.com/acme/site/pull/2'),
+];
+
+function pull(index: number, title: string) {
+  return {
+    candidateId: cid(index), kind: 'pullRequest' as const, title,
+    repository: { id: null, fullName: 'acme/site' },
+    date: '2026-02-03T04:05:06Z', attached: false,
+    url: `https://github.com/acme/site/pull/${index}`,
+  };
+}
+
+const helloRepository = {
+  candidateId: cid(1), kind: 'repository' as const, title: 'octocat/hello',
+  repository: { id: 101, fullName: 'octocat/hello' },
+  date: '2025-03-04T05:06:07Z', attached: false,
+  url: 'https://github.com/octocat/hello',
+};
+
+function picker(page: Page) {
+  return page.getByRole('dialog', { name: 'Add evidence from GitHub' });
+}
+
+async function openPicker(page: Page) {
+  await page.getByRole('button', { name: 'Add evidence from GitHub' }).click();
+  await expect(picker(page)).toBeVisible();
+  return picker(page);
+}
+
+test('evidence: attaches a repository, then a pull request after Show more',
+  async ({ page }) => {
+    const { evidence } = await open(page, `/app/projects/${FIRST}`,
+      evidenceLibrary([]), {
+        evidence: {
+          pages: {
+            repository: [{ items: [helloRepository], nextPage: null }],
+            pullRequest: [
+              { items: [pull(3, 'Add the cart')], nextPage: 2 },
+              { items: [pull(4, 'Ship the cart')], nextPage: null },
+            ],
+          },
+        },
+      });
+    const dialog = await openPicker(page);
+    await expect(dialog.getByTestId('evidence-first-attach')).toBeVisible();
+
+    await dialog.getByRole('button', { name: 'Attach octocat/hello' }).click();
+    await expect(dialog.locator('[data-evidence-attached]'))
+      .toHaveText(['Attached']);
+    await dialog.getByRole('tab', { name: 'Pull requests' }).click();
+    await dialog.getByRole('button', { name: 'Show more' }).click();
+    await dialog.getByRole('button', { name: 'Attach Ship the cart' }).click();
+    await expect(dialog.locator('[data-evidence-attached]'))
+      .toHaveText(['Attached']);
+    await page.keyboard.press('Escape');
+
+    await expect(dialog).toBeHidden();
+    await expect(page.getByRole('button', {
+      name: 'Add evidence from GitHub',
+    })).toBeFocused();
+    await expect(page.locator('[data-evidence-title]'))
+      .toHaveText(['octocat/hello', 'Ship the cart']);
+    expect(evidence!.reads).toEqual([
+      '?kind=repository&page=1',
+      '?kind=pullRequest&page=1',
+      '?kind=pullRequest&page=2',
+    ]);
+    expect(evidence!.writes.map((write) =>
+      [write.method, write.ifMatch, write.body])).toEqual([
+      ['POST', '"r1"', { kind: 'repository', candidateId: cid(1) }],
+      ['POST', '"r2"', { kind: 'pullRequest', candidateId: cid(4) }],
+    ]);
+  });
+
+test('evidence: a pasted link shows the unsupported-link error, then '
+  + 'attaches', async ({ page }) => {
+  const { evidence } = await open(page, `/app/projects/${FIRST}`,
+    evidenceLibrary([]), { evidence: {} });
+  const dialog = await openPicker(page);
+  await dialog.getByRole('tab', { name: 'Paste a link' }).click();
+  const field = dialog.getByLabel('GitHub link');
+  const attach = dialog.getByRole('button', { name: 'Attach', exact: true });
+
+  await field.fill('https://gitlab.com/octocat/hello');
+  await attach.click();
+  await expect(dialog.locator('#evidence-link-error')).toHaveText(
+    'This link is not a GitHub repository, pull request or release.',
+  );
+  await expect(field).toHaveAttribute('aria-invalid', 'true');
+  await field.fill('https://github.com/octocat/hello/pull/42');
+  await attach.click();
+
+  await expect(field).toHaveValue('');
+  await expect(dialog.locator('#evidence-link-error')).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await expect(page.locator('[data-evidence-title]'))
+    .toHaveText(['octocat/hello#42']);
+  expect(evidence!.writes.map((write) => [write.ifMatch, write.body]))
+    .toEqual([
+      ['"r1"', { kind: 'repository', link: 'https://gitlab.com/octocat/hello' }],
+      ['"r1"', {
+        kind: 'pullRequest', link: 'https://github.com/octocat/hello/pull/42',
+      }],
+    ]);
+});
+
+test('evidence: moves, checks again and removes on each new revision, then '
+  + 'saves on the latest', async ({ page }) => {
+  const { evidence, writes } = await open(page, `/app/projects/${FIRST}`,
+    evidenceLibrary(twoItems()), {
+      evidence: {
+        recheck: (item) => ({ ...item, confirmed: false, flagReason: 'gone' }),
+      },
+    });
+  const titles = page.locator('[data-evidence-title]');
+
+  await page.getByRole('button', { name: 'Move First fix down' }).click();
+  await expect(titles).toHaveText(['Second fix', 'First fix']);
+  await page.getByRole('button', { name: 'Check again First fix' }).click();
+  await expect(page.locator(`[data-evidence-item="${E1}"] `
+    + '[data-evidence-flag]')).toHaveText('GitHub no longer finds this item.');
+  await page.getByRole('button', { name: 'Remove Second fix' }).click();
+  await expect(titles).toHaveText(['First fix']);
+  await page.getByLabel('Role').fill('Staff engineer');
+  await page.locator('[data-action="project-save"]').click();
+  await expect(page.locator('[data-state-mark="saved"]')).toBeVisible();
+
+  expect(evidence!.writes.map((write) => [
+    write.method,
+    write.path.split('/').slice(5).join('/'),
+    write.ifMatch,
+  ])).toEqual([
+    ['PUT', 'evidence/order', '"r1"'],
+    ['POST', `evidence/${E1}/recheck`, '"r2"'],
+    ['DELETE', `evidence/${E2}`, '"r3"'],
+  ]);
+  expect(evidence!.writes[0]?.body).toEqual({ order: [E2, E1] });
+  expect(writes.map((write) => [write.method, write.ifMatch]))
+    .toEqual([['PUT', '"r4"']]);
+});
+
+test('evidence: typing a name disables every write and Continue', async ({
+  page,
+}) => {
+  const { evidence } = await open(page, `/app/projects/${FIRST}`,
+    evidenceLibrary(twoItems()), { evidence: { sessionEnded: true } });
+
+  await page.locator('#project-en-name').fill('Shop site two');
+  await expect(page.getByTestId('project-evidence-save-first'))
+    .toHaveText('Save the project first.');
+  for (const name of [
+    'Move First fix down', 'Move Second fix up', 'Check again First fix',
+    'Remove First fix', 'Check again Second fix', 'Remove Second fix',
+  ]) {
+    await expect(page.getByRole('button', { name })).toBeDisabled();
+  }
+  const dialog = await openPicker(page);
+  await expect(dialog.getByTestId('evidence-session-ended')).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Continue with GitHub' }))
+    .toBeDisabled();
+  await expect(dialog.getByTestId('evidence-save-first'))
+    .toHaveText('Save the project first.');
+  expect(evidence!.writes).toEqual([]);
+  expect(evidence!.starts).toEqual([]);
+});
+
+test('evidence: Continue returns to the project and reopens the picker',
+  async ({ page }) => {
+    const { evidence } = await open(page, `/app/projects/${FIRST}`,
+      evidenceLibrary([]), { evidence: { sessionEnded: true } });
+    const github: string[] = [];
+    await page.route('https://github.com/**', async (route) => {
+      github.push(route.request().url());
+      await route.fulfill({
+        status: 200, contentType: 'text/html',
+        body: '<!doctype html><title>GitHub</title>',
+      });
+    });
+    const dialog = await openPicker(page);
+    await expect(dialog.getByTestId('evidence-session-ended')).toContainText(
+      'Your GitHub session has ended. Continue with GitHub to load the list '
+      + 'again.',
+    );
+
+    await dialog.getByRole('button', { name: 'Continue with GitHub' }).click();
+    await expect.poll(() => github.length, 'GitHub navigation.').toBe(1);
+    expect(evidence!.starts).toEqual([{ returnTo: `/app/projects/${FIRST}` }]);
+    expect(new URL(github[0]!).pathname).toBe('/login/oauth/authorize');
+
+    evidence!.resumeSession();
+    await page.goto(`/app/projects/${FIRST}?evidence=connected`);
+    await expect(picker(page).getByTestId('evidence-outcome'))
+      .toHaveText('GitHub is connected.');
+    await expect(page).toHaveURL(`/app/projects/${FIRST}`);
+    await expect(picker(page).getByRole('tab', { name: 'Repositories' }))
+      .toHaveAttribute('aria-selected', 'true');
+    expect(evidence!.reads.at(-1)).toBe('?kind=repository&page=1');
+  });
+
+async function sheetAtBottom(page: Page): Promise<boolean> {
+  return page.locator('[data-slot="sheet-content"]').evaluate((sheet) => {
+    const box = sheet.getBoundingClientRect();
+    const width = document.documentElement.clientWidth;
+    return Math.abs(box.bottom - innerHeight) <= 1
+      && Math.abs(box.left) <= 1
+      && Math.abs(box.right - width) <= 1;
+  });
+}
+
+async function dialogCentered(page: Page): Promise<boolean> {
+  return page.locator('[data-slot="dialog-content"]').evaluate((dialog) => {
+    const box = dialog.getBoundingClientRect();
+    const width = document.documentElement.clientWidth;
+    return Math.abs((box.left + box.right) / 2 - width / 2) <= 1
+      && Math.abs((box.top + box.bottom) / 2 - innerHeight / 2) <= 1;
+  });
+}
+
+async function pickerFits(page: Page): Promise<boolean> {
+  return page.evaluate(() => {
+    const root = document.documentElement;
+    const sheet = document.querySelector('[data-slot="sheet-content"]');
+    return root.scrollWidth <= root.clientWidth
+      && sheet !== null
+      && sheet.scrollWidth <= sheet.clientWidth;
+  });
+}
+
+async function openPickerAt(page: Page, width: number): Promise<void> {
+  await page.setViewportSize({ width, height: 900 });
+  const long = 'a-very-long-repository-name-that-keeps-going-without-spaces';
+  await open(page, `/app/projects/${FIRST}`, evidenceLibrary([
+    evidenceItem(E1, `Fix ${long}`, `https://github.com/acme/${long}/pull/1`),
+  ]), {
+    evidence: {
+      pages: {
+        repository: [{
+          items: [{
+            ...helloRepository, title: `octocat/${long}`,
+            repository: { id: 101, fullName: `octocat/${long}` },
+          }],
+          nextPage: 2,
+        }],
+      },
+    },
+  });
+  await openPicker(page);
+  await expect(page.locator('[data-evidence-candidate]')).toHaveCount(1);
+}
+
+test('evidence: the picker is a bottom sheet at 390 px and a centered '
+  + 'dialog at 1280 px', async ({ page }) => {
+  await openPickerAt(page, 390);
+  await expect(page.locator('[data-slot="sheet-content"]')).toBeVisible();
+  await expect(page.locator('[data-slot="dialog-content"]')).toHaveCount(0);
+  await expect.poll(() => sheetAtBottom(page), 'Sheet at the bottom.')
+    .toBe(true);
+  await page.keyboard.press('Escape');
+  await expect(picker(page)).toBeHidden();
+
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await openPicker(page);
+  await expect(page.locator('[data-slot="dialog-content"]')).toBeVisible();
+  await expect(page.locator('[data-slot="sheet-content"]')).toHaveCount(0);
+  await expect.poll(() => dialogCentered(page), 'Dialog centered.')
+    .toBe(true);
+});
+
+test('evidence: the section and the picker fit 320 px', async ({ page }) => {
+  await openPickerAt(page, 320);
+  for (const name of [
+    'Repositories', 'Pull requests', 'Releases', 'Paste a link',
+  ]) {
+    await picker(page).getByRole('tab', { name }).click();
+    await expect.poll(() => pickerFits(page), `Picker fit on ${name}.`)
+      .toBe(true);
+  }
+  await page.keyboard.press('Escape');
+  await expect.poll(() => page.evaluate(() =>
+    document.documentElement.scrollWidth
+    <= document.documentElement.clientWidth), 'Section fit at 320px.')
+    .toBe(true);
+});
+
+mutationTest('evidence picker rejects a sheet lifted off the bottom', async ({
+  page,
+}) => {
+  await openPickerAt(page, 390);
+  await expect.poll(() => sheetAtBottom(page)).toBe(true);
+  const restore = await applyStyleMutation(
+    page.locator('[data-slot="sheet-content"]'), { bottom: '40px' },
+  );
+  expect(await sheetAtBottom(page), 'Sheet at the bottom.').toBe(false);
+  await restore();
+});
+
+mutationTest('evidence picker rejects an off-center dialog', async ({
+  page,
+}) => {
+  await openPickerAt(page, 1280);
+  await expect.poll(() => dialogCentered(page)).toBe(true);
+  const restore = await applyStyleMutation(
+    page.locator('[data-slot="dialog-content"]'), { 'margin-left': '24px' },
+  );
+  expect(await dialogCentered(page), 'Dialog centered.').toBe(false);
+  await restore();
+});
+
+mutationTest('evidence picker rejects horizontal overflow at 320 px',
+  async ({ page }) => {
+    await openPickerAt(page, 320);
+    await expect.poll(() => pickerFits(page)).toBe(true);
+    const restore = await applyStyleMutation(
+      page.locator('[data-slot="tabs-content"]'), { 'min-width': '480px' },
+    );
+    expect(await pickerFits(page), 'Picker fit at 320px.').toBe(false);
+    await restore();
+  });

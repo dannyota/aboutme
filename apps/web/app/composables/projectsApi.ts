@@ -6,7 +6,11 @@ import type {
   Project,
   ProjectRequest,
 } from '../components/projects/projectDocument';
-import { requestFromProject } from '../components/projects/projectDocument';
+import {
+  isProject,
+  isRecord,
+  requestFromProject,
+} from '../components/projects/projectDocument';
 import { mapReauthError, mapReauthStartError } from './passwordSettings';
 import { validateAuthorizeUrl } from './providerAuthorization';
 import type { UseAuthReturn } from './useAuth';
@@ -60,27 +64,6 @@ interface RawResult {
   readonly data?: unknown;
   readonly error?: unknown;
   readonly response: Response;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function isProject(value: unknown): value is Project {
-  if (!isRecord(value) || !isRecord(value.text)) return false;
-  const technologies = value.technologies;
-  return typeof value.id === 'string'
-    && value.id !== ''
-    && typeof value.slug === 'string'
-    && typeof value.revision === 'string'
-    && /^[0-9]+$/u.test(value.revision)
-    && typeof value.updatedAt === 'string'
-    && typeof value.defaultLanguage === 'string'
-    && isRecord(value.text[value.defaultLanguage])
-    && Object.values(value.text).every(isRecord)
-    && (technologies === undefined
-      || (Array.isArray(technologies)
-        && technologies.every((item) => typeof item === 'string')));
 }
 
 function codeOf(error: unknown): unknown {

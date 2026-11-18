@@ -10,8 +10,10 @@ import ProjectReleaseDialog
 import ProjectTechnologies
   from '../../app/components/projects/ProjectTechnologies.vue';
 import type { ReleaseState } from '../../app/composables/projectsApi';
+import { projectEvidenceCopy } from '../../app/i18n/project-evidence';
 import { projectsCopy } from '../../app/i18n/projects';
 import { project } from './fixtures';
+import { DESIGN_COPY } from '../support/evidenceCopy';
 import {
   requiresSession,
   signedOutRedirect,
@@ -103,6 +105,16 @@ const sources = [
   'components/projects/projectResumesState.ts',
   'composables/useProjects.ts',
   'composables/projectsApi.ts',
+  'components/projects/ProjectEvidence.vue',
+  'components/projects/ProjectEvidenceItem.vue',
+  'components/projects/EvidenceDialog.vue',
+  'components/projects/EvidenceCandidates.vue',
+  'components/projects/EvidenceLinkForm.vue',
+  'components/projects/evidenceText.ts',
+  'components/projects/projectEvidenceState.ts',
+  'components/projects/evidencePickerState.ts',
+  'composables/projectEvidenceApi.ts',
+  'composables/githubEvidenceApi.ts',
 ];
 const fixtures: Readonly<Record<string, readonly unknown[]>> = {
   'projects.count': [3, 30],
@@ -310,6 +322,72 @@ describe('projects copy', () => {
     expect([projectsCopy.vi.empty, projectsCopy.en.empty])
       .toEqual(['Chưa có dự án nào.', 'No projects yet.']);
     expect(projectsCopy.vi.count(3, 30)).toBe('3 / 30');
+  });
+
+  it('keeps the evidence catalogs complete and aligned', () => {
+    expect(Object.keys(projectEvidenceCopy).sort()).toEqual(['en', 'vi']);
+    expect(parityViolations(
+      projectEvidenceCopy.vi, projectEvidenceCopy.en, 'project-evidence', {
+        'project-evidence.checked': ['1 tháng 1, 2026'],
+        'project-evidence.moveUp': ['Shop'],
+        'project-evidence.moveDown': ['Shop'],
+        'project-evidence.rateLimit': ['10:30'],
+      },
+    )).toEqual([]);
+  });
+
+  it('uses the design text for every picker and section string', () => {
+    const settingsRows = new Set([
+      'Different account', 'Disconnect ask', 'Disconnect keep',
+      'Disconnect remove', 'Connection changed',
+    ]);
+    type Copy = typeof projectEvidenceCopy.en;
+    const pick: Readonly<Record<string, (copy: Copy) => string>> = {
+      'Section': (copy) => copy.section,
+      'Add': (copy) => copy.add,
+      'Tabs': (copy) => [
+        copy.tabs.repository, copy.tabs.pullRequest, copy.tabs.release,
+        copy.tabs.link,
+      ].join(' · '),
+      'Attach': (copy) => copy.attach,
+      'Attached': (copy) => copy.attached,
+      'Pull request label': (copy) => copy.labels.pullRequest,
+      'Release label': (copy) => copy.labels.release,
+      'Repository label': (copy) => copy.labels.repository,
+      'Checked': (copy) => copy.checked('{date}'),
+      'Check again': (copy) => copy.checkAgain,
+      'Rule failed': (copy) => copy.ruleFailed,
+      'Gone': (copy) => copy.gone,
+      'Empty': (copy) => copy.empty,
+      'Incomplete': (copy) => copy.incomplete,
+      'Upstream': (copy) => copy.upstream,
+      'Limit': (copy) => copy.limit,
+      'First attach': (copy) => copy.firstAttach,
+      'Remove': (copy) => copy.remove,
+      'Move up': (copy) => copy.moveUp('{title}'),
+      'Move down': (copy) => copy.moveDown('{title}'),
+      'Try again': (copy) => copy.tryAgain,
+      'More': (copy) => copy.more,
+      'Loading': (copy) => copy.loading,
+      'Session ended': (copy) => copy.sessionEnded,
+      'Rate limit': (copy) => copy.rateLimit('{time}'),
+      'Choose a repository': (copy) => copy.chooseRepository,
+      'Change repository': (copy) => copy.changeRepository,
+      'Paste label': (copy) => copy.pasteLabel,
+      'Paste hint': (copy) => copy.pasteHint,
+      'Not confirmed': (copy) => copy.notConfirmed,
+      'Unsupported link': (copy) => copy.unsupportedLink,
+      'Not found': (copy) => copy.notFound,
+      'Duplicate': (copy) => copy.duplicate,
+      'Size': (copy) => copy.size,
+    };
+    const rows = DESIGN_COPY.filter(([key]) => !settingsRows.has(key));
+    expect(rows.map(([key]) => key).sort())
+      .toEqual(Object.keys(pick).sort());
+    for (const [key, vi, en] of rows) {
+      expect([pick[key]!(projectEvidenceCopy.vi),
+        pick[key]!(projectEvidenceCopy.en)], key).toEqual([vi, en]);
+    }
   });
 
   it('keeps display text out of the project sources', () => {

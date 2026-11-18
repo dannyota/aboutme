@@ -1,6 +1,6 @@
 import type { WorkspaceCopy } from './workspace';
 
-type GitHubEvidenceSettingsCopy = {
+export type GitHubEvidenceSettingsCopy = {
   readonly title: string;
   readonly privacy: string;
   readonly loading: string;
@@ -15,6 +15,9 @@ type GitHubEvidenceSettingsCopy = {
   readonly continue: string;
   readonly done: string;
   readonly disconnect: string;
+  readonly disconnectAsk: string;
+  readonly disconnectKeep: string;
+  readonly disconnectRemove: string;
   readonly connectedNotice: string;
   readonly failedNotice: string;
   readonly differentAccountNotice: string;
@@ -24,6 +27,7 @@ type GitHubEvidenceSettingsCopy = {
     readonly upstream: string;
     readonly rateLimited: string;
     readonly csrfRejected: string;
+    readonly connectionChanged: string;
     readonly failed: string;
   };
 };
@@ -48,6 +52,9 @@ export const githubEvidenceSettingsCopy: WorkspaceCopy<
     continue: 'Tiếp tục với GitHub',
     done: 'Xong',
     disconnect: 'Ngắt kết nối',
+    disconnectAsk: 'Giữ các mục đã gắn dưới dạng đường dẫn thường?',
+    disconnectKeep: 'Giữ đường dẫn',
+    disconnectRemove: 'Xóa khỏi mọi dự án',
     connectedNotice: 'Đã kết nối GitHub.',
     failedNotice: 'Chưa kết nối được GitHub. Hãy thử lại.',
     differentAccountNotice:
@@ -60,6 +67,8 @@ export const githubEvidenceSettingsCopy: WorkspaceCopy<
       rateLimited: 'Có quá nhiều lần thử. Hãy thử lại sau.',
       csrfRejected:
         'Không thể xác nhận yêu cầu này. Hãy tải lại trang rồi thử lại.',
+      connectionChanged:
+        'Kết nối GitHub vừa thay đổi. Trạng thái đã được tải lại; hãy thử lại.',
       failed: 'Đã xảy ra lỗi. Hãy thử lại.',
     },
   },
@@ -80,6 +89,9 @@ export const githubEvidenceSettingsCopy: WorkspaceCopy<
     continue: 'Continue with GitHub',
     done: 'Done',
     disconnect: 'Disconnect',
+    disconnectAsk: 'Keep the attached items as plain links?',
+    disconnectKeep: 'Keep links',
+    disconnectRemove: 'Remove from every project',
     connectedNotice: 'GitHub is connected.',
     failedNotice: 'GitHub was not connected. Try again.',
     differentAccountNotice:
@@ -92,6 +104,9 @@ export const githubEvidenceSettingsCopy: WorkspaceCopy<
       rateLimited: 'Too many attempts. Try again later.',
       csrfRejected:
         'We could not confirm this request. Refresh the page and try again.',
+      connectionChanged:
+        'The GitHub connection just changed. The status has been reloaded; '
+        + 'try again.',
       failed: 'Something went wrong. Please try again.',
     },
   },
