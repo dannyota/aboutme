@@ -241,18 +241,26 @@ under [ADR 0006](../adr/0006-transactional-idempotency.md):
 
 ## Project page
 
-Evidence has its own section after the project text and before related projects,
-never inside the facts panel. A heading, then one row per item in the owner's
-order: for a confirmed item the label, the title as a link, the repository name,
-the item date and "checked on {date}"; otherwise the title as a link and the
-repository name. Dates follow the resume's date format and language, in UTC. No
-stars and no images; static SVG icons only.
+Evidence has its own section in the text column, after "About the project" and
+before the "See other projects" footer, never inside the facts panel; the
+[page design](ui/project-pages.md) sets its look. A heading, then one row per
+item in the owner's order: for a confirmed item the label, the title as a link,
+then a meta line with the repository name, the item date and "checked {date}";
+otherwise the title as a link and the repository name. The repository name is
+left out when it equals the title. Dates follow the resume's date format and
+language, from the UTC instant. No stars and no images; static SVG icons only.
 
-- The project envelope gains `evidence` with
-  `{kind, title, url, repositoryName, itemDate, checkedAt, confirmed}`; the
-  renderer derives the label from `kind` and `confirmed`. The server builds
-  `url` itself, always under `https://github.com/`. The web and Go decoders and
-  the parity corpus change together; the project page format version rises to 3.
+- The project envelope gains a required `evidence` array of
+  `{kind, title, url, repositoryName, itemDate, checkedAt, confirmed}`, empty
+  when the project has none or the capability is off, and absent from the list
+  page; the renderer derives the label from `kind` and `confirmed`. Instants are
+  UTC RFC 3339 at second precision, and the renderer reads the year and month
+  from the string. The server builds `url` itself, always under
+  `https://github.com/`, and turns control characters in text into spaces; the
+  web decoder refuses them. The public read takes the rows in the same statement
+  as the project, and reads none when the capability is off. The web and Go
+  decoders and the parity corpus change together; the project page format
+  version rises to 3.
 - The Go validator admits `a.project-evidence` only on a project page, exactly
   once per envelope item and in envelope order, with exactly the attributes
   `class="project-evidence"`, `href` equal to the item's `url`, and
@@ -289,7 +297,7 @@ does; no tool attaches, checks again, reorders or removes a single item.
 | Pull request label  | Tác giả của pull request đã được merge                                                                                                  | Author of a merged pull request                                                                                                             |
 | Release label       | Tác giả của bản phát hành này                                                                                                           | Author of this release                                                                                                                      |
 | Repository label    | Chủ sở hữu kho mã này                                                                                                                   | Owner of this repository                                                                                                                    |
-| Checked             | kiểm tra ngày {date}                                                                                                                    | checked on {date}                                                                                                                           |
+| Checked             | kiểm tra {date}                                                                                                                         | checked {date}                                                                                                                              |
 | Check again         | Kiểm tra lại                                                                                                                            | Check again                                                                                                                                 |
 | Rule failed         | Lần kiểm tra gần nhất không còn đáp ứng điều kiện.                                                                                      | The last check no longer met the rule.                                                                                                      |
 | Gone                | GitHub không còn tìm thấy mục này.                                                                                                      | GitHub no longer finds this item.                                                                                                           |

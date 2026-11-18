@@ -65,7 +65,19 @@ Text column:
 
 1. “Kết quả” or “Outcome”: the outcome text in a bordered panel, when present.
 2. “Mô tả” or “About the project”: the sanitized rich text.
-3. Footer link: “Xem các dự án khác” or “See other projects”, when the resume
+3. GitHub evidence, when the project has any: the heading “Bằng chứng trên
+   GitHub” or “GitHub evidence”, then one bordered card with the card radius and
+   hairline separators between rows, as the rows panel has. Each row starts with
+   the item kind's static icon, outside the link; a confirmed row shows the
+   label first (a check icon and the kind's label), then the title as the link,
+   then a meta line in the muted color: the repository, the item date and “kiểm
+   tra {date}” or “checked {date}”, joined by “·”. The repository is left out
+   when it equals the title. Rows have 16 px padding, 20 px by 24 px from 40
+   rem; the link is 16/24 at weight 600, the label 14/20 at weight 500 in ink,
+   and the meta 14/20; text wraps. It uses the page's tokens in light, dark and
+   system, and draws a border in forced colors. The
+   [evidence design](../github-evidence-picker.md#project-page) owns its data.
+4. Footer link: “Xem các dự án khác” or “See other projects”, when the resume
    has more than one available project.
 
 Facts column, one bordered panel:
