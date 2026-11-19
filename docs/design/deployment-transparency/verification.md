@@ -77,7 +77,7 @@ trust root (refreshed through TUF) and requires all of:
    and filtered by predicate type. When the API answers 403 or 429 (its
    unauthenticated limit is 60 requests an hour per address), the observer reads
    the same bundle from the registry, in both owners' namespaces. A namespace
-   whose token or index the registry refuses holds no readable bundle.
+   whose token the registry refuses holds no readable bundle.
 2. A valid signature, a certificate chain to Fulcio, and a Rekor inclusion proof
    and signed timestamp inside the certificate's validity.
 3. Issuer `https://token.actions.githubusercontent.com`.

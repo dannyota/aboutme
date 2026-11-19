@@ -150,7 +150,7 @@ The observer computes `summary` from the components:
 | `verified`    | Every component runs one verified digest                                                   |
 
 `release` is set only when `summary` is `verified` and `server`, `web`, and
-`caddy` share one version and commit. It holds `version`, `commit`, and
+`caddy` share one version, commit, and owner. It holds `version`, `commit`, and
 `deployed_at`: the latest `running_since` among those three, the moment the
 whole release was running. `maintenance` may run an older Caddy after a rollback
 and does not affect `release`.
