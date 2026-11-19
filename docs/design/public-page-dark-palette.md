@@ -1,5 +1,9 @@
 # Public page dark palette rule
 
+Status: Superseded by [public resume as PDF pages](public-pdf-pages.md)
+(2026-11-19): resume pages stay light; it describes the rule until that release
+lands.
+
 This page holds the dark palette rule of the
 [public page bar and color scheme](public-page-theme.md) design, which owns the
 owner decisions, the color scheme setting, and the display checks.

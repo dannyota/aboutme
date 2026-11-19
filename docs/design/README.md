@@ -85,7 +85,8 @@ Current behavior lives in code, deployment configuration, and
 | Other   | [Viewer analytics](viewer-analytics/README.md)                         | View counts and sign in to view, with no viewer data kept                     |
 | Other   | [Public page bar and theme](public-page-theme.md)                      | Owner decisions, color scheme setting, what stays light, and checks           |
 | Other   | [Public page bar](public-page-bar.md)                                  | Bar structure, copy, tokens, size, and behavior                               |
-| Other   | [Public web layout](public-web-layout.md)                              | Paper sheets on screen, grouping, paper and desk colors, one column, contacts |
+| Other   | [Public resume as PDF pages](public-pdf-pages.md)                      | PDF pages as paper sheets on screen, swipe on phones, continuous server HTML  |
+| Other   | [Public web layout](public-web-layout.md)                              | Superseded by PDF pages; paper sheets, grouping, contacts                     |
 | Other   | [Public page dark palette](public-page-dark-palette.md)                | Dark source colors, how roles reach the page, and preset values               |
 | Other   | [Projects](projects.md)                                                | Project library, selection, language, project pages, and limits               |
 | Other   | [Projects contract](projects-contract.md)                              | Routes, revocation, owner API, agent scopes, representations, and print       |

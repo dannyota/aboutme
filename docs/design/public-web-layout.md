@@ -1,10 +1,11 @@
 # Public resume web layout
 
-Status: Accepted (2026-11-18). The owner chose the "separate sheets" direction
-from mockups on 2026-11-18, with the defaults under
-[Owner decisions](#owner-decisions). It amends
-[ADR 0020](../adr/0020-application-visual-identity.md) for the public page and
-the editor's Web preview on screen. The document contract
+Status: Superseded by [public resume as PDF pages](public-pdf-pages.md)
+(2026-11-19); it describes the sheets layout until that release lands. Accepted
+(2026-11-18). The owner chose the "separate sheets" direction from mockups on
+2026-11-18, with the defaults under [Owner decisions](#owner-decisions). It
+amends [ADR 0020](../adr/0020-application-visual-identity.md) for the public
+page and the editor's Web preview on screen. The document contract
 ([ADR 0004](../adr/0004-resume-document-contract.md)), the render envelope and
 the PDF are unchanged.
 
