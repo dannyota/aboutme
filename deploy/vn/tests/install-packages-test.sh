@@ -293,3 +293,96 @@ for VERIFY_PACKAGE in yes offline; do
   done
 done
 printf 'PASS failed-held-upgrades-restore-holds-before-refusing\n'
+
+pg_version=$(sed -n 's/^POSTGRESQL_COMMON_VERSION=//p' "$installer")
+[[ -n $pg_version ]] || fail 'postgresql-common pin missing'
+mkdir -p "$work/pg-calls"
+awk -v dir="$work/pg-calls" '
+  /^[[:space:]]*install_pinned / { n++; copy = 1 }
+  copy { print > (dir "/" n); if ($0 !~ /\\$/) { copy = 0; close(dir "/" n) } }
+' "$installer"
+mapfile -t pg_calls < <(grep -lF 'postgresql-common=' "$work/pg-calls"/*)
+((${#pg_calls[@]} == 2)) || fail 'postgresql-common install calls changed'
+cat >"$work/pg-fixture.sh" <<'SH'
+die() { printf 'install: %s\n' "$*" >&2; exit 1; }
+dpkg-query() {
+  [[ -f $PG_STATE/${!#} ]] || return 1
+  printf '%s' "$(<"$PG_STATE/${!#}")"
+}
+apt-mark() {
+  local package state
+  case $1 in
+    showhold)
+      for package in "$PG_STATE"/*; do
+        [[ ! -f $package || $(<"$package") != hold\ * ]] || printf '%s\n' "${package##*/}"
+      done
+      ;;
+    hold)
+      shift
+      for package in "$@"; do
+        printf 'mark hold %s\n' "$package" >>"$PG_CALLS"
+        [[ -f $PG_STATE/$package ]] || return 1
+        state=$(<"$PG_STATE/$package")
+        printf 'hold %s' "${state#* }" >"$PG_STATE/$package"
+      done
+      ;;
+    *) return 2 ;;
+  esac
+}
+apt-get() {
+  local spec common='' client=''
+  printf 'apt %s\n' "$*" >>"$PG_CALLS"
+  for spec in "$@"; do
+    case $spec in
+      postgresql-common=*) common=${spec#*=} ;;
+      postgresql-client-common=*) client=${spec#*=} ;;
+    esac
+  done
+  if [[ -z $client ]]; then
+    client=$PG_CLIENT_CANDIDATE
+    [[ ! -f $PG_STATE/postgresql-client-common ]] || client=$(cut -f2 "$PG_STATE/postgresql-client-common")
+  fi
+  if [[ -n $common && $client != "$common" ]]; then
+    printf 'postgresql-common : Depends: postgresql-client-common (= %s) but %s is to be installed\n' \
+      "$common" "$client" >&2
+    return 100
+  fi
+  for spec in "$@" "postgresql-client-common=$client"; do
+    [[ $spec == *=* ]] || continue
+    [[ -f $PG_STATE/${spec%%=*} && $(cut -f2 "$PG_STATE/${spec%%=*}") == "${spec#*=}" ]] ||
+      printf 'install ok installed\t%s' "${spec#*=}" >"$PG_STATE/${spec%%=*}"
+  done
+}
+SH
+for pg_call in "${pg_calls[@]}"; do
+  for pg_host in fresh live; do
+    pg_case=$work/pg-case
+    rm -rf -- "$pg_case"
+    mkdir -p "$pg_case/state"
+    : >"$pg_case/calls"
+    if [[ $pg_host == live ]]; then
+      printf 'hold ok installed\t%s' "$pg_version" >"$pg_case/state/postgresql-common"
+      printf 'install ok installed\t%s' "$pg_version" >"$pg_case/state/postgresql-client-common"
+    fi
+    {
+      printf '#!/usr/bin/env bash\nset -euo pipefail\n'
+      sed -n '/^POSTGRESQL_COMMON_VERSION=/,/^CROWDSEC_BOUNCER_VERSION=/p' "$installer"
+      sed -n '/^# Installs packages at/,/^# copy_tree/{ /^# copy_tree/d; p; }' "$installer"
+      cat "$work/pg-fixture.sh" "$pg_call"
+    } >"$work/pg-install.sh"
+    if ! PG_STATE=$pg_case/state PG_CALLS=$pg_case/calls PG_CLIENT_CANDIDATE=999.pgdg24.04+1 \
+      bash "$work/pg-install.sh" >"$work/out" 2>"$work/err"; then
+      cat "$work/err" >&2
+      fail "$pg_host host refused the pinned postgresql-common install"
+    fi
+    pg_apt=$(grep '^apt ' "$pg_case/calls") || fail 'postgresql-common install skipped apt'
+    [[ $(wc -l <<<"$pg_apt") == 1 && " $pg_apt " == *" postgresql-common=$pg_version "* &&
+      " $pg_apt " == *" postgresql-client-common=$pg_version "* ]] ||
+      fail "$pg_host host did not pin postgresql-client-common with postgresql-common"
+    for package in postgresql-common postgresql-client-common; do
+      [[ $(<"$pg_case/state/$package") == "hold ok installed"$'\t'"$pg_version" ]] ||
+        fail "$pg_host host left $package unheld or off its pin"
+    done
+  done
+done
+printf 'PASS postgresql-common-installs-and-holds-client-common-at-its-pin\n'
