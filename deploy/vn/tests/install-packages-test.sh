@@ -420,3 +420,20 @@ pg_expected=$(printf '%s\n' "postgresql-common=$pg_version" "postgresql-client-c
   "postgresql-18=$pg_server_version" "postgresql-client-18=$pg_server_version" | sort)
 [[ $pg_proof == "$pg_expected" ]] || fail 'CrowdSec package proof pins PostgreSQL off the installer pins'
 printf 'PASS crowdsec-package-proof-pins-postgresql-at-installer-versions\n'
+
+crowdsec_version=$(sed -n 's/^CROWDSEC_VERSION=//p' "$installer")
+bouncer_version=$(sed -n 's/^CROWDSEC_BOUNCER_VERSION=//p' "$installer")
+[[ -n $crowdsec_version && -n $bouncer_version ]] || fail 'CrowdSec pins missing'
+collect=${3:-$root/deploy/vn/tests/ci-debs/collect.sh}
+collect_tokens=$(awk '
+  /^apt-get install .*--download-only/ { copy = 1 }
+  copy { more = sub(/\\$/, ""); print; if (!more) exit }
+' "$collect" | tr -s ' \t' '\n\n')
+collect_pins() { { grep -E "^($1)(=|\$)" <<<"$collect_tokens" || true; } | sort; }
+[[ $(collect_pins 'postgresql-common|postgresql-client-common|postgresql-18|postgresql-client-18') == "$pg_expected" ]] ||
+  fail 'CI package collection pins PostgreSQL off the installer pins'
+crowdsec_expected=$(printf '%s\n' "crowdsec=$crowdsec_version" \
+  "crowdsec-firewall-bouncer-nftables=$bouncer_version" | sort)
+[[ $(collect_pins 'crowdsec|crowdsec-firewall-bouncer-nftables') == "$crowdsec_expected" ]] ||
+  fail 'CI package collection pins CrowdSec off the installer pins'
+printf 'PASS ci-package-collection-pins-match-installer-versions\n'
