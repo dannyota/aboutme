@@ -76,6 +76,7 @@ Current behavior lives in code, deployment configuration, and
 | Other   | [Link-preview card](link-preview-card.md)                              | Card and publish-dialog preview visuals                                       |
 | Other   | [Production pull deployment](production-pull-deploy/README.md)         | Proposed host-initiated deployment and approval controls                      |
 | Other   | [Deployment transparency](deployment-transparency/README.md)           | Running digests, signed provenance, SBOMs, and the verify page                |
+| Other   | [Repository transfer](repository-transfer.md)                          | Move to the dntmakers organization: images, signatures, workflows and links   |
 | Other   | [LinkedIn sign-in](linkedin-sign-in.md)                                | LinkedIn OIDC flow, account linking, and app setup                            |
 | Other   | [LinkedIn import](linkedin-import.md)                                  | New resume from an English LinkedIn Save to PDF                               |
 | Other   | [LinkedIn import parser](linkedin-import-parser.md)                    | Extraction, lines, detection, mapping, dates, and bounds                      |
