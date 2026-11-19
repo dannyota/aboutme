@@ -606,6 +606,9 @@ function checkRepositoryContext(manual, release) {
   assert.equal(release.jobs.image.env.IMAGE, `ghcr.io/${owner}/aboutme-\${{ matrix.name }}:\${{ github.ref_name }}`, "index image namespace");
   assert.equal(release.jobs["observer-image"].env.IMAGE, `ghcr.io/${owner}/aboutme-observer:\${{ github.ref_name }}`, "observer image namespace");
   assert.equal(release.jobs["observer-image-amd64"].env.IMAGE, `ghcr.io/${owner}/aboutme-observer:\${{ github.ref_name }}-amd64`, "observer image namespace");
+  for (const [name, job] of [["manual build", manual.jobs.build], ["observer-image", release.jobs["observer-image"]], ["observer-image-amd64", release.jobs["observer-image-amd64"]]]) {
+    assert.equal(job.env.OWNER, owner, `${name}: observer build owner`);
+  }
   for (const [name, job] of Object.entries(release.jobs)) {
     for (const step of job.steps ?? []) {
       if (step.with?.path === ".release-trusted") {
@@ -657,6 +660,9 @@ test("release images and trusted checkouts follow the repository context", () =>
     ["fixed manual image", (manual) => { manual.jobs.build.env.IMAGE = "ghcr.io/dannyota/aboutme-${{ matrix.name }}:dry-run-${{ matrix.arch }}"; }, /manual image namespace/],
     ["fixed digest list", (_manual, release) => { const step = release.jobs.release.steps.find((candidate) => candidate.name === "Assemble"); step.run = step.run.replace("ghcr.io/$OWNER/aboutme-observer@", "ghcr.io/dannyota/aboutme-observer@"); }, /shell namespace/],
     ["fixed notes repository", (_manual, release) => { const step = release.jobs.release.steps.find((candidate) => candidate.name === "Assemble"); step.run = step.run.replace("--repo $GH_REPO", "--repo dannyota/aboutme"); }, /verify command/],
+    ["manual observer build without owner", (manual) => { delete manual.jobs.build.env.OWNER; }, /observer build owner/],
+    ["arm64 observer build without owner", (_manual, release) => { delete release.jobs["observer-image"].env.OWNER; }, /observer build owner/],
+    ["amd64 observer build with a fixed owner", (_manual, release) => { release.jobs["observer-image-amd64"].env.OWNER = "dntmakers"; }, /observer build owner/],
   ];
   for (const [name, mutate, diagnostic] of fixtures) {
     const manual = readWorkflow("release-check");
