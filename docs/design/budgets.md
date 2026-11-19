@@ -221,6 +221,15 @@ Notes on rows whose reason is not obvious:
   overflow of [ADR 0007](../adr/0007-bounded-rate-limiter.md). Resume read and
   write limits leave room for several editor tabs above the one-second autosave
   cadence. Operation counts per request are separate from the 256 KiB body cap.
+- **MCP slots.** No `/mcp` request is held open, so the four slots per user
+  bound only work in progress. The server advertises `tools` without
+  `listChanged`, so clients that follow the capability, such as Claude Code and
+  the Go SDK client, open no `subscriptions/listen`. A listen sent anyway gets a
+  short event stream, the acknowledgement and then the result, and closes
+  ([ADR 0018](../adr/0018-mcp-agent-access.md)). The server also advertises no
+  `logging`, since it sends no log messages. A capability that keeps a request
+  open, such as list-change or resource subscriptions, needs a design change
+  first, because each open request holds a slot.
 - **Showcase.** The listing limiter keeps the ADR 0007 overflow. Card images
   count against the public artifact limit, so one showcase page uses 12 of the
   300 a minute
