@@ -1,7 +1,7 @@
 # Repository transfer to dntmakers
 
-Proposed 2026-11-19: the owner moves `github.com/dannyota/aboutme` to the
-organization `github.com/dntmakers/aboutme`. This design moves the release
+Accepted 2026-11-19 (owner): the owner moves `github.com/dannyota/aboutme` to
+the organization `github.com/dntmakers/aboutme`. This design moves the release
 images, signature checks, scripts, workflows and links with it. No deploy fails,
 the running release stays verifiable, and rollback to any earlier release still
 verifies.
