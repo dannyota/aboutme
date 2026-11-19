@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"sort"
 	"time"
+
+	"danny.vn/aboutme/deploy/observer/internal/source"
 )
 
 const (
@@ -19,14 +21,33 @@ var Components = []string{Server, Web, Caddy, Maintenance}
 
 var Required = []string{Server, Web, Caddy}
 
-var imageRepository = map[string]string{
-	Server:      "ghcr.io/dannyota/aboutme-server",
-	Web:         "ghcr.io/dannyota/aboutme-web",
-	Caddy:       "ghcr.io/dannyota/aboutme-caddy",
-	Maintenance: "ghcr.io/dannyota/aboutme-caddy",
+func imageName(component string) string {
+	switch component {
+	case Server:
+		return "aboutme-server"
+	case Web:
+		return "aboutme-web"
+	case Caddy, Maintenance:
+		return "aboutme-caddy"
+	}
+	return ""
 }
 
-func ImageRepository(component string) string { return imageRepository[component] }
+func Repository(owner, component string) string {
+	if !source.Valid(owner) || imageName(component) == "" {
+		return ""
+	}
+	return "ghcr.io/" + owner + "/" + imageName(component)
+}
+
+func RepositoryOwner(component, repository string) (string, bool) {
+	for _, owner := range source.Owners() {
+		if r := Repository(owner, component); r != "" && r == repository {
+			return owner, true
+		}
+	}
+	return "", false
+}
 
 var digestPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 
@@ -34,15 +55,17 @@ func ValidDigest(d string) bool { return digestPattern.MatchString(d) }
 
 type Image struct {
 	Component    string
+	Repository   string
 	Digest       string
 	Replicas     int
 	RunningSince time.Time
 }
 
 type Observation struct {
-	Component string
-	Digest    string
-	StartedAt time.Time
+	Component  string
+	Repository string
+	Digest     string
+	StartedAt  time.Time
 }
 
 type Info struct {
@@ -63,10 +86,18 @@ type SnapshotLister interface {
 func Aggregate(obs []Observation) ([]Image, error) {
 	type key struct{ component, digest string }
 	byKey := map[key]*Image{}
+	repositories := map[string]string{}
 	for _, o := range obs {
-		if ImageRepository(o.Component) == "" {
+		if imageName(o.Component) == "" {
 			return nil, fmt.Errorf("unknown component %q", o.Component)
 		}
+		if _, ok := RepositoryOwner(o.Component, o.Repository); !ok {
+			return nil, fmt.Errorf("a running %s container has no accepted image repository", o.Component)
+		}
+		if r, seen := repositories[o.Component]; seen && r != o.Repository {
+			return nil, fmt.Errorf("running %s containers name two image repositories", o.Component)
+		}
+		repositories[o.Component] = o.Repository
 		if !ValidDigest(o.Digest) {
 			return nil, fmt.Errorf("a running %s container has no valid digest", o.Component)
 		}
@@ -76,7 +107,7 @@ func Aggregate(obs []Observation) ([]Image, error) {
 		k := key{o.Component, o.Digest}
 		img := byKey[k]
 		if img == nil {
-			img = &Image{Component: o.Component, Digest: o.Digest, RunningSince: o.StartedAt.UTC()}
+			img = &Image{Component: o.Component, Repository: o.Repository, Digest: o.Digest, RunningSince: o.StartedAt.UTC()}
 			byKey[k] = img
 		}
 		img.Replicas++

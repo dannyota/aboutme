@@ -11,6 +11,7 @@ import (
 	"danny.vn/aboutme/deploy/observer/internal/document"
 	"danny.vn/aboutme/deploy/observer/internal/platform"
 	"danny.vn/aboutme/deploy/observer/internal/publish"
+	"danny.vn/aboutme/deploy/observer/internal/source"
 	"danny.vn/aboutme/deploy/observer/internal/verify"
 )
 
@@ -27,7 +28,7 @@ var publishedInfo = platform.Info{Provider: "greennode", Orchestrator: "podman",
 func publishedEvidence(images []platform.Image, checkedAt time.Time) map[string]verify.Evidence {
 	evidence := map[string]verify.Evidence{}
 	for _, image := range images {
-		repo := platform.ImageRepository(image.Component)
+		repo := platform.Repository(source.Dannyota, image.Component)
 		evidence[image.Digest] = verify.Evidence{
 			Digest: image.Digest,
 			Provenance: verify.Provenance{
@@ -46,12 +47,13 @@ func publishedEvidence(images []platform.Image, checkedAt time.Time) map[string]
 func TestPublishedDocument_MatchesGolden(t *testing.T) {
 	running := testNow.Add(-5 * time.Minute)
 	reported, err := document.Build(document.Input{
+		Owner:       source.Dannyota,
 		Environment: "production", Site: "https://aboutme.vn", Platform: publishedInfo,
 		ObservedAt: testNow.Add(-30 * time.Second),
 		Images: []platform.Image{
-			{Component: platform.Server, Digest: "sha256:" + strings.Repeat("1a", 32), Replicas: 1, RunningSince: running},
-			{Component: platform.Web, Digest: "sha256:" + strings.Repeat("2b", 32), Replicas: 1, RunningSince: running},
-			{Component: platform.Caddy, Digest: "sha256:" + strings.Repeat("3c", 32), Replicas: 1, RunningSince: running},
+			{Component: platform.Server, Repository: "ghcr.io/dannyota/aboutme-server", Digest: "sha256:" + strings.Repeat("1a", 32), Replicas: 1, RunningSince: running},
+			{Component: platform.Web, Repository: "ghcr.io/dannyota/aboutme-web", Digest: "sha256:" + strings.Repeat("2b", 32), Replicas: 1, RunningSince: running},
+			{Component: platform.Caddy, Repository: "ghcr.io/dannyota/aboutme-caddy", Digest: "sha256:" + strings.Repeat("3c", 32), Replicas: 1, RunningSince: running},
 		},
 	})
 	if err != nil {
@@ -69,6 +71,7 @@ func TestPublishedDocument_MatchesGolden(t *testing.T) {
 		t.Fatal(err)
 	}
 	doc, err := document.Build(document.Input{
+		Owner:       source.Dannyota,
 		Environment: "production", Site: "https://aboutme.vn", Platform: publishedInfo,
 		ObservedAt: lister.ObservationTime(),
 		Images:     images,

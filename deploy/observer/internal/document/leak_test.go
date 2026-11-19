@@ -16,6 +16,7 @@ import (
 	"danny.vn/aboutme/deploy/observer/internal/leakscan"
 	"danny.vn/aboutme/deploy/observer/internal/platform"
 	"danny.vn/aboutme/deploy/observer/internal/platform/podman"
+	"danny.vn/aboutme/deploy/observer/internal/source"
 	"danny.vn/aboutme/deploy/observer/internal/verify"
 	"danny.vn/aboutme/deploy/observer/schema"
 )
@@ -37,14 +38,15 @@ func podmanImages(t *testing.T, strip bool) []platform.Image {
 	var imgs []platform.Image
 	for i, component := range platform.Components {
 		imgs = append(imgs, platform.Image{
-			Component: component, Digest: "sha256:" + strings.Repeat(fmt.Sprintf("%02x", 0xa1+i), 32),
+			Component: component, Repository: platform.Repository(source.Dannyota, component),
+			Digest:   "sha256:" + strings.Repeat(fmt.Sprintf("%02x", 0xa1+i), 32),
 			Replicas: 1, RunningSince: running,
 		})
 	}
 	claims := map[string]verify.Evidence{}
 	if !strip {
 		for _, img := range imgs {
-			repo := platform.ImageRepository(img.Component)
+			repo := platform.Repository(source.Dannyota, img.Component)
 			claims[img.Digest] = verify.Evidence{
 				Digest: img.Digest,
 				Provenance: verify.Provenance{
@@ -59,6 +61,7 @@ func podmanImages(t *testing.T, strip bool) []platform.Image {
 		}
 	}
 	reported, err := document.Build(document.Input{
+		Owner:       source.Dannyota,
 		Environment: "production", Site: "https://aboutme.vn", Platform: info,
 		ObservedAt: time.Now(), Images: imgs, Evidence: claims,
 		Observer: document.BuildInfo{Version: "v9.9.9", Commit: "c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00"},
@@ -83,23 +86,29 @@ func podmanImages(t *testing.T, strip bool) []platform.Image {
 
 func build(t *testing.T, imgs []platform.Image, info platform.Info) []byte {
 	t.Helper()
+	return buildBy(t, source.Dannyota, imgs, info)
+}
+
+func buildBy(t *testing.T, owner string, imgs []platform.Image, info platform.Info) []byte {
+	t.Helper()
 	ev := map[string]verify.Evidence{}
 	now := time.Date(2026, 10, 2, 3, 14, 5, 0, time.UTC)
 	for _, img := range imgs {
-		repo := platform.ImageRepository(img.Component)
+		signer := strings.Split(img.Repository, "/")[1]
 		ev[img.Digest] = verify.Evidence{
 			Digest: img.Digest,
 			Provenance: verify.Provenance{
-				Status: verify.Verified, CheckedAt: now, Subjects: []string{repo},
+				Status: verify.Verified, CheckedAt: now, Subjects: []string{img.Repository},
 				Version: "v0.6.5", Commit: "3b1f0000000000000000000000000000000f9e07",
-				SignerWorkflow: "https://github.com/dannyota/aboutme/.github/workflows/release-images.yml@refs/tags/v0.6.5",
+				SignerWorkflow: "https://github.com/" + signer + "/aboutme/.github/workflows/release-images.yml@refs/tags/v0.6.5",
 				LogIndex:       2965228543,
-				BuildURL:       "https://github.com/dannyota/aboutme/actions/runs/36218940587/attempts/1",
+				BuildURL:       "https://github.com/" + signer + "/aboutme/actions/runs/36218940587/attempts/1",
 			},
-			SBOM: verify.SBOM{Status: verify.Verified, CheckedAt: now, Subjects: []string{repo}},
+			SBOM: verify.SBOM{Status: verify.Verified, CheckedAt: now, Subjects: []string{img.Repository}},
 		}
 	}
 	doc, err := document.Build(document.Input{
+		Owner:       owner,
 		Environment: "production",
 		Site:        "https://aboutme.vn",
 		Platform:    info,
@@ -266,5 +275,20 @@ func TestLeakChecksCatchLeaks(t *testing.T) {
 		if r.failures == 0 {
 			t.Errorf("the leak checks passed %s", l)
 		}
+	}
+}
+
+func TestDntmakersDocumentLeaksNothing(t *testing.T) {
+	info := platform.Info{Provider: "greennode", Orchestrator: "podman", Region: "HCM03"}
+	imgs := podmanImages(t, false)
+	for i := range imgs {
+		imgs[i].Repository = platform.Repository(source.Dntmakers, imgs[i].Component)
+	}
+	for _, owner := range source.Owners() {
+		b := buildBy(t, owner, imgs, info)
+		if !strings.Contains(string(b), "ghcr.io/dntmakers/aboutme-server") {
+			t.Fatalf("%s: the document lost the dntmakers images", owner)
+		}
+		assertNoLeak(t, b)
 	}
 }

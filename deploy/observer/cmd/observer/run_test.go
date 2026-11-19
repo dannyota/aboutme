@@ -9,6 +9,7 @@ import (
 
 	"danny.vn/aboutme/deploy/observer/internal/document"
 	"danny.vn/aboutme/deploy/observer/internal/platform"
+	"danny.vn/aboutme/deploy/observer/internal/source"
 	"danny.vn/aboutme/deploy/observer/internal/verify"
 )
 
@@ -49,20 +50,28 @@ func (f *fakePublisher) Put(_ context.Context, body []byte) error {
 
 func fixedNow() time.Time { return time.Date(2026, 10, 2, 3, 14, 5, 0, time.UTC) }
 
+func runningImage(component, digest string, since time.Time) platform.Image {
+	return platform.Image{
+		Component: component, Repository: platform.Repository(source.Dannyota, component),
+		Digest: digest, Replicas: 1, RunningSince: since,
+	}
+}
+
 func serverImage(digest string, since time.Time) platform.Image {
-	return platform.Image{Component: platform.Server, Digest: digest, Replicas: 1, RunningSince: since}
+	return runningImage(platform.Server, digest, since)
 }
 
 func TestRunPublishesOnSuccess(t *testing.T) {
 	digest := "sha256:" + repeatHex("a1", 32)
 	lister := &fakeLister{images: []platform.Image{
 		serverImage(digest, fixedNow()),
-		{Component: platform.Web, Digest: digest, Replicas: 1, RunningSince: fixedNow()},
-		{Component: platform.Caddy, Digest: digest, Replicas: 1, RunningSince: fixedNow()},
+		runningImage(platform.Web, digest, fixedNow()),
+		runningImage(platform.Caddy, digest, fixedNow()),
 	}}
 	checker := &fakeChecker{}
 	pub := &fakePublisher{}
 	obs := &observer{
+		owner:     source.Dannyota,
 		lister:    lister,
 		info:      platform.Info{Provider: "greennode", Orchestrator: "podman", Region: "HCM03"},
 		verifier:  checker,
@@ -109,6 +118,7 @@ func TestRunPreservesHostObservationTime(t *testing.T) {
 	}
 	pub := &fakePublisher{}
 	obs := &observer{
+		owner:  source.Dannyota,
 		lister: lister, verifier: &fakeChecker{}, publisher: pub,
 		info: platform.Info{Provider: "greennode", Orchestrator: "podman", Region: "HCM03"},
 	}
@@ -146,4 +156,37 @@ func repeatHex(pair string, n int) string {
 		out = append(out, pair...)
 	}
 	return string(out)
+}
+
+func TestRunPublishesNothingWithoutOwner(t *testing.T) {
+	for _, value := range []string{"", "someone"} {
+		lister := &fakeLister{images: []platform.Image{serverImage("sha256:"+repeatHex("a1", 32), fixedNow())}}
+		pub := &fakePublisher{}
+		obs := &observer{
+			owner: value, lister: lister, verifier: &fakeChecker{}, publisher: pub,
+			info: platform.Info{Provider: "greennode", Orchestrator: "podman", Region: "HCM03"},
+		}
+		if err := obs.run(t.Context(), fixedNow); err == nil || pub.body != nil {
+			t.Errorf("owner %q: run = %v, published %d bytes", value, err, len(pub.body))
+		}
+	}
+}
+
+func TestRunNamesTheBuildTimeOwner(t *testing.T) {
+	lister := &fakeLister{images: []platform.Image{serverImage("sha256:"+repeatHex("a1", 32), fixedNow())}}
+	pub := &fakePublisher{}
+	obs := &observer{
+		owner: source.Dntmakers, lister: lister, verifier: &fakeChecker{}, publisher: pub,
+		info: platform.Info{Provider: "greennode", Orchestrator: "podman", Region: "HCM03"},
+	}
+	if err := obs.run(t.Context(), fixedNow); err != nil {
+		t.Fatal(err)
+	}
+	var doc document.Document
+	if err := json.Unmarshal(pub.body, &doc); err != nil {
+		t.Fatal(err)
+	}
+	if doc.SourceRepository != "https://github.com/dntmakers/aboutme" || doc.Components[0].Image != "ghcr.io/dannyota/aboutme-server" {
+		t.Errorf("source %s, server image %s", doc.SourceRepository, doc.Components[0].Image)
+	}
 }

@@ -19,25 +19,33 @@ import (
 	"github.com/sigstore/sigstore-go/pkg/tuf"
 	sgverify "github.com/sigstore/sigstore-go/pkg/verify"
 	"github.com/theupdateframework/go-tuf/v2/metadata/fetcher"
+
+	"danny.vn/aboutme/deploy/observer/internal/source"
 )
 
 const (
-	Issuer           = "https://token.actions.githubusercontent.com"
-	SourceRepository = "https://github.com/dannyota/aboutme"
-	RunnerHosted     = "github-hosted"
+	Issuer       = "https://token.actions.githubusercontent.com"
+	RunnerHosted = "github-hosted"
 
 	ProvenancePredicate = "https://slsa.dev/provenance/v1"
 	SPDXPredicate       = "https://spdx.dev/Document/v2.3"
 
-	signerPattern = `^https://github\.com/dannyota/aboutme/\.github/workflows/release-images\.yml@refs/tags/(v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))$`
+	signerPattern = `^https://github\.com/(` + source.OwnerPattern + `)/aboutme/\.github/workflows/release-images\.yml@refs/tags/(v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))$`
 )
 
 var (
 	signerRE = regexp.MustCompile(signerPattern)
 	commitRE = regexp.MustCompile(`^[0-9a-f]{40}$`)
-	buildRE  = regexp.MustCompile(`^https://github\.com/dannyota/aboutme/actions/runs/[0-9]{1,20}/attempts/[0-9]{1,4}$`)
+	buildRE  = regexp.MustCompile(`^https://github\.com/(` + source.OwnerPattern + `)/aboutme/actions/runs/[0-9]{1,20}/attempts/[0-9]{1,4}$`)
 	digestRE = regexp.MustCompile(`^sha256:([0-9a-f]{64})$`)
 )
+
+func SignerOwner(signerWorkflow string) string {
+	if m := signerRE.FindStringSubmatch(signerWorkflow); m != nil {
+		return m[1]
+	}
+	return ""
+}
 
 type Options struct {
 	HTTPClient      *http.Client
@@ -153,6 +161,7 @@ func (v *Verifier) trustedMaterial() (root.TrustedMaterial, error) {
 }
 
 type verified struct {
+	owner    string
 	subjects []string
 	version  string
 	commit   string
@@ -191,17 +200,17 @@ func (v *Verifier) sbom(ctx context.Context, trusted root.TrustedMaterial, diges
 }
 
 func (v *Verifier) check(ctx context.Context, trusted root.TrustedMaterial, digest string, sum []byte, predicate, apiFilter string) (Status, verified) {
-	bundles, err := v.fetch(ctx, digest, predicate, apiFilter)
-	if err != nil {
-		return Unchecked, verified{}
-	}
-	if len(bundles) == 0 {
-		return NotFound, verified{}
-	}
+	bundles, fetchErr := v.fetch(ctx, digest, predicate, apiFilter)
 	for _, raw := range bundles {
 		if got, err := verifyBundle(trusted, raw, sum, predicate); err == nil {
 			return Verified, got
 		}
+	}
+	switch {
+	case fetchErr != nil:
+		return Unchecked, verified{}
+	case len(bundles) == 0:
+		return NotFound, verified{}
 	}
 	return Invalid, verified{}
 }
@@ -227,8 +236,8 @@ func verifyBundle(trusted root.TrustedMaterial, raw []byte, sum []byte, predicat
 		return verified{}, err
 	}
 	id, err := sgverify.NewCertificateIdentity(san, iss, certificate.Extensions{
-		SourceRepositoryURI: SourceRepository,
-		RunnerEnvironment:   RunnerHosted,
+		SourceRepositoryIdentifier: source.RepositoryID,
+		RunnerEnvironment:          RunnerHosted,
 	})
 	if err != nil {
 		return verified{}, err
@@ -255,8 +264,8 @@ func verifyBundle(trusted root.TrustedMaterial, raw []byte, sum []byte, predicat
 			got.subjects = append(got.subjects, s.GetName())
 		}
 	}
-	if len(got.subjects) == 0 {
-		return verified{}, errors.New("no subject names this digest")
+	if err = inNamespace(got.subjects, got.owner); err != nil {
+		return verified{}, err
 	}
 	entries, err := b.TlogEntries()
 	if err != nil || len(entries) != 1 {
@@ -269,17 +278,34 @@ func verifyBundle(trusted root.TrustedMaterial, raw []byte, sum []byte, predicat
 	return got, nil
 }
 
+func inNamespace(subjects []string, owner string) error {
+	if len(subjects) == 0 {
+		return errors.New("no subject names this digest")
+	}
+	for _, s := range subjects {
+		if !source.Valid(owner) || !strings.HasPrefix(s, "ghcr.io/"+owner+"/") {
+			return errors.New("a subject is outside the signer's namespace")
+		}
+	}
+	return nil
+}
+
 func certificateFacts(c certificate.Summary) (verified, error) {
 	m := signerRE.FindStringSubmatch(c.SubjectAlternativeName)
 	if m == nil {
 		return verified{}, errors.New("signer identity does not match")
 	}
-	version := m[1]
+	owner, version := m[1], m[2]
+	run := buildRE.FindStringSubmatch(c.RunInvocationURI)
 	switch {
 	case c.Issuer != Issuer:
 		return verified{}, errors.New("wrong issuer")
-	case c.SourceRepositoryURI != SourceRepository:
-		return verified{}, errors.New("wrong source repository")
+	case c.SourceRepositoryIdentifier != source.RepositoryID:
+		return verified{}, errors.New("wrong source repository identifier")
+	case c.SourceRepositoryURI != source.Repository(owner):
+		return verified{}, errors.New("source repository owner differs from the signer's")
+	case c.SourceRepositoryOwnerIdentifier != source.OwnerID(owner):
+		return verified{}, errors.New("source repository owner identifier does not match the signer's owner")
 	case c.RunnerEnvironment != RunnerHosted:
 		return verified{}, errors.New("not a GitHub-hosted runner")
 	case c.SourceRepositoryRef != "refs/tags/"+version:
@@ -288,10 +314,11 @@ func certificateFacts(c certificate.Summary) (verified, error) {
 		return verified{}, errors.New("build signer does not match the signer identity")
 	case !commitRE.MatchString(c.SourceRepositoryDigest):
 		return verified{}, errors.New("malformed source digest")
-	case !buildRE.MatchString(c.RunInvocationURI):
+	case run == nil || run[1] != owner:
 		return verified{}, errors.New("malformed run invocation")
 	}
 	return verified{
+		owner:    owner,
 		version:  version,
 		commit:   c.SourceRepositoryDigest,
 		san:      c.SubjectAlternativeName,

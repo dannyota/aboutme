@@ -8,15 +8,15 @@ import (
 	"time"
 
 	"danny.vn/aboutme/deploy/observer/internal/platform"
+	"danny.vn/aboutme/deploy/observer/internal/source"
 	"danny.vn/aboutme/deploy/observer/internal/verify"
 )
 
 const (
-	SchemaVersion    = 1
-	Project          = "aboutme"
-	SourceRepository = "https://github.com/dannyota/aboutme"
-	StaleAfter       = 180 * time.Second
-	MaxImages        = 8
+	SchemaVersion = 1
+	Project       = "aboutme"
+	StaleAfter    = 180 * time.Second
+	MaxImages     = 8
 )
 
 const (
@@ -105,6 +105,7 @@ type BuildInfo struct {
 }
 
 type Input struct {
+	Owner       string
 	Environment string
 	Site        string
 	Platform    platform.Info
@@ -118,13 +119,16 @@ func Build(in Input) (*Document, error) {
 	if in.ObservedAt.IsZero() {
 		return nil, errors.New("observed_at is required")
 	}
+	if !source.Valid(in.Owner) {
+		return nil, fmt.Errorf("source owner %q is not dannyota or dntmakers", in.Owner)
+	}
 	observed := in.ObservedAt.UTC().Truncate(time.Second)
 	doc := &Document{
 		SchemaVersion:    SchemaVersion,
 		Project:          Project,
 		Environment:      in.Environment,
 		Site:             in.Site,
-		SourceRepository: SourceRepository,
+		SourceRepository: source.Repository(in.Owner),
 		Platform: Platform{
 			Provider:     in.Platform.Provider,
 			Orchestrator: in.Platform.Orchestrator,
@@ -140,8 +144,8 @@ func Build(in Input) (*Document, error) {
 	}
 	byComponent := map[string][]platform.Image{}
 	for _, img := range in.Images {
-		if platform.ImageRepository(img.Component) == "" {
-			return nil, fmt.Errorf("unknown component %q", img.Component)
+		if _, ok := platform.RepositoryOwner(img.Component, img.Repository); !ok {
+			return nil, fmt.Errorf("component %q runs image %q, not an accepted repository", img.Component, img.Repository)
 		}
 		byComponent[img.Component] = append(byComponent[img.Component], img)
 	}
@@ -154,9 +158,15 @@ func Build(in Input) (*Document, error) {
 			return nil, fmt.Errorf("%s runs %d digests, more than %d", name, len(imgs), MaxImages)
 		}
 		slices.SortStableFunc(imgs, func(a, b platform.Image) int { return a.RunningSince.Compare(b.RunningSince) })
-		c := Component{Name: name, Image: platform.ImageRepository(name), RunningImages: []RunningImage{}}
+		c := Component{Name: name, Image: platform.Repository(source.Dannyota, name), RunningImages: []RunningImage{}}
+		if len(imgs) > 0 {
+			c.Image = imgs[0].Repository
+		}
 		for _, img := range imgs {
-			c.RunningImages = append(c.RunningImages, runningImage(name, img, in.Evidence[img.Digest]))
+			if img.Repository != c.Image {
+				return nil, fmt.Errorf("%s runs images from two repositories", name)
+			}
+			c.RunningImages = append(c.RunningImages, runningImage(in.Owner, img, in.Evidence[img.Digest]))
 		}
 		doc.Components = append(doc.Components, c)
 	}
@@ -165,14 +175,16 @@ func Build(in Input) (*Document, error) {
 	return doc, nil
 }
 
-func runningImage(component string, img platform.Image, ev verify.Evidence) RunningImage {
-	repo := platform.ImageRepository(component)
+func runningImage(owner string, img platform.Image, ev verify.Evidence) RunningImage {
+	repo := img.Repository
+	imageOwner, _ := platform.RepositoryOwner(img.Component, repo)
+	sourceRepository := source.Repository(owner)
 	ri := RunningImage{
 		Digest:       img.Digest,
 		Replicas:     img.Replicas,
 		RunningSince: stamp(img.RunningSince),
 		Links: Links{
-			Provenance: fmt.Sprintf("https://api.github.com/repos/dannyota/aboutme/attestations/%s?predicate_type=provenance", img.Digest),
+			Provenance: fmt.Sprintf("https://api.github.com/repos/%s/aboutme/attestations/%s?predicate_type=provenance", owner, img.Digest),
 		},
 	}
 	p := ev.Provenance
@@ -180,7 +192,7 @@ func runningImage(component string, img platform.Image, ev verify.Evidence) Runn
 	if status == "" {
 		status = verify.Unchecked
 	}
-	if status == verify.Verified && !slices.Contains(p.Subjects, repo) {
+	if status == verify.Verified && (!slices.Contains(p.Subjects, repo) || verify.SignerOwner(p.SignerWorkflow) != imageOwner) {
 		status = verify.Invalid
 	}
 	ri.Signature.Status = string(status)
@@ -207,12 +219,12 @@ func runningImage(component string, img platform.Image, ev verify.Evidence) Runn
 	ri.Signature.SignerWorkflow = optional(p.SignerWorkflow)
 	idx := p.LogIndex
 	ri.Signature.TransparencyLogIndex = &idx
-	ri.Links.Commit = optional(SourceRepository + "/commit/" + p.Commit)
+	ri.Links.Commit = optional(sourceRepository + "/commit/" + p.Commit)
 	ri.Links.Build = optional(p.BuildURL)
 	ri.Links.TransparencyLog = optional(fmt.Sprintf("https://search.sigstore.dev/?logIndex=%d", p.LogIndex))
 	if sbomStatus == verify.Verified {
-		ri.Links.Release = optional(SourceRepository + "/releases/tag/" + p.Version)
-		ri.Links.SBOM = optional(fmt.Sprintf("%s/releases/download/%s/%s-amd64.spdx.json", SourceRepository, p.Version, imageBase(repo)))
+		ri.Links.Release = optional(sourceRepository + "/releases/tag/" + p.Version)
+		ri.Links.SBOM = optional(fmt.Sprintf("%s/releases/download/%s/%s-amd64.spdx.json", sourceRepository, p.Version, imageBase(repo)))
 	}
 	return ri
 }
@@ -254,7 +266,7 @@ func release(summary string, components []Component) *Release {
 	if summary != SummaryVerified {
 		return nil
 	}
-	var version, commit, deployed string
+	var version, commit, owner, deployed string
 	for _, c := range components {
 		if !slices.Contains(platform.Required, c.Name) {
 			continue
@@ -263,9 +275,10 @@ func release(summary string, components []Component) *Release {
 		if ri.Version == nil || ri.Commit == nil {
 			return nil
 		}
+		imageOwner, _ := platform.RepositoryOwner(c.Name, c.Image)
 		if version == "" {
-			version, commit = *ri.Version, *ri.Commit
-		} else if *ri.Version != version || *ri.Commit != commit {
+			version, commit, owner = *ri.Version, *ri.Commit, imageOwner
+		} else if *ri.Version != version || *ri.Commit != commit || imageOwner != owner {
 			return nil
 		}
 		if ri.RunningSince > deployed {

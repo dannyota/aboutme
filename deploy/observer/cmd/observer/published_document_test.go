@@ -13,6 +13,7 @@ import (
 
 	"danny.vn/aboutme/deploy/observer/internal/document"
 	"danny.vn/aboutme/deploy/observer/internal/platform"
+	"danny.vn/aboutme/deploy/observer/internal/source"
 	"danny.vn/aboutme/deploy/observer/internal/verify"
 )
 
@@ -30,11 +31,12 @@ func TestRunPublishesPodmanGolden(t *testing.T) {
 		)
 		running := now.Add(-5 * time.Minute)
 		images := []platform.Image{
-			{Component: platform.Server, Digest: "sha256:" + strings.Repeat("1a", 32), Replicas: 1, RunningSince: running},
-			{Component: platform.Web, Digest: "sha256:" + strings.Repeat("2b", 32), Replicas: 1, RunningSince: running},
-			{Component: platform.Caddy, Digest: "sha256:" + strings.Repeat("3c", 32), Replicas: 1, RunningSince: running},
+			runningImage(platform.Server, "sha256:"+strings.Repeat("1a", 32), running),
+			runningImage(platform.Web, "sha256:"+strings.Repeat("2b", 32), running),
+			runningImage(platform.Caddy, "sha256:"+strings.Repeat("3c", 32), running),
 		}
 		reported, err := document.Build(document.Input{
+			Owner:       source.Dannyota,
 			Environment: environment, Site: site,
 			Platform:   platform.Info{Provider: "greennode", Orchestrator: "podman", Region: "HCM03"},
 			ObservedAt: now.Add(-30 * time.Second),
@@ -66,7 +68,7 @@ func TestRunPublishesPodmanGolden(t *testing.T) {
 		checkedAt := now.Add(-20 * time.Second)
 		evidence := evidenceChecker{}
 		for _, image := range images {
-			repo := platform.ImageRepository(image.Component)
+			repo := platform.Repository(source.Dannyota, image.Component)
 			evidence[image.Digest] = verify.Evidence{
 				Digest: image.Digest,
 				Provenance: verify.Provenance{
@@ -81,6 +83,7 @@ func TestRunPublishesPodmanGolden(t *testing.T) {
 		}
 		obs.verifier = evidence
 		obs.build = document.BuildInfo{Version: releaseVersion, Commit: releaseCommit}
+		obs.owner = source.Dannyota
 
 		if err = obs.run(t.Context(), time.Now); err != nil {
 			t.Fatal(err)

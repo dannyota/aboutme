@@ -18,6 +18,7 @@ runs:
           observer*)
             docker build --platform "linux/$ARCH" --provenance=false \
               --build-arg VERSION="$VERSION" --build-arg COMMIT="$COMMIT" \
+              --build-arg OWNER="$OWNER" \
               -f "$DOCKERFILE" -t "$IMAGE" .
             ;;
           *)
@@ -55,7 +56,10 @@ runs:
             docker run --rm -e EDGES=cloudfront "$IMAGE" adapt
             ;;
           observer*)
-            docker run --rm "$IMAGE" version
+            version=$(docker run --rm "$IMAGE" version)
+            printf '%s\n' "$version"
+            [ "${version##* }" = "$OWNER" ] ||
+              { echo "observer image reports owner '${version##* }', not the repository owner '$OWNER'" >&2; exit 1; }
             ;;
         esac
     - name: Probe host operation dispatch
