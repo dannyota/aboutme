@@ -30,8 +30,16 @@ const actionFixture = (reference, comment = "v1.2.3") =>
 const readWorkflow = (name) =>
   parseYaml(read(`.github/workflows/${name}.yml`), name).toJS();
 
+const repositoryId = "1318874703";
+const repositoryGuard = `github.repository_id == ${repositoryId} && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'`;
+
+function guardAdmits(condition, github) {
+  assert.match(condition, /^[\w.' =&/-]+$/, "guard uses only comparisons");
+  return Function("github", `return ${condition}`)(github);
+}
+
 function checkApprovalProbe(workflow) {
-  const condition = "github.repository == 'dannyota/aboutme' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'";
+  const condition = repositoryGuard;
   const job = (name, stepName, text) => ({
     name, if: condition, "runs-on": "ubuntu-24.04", "timeout-minutes": 2,
     permissions: {}, steps: [{ name: stepName, run: `echo '${text}'` }],
@@ -53,6 +61,32 @@ test("approval probe has only fixed echoes and a main-only environment gate", ()
   checkApprovalProbe(readWorkflow("approval-probe"));
 });
 
+test("run guards admit the repository under both names and nothing else", () => {
+  const guards = [
+    ...Object.values(readWorkflow("approval-probe").jobs).map((job) => job.if),
+    readWorkflow("vmonitor-renew").jobs.renew.if,
+  ];
+  const dispatch = { ref: "refs/heads/main", event_name: "workflow_dispatch" };
+  for (const condition of guards) {
+    assert.equal(condition, repositoryGuard);
+    for (const repository of ["dannyota/aboutme", "dntmakers/aboutme"]) {
+      assert.equal(guardAdmits(condition, { ...dispatch, repository, repository_id: repositoryId }), true, repository);
+    }
+    for (const github of [
+      { ...dispatch, repository: "dannyota/aboutme", repository_id: "1" },
+      { ...dispatch, repository: "fork/aboutme", repository_id: "999" },
+      { ...dispatch, repository: "dntmakers/aboutme", repository_id: `${repositoryId}0` },
+      { ...dispatch, repository: "dannyota/aboutme", repository_id: repositoryId, ref: "refs/heads/topic" },
+      { ...dispatch, repository: "dannyota/aboutme", repository_id: repositoryId, event_name: "push" },
+    ]) {
+      assert.equal(guardAdmits(condition, github), false, JSON.stringify(github));
+    }
+  }
+  for (const name of ["approval-probe", "vmonitor-renew"]) {
+    assert.doesNotMatch(read(`.github/workflows/${name}.yml`), /dannyota|dntmakers|github\.repository ==/, `${name}: no repository name pin`);
+  }
+});
+
 test("approval probe rejects trigger, authority, gate, and execution drift", () => {
   for (const mutate of [
     (workflow) => { workflow.on.push = null; },
@@ -60,6 +94,7 @@ test("approval probe rejects trigger, authority, gate, and execution drift", () 
     (workflow) => { workflow.env = { TOKEN: "${{ secrets.GITHUB_TOKEN }}" }; },
     (workflow) => { workflow.concurrency["cancel-in-progress"] = true; },
     (workflow) => { workflow.jobs["prepare-request"].environment = "approval-probe"; },
+    (workflow) => { workflow.jobs["record-approval"].if = workflow.jobs["record-approval"].if.replace(`github.repository_id == ${repositoryId}`, "github.repository == 'dannyota/aboutme'"); },
     (workflow) => { delete workflow.jobs["record-approval"].environment; },
     (workflow) => { workflow.jobs["record-approval"].environment = "production"; },
     (workflow) => { delete workflow.jobs["record-approval"].needs; },
@@ -563,6 +598,74 @@ test("manual image checks have no release authority and publication stays bounde
   checkReleaseContracts(readWorkflow("release-check"), readWorkflow("release-images"), readImageCheck());
 });
 
+function checkRepositoryContext(manual, release) {
+  const owner = "${{ github.repository_owner }}";
+  assert.equal(manual.jobs.build.env.IMAGE, `ghcr.io/${owner}/aboutme-\${{ matrix.name }}:dry-run-\${{ matrix.arch }}`, "manual image namespace");
+  assert.equal(release.jobs.build.env.IMAGE, `ghcr.io/${owner}/aboutme-\${{ matrix.name }}:\${{ github.ref_name }}-\${{ matrix.arch }}`, "build image namespace");
+  assert.equal(release.jobs.image.env.REPO, `ghcr.io/${owner}/aboutme-\${{ matrix.name }}`, "index repository namespace");
+  assert.equal(release.jobs.image.env.IMAGE, `ghcr.io/${owner}/aboutme-\${{ matrix.name }}:\${{ github.ref_name }}`, "index image namespace");
+  assert.equal(release.jobs["observer-image"].env.IMAGE, `ghcr.io/${owner}/aboutme-observer:\${{ github.ref_name }}`, "observer image namespace");
+  assert.equal(release.jobs["observer-image-amd64"].env.IMAGE, `ghcr.io/${owner}/aboutme-observer:\${{ github.ref_name }}-amd64`, "observer image namespace");
+  for (const [name, job] of Object.entries(release.jobs)) {
+    for (const step of job.steps ?? []) {
+      if (step.with?.path === ".release-trusted") {
+        assert.deepEqual(step.with, { repository: "${{ github.repository }}", ref: "refs/heads/main", path: ".release-trusted", "fetch-depth": 0, "persist-credentials": false }, `${name}: trusted checkout repository`);
+      }
+      if (step.name === "Check release eligibility") {
+        assert.equal(step.env?.OWNER, owner, `${name}: eligibility binds the repository owner`);
+        assert.equal(step.run, 'bash .release-trusted/scripts/release-eligibility.sh "$TAG" "$COMMIT" "$OWNER"', `${name}: eligibility checks the owner`);
+      }
+      if (step.run?.includes("ghcr.io/")) {
+        assert.equal(step.env?.OWNER, owner, `${name}/${step.name}: shell namespace binds the repository owner`);
+        for (const [reference] of step.run.matchAll(/ghcr\.io\/[^/\s"]+\//g)) {
+          assert.equal(reference, "ghcr.io/$OWNER/", `${name}/${step.name}: shell namespace`);
+        }
+      }
+    }
+  }
+  assert.equal(release.jobs.release.env.GH_REPO, "${{ github.repository }}", "release repository context");
+  const notes = release.jobs.release.steps.find((step) => step.name === "Assemble").run;
+  for (const line of [
+    "  oci://ghcr.io/$OWNER/aboutme-server@sha256:<digest> \\\\",
+    "  --repo $GH_REPO \\\\",
+    "  --signer-workflow $GH_REPO/.github/workflows/release-images.yml \\\\",
+  ]) {
+    assert.ok(notes.split("\n").includes(line), `release notes verify command: ${line}`);
+  }
+  for (const text of [JSON.stringify(manual), JSON.stringify(release)]) {
+    assert.doesNotMatch(text, /dannyota|dntmakers/, "no fixed repository owner");
+  }
+}
+
+test("release images and trusted checkouts follow the repository context", () => {
+  checkRepositoryContext(readWorkflow("release-check"), readWorkflow("release-images"));
+  for (const owner of ["dannyota", "dntmakers"]) {
+    const rendered = JSON.parse(JSON.stringify(readWorkflow("release-images"))
+      .replaceAll("${{ github.repository_owner }}", owner)
+      .replaceAll("${{ github.repository }}", `${owner}/aboutme`));
+    for (const name of ["build", "image"]) {
+      const step = rendered.jobs[name].steps.find((candidate) => candidate.uses?.startsWith("actions/attest-build-provenance@"));
+      assert.equal(step.with["subject-name"], `ghcr.io/${owner}/aboutme-\${{ matrix.name }}`, `${owner}/${name}`);
+    }
+    assert.equal(rendered.jobs.eligibility.steps[0].with.repository, `${owner}/aboutme`);
+  }
+  const fixtures = [
+    ["fixed trusted checkout", (_manual, release) => { release.jobs.build.steps[0].with.repository = "dannyota/aboutme"; }, /trusted checkout repository/],
+    ["eligibility without owner", (_manual, release) => { delete release.jobs.release.steps[1].env.OWNER; }, /binds the repository owner/],
+    ["eligibility ignores owner", (_manual, release) => { release.jobs.image.steps[1].run = 'bash .release-trusted/scripts/release-eligibility.sh "$TAG" "$COMMIT"'; }, /checks the owner/],
+    ["fixed build image", (_manual, release) => { release.jobs.build.env.IMAGE = "ghcr.io/dannyota/aboutme-${{ matrix.name }}:x"; }, /build image namespace/],
+    ["fixed manual image", (manual) => { manual.jobs.build.env.IMAGE = "ghcr.io/dannyota/aboutme-${{ matrix.name }}:dry-run-${{ matrix.arch }}"; }, /manual image namespace/],
+    ["fixed digest list", (_manual, release) => { const step = release.jobs.release.steps.find((candidate) => candidate.name === "Assemble"); step.run = step.run.replace("ghcr.io/$OWNER/aboutme-observer@", "ghcr.io/dannyota/aboutme-observer@"); }, /shell namespace/],
+    ["fixed notes repository", (_manual, release) => { const step = release.jobs.release.steps.find((candidate) => candidate.name === "Assemble"); step.run = step.run.replace("--repo $GH_REPO", "--repo dannyota/aboutme"); }, /verify command/],
+  ];
+  for (const [name, mutate, diagnostic] of fixtures) {
+    const manual = readWorkflow("release-check");
+    const release = readWorkflow("release-images");
+    mutate(manual, release);
+    assert.throws(() => checkRepositoryContext(manual, release), diagnostic, name);
+  }
+});
+
 test("release contracts reject changed or skipped attestation inputs", () => {
   for (const name of ["build", "image", "observer-image", "observer-image-amd64"]) {
     for (const prefix of ["actions/attest-build-provenance@", "actions/attest@"]) {
@@ -575,9 +678,13 @@ test("release contracts reject changed or skipped attestation inputs", () => {
         ["signing after failure", (step) => { step.if = "always()"; }, /signing condition/],
         ["ignored signing failure", (step) => { step["continue-on-error"] = true; }, /signing failure/],
       ];
+      fixtures.push(
+        ["storage record", (step) => { step.with["create-storage-record"] = true; }, /signing inputs/],
+        ["storage record default", (step) => { delete step.with["create-storage-record"]; }, /signing inputs/],
+        ["fixed namespace", (step) => { step.with["subject-name"] = step.with["subject-name"].replace("${{ github.repository_owner }}", "dannyota"); }, /signing inputs/],
+      );
       if (prefix === "actions/attest@") fixtures.push(
         ["sbom-path", (step) => { step.with["sbom-path"] = "unreviewed.spdx.json"; }, /signing inputs/],
-        ["storage record", (step) => { step.with["create-storage-record"] = true; }, /signing inputs/],
       );
       for (const [drift, mutate, diagnostic] of fixtures) {
         const release = readWorkflow("release-images");
@@ -903,7 +1010,7 @@ function checkReleaseContracts(manual, release, action) {
   for (const name of ["build", "image", "observer-image", "observer-image-amd64"]) {
     const job = release.jobs[name];
     assert.deepEqual(job.permissions, { actions: "read", contents: "read", packages: "write", "id-token": "write", attestations: "write" });
-    const subject = name.startsWith("observer-") ? "ghcr.io/dannyota/aboutme-observer" : "ghcr.io/dannyota/aboutme-${{ matrix.name }}";
+    const subject = name.startsWith("observer-") ? "ghcr.io/${{ github.repository_owner }}/aboutme-observer" : "ghcr.io/${{ github.repository_owner }}/aboutme-${{ matrix.name }}";
     const digest = name === "image" ? "${{ steps.index.outputs.digest }}" : "${{ steps.push.outputs.digest }}";
     const sbom = name === "build" ? "aboutme-${{ matrix.name }}-${{ matrix.arch }}.spdx.json" :
       name === "observer-image" ? "aboutme-observer.spdx.json" : "aboutme-observer-amd64.spdx.json";
@@ -914,8 +1021,8 @@ function checkReleaseContracts(manual, release, action) {
       const step = steps[0];
       assert.equal(step.if, name === "image" ? undefined : "github.event_name == 'push'", `${name}: signing condition (${prefix})`);
       assert.equal(step["continue-on-error"], undefined, `${name}: signing failure (${prefix})`);
-      const inputs = { "subject-name": subject, "subject-digest": digest, "push-to-registry": true };
-      if (prefix === "actions/attest@") Object.assign(inputs, { "sbom-path": sbom, "create-storage-record": false });
+      const inputs = { "subject-name": subject, "subject-digest": digest, "push-to-registry": true, "create-storage-record": false };
+      if (prefix === "actions/attest@") inputs["sbom-path"] = sbom;
       assert.deepEqual(step.with, inputs, `${name}: signing inputs (${prefix})`);
     }
   }
@@ -2110,12 +2217,12 @@ function checkRenewalWorkflow(workflow) {
     concurrency: { group: "vmonitor-renew", "cancel-in-progress": false },
     jobs: { renew: {
       name: "Renew Synthetic quota",
-      if: "github.repository == 'dannyota/aboutme' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'",
+      if: repositoryGuard,
       "runs-on": "ubuntu-24.04", "timeout-minutes": 10,
       environment: "vmonitor-renew", permissions: { issues: "write" },
       steps: [
         { name: "Check out trusted main", uses: "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
-          with: { repository: "dannyota/aboutme", ref: "refs/heads/main", "persist-credentials": false } },
+          with: { repository: "${{ github.repository }}", ref: "refs/heads/main", "persist-credentials": false } },
         { name: "Log checkout commit", run: "git rev-parse HEAD" },
         { name: "Set up Go", uses: "actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
           with: { "go-version": pins.golang, cache: false } },
@@ -2137,6 +2244,8 @@ test("renewal workflow keeps its trusted dispatch and credential boundary", () =
     (w) => { w.on.schedule = [{ cron: "37 5,17 * * *" }]; },
     (w) => { w.on.workflow_dispatch.inputs.action.options.push("other"); },
     (w) => { w.jobs.renew.if = "always()"; },
+    (w) => { w.jobs.renew.if = w.jobs.renew.if.replace(`github.repository_id == ${repositoryId}`, "github.repository == 'dannyota/aboutme'"); },
+    (w) => { w.jobs.renew.steps[0].with.repository = "dannyota/aboutme"; },
     (w) => { w.permissions.contents = "write"; },
     (w) => { w.jobs.renew.permissions.actions = "write"; },
     (w) => { w.jobs.renew.environment = "other"; },

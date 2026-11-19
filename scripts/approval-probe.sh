@@ -165,11 +165,10 @@ def collect(endpoint, per_page, jobs=False):
 def inspect_run(run, run_id, sha, pins):
     fields(run, ["id", "repository", "workflow_id", "path", "event", "head_branch",
                  "head_sha", "run_attempt", "status", "conclusion", "actor", "triggering_actor"])
-    fields(run["repository"], ["id", "full_name"])
+    fields(run["repository"], ["id"])
     require(all(integer(value, True) for value in [run["id"], run["repository"]["id"],
                 run["workflow_id"], run["run_attempt"]]), "MISSING_FIELDS")
     require(run["id"] == run_id and run["repository"]["id"] == pins["repository_id"] and
-            run["repository"]["full_name"] == "dannyota/aboutme" and
             run["workflow_id"] == pins["workflow_id"] and
             run["path"] in (".github/workflows/approval-probe.yml",
                             ".github/workflows/approval-probe.yml@main") and
@@ -254,7 +253,7 @@ try:
     except (Refusal, OSError):
         raise Refusal("CONFIG_INVALID") from None
     run_id, per_page = int(run_text), int(per_page_text)
-    endpoint = f"https://api.github.com/repos/dannyota/aboutme/actions/runs/{run_id}"
+    endpoint = f"https://api.github.com/repositories/{pins['repository_id']}/actions/runs/{run_id}"
     comment = f"approve production deploy v0.0.0 run {run_id} attempt 1 sha256:{request_hash}"
     run, link = fetch(endpoint)
     require(link is None, "PAGINATION")

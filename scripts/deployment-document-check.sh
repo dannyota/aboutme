@@ -7,7 +7,7 @@ URLS=(
   "apex https://aboutme.vn/.well-known/deployment.json"
   "www https://www.aboutme.vn/.well-known/deployment.json"
 )
-SIGNER=dannyota/aboutme/.github/workflows/release-images.yml
+REPOSITORY_ID=1318874703
 
 fail() {
   printf 'deployment-document-check: %s\n' "$*" >&2
@@ -28,7 +28,7 @@ if [ -z "${ABOUTME_DOCUMENT_CHECK_SCOPED:-}" ]; then
     --timeout 900 -- bash "$REPO/scripts/deployment-document-check.sh"
 fi
 
-for tool in curl gh; do
+for tool in curl gh jq; do
   command -v "$tool" >/dev/null || fail "$tool is not installed"
 done
 gh auth status >/dev/null 2>&1 || fail 'gh is not signed in; run gh auth login'
@@ -145,18 +145,52 @@ for entry in "${URLS[@]}"; do
   fetch_and_check "${entry%% *}" "${entry#* }"
 done
 
+image_owner() {
+  [[ $1 =~ ^ghcr\.io/(dannyota|dntmakers)/aboutme-(server|web|caddy)$ ]] || return 1
+  printf '%s\n' "${BASH_REMATCH[1]}"
+}
+
+owner_id() {
+  case $1 in
+  dannyota) printf '244348267\n' ;;
+  dntmakers) printf '342323513\n' ;;
+  *) return 1 ;;
+  esac
+}
+
+app_owners_agree() {
+  local owners
+  owners=$(awk '$1 ~ /^ghcr\.io\/[^\/]+\/aboutme-(server|web)$/ { split($1, part, "/"); print part[2] }' "$1" | sort -u)
+  [ -n "$owners" ] || return 0
+  [[ $owners != *$'\n'* ]] || return 1
+  awk -v caddy="ghcr.io/$owners/aboutme-caddy" '$1 == caddy { found = 1 } END { exit !found }' "$1" ||
+    ! awk '$1 ~ /\/aboutme-caddy$/ { found = 1 } END { exit !found }' "$1"
+}
+
 verify() {
-  local out=$1 image=$2 digest=$3 version=$4
+  local out=$1 image=$2 digest=$3 version=$4 owner id
   shift 4
+  if ! owner=$(image_owner "$image") || ! id=$(owner_id "$owner"); then
+    printf 'not an aboutme release image: %s\n' "$image" >"$out.err"
+    return 1
+  fi
   env -u GH_DEBUG bash "$REPO/scripts/run-owned.sh" --timeout 120 -- gh attestation verify "oci://$image@$digest" \
-    --repo dannyota/aboutme --signer-workflow "$SIGNER" \
-    --source-ref "refs/tags/$version" --deny-self-hosted-runners "$@" \
-    >"$out" 2>&1
+    --repo "$owner/aboutme" --signer-workflow "$owner/aboutme/.github/workflows/release-images.yml" \
+    --source-ref "refs/tags/$version" --deny-self-hosted-runners "$@" --format json \
+    >"$out.json" 2>"$out.err" || return 1
+  jq -e --arg repository "$REPOSITORY_ID" --arg owner "$owner" --arg id "$id" '
+    type == "array" and length > 0 and all(.[];
+      .verificationResult.signature.certificate as $c
+      | $c.sourceRepositoryIdentifier == $repository and $c.sourceRepositoryOwnerIdentifier == $id
+        and ($c.buildSignerURI | type == "string"
+          and startswith("https://github.com/\($owner)/aboutme/.github/workflows/release-images.yml@")))
+  ' "$out.json" >/dev/null 2>>"$out.err"
 }
 
 check 'apex lists at least one running image' [ -s "$EVIDENCE/apex.images" ]
 check 'www lists the same images as apex' \
   cmp -s "$EVIDENCE/apex.images" "$EVIDENCE/www.images"
+check 'app images share one owner' app_owners_agree "$EVIDENCE/apex.images"
 while read -r image digest version; do
   [ -n "$image" ] || continue
   tag=${digest#sha256:}
@@ -166,9 +200,9 @@ while read -r image digest version; do
     continue
   fi
   check "$image@$digest provenance" \
-    verify "$EVIDENCE/gh-$tag.provenance.txt" "$image" "$digest" "$version"
+    verify "$EVIDENCE/gh-$tag.provenance" "$image" "$digest" "$version"
   check "$image@$digest sbom" \
-    verify "$EVIDENCE/gh-$tag.sbom.txt" "$image" "$digest" "$version" \
+    verify "$EVIDENCE/gh-$tag.sbom" "$image" "$digest" "$version" \
     --predicate-type https://spdx.dev/Document/v2.3
 done < <(awk '!seen[$2]++' "$EVIDENCE/apex.images" 2>/dev/null)
 
