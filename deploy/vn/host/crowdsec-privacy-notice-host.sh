@@ -122,7 +122,7 @@ notice_installed_admission() {
   number=$((10#${BASH_REMATCH[1]} * 1000000 + 10#${BASH_REMATCH[2]} * 1000 + 10#${BASH_REMATCH[3]}))
   [[ $number == "$(jq -r .release_number <<<"$record")" ]] || return 1
   image=$(jq -r .server_image <<<"$record")
-  [[ $image =~ ^ghcr\.io/dannyota/aboutme-server@sha256:[0-9a-f]{64}$ ]] || return 1
+  [[ $image =~ ^ghcr\.io/(dannyota|dntmakers)/aboutme-server@sha256:[0-9a-f]{64}$ ]] || return 1
   notice_safe_file /etc/containers/systemd/aboutme-server.container 644 &&
     grep -qxF "Image=$image" /etc/containers/systemd/aboutme-server.container || return 1
   printf '%s\n' "$tag"

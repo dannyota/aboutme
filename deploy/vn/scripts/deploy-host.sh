@@ -11,7 +11,6 @@ maintenance_json=$state/maintenance.json
 data=/srv/data
 operations_dir=$data/host-operations
 secrets=/etc/aboutme/secrets
-repo=ghcr.io/dannyota/aboutme
 jobs=(idempotency-expiry-sweep media-deletion-sweep privacy-retention-sweep media-orphan-sweep)
 # shellcheck source=deploy-safety.sh
 source "$lib/deploy-safety.sh"
@@ -31,7 +30,8 @@ release_number() {
 }
 
 image_ok() {
-  [[ $2 =~ ^${repo//./\\.}-$1@sha256:[0-9a-f]{64}$ ]] || die "'$2' is not a $1 image pinned by digest"
+  [[ $2 =~ ^ghcr\.io/(dannyota|dntmakers)/aboutme-$1@sha256:[0-9a-f]{64}$ ]] || die "'$2' is not a $1 image pinned by digest"
+  [[ -z ${3:-} || $3 == "ghcr.io/${BASH_REMATCH[1]}/"* ]] || die "'$2' and '$3' have different owners"
 }
 
 checkpoint() {
@@ -44,7 +44,7 @@ checkpoint() {
 }
 
 release_shape='
-  def img($n): type == "string" and test("^ghcr\\.io/dannyota/aboutme-" + $n + "@sha256:[0-9a-f]{64}$");
+  def img($n): type == "string" and test("^ghcr\\.io/(dannyota|dntmakers)/aboutme-" + $n + "@sha256:[0-9a-f]{64}$");
   def tag: type == "string" and test("^v(0|[1-9][0-9]{0,2})\\.(0|[1-9][0-9]{0,2})\\.(0|[1-9][0-9]{0,2})$");
   def num: type == "number" and . >= 0 and . == floor;
   if type == "object"
@@ -53,6 +53,7 @@ release_shape='
     and (.release_tag | tag) and (.release_number | num)
     and (.server_image | img("server")) and (.web_image | img("web"))
     and (.caddy_image | img("caddy")) and (.maintenance_image | img("caddy"))
+    and ([.server_image, .web_image, .caddy_image] | map(split("/")[1]) | unique | length == 1)
     and (.maintenance_tag | tag) and (.maintenance_number | num)
   then . else error("malformed release state") end'
 
@@ -229,12 +230,10 @@ step_release_json() {
 }
 
 step_pull() {
-  local name ref arch names=(server web caddy)
+  local i ref arch names=(server web caddy) pins=("$@")
   [[ -z ${4:-} ]] || names+=(observer)
-  for name in "${names[@]}"; do
-    ref=$1
-    shift
-    image_ok "$name" "$ref"
+  for i in "${!names[@]}"; do image_ok "${names[i]}" "${pins[i]}" "$1"; done
+  for ref in "${pins[@]:0:${#names[@]}}"; do
     podman pull --quiet --arch amd64 "$ref" >/dev/null || die "could not pull $ref"
     arch=$(podman image inspect --format '{{.Os}}/{{.Architecture}}' "$ref")
     [[ $arch == linux/amd64 ]] || die "$ref resolved to $arch, not linux/amd64"
@@ -358,8 +357,9 @@ step_render() {
   local number mimage mtag mnumber
   number=$(release_number "$tag") || die "'$tag' is not a release tag"
   image_ok server "$1"
-  image_ok web "$2"
-  image_ok caddy "$3"
+  image_ok web "$2" "$1"
+  image_ok caddy "$3" "$1"
+  [[ -z ${4:-} ]] || image_ok observer "$4" "$1"
   mimage=$3 mtag=$tag
   if [[ -f $maintenance_json ]]; then
     mimage=$(jq -er '.image | strings' "$maintenance_json") || die "$maintenance_json is malformed"
@@ -558,7 +558,7 @@ step_maintenance_down() {
 
 prune_refs() {
   [[ -e $1 || -L $1 ]] || return 0
-  grep -ohE 'ghcr\.io/dannyota/aboutme-[a-z]+@sha256:[0-9a-f]{64}' -- "$1" || (($? == 1))
+  grep -ohE 'ghcr\.io/(dannyota|dntmakers)/aboutme-[a-z]+@sha256:[0-9a-f]{64}' -- "$1" || (($? == 1))
 }
 
 step_prune_images() {
@@ -616,7 +616,7 @@ step_prune_images() {
   listing=$(jq -r 'if type == "array" then .[] else error("not a list") end
     | (.Id | ltrimstr("sha256:") | if test("^[0-9a-f]{64}$") then . else error("malformed ID") end) as $id
     | (.RepoDigests // [])[]
-    | select(test("^ghcr\\.io/dannyota/aboutme-[a-z]+@sha256:[0-9a-f]{64}$")) | "\($id) \(.)"' <<<"$out" 2>/dev/null) ||
+    | select(test("^ghcr\\.io/(dannyota|dntmakers)/aboutme-[a-z]+@sha256:[0-9a-f]{64}$")) | "\($id) \(.)"' <<<"$out" 2>/dev/null) ||
     die "warning: could not read the image list; removed no images"
   while read -r id ref; do
     [[ -n $id ]] || continue
