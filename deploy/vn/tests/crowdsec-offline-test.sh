@@ -5,6 +5,9 @@ repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 # shellcheck source=../host/crowdsec-offline.sh
 source "$repo_root/deploy/vn/host/crowdsec-offline.sh"
 
+pinned_postgresql=(postgresql-common=293.pgdg24.04+1 postgresql-client-common=293.pgdg24.04+1
+  postgresql-18=18.6-1.pgdg24.04+2 postgresql-client-18=18.6-1.pgdg24.04+2)
+
 apt_run() {
   "$@" >"$apt_log" 2>&1 && rm -f -- "$apt_log"
 }
@@ -12,7 +15,7 @@ apt_run() {
 apt_failed() {
   if [[ -f $apt_log ]]; then
     echo "apt failed with status $1; last output lines:" >&2
-    tail -n 200 -- "$apt_log" >&2
+    tail -n 200 -- "$apt_log" >&2 || true
   fi
   return "$1"
 }
@@ -35,8 +38,7 @@ if [[ ${1:-} == packages ]]; then
   apt_run apt-get "${apt_options[@]}" update -q || apt_failed $?
   DEBIAN_FRONTEND=noninteractive apt_run apt-get "${apt_options[@]}" -o Dir::Log::Terminal=/dev/null \
     -o Dir::Log::History=/dev/null -o DPkg::Options::=--log=/dev/null install -y -q --allow-downgrades \
-    postgresql-common=293.pgdg24.04+1 postgresql-18=18.6-1.pgdg24.04+2 postgresql-client-18=18.6-1.pgdg24.04+2 \
-    python3-yaml nftables gettext-base strace || apt_failed $?
+    "${pinned_postgresql[@]}" python3-yaml nftables gettext-base strace || apt_failed $?
   printf '%s\n' \
     "d534ad21e6eed3d82a8fd748fa19f34970e95bfccd99735c0ebebcbad1e6366e  $proof/crowdsec_1.8.2_amd64.deb" \
     "fb3f38d222793cd031dac7e2b33076033a05c5bb476f323129d431cdc8b69b78  $proof/crowdsec-firewall-bouncer-nftables_0.0.36_amd64.deb" |
@@ -357,16 +359,17 @@ unset CROWDSEC_TEST_CLEANUP_MASK_FAIL
 
 apt_log=$work/apt.log
 apt_refusal_stub() {
-  printf '%s\n' 'The following packages will be DOWNGRADED:' '  postgresql-client-common postgresql-common'
-  echo 'E: Packages were downgraded and -y was used without --allow-downgrades.' >&2
+  printf '%s\n' 'The following packages have unmet dependencies:' \
+    ' postgresql-common : Depends: postgresql-client-common (= 293.pgdg24.04+1) but 295.pgdg24.04+1 is to be installed'
+  echo 'E: Unable to correct problems, you have held broken packages.' >&2
   return 100
 }
 for wrapper in '' crowdsec_install_offline; do
   status=0
   { ${wrapper:+"$wrapper"} apt_run apt_refusal_stub crowdsec=1.8.2 || apt_failed $?; } >"$work/apt-output" 2>&1 || status=$?
   [[ $status -eq 100 ]] || { echo "failed apt step via ${wrapper:-apt_run} returned $status, not 100" >&2; exit 1; }
-  if ! grep -qxF '  postgresql-client-common postgresql-common' "$work/apt-output" ||
-    ! grep -qxF 'E: Packages were downgraded and -y was used without --allow-downgrades.' "$work/apt-output"; then
+  if ! grep -qF 'postgresql-common : Depends: postgresql-client-common (= 293.pgdg24.04+1)' "$work/apt-output" ||
+    ! grep -qxF 'E: Unable to correct problems, you have held broken packages.' "$work/apt-output"; then
     echo "failed apt step via ${wrapper:-apt_run} hid its decision and error lines" >&2
     exit 1
   fi
@@ -385,6 +388,14 @@ status=0
   echo "successful apt step printed output or left it for a later failure" >&2
   exit 1
 }
+declare -A pinned=()
+for spec in "${pinned_postgresql[@]}"; do pinned[${spec%%=*}]=${spec#*=}; done
+for pair in postgresql-common:postgresql-client-common postgresql-18:postgresql-client-18; do
+  [[ -n ${pinned[${pair%:*}]:-} && ${pinned[${pair#*:}]:-} == "${pinned[${pair%:*}]}" ]] || {
+    echo "pinned ${pair%:*} needs ${pair#*:} pinned at the same version" >&2
+    exit 1
+  }
+done
 
 base=$work/config.yaml
 local_config=$work/config.yaml.local
