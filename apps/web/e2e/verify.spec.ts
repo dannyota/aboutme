@@ -42,8 +42,8 @@ const ROLLING_WEB_OLD_HEX
   = '0ba375ceeb4f482e0ade774c5539c848858b5911882af6236d03f7e60d87a412';
 const ROLLBACK_MAINTENANCE_HEX
   = '690ab1ca62bf8e8499ced987a870c3d4f4671b6f15e06812cf4d7a5e0f7f6d19';
-const ROLLBACK_NAMESPACES = [
-  'ghcr.io/dannyota/aboutme-*', 'ghcr.io/dntmakers/aboutme-*',
+const MIXED_OWNER_NAMESPACES = [
+  'ghcr.io/dntmakers/aboutme-*', 'ghcr.io/dannyota/aboutme-*',
 ] as const;
 
 const STATE_FIXTURES = [
@@ -191,13 +191,13 @@ test('the verified chain shows four matches with agreeing '
   await expectNamespaces(page, ['ghcr.io/dannyota/aboutme-*']);
 });
 
-test('a rollback names each image namespace on its own line and gives '
+test('a rollback names only the release image namespace and gives '
   + 'each image its own owner', async ({ page }) => {
   await serveDeployment(page, { fixture: 'rollback' });
   await gotoVerify(page, 'en');
   await expect(page.getByTestId('verify-status')).toHaveAttribute(
     'data-state', 'verified');
-  await expectNamespaces(page, ROLLBACK_NAMESPACES);
+  await expectNamespaces(page, ['ghcr.io/dannyota/aboutme-*']);
 
   const command2 = page.getByTestId('verify-command-2');
   await expect(command2).toContainText(
@@ -212,6 +212,15 @@ test('a rollback names each image namespace on its own line and gives '
     '--signer-workflow dntmakers/aboutme/.github/workflows/');
   await expect(command2).toContainText('v0.9.40');
   await expect(command2).not.toContainText('dannyota');
+});
+
+test('mixed app owners name each image namespace on its own line, in '
+  + 'component order', async ({ page }) => {
+  await serveDeployment(page, { fixture: 'mixed-owners' });
+  await gotoVerify(page, 'en');
+  await expect(page.getByTestId('verify-status')).toHaveAttribute(
+    'data-state', 'verified');
+  await expectNamespaces(page, MIXED_OWNER_NAMESPACES);
 });
 
 test('the rolling-out chain shows an updating running step', async ({
@@ -359,6 +368,7 @@ for (const width of [360, 390] as const) {
     { fixture: 'verified', state: 'verified' },
     { fixture: 'rolling-out', state: 'rolling_out' },
     { fixture: 'rollback', state: 'verified' },
+    { fixture: 'mixed-owners', state: 'verified' },
   ] as const) {
     test(`${spec.fixture} fits ${width}px with no horizontal `
       + 'overflow', async ({ page }) => {
@@ -581,12 +591,12 @@ screenMutationTests('verify', async (page) => {
 mutationTest('verify rejects image namespaces joined on one line', async ({
   page,
 }) => {
-  await serveDeployment(page, { fixture: 'rollback' });
+  await serveDeployment(page, { fixture: 'mixed-owners' });
   await gotoVerify(page, 'en');
   await expect(page.getByTestId('verify-status'))
     .toHaveAttribute('data-state', 'verified');
-  await proveMutation(() => expectNamespaces(page, ROLLBACK_NAMESPACES),
-    () => mutateText(namespaceLine(page), ROLLBACK_NAMESPACES.join(' ')),
+  await proveMutation(() => expectNamespaces(page, MIXED_OWNER_NAMESPACES),
+    () => mutateText(namespaceLine(page), MIXED_OWNER_NAMESPACES.join(' ')),
     'Verify image namespaces.');
 });
 

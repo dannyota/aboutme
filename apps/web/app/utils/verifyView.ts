@@ -185,9 +185,11 @@ export function commandTargets(
 }
 
 export function imageNamespaces(document: DeploymentDocument): string[] {
-  const running = document.components
+  const release = document.components
+    .filter(({ name }) => servingComponents.includes(name));
+  const running = release
     .filter(({ runningImages }) => runningImages.length > 0);
-  const shown = running.length > 0 ? running : document.components;
+  const shown = running.length > 0 ? running : release;
   return [...new Set(shown.map(({ image }) =>
     `ghcr.io/${imageOwner(image)}/`))];
 }

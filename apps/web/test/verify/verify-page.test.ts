@@ -593,15 +593,25 @@ describe('verify page image owners', () => {
     expect(markup(dntmakers)).toBe('ghcr.io/dntmakers/<wbr>aboutme-*');
   });
 
-  it('shows each namespace of a rollback once, one per line', async () => {
+  it('shows only the release namespace of a rollback', async () => {
     serveFixture('rollback');
     const wrapper = await mountVerify();
     expect(status(wrapper).attributes('data-state')).toBe('verified');
-    const line = namespaceLine(wrapper);
-    expect(line.findAll('br')).toHaveLength(1);
-    expect(markup(wrapper)).toBe(
-      'ghcr.io/dannyota/<wbr>aboutme-*<br>ghcr.io/dntmakers/<wbr>aboutme-*');
+    expect(namespaceLine(wrapper).findAll('br')).toHaveLength(0);
+    expect(markup(wrapper)).toBe('ghcr.io/dannyota/<wbr>aboutme-*');
+    expect(wrapper.get('[data-step="image"]').text())
+      .toContain('3 image, đã được GitHub ký');
   });
+
+  it('shows each namespace of mixed app owners once, one per line',
+    async () => {
+      serveFixture('mixed-owners');
+      const wrapper = await mountVerify();
+      expect(status(wrapper).attributes('data-state')).toBe('verified');
+      expect(namespaceLine(wrapper).findAll('br')).toHaveLength(1);
+      expect(markup(wrapper)).toBe(
+        'ghcr.io/dntmakers/<wbr>aboutme-*<br>ghcr.io/dannyota/<wbr>aboutme-*');
+    });
 
   it('puts each rollback image\'s own owner in command 2', async () => {
     serveFixture('rollback');

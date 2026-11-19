@@ -586,6 +586,7 @@ apps/web/e2e/fixtures/deployment/mismatch-invalid.json
 apps/web/e2e/fixtures/deployment/mismatch-missing.json
 apps/web/e2e/fixtures/deployment/mismatch-not-found.json
 apps/web/e2e/fixtures/deployment/mismatch-summary.json
+apps/web/e2e/fixtures/deployment/mixed-owners.json
 apps/web/e2e/fixtures/deployment/outdated.json
 apps/web/e2e/fixtures/deployment/rollback.json
 apps/web/e2e/fixtures/deployment/rolling-out.json

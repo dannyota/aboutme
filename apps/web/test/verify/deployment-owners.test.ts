@@ -170,12 +170,22 @@ describe('a rollback keeping a newer dntmakers maintenance image', () => {
     });
   });
 
-  it('names each running namespace once, in component order', () => {
+  it('names only the release namespace, leaving maintenance out', () => {
     expect(imageNamespaces(decoded(raw('rollback'))))
-      .toEqual(['ghcr.io/dannyota/', 'ghcr.io/dntmakers/']);
+      .toEqual(['ghcr.io/dannyota/']);
+  });
+
+  it('names each mixed app owner once, in component order', () => {
     const serverFirst = raw('verified');
     moveComponent(serverFirst, 0, 'dntmakers');
     expect(imageNamespaces(decoded(serverFirst)))
+      .toEqual(['ghcr.io/dntmakers/', 'ghcr.io/dannyota/']);
+    const webMoved = raw('rollback');
+    moveComponent(webMoved, 1, 'dntmakers');
+    webMoved.release = null;
+    expect(imageNamespaces(decoded(webMoved)))
+      .toEqual(['ghcr.io/dannyota/', 'ghcr.io/dntmakers/']);
+    expect(imageNamespaces(decoded(raw('mixed-owners'))))
       .toEqual(['ghcr.io/dntmakers/', 'ghcr.io/dannyota/']);
   });
 
@@ -186,11 +196,22 @@ describe('a rollback keeping a newer dntmakers maintenance image', () => {
     expect(imageNamespaces(decoded(value))).toEqual(['ghcr.io/dntmakers/']);
   });
 
-  it('falls back to the listed namespaces when nothing runs', () => {
+  it('falls back to the release components when nothing runs', () => {
     const value = raw('mismatch-missing');
+    value.components.push(raw('rollback').components[3]);
     for (const entry of value.components) entry.running_images = [];
     expect(imageNamespaces(decoded(value))).toEqual(['ghcr.io/dannyota/']);
   });
+
+  it('falls back to the release components when only maintenance runs',
+    () => {
+      const value = raw('mismatch-missing');
+      value.components.push(raw('rollback').components[3]);
+      for (const entry of value.components.slice(0, 3)) {
+        entry.running_images = [];
+      }
+      expect(imageNamespaces(decoded(value))).toEqual(['ghcr.io/dannyota/']);
+    });
 });
 
 describe('mixed app owners', () => {
