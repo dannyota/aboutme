@@ -58,6 +58,34 @@ if (REFUSE_CIMD_ROLLBACK=1 step_restore_previous "$record") >"$work/out" 2>&1; t
 fi
 grep -qxF 'CIMD rollback refused' "$work/out"
 [[ $(cat "$work/rollback-check") == 1000 && ! -e $work/render ]]
+owner_record() {
+  jq --arg s "$1" --arg w "$2" --arg c "$3" --arg m "$4" '
+    def owner($o): sub("^ghcr\\.io/dannyota/"; "ghcr.io/" + $o + "/");
+    .server_image |= owner($s) | .web_image |= owner($w) | .caddy_image |= owner($c) | .maintenance_image |= owner($m)' <<<"$record"
+}
+for owners in 'dntmakers dntmakers dntmakers dntmakers' 'dannyota dannyota dannyota dntmakers' \
+  'dntmakers dntmakers dntmakers dannyota'; do
+  read -r -a owner <<<"$owners"
+  rm -f "$work/rollback-check" "$work/render"
+  (step_restore_previous "$(owner_record "${owner[@]}")") >"$work/out" 2>&1 || {
+    echo "a saved release with owners $owners was refused: $(cat "$work/out")" >&2; exit 1;
+  }
+  digest=$(printf '%064d' 0)
+  [[ $(sed -n '3,6p' "$work/render" | paste -sd ' ' -) == "ghcr.io/${owner[0]}/aboutme-server@sha256:$digest ghcr.io/${owner[1]}/aboutme-web@sha256:$digest ghcr.io/${owner[2]}/aboutme-caddy@sha256:$digest ghcr.io/${owner[3]}/aboutme-caddy@sha256:$digest" ]] || {
+    echo "a saved release with owners $owners was not restored" >&2; exit 1;
+  }
+done
+for owners in 'dntmakers dannyota dannyota dannyota' 'dannyota dntmakers dannyota dannyota' \
+  'dannyota dannyota dntmakers dannyota' 'dntmakers dntmakers dannyota dntmakers' 'evil evil evil evil' \
+  'dannyota dannyota dannyota evil' 'Dntmakers Dntmakers Dntmakers Dntmakers' 'dannyota dannyota dannyota DANNYOTA'; do
+  read -r -a owner <<<"$owners"
+  rm -f "$work/rollback-check" "$work/render"
+  if (step_restore_previous "$(owner_record "${owner[@]}")") >"$work/out" 2>&1; then
+    echo "a saved release with owners $owners was restored" >&2; exit 1
+  fi
+  grep -qxF 'saved release is malformed' "$work/out"
+  [[ ! -e $work/rollback-check && ! -e $work/render ]]
+done
 sed -n '/^write_release_json() {/,/^}/p; /^step_migration_state() {/,/^}/p; /^migrator_query() {/,/^}/p; /^cimd_url_rows_exist() {/,/^}/p' "$host" >"$work/release-functions"
 # shellcheck disable=SC1091
 source "$work/release-functions"
@@ -152,7 +180,6 @@ sed -n '/^render_observer() {/,/^}/p; /^image_ok() {/,/^}/p' "$host" >"$work/obs
 source "$work/observer-functions"
 # shellcheck disable=SC2034 # used by the sourced render_observer function
 units=$work/units templates=$root/deploy/vn/host/quadlet
-repo=ghcr.io/dannyota/aboutme
 mkdir "$units"
 printf 'existing observer unit\n' >"$units/aboutme-observer.container"
 cp "$units/aboutme-observer.container" "$work/previous-observer"
@@ -162,11 +189,80 @@ active() { return 0; }
 render_observer ""
 cmp "$units/aboutme-observer.container" "$work/previous-observer"
 [[ ! -s $work/calls ]]
-observer_image=$repo-observer@sha256:$(printf '%064d' 7)
-render_observer "$observer_image"
-grep -qxF "Image=$observer_image" "$units/aboutme-observer.container"
-grep -qxF 'restart aboutme-observer' "$work/calls"
-if grep -q '@[A-Z_]*@' "$units/aboutme-observer.container"; then exit 1; fi
+for owner in evil Dntmakers DANNYOTA; do
+  if (render_observer "ghcr.io/$owner/aboutme-observer@sha256:$(printf '%064d' 7)") >"$work/out" 2>&1; then
+    echo "rendered an observer image under $owner" >&2; exit 1
+  fi
+  cmp "$units/aboutme-observer.container" "$work/previous-observer"
+  [[ ! -s $work/calls ]]
+done
+for owner in dannyota dntmakers; do
+  observer_image=ghcr.io/$owner/aboutme-observer@sha256:$(printf '%064d' 7)
+  : >"$work/calls"
+  render_observer "$observer_image"
+  grep -qxF "Image=$observer_image" "$units/aboutme-observer.container"
+  grep -qxF 'restart aboutme-observer' "$work/calls"
+  if grep -q '@[A-Z_]*@' "$units/aboutme-observer.container"; then exit 1; fi
+done
+sed -n '/^step_pull() {/,/^}/p; /^step_render() {/,/^}/p' "$host" >"$work/image-steps"
+# shellcheck disable=SC1091
+source "$work/image-steps"
+image_ref() { printf 'ghcr.io/%s/aboutme-%s@sha256:%064d' "$1" "$2" 3; }
+image_set() { printf '%s\n' "$(image_ref "$1" server)" "$(image_ref "$2" web)" "$(image_ref "$3" caddy)" "$(image_ref "$4" observer)"; }
+image_steps() {
+  (
+    tag=v0.1.1 maintenance_json=$work/maintenance.json
+    checkpoint() { :; }
+    cimd_rollback_check() { :; }
+    say() { :; }
+    render_all() { printf '%s\n' "$@" >"$work/rendered"; }
+    render_observer() { printf '%s\n' "$1" >"$work/rendered-observer"; }
+    podman() {
+      case $1:$2 in
+        pull:*) printf '%s\n' "${!#}" >>"$work/pulled" ;;
+        image:inspect) printf 'linux/amd64\n' ;;
+        *) return 125 ;;
+      esac
+    }
+    "$@"
+  )
+}
+image_failures=0
+image_fail() { echo "$*" >&2; image_failures=1; }
+rollback_maintenance=$(image_ref dntmakers caddy)
+for owners in 'dannyota dannyota dannyota dannyota' 'dntmakers dntmakers dntmakers dntmakers'; do
+  read -r -a owner <<<"$owners"
+  mapfile -t refs < <(image_set "${owner[@]}")
+  rm -f "$work/pulled" "$work/rendered" "$work/rendered-observer"
+  jq -n --arg i "$rollback_maintenance" '{image:$i,tag:"v0.9.0",number:9000}' >"$work/maintenance.json"
+  image_steps step_pull "${refs[@]}" >"$work/out" 2>&1 || image_fail "refused to pull $owners images: $(cat "$work/out")"
+  [[ $(cat "$work/pulled") == "$(printf '%s\n' "${refs[@]}")" ]] || image_fail "did not pull the $owners images"
+  image_steps step_render "${refs[@]}" >"$work/out" 2>&1 || image_fail "refused to render $owners images: $(cat "$work/out")"
+  [[ $(cat "$work/rendered") == "$(printf '%s\n' v0.1.1 1001 "${refs[@]:0:3}" "$rollback_maintenance" v0.9.0 9000)" &&
+    $(cat "$work/rendered-observer") == "${refs[3]}" ]] || image_fail "did not render the $owners images with the kept maintenance image"
+done
+for owners in 'dntmakers dannyota dannyota dannyota' 'dannyota dntmakers dannyota dannyota' 'dannyota dannyota dntmakers dannyota' \
+  'dannyota dannyota dannyota dntmakers' 'dntmakers dntmakers dntmakers dannyota' 'evil evil evil evil' \
+  'Dntmakers Dntmakers Dntmakers Dntmakers' 'dannyota DANNYOTA dannyota dannyota'; do
+  read -r -a owner <<<"$owners"
+  mapfile -t refs < <(image_set "${owner[@]}")
+  rm -f "$work/pulled" "$work/rendered" "$work/rendered-observer" "$work/maintenance.json"
+  if image_steps step_pull "${refs[@]}" >"$work/out" 2>&1; then image_fail "accepted mixed or foreign images: $owners"; fi
+  [[ ! -s $work/pulled ]] || image_fail "pulled $(paste -sd ' ' "$work/pulled") from a mixed or foreign set: $owners"
+  if image_steps step_render "${refs[@]}" >"$work/out" 2>&1 || [[ -e $work/rendered || -e $work/rendered-observer ]]; then
+    image_fail "rendered mixed or foreign images: $owners"
+  fi
+done
+for maintenance in evil Dntmakers; do
+  mapfile -t refs < <(image_set dannyota dannyota dannyota dannyota)
+  rm -f "$work/rendered" "$work/rendered-observer"
+  jq -n --arg i "$(image_ref "$maintenance" caddy)" '{image:$i,tag:"v0.9.0",number:9000}' >"$work/maintenance.json"
+  if image_steps step_render "${refs[@]}" >"$work/out" 2>&1 || [[ -e $work/rendered ]]; then
+    image_fail "rendered with a $maintenance maintenance image"
+  fi
+done
+rm -f "$work/maintenance.json"
+((image_failures == 0)) || exit 1
 grep -q 'aboutme-observer.container.in.*continue' "$host"
 grep -qxF 'Volume=/var/lib/aboutme/privacy-notice:/var/lib/aboutme/privacy-notice:ro' \
   "$root/deploy/vn/host/quadlet/aboutme-server.container.in" || {
@@ -301,12 +397,13 @@ p=$work/prune
 state=$p/state units=$p/units data=$p/data operations_dir=$p/data/host-operations release_json=$p/state/release.json \
   maintenance_json=$p/state/maintenance.json
 ref() { printf 'ghcr.io/dannyota/aboutme-%s@sha256:%064d' "$1" "$2"; }
+new_ref() { printf 'ghcr.io/dntmakers/aboutme-%s@sha256:%064d' "$1" "$2"; }
 img() { printf '%064d' "$1" | tr 0 f; }
 prune_fixture() {
   rm -rf "$p"
   mkdir -p "$state" "$units" "$operations_dir/op1" "$operations_dir/op2"
-  jq -n --arg s "$(ref server 1)" --arg w "$(ref web 2)" --arg c "$(ref caddy 3)" \
-    '{server_image:$s,web_image:$w,caddy_image:$c,maintenance_image:$c}' >"$state/release.json"
+  jq -n --arg s "$(ref server 1)" --arg w "$(ref web 2)" --arg c "$(ref caddy 3)" --arg m "$(new_ref caddy 19)" \
+    '{server_image:$s,web_image:$w,caddy_image:$c,maintenance_image:$m}' >"$state/release.json"
   jq -n --arg s "$(ref server 4)" --arg w "$(ref web 5)" --arg c "$(ref caddy 3)" \
     '{server_image:$s,web_image:$w,caddy_image:$c,maintenance_image:$c}' >"$state/release.previous.json"
   jq -n --arg i "$(ref caddy 6)" '{image:$i}' >"$state/maintenance.json"
@@ -319,7 +416,8 @@ prune_fixture() {
   {
     printf '%s %s\n' "$(ref server 1)" "$(img 1 a)" "$(ref server 11)" "$(img 1 a)" \
       "$(ref web 2)" "$(img 2 b)" "$(ref caddy 3)" "$(img 3 c)" "$(ref server 4)" "$(img 4 d)" \
-      "$(ref caddy 6)" "$(img 6 f)" "$(ref server 7)" "$(img 7 g)" "$(ref observer 8)" "$(img 8 h)"
+      "$(ref caddy 6)" "$(img 6 f)" "$(ref server 7)" "$(img 7 g)" "$(ref observer 8)" "$(img 8 h)" \
+      "$(new_ref caddy 19)" "$(img 19 s)"
   } >"$p/local"
   jq -n --arg a "$(img 1 a)" --arg b "$(img 2 b)" --arg c "$(img 3 c)" --arg d "$(img 4 d)" \
     --arg f "$(img 6 f)" --arg g "$(img 7 g)" --arg h "$(img 8 h)" --arg i "$(img 9 i)" \
@@ -329,11 +427,14 @@ prune_fixture() {
     --arg r4 "$(ref server 4)" --arg r6 "$(ref caddy 6)" --arg r7 "$(ref server 7)" --arg r8 "$(ref observer 8)" \
     --arg r9 "$(ref server 9)" --arg r10 "$(ref server 10)" --arg r12 "$(ref web 12)" --arg r13 "$(ref web 13)" \
     --arg r14 "$(ref caddy 14)" --arg r15 "docker.io/library/alpine@sha256:$(printf '%064d' 15)" \
-    --arg r17 "ghcr.io/other/aboutme-server@sha256:$(printf '%064d' 17)" '
+    --arg r17 "ghcr.io/other/aboutme-server@sha256:$(printf '%064d' 17)" \
+    --arg q "$(img 18 q)" --arg r18 "$(new_ref server 18)" --arg s "$(img 19 s)" --arg r19 "$(new_ref caddy 19)" \
+    --arg t "$(img 20 t)" --arg r20 "ghcr.io/Dntmakers/aboutme-server@sha256:$(printf '%064d' 20)" '
     [{Id:$a,RepoDigests:[$r1,$r11]},{Id:$b,RepoDigests:[$r2]},{Id:$c,RepoDigests:[$r3]},{Id:$d,RepoDigests:[$r4]},
      {Id:$f,RepoDigests:[$r6]},{Id:$g,RepoDigests:[$r7]},{Id:$h,RepoDigests:[$r8]},{Id:$i,RepoDigests:[$r9]},
      {Id:$j,RepoDigests:[$r10]},{Id:$k,RepoDigests:[$r12,$r13]},{Id:$l,RepoDigests:[$r14]},
-     {Id:$m,RepoDigests:[$r15]},{Id:$n,RepoDigests:[]},{Id:$n,RepoDigests:null},{Id:$o,RepoDigests:[$r17]}]' >"$p/images.json"
+     {Id:$m,RepoDigests:[$r15]},{Id:$n,RepoDigests:[]},{Id:$n,RepoDigests:null},{Id:$o,RepoDigests:[$r17]},
+     {Id:$q,RepoDigests:[$r18]},{Id:$s,RepoDigests:[$r19]},{Id:$t,RepoDigests:[$r20]}]' >"$p/images.json"
   : >"$p/calls"
   : >"$p/rm"
 }
@@ -381,7 +482,7 @@ prune_run() {
 }
 prune_failures=0
 prune_fail() { echo "FAIL prune: $*" >&2; prune_failures=1; }
-unused=$(printf '%s\n' "$(ref server 10)" "$(ref web 12)" "$(ref web 13)" "$(ref caddy 14)" | sort)
+unused=$(printf '%s\n' "$(ref server 10)" "$(ref web 12)" "$(ref web 13)" "$(ref caddy 14)" "$(new_ref server 18)" | sort)
 prune_fixture
 prune_run
 [[ $prune_status == 0 ]] || prune_fail "exit $prune_status on a clean run: $(cat "$p/out")"
@@ -389,7 +490,7 @@ prune_run
 [[ $(sort "$p/rm") == "$unused" ]] || prune_fail "removed $(paste -sd ' ' "$p/rm"), not only the unused aboutme digests"
 if grep -q -e '--force' -e ' -f ' "$p/calls"; then prune_fail 'passed force to podman'; fi
 [[ ! -e $p/unexpected ]] || prune_fail "$(cat "$p/unexpected")"
-grep -qxF 'deploy-host: removed 4 unused images, kept 9' "$p/out" || prune_fail "wrong summary: $(cat "$p/out")"
+grep -qxF 'deploy-host: removed 5 unused images, kept 10' "$p/out" || prune_fail "wrong summary: $(cat "$p/out")"
 for source in release previous maintenance operation unit container; do
   prune_fixture
   case $source in
@@ -437,7 +538,7 @@ prune_fixture
 rm -rf "$operations_dir"
 prune_run
 if [[ $prune_status != 0 || $(sort "$p/rm") != "$(printf '%s\n' "$unused" "$(ref server 7)" | sort)" ]] ||
-   ! grep -qxF 'deploy-host: removed 5 unused images, kept 8' "$p/out"; then
+   ! grep -qxF 'deploy-host: removed 6 unused images, kept 9' "$p/out"; then
   prune_fail "a mounted data volume with no operations directory did not prune: $(cat "$p/out")"
 fi
 grep -qxF "mountpoint -q $data" "$p/calls" || prune_fail 'did not check that the data volume is mounted'
@@ -448,7 +549,7 @@ prune_run
 unset PRUNE_FAIL_RM
 if [[ $prune_status != 0 || $(sort "$p/rm") != "$unused" ]] ||
    ! grep -qxF "deploy-host: warning: could not remove $(ref web 12)" "$p/out" ||
-   ! grep -qxF 'deploy-host: removed 3 unused images, kept 9' "$p/out"; then
+   ! grep -qxF 'deploy-host: removed 4 unused images, kept 10' "$p/out"; then
   prune_fail "a failed removal stopped the rest or failed the step: $(cat "$p/out")"
 fi
 grep -qxF '  prune-images:0) step_prune_images ;;' "$host" || prune_fail 'no prune-images dispatcher entry'

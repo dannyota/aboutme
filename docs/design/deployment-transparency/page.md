@@ -52,7 +52,7 @@ primitives. Top to bottom:
 | ------- | ------------------------------------------------------ | ------------------------------------------------------- |
 | Source  | `dannyota/aboutme`, tag, short commit, links           | The signed certificate names this repository and tag    |
 | Build   | "GitHub Actions, release-images", run link             | The signer workflow matches the expected identity       |
-| Image   | `ghcr.io/dannyota/aboutme-*`, short digest             | The signed subject equals the digest                    |
+| Image   | `ghcr.io/<owner>/aboutme-*`, short digest              | The signed subject equals the digest                    |
 | Running | "aboutme.vn, GreenNode HCM03", replicas, running since | The platform reports that digest; the document is fresh |
 
 A digest shows as `sha256:d1c33a0a…945c` (the first 8 and last 4 hex characters)

@@ -3,7 +3,6 @@ set -euo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 root=$(cd "$here/../../.." && pwd)
 lib=/usr/local/lib/aboutme
-repo=dannyota/aboutme
 umask 077
 # shellcheck source=../host/operation-state.sh
 source "$here/../host/operation-state.sh"
@@ -60,10 +59,16 @@ release=$(remote "sudo $lib/deploy-host.sh - - release-json" 2>/dev/null) || fai
 tag=$(jq -er .release_tag <<<"$release") || fail protocol_failed
 operation_release_supported "$tag" || fail refused
 commit=$(bash "$root/scripts/release-eligibility.sh" --deploy-checkout "$tag" 2>/dev/null) || fail refused
+owner=$(bash "$root/scripts/release-eligibility.sh" --owner "$commit" 2>/dev/null) || fail refused
+repo=$owner/aboutme
+declare -A pinned
 for component in server web caddy; do
   pin=$(jq -er --arg component "$component" '.[$component+"_image"]' <<<"$release") || fail protocol_failed
-  [[ $pin =~ ^ghcr\.io/dannyota/aboutme-$component@(sha256:[0-9a-f]{64})$ ]] || fail protocol_failed
-  digest=${BASH_REMATCH[1]}
+  [[ $pin =~ ^ghcr\.io/"$owner"/aboutme-$component@(sha256:[0-9a-f]{64})$ ]] || fail protocol_failed
+  pinned[$component]=${BASH_REMATCH[1]}
+done
+for component in server web caddy; do
+  digest=${pinned[$component]}
   token=$(curl -fsS --max-time 30 "https://ghcr.io/token?scope=repository:$repo-$component:pull&service=ghcr.io" | jq -er .token) || fail refused
   platform=$(curl -fsS --max-time 30 --config <(printf 'header = "Authorization: Bearer %s"\n' "$token") \
     -H 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json' \
@@ -92,5 +97,4 @@ if ((rc != 0)); then
   esac
 fi
 [[ $(wc -c <"$work/reply") -le 16384 ]] || fail protocol_failed
-# Reuse the closed versioned validator without reading any host state locally.
 operation_state wire '' 3<"$work/reply" 2>/dev/null || fail protocol_failed

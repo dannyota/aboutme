@@ -13,12 +13,12 @@ Baseline references below `host/`, `tests/`, and `edge/` start at `deploy/vn/`.
 
 | Location                                                                                                                   | Change                                                                           |
 | -------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| `host/install.sh:11`, `:429`                                                                                               | Package pin and installed catalog filename. Keep ordinary migration invocation.  |
+| `host/install.sh:11`, `:427`                                                                                               | Package pin and installed catalog filename. Keep ordinary migration invocation.  |
 | `host/crowdsec-db.sh:15`, `:223`, `:225`, `:262`                                                                           | Sole catalog path, exact comparison, and epoch digest.                           |
 | `host/crowdsec-provision.sh:75`, `host/crowdsec-vacuum.sh:18`                                                              | Package assertion and catalog path.                                              |
 | `host/crowdsec-schema-v1.8.1.tsv:1`                                                                                        | Replace with generated `crowdsec-schema-v1.8.2.tsv`.                             |
 | `tests/crowdsec-db-test.sh:29`, `:110`, `:326`, `:462`, `:584`                                                             | Catalog fixtures, binary assertion, tamper cases, derivation delimiters.         |
-| `tests/crowdsec-offline-test.sh:24`, `:27`, `:30`, `:91`, `:221`                                                           | Package/archive pins, reviewed 1.8.2 digest, version and suppression assertions. |
+| `tests/crowdsec-offline-test.sh:8`, `:37`, `:43`, `:108`, `:212`                                                           | Package/archive pins, reviewed 1.8.2 digest, version and suppression assertions. |
 | `tests/crowdsec-retention-fixture.sh:62`, `:340`                                                                           | Proof module and catalog fixture.                                                |
 | `tests/install-packages-test.sh:253`, `:257`, `:278`, `:288`                                                               | Held/exact package cases, commands, diagnostics.                                 |
 | `tests/install-admission-test.sh:90`, `:287`, `tests/crowdsec-vacuum-test.sh:18`, `tests/crowdsec-integration-test.sh:982` | Catalog fixtures and success label.                                              |
@@ -57,8 +57,8 @@ access.
 ## Installation and recovery
 
 Use the existing operator reset, with no installer reset flag or automatic loss.
-`install.sh:381` suppresses package startup and registration; `:426` installs
-helpers and catalog before the ordinary migration at `:535`. On an occupied
+`install.sh:390` suppresses package startup and registration; `:424` installs
+helpers and catalog before the ordinary migration at `:533`. On an occupied
 1.8.1 database that call fails target preflight, stops consumers, and refuses
 `fresh-admission` (`crowdsec-migrate.sh:173`, `:181`, `:182`). It cannot
 complete without reset. No new controller, admission exception, or marker

@@ -57,7 +57,7 @@ Access and confinement proposals have their own pages:
 
 ### Kernel and network
 
-Home: `E/sysctl.d/90-aboutme.conf`, installed at `H/install.sh:524`. Bundled
+Home: `E/sysctl.d/90-aboutme.conf`, installed at `H/install.sh:540`. Bundled
 hardening at lines 11-14 is limited. Fail required checks on absent knobs; probe
 after boot and Podman network creation. Target: compromised containers unless
 named otherwise.
@@ -156,7 +156,7 @@ Preserve missing-data-volume refusal. [Mount]
 
 **Updates.** Retain daily Ubuntu security updates and manual reboots at
 `E/apt/apt.conf.d/52aboutme-unattended-upgrades:1-11`. Keep reviewed third-party
-pins at `H/install.sh:8-12,122-129`; do not silently unhold PostgreSQL,
+pins at `H/install.sh:8-12,122-151`; do not silently unhold PostgreSQL,
 pgBackRest, or CrowdSec. Propose weekly advisory review and expedited reviewed
 security-pin updates when applicable. Home: installer, watcher alerts for
 update/reboot backlog, and production runbook. Verify versions, update logs,

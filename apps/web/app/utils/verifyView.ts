@@ -6,6 +6,7 @@ import {
   componentNames,
   type DeploymentDocument,
   type Failure,
+  imageOwner,
   type PageState,
   type RunningImage,
   servingComponents,
@@ -162,6 +163,7 @@ export function componentRows(document: DeploymentDocument): ComponentRow[] {
 export interface CommandTarget {
   readonly key: string;
   readonly component: ComponentName;
+  readonly owner: string;
   readonly label: string;
   readonly image: RunningImage;
 }
@@ -169,13 +171,27 @@ export interface CommandTarget {
 export function commandTargets(
   document: DeploymentDocument,
 ): CommandTarget[] {
-  return componentRows(document).flatMap(({ name, lines }) =>
-    lines.map(({ image }) => ({
+  return componentRows(document).flatMap(({ name, lines }) => {
+    const entry = document.components.find((item) => item.name === name);
+    const owner = entry === undefined ? '' : imageOwner(entry.image);
+    return lines.map(({ image }) => ({
       key: `${name}@${image.digest}`,
       component: name,
+      owner,
       label: lines.length > 1 ? `${name} ${image.version ?? '?'}` : name,
       image,
-    })));
+    }));
+  });
+}
+
+export function imageNamespaces(document: DeploymentDocument): string[] {
+  const release = document.components
+    .filter(({ name }) => servingComponents.includes(name));
+  const running = release
+    .filter(({ runningImages }) => runningImages.length > 0);
+  const shown = running.length > 0 ? running : release;
+  return [...new Set(shown.map(({ image }) =>
+    `ghcr.io/${imageOwner(image)}/`))];
 }
 
 export function defaultTarget(
@@ -219,6 +235,9 @@ export const readDigestsCommand = command([
 ]);
 
 export function verifyImageCommand(target: CommandTarget | null): Command {
+  const owner: CommandPart = target === null
+    ? plain('dannyota')
+    : { text: target.owner, kind: 'live' };
   const repository = target === null
     ? plain('server')
     : {
@@ -233,11 +252,11 @@ export function verifyImageCommand(target: CommandTarget | null): Command {
     : { text: '<version>', kind: 'placeholder' };
   return command([
     [plain('gh attestation verify \\')],
-    [plain('  oci://ghcr.io/dannyota/aboutme-'), repository,
+    [plain('  oci://ghcr.io/'), owner, plain('/aboutme-'), repository,
       plain('@sha256:'), digest, plain(' \\')],
-    [plain('  --repo dannyota/aboutme \\')],
-    [plain('  --signer-workflow '
-      + 'dannyota/aboutme/.github/workflows/release-images.yml \\')],
+    [plain('  --repo '), owner, plain('/aboutme \\')],
+    [plain('  --signer-workflow '), owner,
+      plain('/aboutme/.github/workflows/release-images.yml \\')],
     [plain('  --source-ref refs/tags/'), version, plain(' \\')],
     [plain('  --deny-self-hosted-runners')],
   ]);

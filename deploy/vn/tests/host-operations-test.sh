@@ -78,11 +78,16 @@ cat >"$work/client/scripts/release-eligibility.sh" <<'STUB'
 #!/usr/bin/env bash
 printf 'eligibility %s\n' "$*" >>"$CLIENT_FIXTURE/calls"
 [[ ${REJECT_ELIGIBILITY:-0} == 0 ]] || exit 1
+if [[ $1 == --owner ]]; then
+  [[ $# == 2 && $2 =~ ^[0-9a-f]{40}$ && ${REJECT_OWNER:-0} == 0 ]] || exit 1
+  printf '%s\n' "${TAG_OWNER:-dannyota}"
+  exit 0
+fi
 [[ $# == 1 || ${REJECT_TAG_ELIGIBILITY:-0} == 0 ]] || exit 1
 printf '%040d\n' 0
 STUB
 cat >"$work/client/deploy/vn/scripts/provenance.sh" <<'STUB'
-provenance_verify() { [[ ${REJECT_PROVENANCE:-0} == 0 ]]; }
+provenance_verify() { printf '%s %s %s\n' "$repo" "$1" "$2" >>"$CLIENT_FIXTURE/provenance"; [[ ${REJECT_PROVENANCE:-0} == 0 ]]; }
 STUB
 cat >"$work/bin/ssh" <<'STUB'
 #!/usr/bin/env bash
@@ -116,6 +121,7 @@ STUB
 cat >"$work/bin/curl" <<'STUB'
 #!/usr/bin/env bash
 set -euo pipefail
+printf '%s\n' "${!#}" >>"$CLIENT_FIXTURE/registry"
 case ${!#} in
   *'/token?'*) echo '{"token":"synthetic-public-pull"}' ;;
   *) printf '{"manifests":[{"platform":{"os":"linux","architecture":"amd64"},"digest":"sha256:%064d"}]}\n' "${REGISTRY_DIGEST:-0}" ;;
@@ -125,9 +131,11 @@ chmod +x "$work/bin/"* "$work/client/scripts/release-eligibility.sh"
 export CLIENT_FIXTURE=$work
 export PATH=$work/bin:$PATH DEPLOY_HOST=fixture.example SSH_PORT=22922
 release_fixture() {
-  jq -cn --arg tag "$1" --argjson number "$2" '{release_tag:$tag,release_number:$number,maintenance_tag:$tag,maintenance_number:$number,
-   server_image:("ghcr.io/dannyota/aboutme-server@sha256:"+("0"*64)),web_image:("ghcr.io/dannyota/aboutme-web@sha256:"+("0"*64)),
-   caddy_image:("ghcr.io/dannyota/aboutme-caddy@sha256:"+("0"*64)),maintenance_image:("ghcr.io/dannyota/aboutme-caddy@sha256:"+("0"*64))}' >"$work/release"
+  local server=${3:-dannyota}
+  jq -cn --arg tag "$1" --argjson number "$2" --arg s "$server" --arg w "${4:-$server}" --arg c "${5:-$server}" \
+    --arg m "${6:-$server}" '{release_tag:$tag,release_number:$number,maintenance_tag:$tag,maintenance_number:$number,
+   server_image:("ghcr.io/"+$s+"/aboutme-server@sha256:"+("0"*64)),web_image:("ghcr.io/"+$w+"/aboutme-web@sha256:"+("0"*64)),
+   caddy_image:("ghcr.io/"+$c+"/aboutme-caddy@sha256:"+("0"*64)),maintenance_image:("ghcr.io/"+$m+"/aboutme-caddy@sha256:"+("0"*64))}' >"$work/release"
 }
 release_fixture v0.8.29 8029
 wrapper=$work/client/deploy/vn/scripts/operations.sh
@@ -209,8 +217,8 @@ for release in v0.7.9:7009 v0.7.10:7010 v0.8.29:8029 v1.0.0:1000000 v999.999.999
   rm -f "$work/calls"
   bash "$wrapper" status "$valid_id" >"$work/output" 2>"$work/error" || fail "supported release refused: $tag"
   known_reply || fail "supported release reply changed: $tag"
-  [[ $(call_order) == "eligibility --deploy-checkout ssh eligibility --deploy-checkout $tag ssh " ]] ||
-    fail "checkout proof, hashes, deployed tag eligibility or dispatch out of order: $tag"
+  [[ $(call_order) == "eligibility --deploy-checkout ssh eligibility --deploy-checkout $tag eligibility --owner $(printf '%040d' 0) ssh " ]] ||
+    fail "checkout proof, hashes, deployed tag eligibility, tag owner or dispatch out of order: $tag"
 done
 for tag in v0.7.8 v0.6.999 v0.0.0 '' v0.8 v0.8.29.1 v0.8.29-rc1 v0.8.29+build 'v0.8.29 ' v08.29.0 v0.08.29 V0.8.29 0.8.29 v1000.0.0 'v0.8.29;true'; do
   release_fixture "$tag" 0
@@ -243,6 +251,57 @@ bash "$wrapper" status "$valid_id" >"$work/output" 2>"$work/error" || rc=$?
 [[ $rc == 1 && ! -s $work/output && $(<"$work/error") == protocol_failed ]] || fail 'open reply accepted'
 cp "$work/known-reply" "$work/reply"
 echo 'host operation release gate and post-SSH checks passed'
+
+zero=$(printf '%064d' 0)
+for TAG_OWNER in dannyota dntmakers; do
+  export TAG_OWNER
+  other=dntmakers
+  [[ $TAG_OWNER == dannyota ]] || other=dannyota
+  for maintenance in dannyota dntmakers; do
+    release_fixture v0.8.29 8029 "$TAG_OWNER" "$TAG_OWNER" "$TAG_OWNER" "$maintenance"
+    jq -c --slurpfile release "$work/release" '.release=$release[0]' "$work/known-reply" >"$work/reply"
+    rm -f "$work/calls" "$work/registry" "$work/provenance"
+    bash "$wrapper" status "$valid_id" >"$work/output" 2>"$work/error" ||
+      fail "a $TAG_OWNER release with a $maintenance maintenance image refused: $(cat "$work/error")"
+    [[ ! -s $work/error && $(jq -cS . "$work/output") == "$(jq -cS . "$work/reply")" ]] ||
+      fail "a $TAG_OWNER release with a $maintenance maintenance image changed the reply"
+    for component in server web caddy; do
+      grep -qxF "https://ghcr.io/token?scope=repository:$TAG_OWNER/aboutme-$component:pull&service=ghcr.io" "$work/registry" &&
+        grep -qxF "https://ghcr.io/v2/$TAG_OWNER/aboutme-$component/manifests/v0.8.29" "$work/registry" &&
+        grep -qxF "$TAG_OWNER/aboutme $component sha256:$zero" "$work/provenance" ||
+        fail "$component of a $TAG_OWNER release was not read and verified under $TAG_OWNER"
+    done
+    if grep -qF "$other/" "$work/registry" "$work/provenance"; then fail "a $TAG_OWNER release read the $other namespace"; fi
+  done
+done
+for case in 'dntmakers dannyota' 'dannyota dntmakers' 'dntmakers dntmakers dannyota' 'dntmakers dntmakers dntmakers dannyota' \
+  'dannyota dannyota dntmakers' 'dntmakers evil' 'dntmakers Dntmakers'; do
+  read -r -a owners <<<"$case"
+  TAG_OWNER=${owners[0]}
+  release_fixture v0.8.29 8029 "${owners[@]:1}"
+  rm -f "$work/provenance"
+  post_ssh_refused "pins $case" protocol_failed
+  [[ ! -e $work/provenance ]] || fail "pins $case reached provenance"
+done
+TAG_OWNER=dannyota
+release_fixture v0.8.29 8029
+REJECT_OWNER=1 post_ssh_refused 'unreadable tag owner' refused
+[[ $(call_order) == "eligibility --deploy-checkout ssh eligibility --deploy-checkout v0.8.29 eligibility --owner $(printf '%040d' 0) " ]] ||
+  fail 'tag owner not read after deployed tag eligibility'
+for owners in 'dntmakers dannyota dannyota dannyota' 'dannyota dannyota dntmakers dannyota' 'evil evil evil evil' \
+  'dannyota dannyota dannyota evil' 'Dntmakers Dntmakers Dntmakers Dntmakers' 'dannyota dannyota dannyota DANNYOTA'; do
+  read -r -a owner <<<"$owners"
+  jq -c --arg s "${owner[0]}" --arg w "${owner[1]}" --arg c "${owner[2]}" --arg m "${owner[3]}" '
+    def owner($o): sub("^ghcr\\.io/dannyota/"; "ghcr.io/" + $o + "/");
+    .release.server_image |= owner($s) | .release.web_image |= owner($w)
+    | .release.caddy_image |= owner($c) | .release.maintenance_image |= owner($m)' "$work/known-reply" >"$work/reply"
+  rc=0
+  bash "$wrapper" status "$valid_id" >"$work/output" 2>"$work/error" || rc=$?
+  [[ $rc == 1 && ! -s $work/output && $(<"$work/error") == protocol_failed ]] || fail "reply release with owners $owners accepted"
+done
+unset TAG_OWNER
+cp "$work/known-reply" "$work/reply"
+echo 'host operation owner namespaces passed'
 
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_COMMON_DIR
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_COUNT=1 \
