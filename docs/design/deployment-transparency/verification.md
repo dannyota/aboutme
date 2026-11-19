@@ -129,13 +129,14 @@ GitHub and Sigstore.
    ```
 
 2. Verify one digest's provenance with the GitHub CLI (signed in, since `gh`
-   needs a token):
+   needs a token). `<owner>` is the owner in that component's `image` in the
+   document, `dannyota` or `dntmakers`:
 
    ```sh
    gh attestation verify \
-     oci://ghcr.io/dannyota/aboutme-server@sha256:<digest> \
-     --repo dannyota/aboutme \
-     --signer-workflow dannyota/aboutme/.github/workflows/release-images.yml \
+     oci://ghcr.io/<owner>/aboutme-server@sha256:<digest> \
+     --repo <owner>/aboutme \
+     --signer-workflow <owner>/aboutme/.github/workflows/release-images.yml \
      --source-ref refs/tags/<version> \
      --deny-self-hosted-runners
    ```
