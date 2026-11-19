@@ -386,3 +386,37 @@ for pg_call in "${pg_calls[@]}"; do
   done
 done
 printf 'PASS postgresql-common-installs-and-holds-client-common-at-its-pin\n'
+
+pg_order=$(awk '
+  BEGIN { path = "preamble" }
+  /^if [[] "[$]only" = postgres []]; then$/ { path = "postgres-only"; next }
+  path == "postgres-only" && /^fi$/ { path = "full"; next }
+  /^[[:space:]]*install_pinned / {
+    start = FNR; call = $0
+    while (call ~ /\\$/ && (getline line) > 0) call = call " " line
+    if (call ~ /"postgresql-common=/ && call ~ /"postgresql-client-common=/) print path, "common", start
+    if (call ~ /"postgresql-18=/) print path, "server", start
+  }
+  /^[[:space:]]*chown postgres:postgres \/srv\/data\/postgresql$/ { print path, "chown", FNR }
+' "$installer")
+pg_step() { awk -v p="$pg_path" -v s="$1" '$1 == p && $2 == s { print $3 }' <<<"$pg_order"; }
+for pg_path in postgres-only full; do
+  pg_common=$(pg_step common) pg_chown=$(pg_step chown) pg_server=$(pg_step server)
+  [[ $pg_common =~ ^[0-9]+$ && $pg_chown =~ ^[0-9]+$ && $pg_server =~ ^[0-9]+$ ]] ||
+    fail "$pg_path path lost a PostgreSQL install step"
+  ((pg_common < pg_chown)) || fail "$pg_path path chowns the data directory before installing postgresql-common"
+  ((pg_chown < pg_server)) || fail "$pg_path path installs postgresql-18 before chowning the data directory"
+done
+printf 'PASS postgresql-data-directory-chown-runs-between-common-and-server-installs\n'
+
+pg_server_version=$(sed -n 's/^POSTGRESQL_VERSION=//p' "$installer")
+[[ -n $pg_server_version ]] || fail 'postgresql-18 pin missing'
+pg_offline=${2:-$root/deploy/vn/tests/crowdsec-offline-test.sh}
+pg_proof=$(awk '
+  /^pinned_postgresql=[(]/ { copy = 1; sub(/^pinned_postgresql=[(]/, "") }
+  copy { closed = sub(/[)].*/, ""); print; if (closed) exit }
+' "$pg_offline" | tr -s ' \t' '\n\n' | sed '/^$/d' | sort)
+pg_expected=$(printf '%s\n' "postgresql-common=$pg_version" "postgresql-client-common=$pg_version" \
+  "postgresql-18=$pg_server_version" "postgresql-client-18=$pg_server_version" | sort)
+[[ $pg_proof == "$pg_expected" ]] || fail 'CrowdSec package proof pins PostgreSQL off the installer pins'
+printf 'PASS crowdsec-package-proof-pins-postgresql-at-installer-versions\n'
