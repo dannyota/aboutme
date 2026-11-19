@@ -15,9 +15,6 @@ readonly TARGET_TITLE='CV tiếng Việt'
 readonly TARGET_HEADLINE='Kỹ sư nền tảng hư cấu'
 readonly TARGET_SECTION='Kinh nghiệm'
 readonly IMAGE_RE='^sha256:[0-9a-f]{64}$'
-readonly IMAGE_REPOSITORY=dannyota/aboutme
-# The runner prints at most one closed failure word (reason.go) on stderr, only
-# while it has written no evidence; this list must match them all.
 RUNNER_REASONS=' arguments control-root run-root entry-set artifact-mode tls network discovery oauth registration metadata issuer state-mismatch token-exchange authorize-shape'
 RUNNER_REASONS+=' authorize-redirect authorize-scope authorize-resource authorize-challenge callback callback-bind second-factor-required reauthorization browser-handoff grant'
 RUNNER_REASONS+=' source-selection source-changed candidate create-intent create-rejected mutation-cap tool-output photo recovery revocation evidence workflow-state contract local-proof internal '
@@ -243,6 +240,12 @@ registry_digest() {
   [[ $digest =~ $IMAGE_RE ]] || return 1
   printf -v "$2" '%s' "$digest"
 }
+release_owner() {
+  local owner
+  IMAGE_REPOSITORY=
+  owner=$(bash "$REPO/scripts/release-eligibility.sh" --owner "$RELEASE_COMMIT") || return 1
+  IMAGE_REPOSITORY=$owner/aboutme
+}
 release_images() {
   APP_IMAGE= WEB_IMAGE=
   registry_digest server APP_IMAGE && registry_digest web WEB_IMAGE
@@ -273,6 +276,7 @@ validate_attestation() {
     else "ok" end' "$path" 2>/dev/null) || reason=malformed
   [ "$reason" = ok ] || fail "attestation rejected: $reason"
   release_identity || fail 'attestation rejected: checkout is not a clean release tag'
+  release_owner || fail 'attestation rejected: unreadable repository owner'
   release_images || fail 'attestation rejected: release images are not published'
   reason=$(jq -er --arg tag "$RELEASE_TAG" --arg commit "$RELEASE_COMMIT" --arg runner "$RUNNER_SHA" \
     --arg server "$SERVER_SHA" --arg launcher "$LAUNCHER_SHA" --arg app "$APP_IMAGE" \
@@ -292,7 +296,7 @@ validate_attestation() {
 
 write_attestation() {
   local temporary
-  if ! release_identity || ! release_images; then stage attestation-skipped && return 0; fi
+  if ! release_identity || ! release_owner || ! release_images; then stage attestation-skipped && return 0; fi
   [ -e "$PRODUCTION_CONTROL" ] || [ -L "$PRODUCTION_CONTROL" ] || install -d -m 0700 "$PRODUCTION_CONTROL"
   secure_dir "$PRODUCTION_CONTROL" || fail 'invalid production control directory'
   temporary=$(mktemp "$PRODUCTION_CONTROL/.attestation.XXXXXX")
@@ -619,7 +623,7 @@ main() {
   UID_NOW=$(id -u)
   [ "$UID_NOW" -ne 0 ] || fail 'the workflow must not run as root'
   RUNNER_PID= BROWSER_PID= FIXTURE_SEEDED=0 STAGING= BROWSER_EVIDENCE= BROWSER_LOG= RUN= SCRATCH=
-  REGISTRY_HEADERS= REGISTRY_RESPONSE= CONTAINER_NAME= RUNNER_LOG=
+  REGISTRY_HEADERS= REGISTRY_RESPONSE= CONTAINER_NAME= RUNNER_LOG= IMAGE_REPOSITORY=
   trap cleanup EXIT
   stage preflight
   resolve_paths

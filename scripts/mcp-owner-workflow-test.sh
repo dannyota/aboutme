@@ -84,6 +84,9 @@ case "$*" in
 'status --porcelain --untracked-files=normal') cat "$ctl/git.status" ;;
 'tag --points-at HEAD') cat "$ctl/git.tags" ;;
 'rev-parse --verify refs/tags/'*) cat "$ctl/git.tagcommit" ;;
+"ls-tree --full-tree $(cat "$ctl/git.commit")^{commit} -- scripts/lib/repository.sh")
+  [ ! -e "$ctl/git.repository" ] || printf '100644 blob %040d\tscripts/lib/repository.sh\n' 0 ;;
+"show $(cat "$ctl/git.commit"):scripts/lib/repository.sh") cat "$ctl/git.repository" ;;
 *) exit 99 ;;
 esac
 EOF
@@ -255,11 +258,11 @@ respond() {
 }
 behavior=$(cat "$ctl/curl.behavior")
 case "$method $url" in
-'GET https://ghcr.io/token?scope=repository:dannyota/aboutme-'*':pull&service=ghcr.io')
+'GET https://ghcr.io/token?scope=repository:'*'/aboutme-'*':pull&service=ghcr.io')
   respond 200 '{"token":"ghcr-anon-token"}'
   ;;
-'GET https://ghcr.io/v2/dannyota/aboutme-'*)
-  name=${url#https://ghcr.io/v2/dannyota/aboutme-}
+'GET https://ghcr.io/v2/'*'/aboutme-'*)
+  name=${url#https://ghcr.io/v2/*/aboutme-}
   name=${name%%/*}
   [ "${url##*/}" = "$(cat "$ctl/git.tags")" ] && [ -s "$ctl/ghcr.$name.json" ] || exit 22
   if [ -n "$headers" ]; then
@@ -474,6 +477,7 @@ setup_tree() {
     "$OWNER_MARKER" "$OWNER_MARKER" >"$OWNER_CREDENTIAL"
   chmod 0600 "$OWNER_CREDENTIAL"
   cp -- "$SCRIPT_SOURCE" "$SCRIPT"
+  cp -- "$ROOT/scripts/release-eligibility.sh" "$REPO/scripts/"
   if [ -f "$ROOT/scripts/lib/mcp-workflow-fixture.sh" ]; then
     cp -- "$ROOT/scripts/lib/mcp-workflow-fixture.sh" "$REPO/scripts/lib/"
   fi
@@ -796,6 +800,8 @@ rm -rf -- "$T/repo.good"
 cp -a -- "$REPO" "$T/repo.good"
 cp -- "$CTL/fake-runner" "$T/runner.good"
 check 'release digests come from the registry by tag' [ "$(grep -c "/manifests/$TAG\$" "$CTL/curl.calls")" -eq 2 ]
+check 'a release commit without the repository file reads dannyota images' \
+  [ "$(grep -c "^GET /v2/dannyota/aboutme-\(server\|web\)/manifests/$TAG\$" "$CTL/curl.calls")" -eq 2 ]
 check 'caller image input is ignored' lacks 'ffffffff' "$ATTESTATION"
 check 'the registry token stays out of curl arguments' lacks ghcr-anon-token "$CTL/curl.argv"
 check 'the registry token stays out of output' lacks ghcr-anon-token "$CTL/out"
@@ -826,6 +832,7 @@ restore_release() {
   printf '%s\n' "$COMMIT" >"$CTL/git.commit"
   printf '%s\n' "$COMMIT" >"$CTL/git.tagcommit"
   chmod 0600 "$OWNER_CREDENTIAL"
+  rm -f -- "$CTL/git.repository"
   write_registry_index server "$APP" "$AMD"
   write_registry_index web "$WEB" "$AMD"
 }
@@ -1051,6 +1058,35 @@ restore_release
 refresh_image_manifest sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
 run_production
 expect_rejection 'other browser image' 'attestation rejected: browser image mismatch'
+
+for namespace in dannyota dntmakers; do
+  restore_release
+  printf '# shellcheck shell=bash disable=SC2034\nowner=%s\nname=aboutme\n' "$namespace" >"$CTL/git.repository"
+  run_production
+  check "a $namespace release passes production" [ "$STATUS" -eq 0 ]
+  check "a $namespace release reads its own namespace" \
+    [ "$(grep -c "^GET /v2/$namespace/aboutme-\(server\|web\)/manifests/$TAG\$" "$CTL/curl.calls")" -eq 2 ]
+  check "a $namespace release requests its own pull scope" \
+    [ "$(grep -c "^GET /token?scope=repository:$namespace/aboutme-\(server\|web\):pull&service=ghcr.io\$" "$CTL/curl.calls")" -eq 2 ]
+done
+check 'a dntmakers release never reads the dannyota namespace' lacks 'dannyota' "$CTL/curl.calls"
+
+restore_release
+set_release
+printf '# shellcheck shell=bash disable=SC2034\nowner=dntmakers\nname=aboutme\n' >"$CTL/git.repository"
+run_workflow local
+check 'a dntmakers local release proof writes the attestation' has 'stage attestation-written' "$CTL/out"
+check 'a dntmakers local release proof reads the dntmakers namespace' \
+  [ "$(grep -c "^GET /v2/dntmakers/aboutme-\(server\|web\)/manifests/$TAG\$" "$CTL/curl.calls")" -eq 2 ]
+
+for repository in 'owner=dntmakers\nname=aboutme\n' '# shellcheck shell=bash disable=SC2034\nowner=evil\nname=aboutme\n' \
+  '# shellcheck shell=bash disable=SC2034\nowner=dannyota\nname=aboutme\nextra=1\n'; do
+  restore_release
+  printf '%b' "$repository" >"$CTL/git.repository"
+  run_production
+  expect_rejection "repository file $repository" 'attestation rejected: unreadable repository owner'
+  check "repository file $repository never reaches the registry" lacks '/v2/' "$CTL/curl.calls"
+done
 
 restore_release
 chmod 0644 "$OWNER_CREDENTIAL"

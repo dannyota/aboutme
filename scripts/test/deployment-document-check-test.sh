@@ -54,9 +54,21 @@ if [ "$1 $2" = 'auth status' ]; then
 fi
 printf '%s\n' "$*" >>"$STUB/gh.log"
 case " $* " in
-*' --predicate-type '*) [ ! -f "$STUB/fail-sbom" ] ;;
-*) [ ! -f "$STUB/fail-provenance" ] ;;
+*' --predicate-type '*) [ ! -f "$STUB/fail-sbom" ] || exit 1 ;;
+*) [ ! -f "$STUB/fail-provenance" ] || exit 1 ;;
 esac
+[[ " $* " == *' --format json '* ]] || { echo 'verified'; exit 0; }
+[[ $3 =~ ^oci://ghcr\.io/([^/]+)/aboutme- ]] || exit 1
+owner=${BASH_REMATCH[1]}
+case $owner in
+dannyota) id=244348267 ;;
+dntmakers) id=342323513 ;;
+*) id=0 ;;
+esac
+jq -n --arg owner "$owner" --arg id "$id" '[{verificationResult: {signature: {certificate: {
+  sourceRepositoryIdentifier: "1318874703", sourceRepositoryOwnerIdentifier: $id,
+  buildSignerURI: "https://github.com/\($owner)/aboutme/.github/workflows/release-images.yml@refs/tags/v0.6.5"}}}}]' |
+  jq "$(cat "$STUB/gh-filter" 2>/dev/null || echo .)"
 STUBEOF
 cat >"$BIN/document-check" <<'STUBEOF'
 #!/usr/bin/env bash
@@ -78,6 +90,8 @@ LOCK_PATH=$WORK/local-check.lock
 IMAGE=ghcr.io/dannyota/aboutme-server
 D1=sha256:9f2c9f2c9f2c9f2c9f2c9f2c9f2c9f2c9f2c9f2c9f2c9f2c9f2c9f2c9f2c9f2c
 D2=sha256:a41ba41ba41ba41ba41ba41ba41ba41ba41ba41ba41ba41ba41ba41ba41ba41b
+D3=sha256:c0ddc0ddc0ddc0ddc0ddc0ddc0ddc0ddc0ddc0ddc0ddc0ddc0ddc0ddc0ddc0dd
+D4=sha256:d00dd00dd00dd00dd00dd00dd00dd00dd00dd00dd00dd00dd00dd00dd00dd00d
 
 GOOD_HEADERS='HTTP/2 200
 content-type: application/json
@@ -91,7 +105,7 @@ server: CloudFront
 '
 
 reset() {
-  rm -rf -- "$REPO/.dev" "$STUB"/*.log "$STUB"/*-fail "$STUB"/fail-* "$STUB/dc-out-www"
+  rm -rf -- "$REPO/.dev" "$STUB"/*.log "$STUB"/*-fail "$STUB"/fail-* "$STUB/dc-out-www" "$STUB/gh-filter"
   printf '%s' "$GOOD_HEADERS" | sed 's/$/\r/' >"$STUB/headers"
   cp "$FIXTURE" "$STUB/body"
   printf '%s %s v0.6.5\n%s %s v0.6.5\n' "$IMAGE" "$D1" "$IMAGE" "$D2" >"$STUB/dc-out"
@@ -163,8 +177,103 @@ grep -Fxq -- '-now 2026-10-02T03:21:05Z' "$STUB/dc.log" ||
 [ "$(grep -c . "$STUB/gh.log")" -eq 4 ] || fail 'gh ran the wrong number of times'
 [ "$(grep -c -- "--predicate-type https://spdx.dev/Document/v2.3" "$STUB/gh.log")" -eq 2 ] ||
   fail 'the SBOM verification did not run once per digest'
-grep -Fq -- "attestation verify oci://$IMAGE@$D1 --repo dannyota/aboutme --signer-workflow dannyota/aboutme/.github/workflows/release-images.yml --source-ref refs/tags/v0.6.5 --deny-self-hosted-runners" "$STUB/gh.log" ||
+grep -Fxq -- "attestation verify oci://$IMAGE@$D1 --repo dannyota/aboutme --signer-workflow dannyota/aboutme/.github/workflows/release-images.yml --source-ref refs/tags/v0.6.5 --deny-self-hosted-runners --format json" "$STUB/gh.log" ||
   fail 'the provenance command line is wrong'
+summary | grep -q '^PASS app images share one owner$' || fail 'the app owner check did not run'
+
+NEW=ghcr.io/dntmakers/aboutme
+OLD=ghcr.io/dannyota/aboutme
+images() {
+  local line
+  : >"$STUB/dc-out"
+  for line in "$@"; do printf '%s v0.6.5\n' "$line" >>"$STUB/dc-out"; done
+}
+document() {
+  local server=$1 web=$2 caddy=$3 maintenance=${4:-}
+  jq --arg server "$server" --arg web "$web" --arg caddy "$caddy" --arg maintenance "$maintenance" --arg d4 "$D4" '
+    .components |= map(.image = "ghcr.io/\({server: $server, web: $web, caddy: $caddy}[.name])/aboutme-\(.name)")
+    | if $maintenance == "" then . else .components += [.components[] | select(.name == "caddy")
+        | .name = "maintenance" | .image = "ghcr.io/\($maintenance)/aboutme-caddy"
+        | .running_images[0].digest = $d4] end' "$FIXTURE" >"$STUB/body"
+  images "ghcr.io/$server/aboutme-server $D1" "ghcr.io/$web/aboutme-web $D2" "ghcr.io/$caddy/aboutme-caddy $D3" \
+    ${maintenance:+"ghcr.io/$maintenance/aboutme-caddy $D4"}
+}
+reset
+document dntmakers dntmakers dntmakers
+run_check
+[ "$RC" -eq 0 ] || fail "dntmakers images exited $RC: $(summary)"
+for pair in "server $D1" "web $D2" "caddy $D3"; do
+  grep -Fxq -- "attestation verify oci://$NEW-${pair% *}@${pair#* } --repo dntmakers/aboutme --signer-workflow dntmakers/aboutme/.github/workflows/release-images.yml --source-ref refs/tags/v0.6.5 --deny-self-hosted-runners --format json" "$STUB/gh.log" ||
+    fail "the dntmakers ${pair% *} command line is wrong"
+done
+! grep -q 'dannyota' "$STUB/gh.log" || fail 'a dntmakers image was verified under dannyota'
+
+reset
+document dannyota dannyota dannyota dntmakers
+run_check
+[ "$RC" -eq 0 ] || fail "a rollback with a newer maintenance image exited $RC: $(summary)"
+summary | grep -q '^PASS app images share one owner$' || fail 'the rollback app owner check did not pass'
+grep -Fq -- "oci://$NEW-caddy@$D4 --repo dntmakers/aboutme --signer-workflow dntmakers/aboutme/" "$STUB/gh.log" ||
+  fail 'the maintenance image was not verified under its own owner'
+
+reset
+document dntmakers dannyota dntmakers
+jq '.components |= map(if .name == "web" then .running_images = [] else . end)' "$STUB/body" >"$STUB/body.next"
+mv "$STUB/body.next" "$STUB/body"
+images "$NEW-server $D1" "$NEW-caddy $D3"
+run_check
+[ "$RC" -eq 0 ] || fail "a stopped component of the other owner exited $RC: $(summary)"
+
+for mixed in 'dntmakers dntmakers dannyota dntmakers' 'dannyota dntmakers dannyota' \
+  'dannyota dannyota dntmakers' 'dntmakers dannyota dntmakers dannyota' 'dannyota dannyota dntmakers dannyota'; do
+  reset
+  # shellcheck disable=SC2086
+  document $mixed
+  expect_fail "mixed app owners: $mixed" 'app images share one owner'
+done
+
+reset
+touch "$STUB/dc-fail"
+run_check
+summary | grep -q '^FAIL app images share one owner$' || fail 'an unvalidated document passed the app owner check'
+
+reset
+images "ghcr.io/evil/aboutme-server $D1"
+expect_fail 'unknown owner' 'provenance'
+! grep -q 'ghcr.io/evil' "$STUB/gh.log" 2>/dev/null || fail 'gh verified an image of an unknown owner'
+for image in ghcr.io/Dannyota/aboutme-server ghcr.io/dannyota/aboutme-other ghcr.io/dannyota/other-server \
+  docker.io/dannyota/aboutme-server; do
+  reset
+  images "$image $D1"
+  expect_fail "unknown image $image" 'provenance'
+  [ ! -s "$STUB/gh.log" ] || fail "gh verified $image"
+done
+
+for case in \
+  'repository id|.[0].verificationResult.signature.certificate.sourceRepositoryIdentifier = "1318874704"' \
+  'numeric repository id|.[0].verificationResult.signature.certificate.sourceRepositoryIdentifier = 1318874703' \
+  'missing repository id|del(.[0].verificationResult.signature.certificate.sourceRepositoryIdentifier)' \
+  'owner id|.[0].verificationResult.signature.certificate.sourceRepositoryOwnerIdentifier = "342323513"' \
+  'missing owner id|del(.[0].verificationResult.signature.certificate.sourceRepositoryOwnerIdentifier)' \
+  'signer owner|.[0].verificationResult.signature.certificate.buildSignerURI |= sub("dannyota"; "dntmakers")' \
+  'signer workflow|.[0].verificationResult.signature.certificate.buildSignerURI |= sub("release-images"; "other")' \
+  'signer prefix|.[0].verificationResult.signature.certificate.buildSignerURI |= "x" + .' \
+  'mixed results|. + [.[0] | .verificationResult.signature.certificate.sourceRepositoryIdentifier = "1"]' \
+  'no results|[]' \
+  'not an array|.[0]'; do
+  reset
+  printf '%s\n' "${case#*|}" >"$STUB/gh-filter"
+  expect_fail "${case%%|*}" 'provenance'
+  summary | grep -q '^FAIL .*sbom' || fail "${case%%|*}: the SBOM check passed"
+done
+reset
+printf '%s\n' '.[0].verificationResult.signature.certificate.sourceRepositoryOwnerIdentifier = "244348267"' >"$STUB/gh-filter"
+images "$NEW-server $D1"
+expect_fail 'a dntmakers image with the dannyota owner id' 'provenance'
+reset
+printf '%s\n' '.[0].verificationResult.signature.certificate.buildSignerURI |= sub("dntmakers"; "dannyota")' >"$STUB/gh-filter"
+images "$NEW-server $D1"
+expect_fail 'a dntmakers image with a dannyota signer' 'provenance'
 
 reset
 printf '%s %s v0.6.5\n%s %s v0.6.5\n' "$IMAGE" "$D1" "$IMAGE" "$D1" >"$STUB/dc-out"

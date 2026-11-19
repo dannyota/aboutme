@@ -11,11 +11,14 @@ installation, migration, verification, failure recovery, and cluster restore.
 
 Use the current reviewed checkout's deployer. Publication and deployment share
 `scripts/release-eligibility.sh`: the tag must be strict `vMAJOR.MINOR.PATCH`,
-resolve to a commit on `main` fetched from `dannyota/aboutme`, and have a
-completed, successful latest matching `ci.yml` push run on `main` for that exact
-commit. A branch or manual run never counts. A newer pending, cancelled, or
-failed matching run blocks an older success. Missing evidence or a fetch/API
-error also blocks.
+resolve to a commit on `main` fetched from the repository that
+`scripts/lib/repository.sh` names, and have a completed, successful latest
+matching `ci.yml` push run on `main` for that exact commit. When given an
+expected owner, the check also refuses a tag whose commit names another owner in
+`scripts/lib/repository.sh`; a commit without that file names `dannyota`
+([repository transfer](../design/repository-transfer.md)). A branch or manual
+run never counts. A newer pending, cancelled, or failed matching run blocks an
+older success. Missing evidence or a fetch/API error also blocks.
 
 The accepted
 [tooling and display changes](../design/local-tooling-simplification.md) leave
@@ -24,11 +27,12 @@ requires `server-runtime-smoke` startup/idle evidence. It does not replace
 release image checks, production smoke checks, or host memory observation.
 Native macOS partial proofs cannot authorize tagging or deployment.
 
-The image workflow runs the helper from a separate checkout of
-`dannyota/aboutme` at `refs/heads/main` and binds the tag to the workflow's
-event commit. A read-only job checks eligibility before publishing jobs start.
-Every write-capable job repeats the check before other work, so a partial rerun
-must pass fresh eligibility. Candidate checkouts supply build inputs only. The
+The image workflow runs the helper from a separate checkout of the workflow's
+own repository at `refs/heads/main`, passes the workflow's repository owner as
+the expected owner, and binds the tag to the workflow's event commit. A
+read-only job checks eligibility before publishing jobs start. Every
+write-capable job repeats the check before other work, so a partial rerun must
+pass fresh eligibility. Candidate checkouts supply build inputs only. The
 workflow publishes arm64 and amd64 images; the Vietnam deploy requires amd64 and
 pins image digests. GitHub holds no cloud credential other than the vMonitor
 quota-renewal service account

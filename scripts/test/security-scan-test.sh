@@ -19,16 +19,17 @@ cat >"$WORK/bin/gh" <<'STUB'
 set -euo pipefail
 printf '%s\n' "$*" >>"$API_LOG"
 [ "$1" = api ] || exit 64
+repo=repos/${EXPECT_REPOSITORY:-dannyota/aboutme}/releases
 case $2 in
-repos/dannyota/aboutme/releases/latest | repos/dannyota/aboutme/releases/tags/v9.9.9)
+"$repo/latest" | "$repo/tags/v9.9.9")
   cat "$FIXTURE_DIR/release.json" ;;
-repos/dannyota/aboutme/releases/tags/v8.8.8)
+"$repo/tags/v8.8.8")
   cat "$FIXTURE_DIR/retained.json" ;;
-repos/dannyota/aboutme/releases/assets/99)
-  [ "$*" = 'api repos/dannyota/aboutme/releases/assets/99 -H Accept:application/octet-stream' ] || exit 64
+"$repo/assets/99")
+  [ "$*" = "api $repo/assets/99 -H Accept:application/octet-stream" ] || exit 64
   [ "${ASSET_ERROR:-0}" = 0 ] || exit 70
   cat "$FIXTURE_DIR/digests.txt" ;;
-repos/dannyota/aboutme/releases/assets/88)
+"$repo/assets/88")
   cat "$FIXTURE_DIR/retained-digests.txt" ;;
 *) exit 44 ;;
 esac
@@ -114,6 +115,7 @@ grep -Fq -- "--cache-dir $TRIVY_CACHE_DIR" "$CALL_LOG" || fail 'scan must use th
 grep -Fq -- '--skip-db-update' "$CALL_LOG" || fail 'scan must skip database updates'
 
 fixture() {
+  local owner=${1:-dannyota} retained_owner=${2:-${1:-dannyota}}
   unset FAIL_TARGET FAIL_MODE ASSET_ERROR
   cat >"$WORK/release.json" <<'JSON'
 {"tag_name":"v9.9.9","draft":false,"prerelease":false,"published_at":"2026-10-11T00:00:00Z","assets":[{"id":99,"name":"digests.txt","state":"uploaded"}]}
@@ -127,19 +129,19 @@ JSON
     for arch in arm64 amd64; do
       i=$((i + 1))
       printf -v digest '%064d' "$i"
-      printf 'ghcr.io/dannyota/aboutme-%s@sha256:%s linux/%s\n' "$name" "$digest" "$arch" >>"$WORK/digests.txt"
+      printf 'ghcr.io/%s/aboutme-%s@sha256:%s linux/%s\n' "$owner" "$name" "$digest" "$arch" >>"$WORK/digests.txt"
     done
     if [ "$name" != observer ]; then
-      printf 'ghcr.io/dannyota/aboutme-%s@sha256:%064d linux/arm64,linux/amd64\n' "$name" 99 >>"$WORK/digests.txt"
+      printf 'ghcr.io/%s/aboutme-%s@sha256:%064d linux/arm64,linux/amd64\n' "$owner" "$name" 99 >>"$WORK/digests.txt"
     fi
   done
-  sed 's/sha256:0/sha256:a/' "$WORK/digests.txt" >"$WORK/retained-digests.txt"
+  sed -e 's/sha256:0/sha256:a/' -e "s|^ghcr.io/$owner/|ghcr.io/$retained_owner/|" "$WORK/digests.txt" >"$WORK/retained-digests.txt"
 }
 run_scan() {
   : >"$CALL_LOG"
   : >"$API_LOG"
   status=0
-  bash "$ROOT/scripts/security-scan.sh" weekly-scan "$WORK/bin/trivy" "$WORK/reports" "$@" >"$WORK/output" 2>&1 || status=$?
+  bash "${SCAN_ROOT:-$ROOT}/scripts/security-scan.sh" weekly-scan "$WORK/bin/trivy" "$WORK/reports" "$@" >"$WORK/output" 2>&1 || status=$?
 }
 expect_status() {
   if [ "$1" = success ]; then
@@ -152,12 +154,12 @@ expect_count() {
   [ "$(wc -l <"$CALL_LOG")" -eq "$1" ] || fail "expected $1 image scans"
 }
 expect_all_targets() {
-  local name arch digest ref i=0
+  local owner=${1:-dannyota} name arch digest ref i=0
   for name in server web caddy observer; do
     for arch in arm64 amd64; do
       i=$((i + 1))
       printf -v digest '%064d' "$i"
-      ref="ghcr.io/dannyota/aboutme-$name@sha256:$digest"
+      ref="ghcr.io/$owner/aboutme-$name@sha256:$digest"
       grep -Fq -- "--platform linux/$arch $ref" "$CALL_LOG" || fail "missing immutable target $name $arch"
       grep -Fq "$ref" "$WORK/reports/summary.txt" || fail "missing summary digest $name $arch"
       [ -s "$WORK/reports/released-$name-$arch.json" ] || fail "missing report $name $arch"
@@ -189,6 +191,63 @@ grep -Fq 'aboutme-observer@sha256:a' "$CALL_LOG" || fail 'retained observer asse
 ! grep -Fq 'aboutme-server@sha256:a' "$CALL_LOG" || fail 'observer override changed app selection'
 grep -Fq 'v8.8.8' "$WORK/reports/summary.txt" || fail 'missing observer release'
 printf 'ok - rollback and retained observer select independent published assets\n'
+
+TREE=$WORK/dntmakers-tree
+mkdir -p "$TREE/scripts/lib"
+cp "$ROOT/scripts/security-scan.sh" "$ROOT/scripts/release-eligibility.sh" "$TREE/scripts/"
+printf '# shellcheck shell=bash disable=SC2034\nowner=dntmakers\nname=aboutme\n' >"$TREE/scripts/lib/repository.sh"
+fixture dntmakers
+SCAN_ROOT=$TREE EXPECT_REPOSITORY=dntmakers/aboutme run_scan
+expect_status success
+expect_count 8
+expect_all_targets dntmakers
+! grep -Fq 'ghcr.io/dannyota/' "$CALL_LOG" || fail 'a dntmakers release scanned a dannyota image'
+fixture dntmakers dannyota
+SCAN_ROOT=$TREE EXPECT_REPOSITORY=dntmakers/aboutme run_scan v9.9.9 v8.8.8
+expect_status success
+expect_count 8
+grep -Fq -- '--platform linux/arm64 ghcr.io/dannyota/aboutme-observer@sha256:a' "$CALL_LOG" ||
+  fail 'a retained dannyota observer was not scanned in its own namespace'
+grep -Fq -- '--platform linux/arm64 ghcr.io/dntmakers/aboutme-server@sha256:0' "$CALL_LOG" ||
+  fail 'a dntmakers app release was not scanned in its own namespace'
+fixture dannyota
+SCAN_ROOT=$TREE run_scan
+expect_status failure
+expect_count 0
+grep -q '^api repos/dntmakers/aboutme/releases/latest$' "$API_LOG" ||
+  fail 'the release repository does not come from scripts/lib/repository.sh'
+printf 'owner=dntmakers\n' >"$TREE/scripts/lib/repository.sh"
+fixture dntmakers
+SCAN_ROOT=$TREE EXPECT_REPOSITORY=dntmakers/aboutme run_scan
+expect_status failure
+expect_count 0
+! grep -q '^api ' "$API_LOG" || fail 'a malformed repository file reached the release API'
+printf 'ok - each release names its own namespace and the repository file names the API repository\n'
+
+for mutation in mixed unknown uppercase extra; do
+  fixture
+  case $mutation in
+  mixed) sed 's|^ghcr.io/dannyota/aboutme-web@|ghcr.io/dntmakers/aboutme-web@|' "$WORK/digests.txt" >"$WORK/changed-digests" ;;
+  unknown) sed 's|^ghcr.io/dannyota/|ghcr.io/evil/|' "$WORK/digests.txt" >"$WORK/changed-digests" ;;
+  uppercase) sed 's|^ghcr.io/dannyota/|ghcr.io/Dannyota/|' "$WORK/digests.txt" >"$WORK/changed-digests" ;;
+  extra) { cat "$WORK/digests.txt"; printf 'ghcr.io/evil/aboutme-extra@sha256:%064d linux/arm64\n' 7; } >"$WORK/changed-digests" ;;
+  esac
+  mv "$WORK/changed-digests" "$WORK/digests.txt"
+  run_scan
+  expect_status failure
+  expect_count 0
+  [ "$(grep -c 'missing or invalid release digest' "$WORK/reports/failed.txt")" -eq 8 ] ||
+    fail "$mutation namespace did not fail every target"
+done
+fixture
+sed -e 's|^ghcr.io/dannyota/|ghcr.io/dntmakers/|' \
+  -e 's|^ghcr.io/dntmakers/aboutme-observer@\(.*\) linux/amd64$|ghcr.io/dannyota/aboutme-observer@\1 linux/amd64|' \
+  "$WORK/retained-digests.txt" >"$WORK/changed-digests"
+mv "$WORK/changed-digests" "$WORK/retained-digests.txt"
+run_scan v9.9.9 v8.8.8
+expect_status failure
+expect_count 6
+printf 'ok - a release that mixes or names an unknown owner fails closed\n'
 
 fixture
 run_scan v7.7.7 v8.8.8

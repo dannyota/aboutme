@@ -71,7 +71,7 @@ jobs:
             runner: ubuntu-24.04
             machine: x86_64
     env:
-      IMAGE: ghcr.io/dannyota/aboutme-${{ matrix.name }}:dry-run-${{ matrix.arch }}
+      IMAGE: ghcr.io/${{ github.repository_owner }}/aboutme-${{ matrix.name }}:dry-run-${{ matrix.arch }}
       NAME: ${{ matrix.name }}
       ARCH: ${{ matrix.arch }}
       MACHINE: ${{ matrix.machine }}
