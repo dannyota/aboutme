@@ -14,10 +14,9 @@ import { type ResumeStyles, useResumeStyles } from './useResumeStyles';
 
 export interface RenderContext {
   lng: string;
-  mode: 'continuous' | 'paged' | 'sheets';
+  mode: 'continuous' | 'paged';
   photoUrl?: string;
   nameHeading?: 'h1' | 'p';
-  colorScheme?: 'dark' | 'system';
   projectLinks?: ProjectLinkMap;
 }
 
@@ -36,7 +35,7 @@ export class ResumeRenderError extends Error {
   }
 }
 
-export interface ResolvedSection {
+interface ResolvedSection {
   readonly key: string;
   readonly section: Section;
 }
@@ -58,7 +57,7 @@ export interface ResolvedRenderModel {
   readonly columns: 1 | 2;
   readonly header: {
     readonly align: 'left' | 'center';
-    readonly detailsLayout: 'inline' | 'stacked' | 'rows';
+    readonly detailsLayout: 'inline' | 'stacked';
     readonly iconStyle: 'none' | 'outline';
     readonly photoPosition: 'top' | 'left' | 'right';
   };
@@ -69,7 +68,6 @@ export interface ResolvedRenderModel {
   readonly pageFormat: Customization['pageFormat'];
   readonly lng: string;
   readonly mode: RenderContext['mode'];
-  readonly colorScheme?: RenderContext['colorScheme'];
   readonly styles: ResumeStyles;
 }
 
@@ -112,10 +110,6 @@ export function resolveRenderModel(
   }
 
   const customization = document.customization;
-  const sheets = context.mode === 'sheets';
-  const colorScheme = context.mode === 'paged'
-    ? undefined
-    : context.colorScheme;
   return {
     personalDetails: {
       ...(document.personalDetails.fullName === undefined
@@ -146,9 +140,7 @@ export function resolveRenderModel(
     columns: customization.layout.columns,
     header: {
       align: customization.header?.align ?? 'left',
-      detailsLayout: sheets
-        ? 'rows'
-        : customization.header?.detailsLayout ?? 'inline',
+      detailsLayout: customization.header?.detailsLayout ?? 'inline',
       iconStyle: customization.header?.iconStyle ?? 'outline',
       photoPosition: customization.header?.photoPosition ?? 'top',
     },
@@ -162,9 +154,6 @@ export function resolveRenderModel(
     pageFormat: customization.pageFormat,
     lng: context.lng,
     mode: context.mode,
-    ...(colorScheme === undefined ? {} : { colorScheme }),
-    styles: useResumeStyles(customization, context.lng, colorScheme, {
-      sheets,
-    }),
+    styles: useResumeStyles(customization, context.lng),
   };
 }

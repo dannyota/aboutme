@@ -44,7 +44,7 @@ describe('screen margin stylesheet', () => {
 
   it('reaches only the continuous template detail paper', () => {
     expect(selectorsOf('padding: var\\(--screen-margin-y\\)')).toEqual([
-      '.template-paper[data-web-columns] .resume-document:not(.resume-sheets)',
+      '.template-paper[data-web-columns] .resume-document',
     ]);
     expect(selectorsOf('--screen-measure: 52em;')).toEqual([
       '.template-paper[data-web-columns] .resume-document',
@@ -56,7 +56,7 @@ describe('screen margin stylesheet', () => {
     expect(margins).not.toContain('data-columns');
   });
 
-  it('keeps the public page the container of the bar and the sheet gap',
+  it('keeps the public page the container of the bar',
     () => {
       expect(selectorsOf('container-type: inline-size;')).toEqual([
         '.public-resume-page', '.template-paper[data-web-columns]',

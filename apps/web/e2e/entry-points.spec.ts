@@ -126,7 +126,9 @@ async function measureTitles(page: Page): Promise<Title[]> {
   );
 }
 
-async function expectTitleParity(page: Page, where: string): Promise<void> {
+async function expectTitleParity(
+  page: Page, where: string, wraps = true,
+): Promise<void> {
   const message = `${PARITY} ${where}`;
   const titles = await measureTitles(page);
   const linked = titles.filter((title) => title.entry !== null);
@@ -145,7 +147,7 @@ async function expectTitleParity(page: Page, where: string): Promise<void> {
     expect([title.color, title.decoration], message)
       .toEqual([own[0]!.color, own[0]!.decoration]);
   }
-  expect(linked[1]!.lines, message).toBeGreaterThan(1);
+  if (wraps) expect(linked[1]!.lines, message).toBeGreaterThan(1);
 }
 
 for (const [index, template] of TEMPLATES.entries()) {
@@ -156,7 +158,7 @@ for (const [index, template] of TEMPLATES.entries()) {
     test.setTimeout(60_000);
     for (const width of [390, 1440]) {
       await openScreen(page, template.id, lng, width);
-      await expectTitleParity(page, `screen ${width}`);
+      await expectTitleParity(page, `screen ${width}`, width === 390);
     }
     for (const paper of ['a4', 'letter'] as const) {
       await page.emulateMedia({ media: 'screen' });
@@ -168,7 +170,7 @@ for (const [index, template] of TEMPLATES.entries()) {
 
 mutationTest('title parity rejects a wider linked title', async ({ page }) => {
   await openScreen(page, 'modern-sidebar', 'vi', 1440);
-  await proveMutation(() => expectTitleParity(page, 'mutation'),
+  await proveMutation(() => expectTitleParity(page, 'mutation', false),
     () => applyStyleMutation(page.locator('a[data-project-entry]'),
       { 'letter-spacing': '1px' }), PARITY);
 });
@@ -185,7 +187,7 @@ mutationTest('title parity rejects a lighter linked title in print', async ({
 mutationTest('title parity rejects a project link styled unlike a link',
   async ({ page }) => {
     await openScreen(page, 'engineer-compact', 'en', 1440);
-    await proveMutation(() => expectTitleParity(page, 'mutation'),
+    await proveMutation(() => expectTitleParity(page, 'mutation', false),
       () => applyStyleMutation(page.locator('a[data-project-entry]'),
         { 'text-decoration-line': 'none' }), PARITY);
   });

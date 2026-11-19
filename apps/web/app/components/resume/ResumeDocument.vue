@@ -11,12 +11,15 @@ import {
   resolveRenderModel,
 } from './resolveRenderModel';
 import ResumeHeader from './ResumeHeader.vue';
-import ResumeSheets from './ResumeSheets.vue';
 import { articleStyle } from './useResumeStyles';
 
 const props = defineProps<{
   document: Resume;
   context: RenderContext;
+}>();
+const emit = defineEmits<{
+  settled: [pages: number];
+  failed: [error: unknown];
 }>();
 
 const model = computed(() => resolveRenderModel(props.document, props.context));
@@ -31,10 +34,8 @@ const rootStyle = computed(() => articleStyle(model.value.styles.root));
     v-if="context.mode === 'paged'"
     :document="document"
     :context="context"
-  />
-  <ResumeSheets
-    v-else-if="context.mode === 'sheets'"
-    :model="model"
+    @settled="emit('settled', $event)"
+    @failed="emit('failed', $event)"
   />
   <article
     v-else
@@ -58,8 +59,6 @@ const rootStyle = computed(() => articleStyle(model.value.styles.root));
 @import './resumeColorScheme.css';
 
 @import './resumeScreenMargins.css';
-
-@import './resumeSheets.css';
 
 a[href="#public-resume"]:not(:focus) {
   position: absolute;
@@ -93,12 +92,6 @@ body:has(> #public-resume) {
 .public-resume-page {
   box-sizing: border-box;
   min-height: 100vh;
-}
-
-@media screen {
-  .public-resume-page > .public-toolbar + .resume-sheets {
-    padding-block-start: clamp(14px, 2.5cqi, 26px);
-  }
 }
 
 .public-toolbar {
@@ -364,12 +357,11 @@ body:has(> #public-resume) {
 }
 
 @container (width < 36em) {
-  .resume-document:not(.resume-page):not(.resume-sheets)
-    .resume-header[data-photo-position] {
+  .resume-document:not(.resume-page) .resume-header[data-photo-position] {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .resume-document:not(.resume-page):not(.resume-sheets)
+  .resume-document:not(.resume-page)
     .resume-header[data-photo-position] .resume-photo {
     grid-row: auto;
     grid-column: auto;

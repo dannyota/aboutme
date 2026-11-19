@@ -2,12 +2,13 @@
 
 import type { Resume } from '@aboutme/schema';
 import { readFileSync } from 'node:fs';
-import { createSSRApp, h } from 'vue';
+import { createSSRApp, h, type VNode } from 'vue';
 import { renderToString } from 'vue/server-renderer';
 import { describe, expect, it, vi } from 'vitest';
 
 import { PaginationMeasureKey } from '../../app/components/resume/measure';
 import { PaginationError } from '../../app/components/resume/paginate';
+import PagedResume from '../../app/components/resume/PagedResume.vue';
 import ResumeDocument from '../../app/components/resume/ResumeDocument.vue';
 import { syntheticMeasure } from './synthetic-measure';
 
@@ -161,6 +162,57 @@ describe('paged resume SSR', () => {
     expect(pages[continued]).not.toContain(work.entries[0]!.jobTitle!);
     expect(html).not.toContain('data-page-overflow="true"');
   });
+
+  it('wraps each server page in the page slot and keeps it unchanged',
+    async () => {
+      const document = fixture('full');
+      const filler = 'Built and ran distributed systems. ';
+      const work = document.content.work;
+      if (work?.sectionType !== 'work') throw new Error('fixture has no work');
+      work.entries[0]!.description = Array.from({ length: 14 }, (_, index) =>
+        `<p>Paragraph ${index + 1}: ${filler.repeat(12)}</p>`).join('');
+      const context = {
+        lng: 'en',
+        mode: 'paged',
+        photoUrl: 'data:image/png;base64,AA==',
+      } as const;
+      const page = (slot: {
+        index: number;
+        count: number;
+        widthPx: number;
+        heightPx: number;
+        page: VNode;
+      }) => h('x-page', {
+        'data-position': `${slot.index + 1} / ${slot.count}`,
+        'data-width': slot.widthPx,
+      }, [slot.page]);
+      const render = (slotted: boolean) => {
+        const app = createSSRApp({
+          render: () => h(
+            PagedResume,
+            { document, context },
+            slotted ? { page } : undefined,
+          ),
+        });
+        app.provide(PaginationMeasureKey, syntheticMeasure);
+        return renderToString(app);
+      };
+      const bare = await render(false);
+      const wrapped = await render(true);
+
+      const count = bare.match(/data-page-index=/gu)?.length ?? 0;
+      expect(count).toBeGreaterThan(1);
+      expect([...wrapped.matchAll(/<x-page data-position="([^"]+)"/gu)]
+        .map((match) => match[1])).toEqual(Array.from(
+        { length: count },
+        (_, index) => `${index + 1} / ${count}`,
+      ));
+      expect(wrapped.match(/<x-page [^>]*data-width="816">/gu))
+        .toHaveLength(count);
+      expect(wrapped
+        .replaceAll(/<x-page [^>]*>|<\/x-page>|<!--\[-->|<!--\]-->/gu, ''))
+        .toBe(bare.replaceAll(/<!--\[-->|<!--\]-->/gu, ''));
+    });
 
   it('uses the typed pagination error class', () => {
     expect(new PaginationError('invalid_measurement', 'bad')).toBeInstanceOf(

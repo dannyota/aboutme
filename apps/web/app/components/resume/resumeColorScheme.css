@@ -1,23 +1,11 @@
 @media screen {
-  :is([data-color-scheme="dark"], [data-color-scheme="dark"] *)[style*="--dark-color-surface"] {
-    --color-surface: var(--dark-color-surface) !important;
-    --color-surface-header: var(--dark-color-surface-header) !important;
-    --color-surface-sidebar: var(--dark-color-surface-sidebar) !important;
-    --color-heading: var(--dark-color-heading) !important;
-    --color-body: var(--dark-color-body) !important;
-    --color-meta: var(--dark-color-meta) !important;
-    --color-accent: var(--dark-color-accent) !important;
-    --color-accent-text: var(--dark-color-accent-text) !important;
-    --color-accent-solid: var(--dark-color-accent-solid) !important;
-    --color-on-accent: var(--dark-color-on-accent) !important;
-    --color-link: var(--dark-color-link) !important;
-    --color-rule: var(--dark-color-rule) !important;
-    --color-track: var(--dark-color-track) !important;
+  :root:has(.public-resume-page) {
+    background: #e6dfd0;
   }
 
   :root:has(.public-resume-page[data-color-scheme="dark"]) {
     color-scheme: dark;
-    background: Canvas;
+    background: #141210;
   }
 
   [data-color-scheme="dark"] .public-toolbar {
@@ -38,25 +26,9 @@
 }
 
 @media screen and (prefers-color-scheme: dark) {
-  :is([data-color-scheme="system"], [data-color-scheme="system"] *)[style*="--dark-color-surface"] {
-    --color-surface: var(--dark-color-surface) !important;
-    --color-surface-header: var(--dark-color-surface-header) !important;
-    --color-surface-sidebar: var(--dark-color-surface-sidebar) !important;
-    --color-heading: var(--dark-color-heading) !important;
-    --color-body: var(--dark-color-body) !important;
-    --color-meta: var(--dark-color-meta) !important;
-    --color-accent: var(--dark-color-accent) !important;
-    --color-accent-text: var(--dark-color-accent-text) !important;
-    --color-accent-solid: var(--dark-color-accent-solid) !important;
-    --color-on-accent: var(--dark-color-on-accent) !important;
-    --color-link: var(--dark-color-link) !important;
-    --color-rule: var(--dark-color-rule) !important;
-    --color-track: var(--dark-color-track) !important;
-  }
-
   :root:has(.public-resume-page[data-color-scheme="system"]) {
     color-scheme: dark;
-    background: Canvas;
+    background: #141210;
   }
 
   [data-color-scheme="system"] .public-toolbar {

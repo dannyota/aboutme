@@ -51,9 +51,11 @@ describe('print worker build', () => {
         = /a\[href=(?:"#public-resume"|\\#public-resume)\]:not\(:focus\)/u;
       expect(readFileSync(css, 'utf8')).toMatch(skipLink);
       const scheme = readFileSync(css, 'utf8');
-      expect(scheme).toContain('--dark-color-surface');
+      expect(scheme).toContain('#e6dfd0');
       expect(scheme).toContain('prefers-color-scheme');
       expect(scheme).toContain('data-color-scheme');
+      expect(scheme).not.toContain('--dark-color-');
+      expect(scheme).not.toContain('resume-sheet');
       const source = readFileSync(worker, 'utf8').toLowerCase();
       expect(source).not.toContain('dompurify');
       expect(source).not.toContain('nested-script-tag-stripping-bypass');

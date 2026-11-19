@@ -123,7 +123,7 @@ describe('public resume hydration', () => {
     expect(root.firstElementChild).toBe(original);
   });
 
-  it('hydrates the sheets and renames the folios on a live revision',
+  it('hydrates the continuous article and renames it on a live revision',
     async () => {
       document.body.innerHTML = [
         '<main id="public-resume" data-revision="1">',
@@ -131,16 +131,15 @@ describe('public resume hydration', () => {
         '</main>',
       ].join('');
       const root = document.querySelector<HTMLElement>('#public-resume')!;
-      const article = root.querySelector('article.resume-sheets');
-      const folios = () => [...root.querySelectorAll('.resume-folio')]
-        .map((folio) => [
-          folio.getAttribute('data-folio-name'),
-          folio.getAttribute('data-folio-page'),
-        ]);
+      const article = root.querySelector(
+        '.public-resume-page > article.resume-document',
+      );
+      const name = () => root.querySelector('.resume-name')?.textContent;
       expect(article).not.toBeNull();
-      expect(folios()).toEqual([['Ada Lovelace', '1 / 1']]);
+      expect(article?.classList.contains('resume-sheets')).toBe(false);
+      expect(name()).toBe('Ada Lovelace');
       await hydratePublicResume(root, 'ada1', '1', async () => resume('1'));
-      expect(root.querySelector('article.resume-sheets')).toBe(article);
+      expect(root.querySelector('article.resume-document')).toBe(article);
 
       const source = new FakeEventSource();
       createPublicResumeRealtime({
@@ -158,10 +157,11 @@ describe('public resume hydration', () => {
       source.emitRevision('2');
       await Promise.resolve();
       await nextTick();
-      expect(folios()).toEqual([['Grace Hopper', '1 / 1']]);
+      expect(name()).toBe('Grace Hopper');
+      expect(root.querySelector('article.resume-document')).toBe(article);
     });
 
-  it('hydrates a dark page and follows the scheme on a live revision',
+  it('hydrates a dark page and keeps its article light on a live revision',
     async () => {
       const dark = (revision: string, scheme: 'dark' | undefined) => {
         const value = resume(revision);
@@ -182,8 +182,8 @@ describe('public resume hydration', () => {
       const root = document.querySelector<HTMLElement>('#public-resume')!;
       const page = () => root.querySelector('.public-resume-page');
       expect(page()?.getAttribute('data-color-scheme')).toBe('dark');
-      expect(root.querySelector('article.resume-sheets')
-        ?.getAttribute('data-color-scheme')).toBe('dark');
+      expect(root.querySelectorAll('[data-color-scheme]')).toHaveLength(1);
+      expect(root.innerHTML).not.toContain('--dark-color');
       await hydratePublicResume(
         root,
         'ada1',

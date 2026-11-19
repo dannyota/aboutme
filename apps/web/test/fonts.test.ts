@@ -691,12 +691,20 @@ describe('resolveFontSelection', () => {
     }
   });
 
-  it('orders load descriptors upright 400 then 700 at 1em', () => {
+  it('orders load descriptors upright 400 then 700 at 1em for the '
+    + 'template face only', () => {
     const selection = resolveFontSelection('alegreya');
     expect(selection.loadDescriptors).toEqual([
-      `400 1em ${selection.cssStack}`,
-      `700 1em ${selection.cssStack}`,
+      '400 1em "Alegreya"',
+      '700 1em "Alegreya"',
     ]);
+    for (const entry of catalog.entries) {
+      const descriptors = resolveFontSelection(entry.id).loadDescriptors;
+      for (const descriptor of descriptors) {
+        expect(descriptor, entry.id).toMatch(/^[47]00 1em "[^"]+"$/u);
+        expect(descriptor, entry.id).toContain(`"${entry.cssFamily}"`);
+      }
+    }
   });
 
   it('rejects an unknown ID', () => {
@@ -732,15 +740,16 @@ describe('fontsReady', () => {
     };
   };
 
-  it('loads 400 then 700 for the stack, then awaits ready', async () => {
-    const fake = makeFakeSet();
-    await fontsReady('inter', fake as unknown as FontFaceSet);
-    expect(fake.events).toEqual([
-      'load:400 1em "Inter", "Noto Sans"',
-      'load:700 1em "Inter", "Noto Sans"',
-      'ready',
-    ]);
-  });
+  it('loads 400 then 700 of the template face only, then awaits ready',
+    async () => {
+      const fake = makeFakeSet();
+      await fontsReady('inter', fake as unknown as FontFaceSet);
+      expect(fake.events).toEqual([
+        'load:400 1em "Inter"',
+        'load:700 1em "Inter"',
+        'ready',
+      ]);
+    });
 
   it('rejects when a load resolves empty, before ready', async () => {
     const fake = makeFakeSet(['700 1em']);
@@ -748,8 +757,8 @@ describe('fontsReady', () => {
       fontsReady('inter', fake as unknown as FontFaceSet),
     ).rejects.toThrow(/nothing loaded/);
     expect(fake.events).toEqual([
-      'load:400 1em "Inter", "Noto Sans"',
-      'load:700 1em "Inter", "Noto Sans"',
+      'load:400 1em "Inter"',
+      'load:700 1em "Inter"',
     ]);
   });
 

@@ -199,21 +199,18 @@ apps/web/app/components/resume/LayoutColumns.vue
 apps/web/app/components/resume/PagedResume.vue
 apps/web/app/components/resume/ResumeDocument.vue
 apps/web/app/components/resume/ResumeHeader.vue
-apps/web/app/components/resume/ResumeSheets.vue
 apps/web/app/components/resume/ScaledSheet.vue
 apps/web/app/components/resume/SectionRenderer.vue
 apps/web/app/components/resume/applyTemplate.ts
 apps/web/app/components/resume/brandIcons.ts
 apps/web/app/components/resume/clampContrast.ts
 apps/web/app/components/resume/contactHref.ts
-apps/web/app/components/resume/darkPalette.ts
 apps/web/app/components/resume/entryParts.ts
 apps/web/app/components/resume/formatDate.ts
 apps/web/app/components/resume/icons.ts
 apps/web/app/components/resume/measure.ts
 apps/web/app/components/resume/pageMetrics.ts
 apps/web/app/components/resume/paginate.ts
-apps/web/app/components/resume/paper.ts
 apps/web/app/components/resume/primitives/ContactChip.vue
 apps/web/app/components/resume/primitives/EntryHeader.vue
 apps/web/app/components/resume/primitives/Icon.vue
@@ -225,7 +222,6 @@ apps/web/app/components/resume/projectLinks.ts
 apps/web/app/components/resume/resolveRenderModel.ts
 apps/web/app/components/resume/resumeColorScheme.css
 apps/web/app/components/resume/resumeScreenMargins.css
-apps/web/app/components/resume/resumeSheets.css
 apps/web/app/components/resume/sections/CertificateSection.vue
 apps/web/app/components/resume/sections/CustomSection.vue
 apps/web/app/components/resume/sections/EducationSection.vue
@@ -234,7 +230,6 @@ apps/web/app/components/resume/sections/ProfileSection.vue
 apps/web/app/components/resume/sections/ProjectSection.vue
 apps/web/app/components/resume/sections/SkillSection.vue
 apps/web/app/components/resume/sections/WorkSection.vue
-apps/web/app/components/resume/sheetGroups.ts
 apps/web/app/components/resume/useResumeStyles.ts
 apps/web/app/components/settings/ConnectedAgents.vue
 apps/web/app/components/settings/EvidenceDisconnectDialog.vue
@@ -509,7 +504,6 @@ apps/web/app/lib/showcaseQuery.ts
 apps/web/app/lib/utils.ts
 apps/web/app/middleware/signed-in.global.ts
 apps/web/app/pages/[...slug].vue
-apps/web/app/pages/_harness/dark-ground-fixture.ts
 apps/web/app/pages/_harness/entry-point-fixtures.ts
 apps/web/app/pages/_harness/justify-fixture.ts
 apps/web/app/pages/_harness/photo-fixture.ts
@@ -579,7 +573,6 @@ apps/web/e2e/chrome-details.ts
 apps/web/e2e/chrome.spec.ts
 apps/web/e2e/corpus.spec.ts
 apps/web/e2e/display-assertions.ts
-apps/web/e2e/editor-web-sheets.ts
 apps/web/e2e/entry-points.spec.ts
 apps/web/e2e/filter-sheet-details.ts
 apps/web/e2e/fixtures/deployment/mismatch-invalid.json
@@ -623,8 +616,6 @@ apps/web/e2e/project-page-details.ts
 apps/web/e2e/project-pages.spec.ts
 apps/web/e2e/projects.spec.ts
 apps/web/e2e/public-bar.ts
-apps/web/e2e/public-sheets-tests.ts
-apps/web/e2e/public-sheets.ts
 apps/web/e2e/renderer-content.ts
 apps/web/e2e/renderer-details.ts
 apps/web/e2e/renderer-membership.ts

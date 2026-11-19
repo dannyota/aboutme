@@ -6,11 +6,10 @@ import { contactHref } from '../contactHref';
 import { useResumeLng } from '../formatDate';
 import Icon from './Icon.vue';
 
-const props = withDefaults(defineProps<{
+const props = defineProps<{
   detail: PersonalDetail;
   iconStyle: 'none' | 'outline';
-  row?: boolean;
-}>(), { row: false });
+}>();
 
 type Labels = Record<PersonalDetail['type'], string>;
 const EN_LABELS: Labels = {
@@ -69,42 +68,7 @@ const shownValue = computed(() => {
 </script>
 
 <template>
-  <div
-    v-if="row"
-    class="contact-chip contact-chip--sheets"
-  >
-    <span
-      v-if="display === 'label' && href !== null"
-      class="contact-label"
-    ><Icon
-      v-if="iconStyle === 'outline'"
-      :icon-key="iconKey"
-    /><a
-      :href="href"
-      rel="noopener noreferrer"
-      style="color: var(--color-link); text-decoration: underline"
-    >{{ label }}</a></span>
-    <span
-      v-else
-      class="contact-label"
-    ><Icon
-      v-if="iconStyle === 'outline'"
-      :icon-key="iconKey"
-    />{{ label }}</span>
-    <span
-      v-if="display !== 'label'"
-      class="contact-value"
-    ><a
-      v-if="href !== null"
-      :href="href"
-      rel="noopener noreferrer"
-      style="color: var(--color-link); text-decoration: underline"
-    >{{ shownValue }}</a><template v-else>{{ detail.value }}</template></span>
-  </div>
-  <span
-    v-else
-    class="contact-chip"
-  >
+  <span class="contact-chip">
     <Icon
       v-if="iconStyle === 'outline'"
       :icon-key="iconKey"

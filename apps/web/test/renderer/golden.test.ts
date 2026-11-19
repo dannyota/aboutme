@@ -33,8 +33,6 @@ import {
   buildStartingDocument,
   localeForFixture,
   renderGoldenCell,
-  SHEETS_SCHEMES,
-  sheetsColorScheme,
   verifyFixedPhoto,
 } from './golden.generate.mts';
 import { syntheticMeasure } from './synthetic-measure';
@@ -75,7 +73,7 @@ describe('golden matrix contract', () => {
     .filter((name) => name.endsWith('.json'))
     .sort();
   const matrix = buildGoldenMatrix();
-  const pageNames = presetFilenames
+  const expectedNames = presetFilenames
     .flatMap((presetFilename) => {
       const preset = presetFilename.slice(0, -'.json'.length);
       return [1, 2].flatMap((start) =>
@@ -85,45 +83,15 @@ describe('golden matrix contract', () => {
       );
     })
     .sort();
-  const sheetsNames = presetFilenames
-    .flatMap((presetFilename) => {
-      const preset = presetFilename.slice(0, -'.json'.length);
-      return [1, 2].flatMap((start) =>
-        ['light', 'dark', 'system'].map(
-          (scheme) => `${preset}--start-${start}--sheets-${scheme}.html`,
-        ),
-      );
-    })
-    .sort();
 
-  it('derives all 80 page names from the preset directory', () => {
-    const pages = matrix.filter((cell) => cell.mode !== 'sheets');
-    expect(pages).toHaveLength(presetFilenames.length * 4);
-    expect(pages).toHaveLength(80);
-    expect(pages.map((cell) => cell.filename).sort()).toEqual(pageNames);
-    expect(pages.every((cell) => !('scheme' in cell))).toBe(true);
-  });
-
-  it('derives 120 sheets names for owner Light, Dark and Match device', () => {
-    const sheets = matrix.filter((cell) => cell.mode === 'sheets');
-    expect(SHEETS_SCHEMES).toEqual(['light', 'dark', 'system']);
-    expect(sheets).toHaveLength(presetFilenames.length * 6);
-    expect(sheets).toHaveLength(120);
-    expect(sheets.map((cell) => cell.filename).sort()).toEqual(sheetsNames);
-    expect(new Set(matrix.map((cell) => cell.filename)).size).toBe(200);
-    expect(readdirSync(goldenDirectory).sort()).toEqual(
-      [...pageNames, ...sheetsNames].sort(),
+  it('derives all 80 names from the preset directory', () => {
+    expect(matrix).toHaveLength(presetFilenames.length * 4);
+    expect(matrix).toHaveLength(80);
+    expect(matrix.map((cell) => cell.filename).sort()).toEqual(expectedNames);
+    expect(new Set(matrix.map((cell) => cell.filename)).size).toBe(
+      presetFilenames.length * 4,
     );
-  });
-
-  it('maps owner schemes to the render-context color scheme', () => {
-    expect(sheetsColorScheme(undefined)).toEqual({});
-    expect(sheetsColorScheme('light')).toEqual({});
-    expect(sheetsColorScheme('dark')).toEqual({ colorScheme: 'dark' });
-    expect(sheetsColorScheme('system')).toEqual({ colorScheme: 'system' });
-    expect(() => sheetsColorScheme('sepia')).toThrow(
-      'Unsupported golden color scheme: sepia',
-    );
+    expect(readdirSync(goldenDirectory).sort()).toEqual(expectedNames);
   });
 
   it('builds the two populated starting placements in visual order', () => {

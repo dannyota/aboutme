@@ -32,13 +32,10 @@ import type { ResumeRecord } from '../../app/stores/resumes';
 import { acceptedFixture } from './fixture';
 import { setSiteLocale } from '../support/locale';
 
-const PREVIEW_MODE_STORAGE_KEY = 'aboutme.editorPreviewMode';
-
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
   setSiteLocale(undefined);
-  window.localStorage.removeItem(PREVIEW_MODE_STORAGE_KEY);
 });
 
 beforeEach(() => {
@@ -153,7 +150,6 @@ describe('EditorShell', () => {
   it(
     'keeps a single h1 when the real preview renders the resume name',
     () => {
-      window.localStorage.setItem(PREVIEW_MODE_STORAGE_KEY, 'web');
       const record = editorRecord();
       const wrapper = mount(EditorShell, {
         props: { actions: actionsFor(record), record },

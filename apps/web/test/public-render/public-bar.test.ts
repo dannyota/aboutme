@@ -181,6 +181,52 @@ describe('public page bar tokens', () => {
   });
 });
 
+describe('public page desk', () => {
+  const darkDevice = '@media screen and (prefers-color-scheme: dark)';
+
+  it('paints the light desk on the root of a public resume page', () => {
+    expect(style(schemeRules, ':root:has(.public-resume-page)',
+      '@media screen')).toEqual({ background: DESK.light });
+  });
+
+  it('paints the dark desk for Dark, and for Match device on a dark device',
+    () => {
+      for (const [selector, at] of [
+        [':root:has(.public-resume-page[data-color-scheme="dark"])',
+          '@media screen'],
+        [':root:has(.public-resume-page[data-color-scheme="system"])',
+          darkDevice],
+      ] as const) {
+        expect(style(schemeRules, selector, at), selector).toEqual({
+          'color-scheme': 'dark',
+          'background': DESK.dark,
+        });
+      }
+    });
+
+  it('keeps the desk on screen and on the public resume page only', () => {
+    const rooted = schemeRules.filter((rule) =>
+      rule.selector.startsWith(':root') && !rule.selector.includes(' ')
+      && 'background' in rule.body);
+    expect(rooted).toHaveLength(3);
+    for (const rule of rooted) {
+      expect(rule.selector).toMatch(/^:root:has\(\.public-resume-page[[)]/u);
+      expect(rule.at).toMatch(/^@media screen/u);
+    }
+  });
+
+  it('leaves the resume colors to the renderer in every scheme', () => {
+    for (const rules of [schemeRules, resumeRules]) {
+      for (const rule of rules) {
+        expect(Object.keys(rule.body).filter((name) =>
+          name.startsWith('--color-')), rule.selector).toEqual([]);
+      }
+    }
+    expect(schemeStyle).not.toContain('--dark-color-');
+    expect(schemeStyle).not.toContain('Canvas');
+  });
+});
+
 describe('public page bar buttons', () => {
   it.each(['.public-download', '.public-projects'])(
     'draws %s as a small outline pill', (selector) => {
@@ -243,7 +289,7 @@ describe('public page bar download labels', () => {
 describe('public page bar row', () => {
   const phone = '@media (width < 30rem)';
 
-  it('spans the sheet width with its own inline padding', () => {
+  it('keeps its own row width and inline padding', () => {
     const shared = style(resumeRules, '.public-toolbar-inner');
     expect(shared['margin-inline']).toBe('auto');
     for (const property of ['width', 'max-width', 'padding-inline',
@@ -258,14 +304,6 @@ describe('public page bar row', () => {
     expect(matching(resumeRules,
       '.public-resume-page[data-columns="2"] .public-toolbar-inner', ''))
       .toEqual([]);
-  });
-
-  it('starts the first sheet below the bar with the sheet gap', () => {
-    expect(style(resumeRules,
-      '.public-resume-page > .public-toolbar + .resume-sheets',
-      '@media screen')).toEqual({
-      'padding-block-start': 'clamp(14px, 2.5cqi, 26px)',
-    });
   });
 
   it('lays the brand and actions out in one wrapping row', () => {

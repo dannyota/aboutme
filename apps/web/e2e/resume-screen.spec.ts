@@ -10,12 +10,6 @@ import {
   screenMutationTests, mutationTest,
 } from './style-mutation';
 import { expectBarPaint } from './public-bar';
-import {
-  authoredGround, expectedNameSize, expectNoOverflow, expectOneColumn,
-  expectPaperAndDesk, expectSheetGeometry, expectSheetsPrint, rgb, SHEETS,
-  sheetsContract,
-} from './public-sheets';
-import { publicSheetsTests } from './public-sheets-tests';
 import { expectRendererContent } from './renderer-content';
 import { rendererWidgetTests } from './renderer-widgets';
 import { expectRendererPaint, rendererTypeRules } from './renderer-details';
@@ -229,130 +223,42 @@ mutationTest('renderer rejects a transparent language section', async ({
   await restore();
   await assertClean();
 });
-const PUBLIC_PAINT = {
-  'classic-serif': { light: ['#23262c'], dark: ['#dadee6'] },
-  'modern-sidebar': { light: ['#1c2b33'], dark: ['#d5e0e6'] },
-  'editorial-wide': { light: ['#24211c'], dark: ['#e1ddd7'] },
-  'creative-accent': {
-    light: ['#1f1a17', '#fff0eb'], dark: ['#e4dcd8', '#49332b'],
+const PUBLIC_REVIEW = {
+  vi: {
+    id: 'public-modern-sidebar-vi-dark-390', template: 'modern-sidebar',
+    owner: 'dark', width: 390, desk: 'rgb(20, 18, 16)',
   },
-  'executive-band': {
-    light: ['#1f2937', '#16273d'], dark: ['#d8dfe8', '#283a51'],
+  en: {
+    id: 'public-executive-band-en-light-1440', template: 'executive-band',
+    owner: 'light', width: 1440, desk: 'rgb(230, 223, 208)',
   },
 } as const;
-const SHEETS_ORDER = {
-  'modern-sidebar': [0, 1, 2, 6, 7, 3, 4, 5],
-  'other': [0, 1, 2, 3, 4, 5, 6, 7],
-} as const;
-async function assertPublicPaint(
-  page: Page,
-  template: keyof typeof PUBLIC_PAINT,
-  dark: boolean,
-): Promise<void> {
-  const [foreground, region]: readonly string[]
-    = PUBLIC_PAINT[template][dark ? 'dark' : 'light'];
-  await expectPaperAndDesk(page, authoredGround(template), dark);
-  const article = page.locator(SHEETS);
-  await expect(article, 'Public foreground.')
-    .toHaveCSS('color', rgb(foreground!));
-  await expectBarPaint(page, dark, 'Public bar paint.');
-  if (region !== undefined) {
-    await expect(article.locator('.resume-header'), 'Public region ground.')
-      .toHaveCSS('background-color', rgb(region));
-  }
-}
 for (const language of ['vi', 'en'] as const) {
   test.describe(`public screen ${language}`, () => {
     test.use({ locale: language === 'vi' ? 'vi-VN' : 'en-US' });
-    const templates = Object.keys(PUBLIC_PAINT) as
-      (keyof typeof PUBLIC_PAINT)[];
-    for (const [templateIndex, template] of templates.entries()) {
-      const offsets = [0, 2, 1, 2, 3];
-      const pairs = [
-        ['vi', 390], ['vi', 1440], ['en', 390], ['en', 1440],
-      ] as const;
-      for (const [ownerIndex, owner] of
-        (['light', 'dark', 'system'] as const).entries()) {
-        for (const [viewerIndex, viewer] of
-          (['light', 'dark'] as const).entries()) {
-          for (const width of [390, 1440]) {
-            const pair = pairs[(ownerIndex * 2 + viewerIndex
-              + offsets[templateIndex]!) % pairs.length]!;
-            if (language !== pair[0] || width !== pair[1]) {
-              continue;
-            }
-            test(`${template} ${owner} ${viewer} ${width}`, async ({
-              page,
-            }, testInfo) => {
-              await page.setViewportSize({ width, height: 900 });
-              await page.emulateMedia({ colorScheme: viewer });
-              const external = await denyExternalRequests(page);
-              const fixture = language === 'vi' ? 'vn-full' : 'full';
-              const scheme = owner === 'light' ? '' : `&scheme=${owner}`;
-              const response = await page.goto(
-                `/_harness/render?fixture=${fixture}&template=${template}`
-                + `&mode=public${scheme}`,
-              );
-              expect(response?.ok()).toBe(true);
-              await expect(page.locator('[data-fonts-ready="true"]'))
-                .toHaveCount(1);
-              await waitForImages(page);
-              const dark = owner === 'dark'
-                || (owner === 'system' && viewer === 'dark');
-              const article = page.locator(SHEETS);
-              await assertPublicPaint(page, template, dark);
-              await expectScreen(page,
-                sheetsContract(template, language, dark));
-              await assertRendererStyles(page, template, language, false, true);
-              await expectSheetGeometry(page);
-              await expectOneColumn(page);
-              await expectNoOverflow(page);
-              expect(await page.evaluate(() => {
-                const bar = document.querySelector('.public-toolbar')!
-                  .getBoundingClientRect();
-                const sheet = document.querySelector('.resume-sheet')!
-                  .getBoundingClientRect();
-                return bar.width === innerWidth && bar.bottom <= sheet.top;
-              }), 'Public bar placement.').toBe(true);
-              await expect(article.locator('.resume-name')).toHaveText(
-                language === 'vi' ? 'Nguyễn Thị Minh Châu' : 'Ada Lovelace',
-              );
-              await expectRendererContent(page, language, true, template,
-                true);
-              if (language === 'vi' && template === 'modern-sidebar'
-                && owner === 'dark' && viewer === 'light' && width === 390) {
-                await captureReviewImage(testInfo,
-                  'public-modern-sidebar-vi-dark-390', () =>
-                    page.screenshot({
-                      animations: 'disabled', timeout: 750,
-                    }));
-              }
-              if (language === 'en' && template === 'executive-band'
-                && owner === 'light' && viewer === 'light' && width === 1440) {
-                await captureReviewImage(testInfo,
-                  'public-executive-band-en-light-1440', () =>
-                    page.screenshot({
-                      animations: 'disabled', timeout: 750,
-                    }));
-              }
-              await assertFlow(article, language, template === 'modern-sidebar'
-                ? SHEETS_ORDER['modern-sidebar']
-                : SHEETS_ORDER.other);
-              const paragraphs = article.locator('.entry-body p');
-              expect(await paragraphs.count()).toBeGreaterThan(0);
-              for (const paragraph of await paragraphs.all()) {
-                await expect.poll(() => measureTextContainment(paragraph))
-                  .toEqual({ visible: true, contained: true });
-              }
-              await page.emulateMedia({ media: 'print' });
-              await expect(page.locator('.public-toolbar')).toBeHidden();
-              await expectSheetsPrint(page, authoredGround(template));
-              expect(external).toEqual([]);
-            });
-          }
-        }
-      }
-    }
+    const review = PUBLIC_REVIEW[language];
+    test(`continuous article ${review.template} ${review.owner} `
+      + `${review.width}`, async ({ page }, testInfo) => {
+      await page.setViewportSize({ width: review.width, height: 900 });
+      const external = await denyExternalRequests(page);
+      const fixture = language === 'vi' ? 'vn-full' : 'full';
+      const response = await page.goto(
+        `/_harness/render?fixture=${fixture}&template=${review.template}`
+        + `&mode=public${review.owner === 'dark' ? '&scheme=dark' : ''}`,
+      );
+      expect(response?.ok()).toBe(true);
+      await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
+      await waitForImages(page);
+      await expectScreen(page, resumeContract(review.template, language));
+      await expectRendererContent(page, language, true, review.template);
+      await expect.poll(() => page.evaluate(() =>
+        getComputedStyle(document.documentElement).backgroundColor),
+      'Public desk paint.').toBe(review.desk);
+      await expectBarPaint(page, review.owner === 'dark', 'Public bar paint.');
+      await captureReviewImage(testInfo, review.id, () =>
+        page.screenshot({ animations: 'disabled', timeout: 750 }));
+      expect(external).toEqual([]);
+    });
     for (const viewer of ['light', 'dark'] as const) {
       for (const width of [503, 504]) {
         test(`continuous column and header boundary ${viewer} ${width}`,
@@ -387,47 +293,16 @@ for (const language of ['vi', 'en'] as const) {
     }
   });
 }
-for (const [name, selector, styles, message] of [
-  ['sheet paper', `${SHEETS} > .resume-sheet`, {
-    'background-color': 'rgb(255, 0, 0)',
-  }, 'Sheets paper.'],
-  ['header band', '.resume-header', {
-    'background-color': 'rgb(255, 0, 0)',
-  }, 'Public region ground.'],
-  ['foreground', SHEETS, { color: 'rgb(255, 0, 0)' }, 'Public foreground.'],
-  ['bar paint', '.public-toolbar', { 'background-color': 'rgb(255, 0, 0)' },
-    'Public bar paint.'],
-] as const) {
-  mutationTest(`public paint rejects changed ${name}`, async ({ page }) => {
-    const response = await page.goto(
-      '/_harness/render?fixture=vn-full&template=executive-band'
-      + '&mode=public&scheme=dark',
-    );
-    expect(response?.ok()).toBe(true);
-    await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
-    await proveMutation(() => assertPublicPaint(page, 'executive-band', true),
-      () => applyStyleMutation(page.locator(selector).first(), styles),
-      message);
-  });
-}
 async function assertRendererStyles(
   page: Page, template: string, language: 'vi' | 'en', justify: boolean,
-  publicPage = false,
 ): Promise<void> {
-  const [family, fallback, authoredBase, authoredLineHeight, x, y,
-    sectionGap, entryGap]
+  const [family, fallback, base, lineHeight, x, y, sectionGap, entryGap]
     = RESUME_STYLES[template as keyof typeof RESUME_STYLES];
-  const base = publicPage ? Math.max(authoredBase, 16) : authoredBase;
-  const lineHeight = publicPage
-    ? Math.max(authoredLineHeight, 1.5)
-    : authoredLineHeight;
   const documents = page.locator(
     '.resume-document:not(.pagination-measurement)',
   );
-  await expectStyleRules(page, rendererTypeRules(template, base));
-  if (!publicPage) {
-    await expectRendererPaint(page, template);
-  }
+  await expectStyleRules(page, rendererTypeRules(template));
+  await expectRendererPaint(page, template);
   for (const root of await documents.all()) {
     await expect.poll(() => root.evaluate((node) =>
       getComputedStyle(node).fontFamily.split(',').map((name) =>
@@ -443,26 +318,21 @@ async function assertRendererStyles(
       await expect(image, 'Renderer photo identity.')
         .toHaveAttribute('src', FIXED_PHOTO_DATA_URL);
     }
-    if (!publicPage) {
-      const hex = RESUME_STYLES[template as keyof typeof RESUME_STYLES][8];
-      const channels = [1, 3, 5].map((index) =>
-        parseInt(hex.slice(index, index + 2), 16));
-      await expect(root, 'Renderer body ink.').toHaveCSS(
-        'color', `rgb(${channels.join(', ')})`);
-      const padding = await root.evaluate((element) => {
-        const css = getComputedStyle(element);
-        return [parseFloat(css.paddingLeft), parseFloat(css.paddingTop)];
-      });
-      expect(Math.abs(padding[0]! - x * 96 / 25.4), 'Renderer margin x.')
-        .toBeLessThanOrEqual(1);
-      expect(Math.abs(padding[1]! - y * 96 / 25.4), 'Renderer margin y.')
-        .toBeLessThanOrEqual(1);
-    }
-    const narrow = publicPage && await root.locator('.resume-sheet-body')
-      .first().evaluate((body) => body.getBoundingClientRect().width < 480);
-    const name = publicPage ? expectedNameSize(template, narrow) : base * 2;
+    const hex = RESUME_STYLES[template as keyof typeof RESUME_STYLES][8];
+    const channels = [1, 3, 5].map((index) =>
+      parseInt(hex.slice(index, index + 2), 16));
+    await expect(root, 'Renderer body ink.').toHaveCSS(
+      'color', `rgb(${channels.join(', ')})`);
+    const padding = await root.evaluate((element) => {
+      const css = getComputedStyle(element);
+      return [parseFloat(css.paddingLeft), parseFloat(css.paddingTop)];
+    });
+    expect(Math.abs(padding[0]! - x * 96 / 25.4), 'Renderer margin x.')
+      .toBeLessThanOrEqual(1);
+    expect(Math.abs(padding[1]! - y * 96 / 25.4), 'Renderer margin y.')
+      .toBeLessThanOrEqual(1);
     for (const [selector, size, weight] of [
-      ['.resume-name', name, '700'],
+      ['.resume-name', base * 2, '700'],
       ['.resume-headline', base * 1.15, '400'],
       ['.section-heading h2', base * 1.1, '700'],
       ['.entry-title', base, '700'],
@@ -493,10 +363,8 @@ async function assertRendererStyles(
       ['.resume-section', sectionGap], ['.entry', entryGap],
     ] as const) {
       for (const node of await root.locator(selector).all()) {
-        const sheetEnd = await node.evaluate((element) =>
-          element.matches('.resume-sheet-body > .resume-section:last-child'));
-        await expect(node, 'Renderer spacing.').toHaveCSS('margin-bottom',
-          paged || sheetEnd ? '0px' : `${gap}px`);
+        await expect(node, 'Renderer spacing.')
+          .toHaveCSS('margin-bottom', paged ? '0px' : `${gap}px`);
       }
     }
     const columns = root.locator('.layout-two-columns');
@@ -528,9 +396,7 @@ for (const mode of ['continuous', 'public'] as const) {
     await page.goto('/_harness/render?fixture=vn-full&template=modern-sidebar'
       + `&mode=${mode}`);
     await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
-  }, mode === 'public'
-    ? sheetsContract('modern-sidebar', 'vi', false)
-    : resumeContract('modern-sidebar', 'vi'));
+  }, resumeContract('modern-sidebar', 'vi'));
 }
 rendererWidgetTests();
 mutationTest('renderer rejects moving an entry to another page', async ({
@@ -560,8 +426,8 @@ for (const mode of ['continuous', 'public'] as const) {
     await page.goto('/_harness/render?fixture=full&template=modern-sidebar'
       + `&mode=${mode}`);
     await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
-    await proveMutation(() => expectRendererContent(page, 'en',
-      mode === 'public', 'modern-sidebar', mode === 'public'),
+    await proveMutation(() =>
+      expectRendererContent(page, 'en', mode === 'public'),
     () => mutateText(page.locator('.entry-body p').last(), 'MUTATED'),
     'Renderer body content.');
   });
@@ -578,9 +444,8 @@ mutationTest('public rejects changed section order', async ({ page }) => {
   await page.goto('/_harness/render?fixture=full&template=modern-sidebar'
     + '&mode=public');
   await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
-  const flow = page.locator(SHEETS);
-  const assertion = () =>
-    assertFlow(flow, 'en', SHEETS_ORDER['modern-sidebar']);
+  const flow = page.locator('.resume-main');
+  const assertion = () => assertFlow(flow, 'en', [0, 1, 2, 6, 7]);
   await assertion();
   await flow.evaluate((node) => node.prepend(node.children[1]!));
   await expect(flow.locator('.section-heading h2').first())
@@ -656,9 +521,8 @@ mutationTest('public rejects changed entry order', async ({ page }) => {
   await page.goto('/_harness/render?fixture=full&template=modern-sidebar'
     + '&mode=public');
   await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
-  const flow = page.locator(SHEETS);
-  const assertion = () =>
-    assertFlow(flow, 'en', SHEETS_ORDER['modern-sidebar']);
+  const flow = page.locator('.resume-main');
+  const assertion = () => assertFlow(flow, 'en', [0, 1, 2, 6, 7]);
   await assertion();
   const entries = flow.locator('.entry').filter({
     has: page.locator('.entry-title'),
@@ -675,4 +539,3 @@ mutationTest('public rejects changed entry order', async ({ page }) => {
     .toHaveText('B.Sc. Mathematics');
   await expect(assertion()).rejects.toThrow('Renderer entry order.');
 });
-publicSheetsTests();

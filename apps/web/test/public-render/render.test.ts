@@ -2,9 +2,13 @@
 
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import type { Resume } from '@aboutme/schema';
 import { JSDOM } from 'jsdom';
+import { createSSRApp, h } from 'vue';
+import { renderToString } from 'vue/server-renderer';
 import { describe, expect, it } from 'vitest';
 
+import ResumeDocument from '../../app/components/resume/ResumeDocument.vue';
 import {
   renderPublicGate,
   renderPublicResume,
@@ -319,7 +323,7 @@ describe('public page bar and PDF download', () => {
     });
 });
 
-describe('public page sheets', () => {
+describe('public page continuous article', () => {
   const twoColumns = () => {
     const value = request();
     const document = value.publicResume.document;
@@ -330,12 +334,6 @@ describe('public page sheets', () => {
         sectionType: 'skill',
         entries: [{ id: '00000000-0000-4000-8000-000000000011', name: 'Go' }],
       },
-      language: {
-        sectionType: 'language',
-        entries: [
-          { id: '00000000-0000-4000-8000-000000000012', name: 'English' },
-        ],
-      },
       work: {
         sectionType: 'work',
         entries: [
@@ -344,71 +342,74 @@ describe('public page sheets', () => {
       },
     } as typeof document.content;
     document.customization.layout.sections.main = ['profile', 'work'];
-    document.customization.layout.sections.sidebar = ['skill', 'language'];
+    document.customization.layout.sections.sidebar = ['skill'];
     return value;
   };
+  const projected = (value: ReturnType<typeof request>): Resume => {
+    const source = value.publicResume.document;
+    return {
+      ...source,
+      personalDetails: {
+        ...source.personalDetails,
+        photo: { ...source.personalDetails.photo, key: 'public-render-photo' },
+        details: source.personalDetails.details.map((detail) => ({
+          ...detail,
+          isHidden: false,
+        })),
+      },
+    } as unknown as Resume;
+  };
+  const continuous = (value: ReturnType<typeof request>) => renderToString(
+    createSSRApp({
+      render: () => h(ResumeDocument, {
+        document: projected(value),
+        context: {
+          lng: value.publicResume.lng,
+          mode: 'continuous',
+          photoUrl: value.publicResume.document.personalDetails.photo.url,
+        },
+      }),
+    }),
+  );
   const page = async (value = request()) => new JSDOM(
     await renderPublicResume(value, VERSIONS),
   ).window.document.querySelector('.public-resume-page')!;
 
-  it('puts the bar and one sheets article in the page, with no measure',
+  it('puts the bar and the continuous article in the page inside main',
     async () => {
       const root = await page();
-      expect([...root.children].map((child) => child.className)).toEqual([
-        'public-toolbar', 'resume-document resume-sheets',
+      expect(root.parentElement?.matches('main#public-resume')).toBe(true);
+      expect([...root.children].map((child) => [
+        child.tagName,
+        child.className,
+      ])).toEqual([
+        ['DIV', 'public-toolbar'],
+        ['ARTICLE', 'resume-document'],
       ]);
-      expect(root.querySelector('.public-measure')).toBeNull();
-      expect(root.getAttribute('style')).toBeNull();
-      expect(root.hasAttribute('data-columns')).toBe(false);
-      const article = root.querySelector('article')!;
-      expect(article.getAttribute('lang')).toBe('en');
-      expect(article.getAttribute('style')).toContain('--paper-color-surface:');
-      expect(article.getAttribute('style')).toContain('font-synthesis:none;');
+      expect(root.querySelector('[data-render-mode]')).toBeNull();
+      expect(root.querySelector('.resume-sheet, .resume-folio')).toBeNull();
     });
 
-  it('renders two columns as one column of sheets with no aside',
-    async () => {
-      const root = await page(twoColumns());
-      expect(root.querySelector('.layout-two-columns')).toBeNull();
-      expect(root.querySelector('aside')).toBeNull();
-      const sheets = [...root.querySelectorAll('article > .resume-sheet')];
-      expect(sheets.map((sheet) => [
-        sheet.querySelectorAll('.resume-section').length,
-        [...sheet.querySelectorAll('.entry-title')]
-          .map((title) => title.textContent),
-      ])).toEqual([[1, []], [1, ['Engineer']], [2, ['Go', 'English']]]);
+  it.each([
+    ['one column', request],
+    ['two columns', twoColumns],
+  ] as const)('renders the renderer\'s continuous article for %s',
+    async (_name, build) => {
+      const value = build();
+      const html = await renderPublicResume(value, VERSIONS);
+      const article = await continuous(value);
+      expect(article).toMatch(/^<article class="resume-document" lang="en"/u);
+      expect(html).toContain(`<div class="public-toolbar">`);
+      expect(html).toContain(`</div>${article}</div></main>`);
     });
 
-  it('ends each sheet with a hidden folio naming the owner and the page',
-    async () => {
-      const root = await page(twoColumns());
-      const folios = [...root.querySelectorAll('.resume-folio')];
-      expect(folios.map((folio) => [
-        folio.parentElement?.lastElementChild === folio,
-        folio.getAttribute('aria-hidden'),
-        folio.getAttribute('data-folio-name'),
-        folio.getAttribute('data-folio-page'),
-        folio.textContent,
-      ])).toEqual([1, 2, 3].map((index) => [
-        true, 'true', 'Ada <&> Lovelace', `${index} / 3`, '',
-      ]));
-    });
-
-  it('omits the folio name for an empty full name', async () => {
-    const value = request();
-    value.publicResume.document.personalDetails.fullName = '';
-    const folio = (await page(value)).querySelector('.resume-folio')!;
-    expect(folio.hasAttribute('data-folio-name')).toBe(false);
-    expect(folio.getAttribute('data-folio-page')).toBe('1 / 1');
-  });
-
-  it('keeps the contact rows inside the resume header', async () => {
-    const root = await page();
-    const rows = [...root.querySelectorAll('.contact-chip--sheets')];
-    expect(rows.length).toBe(7);
-    for (const row of rows) {
-      expect(row.closest('header.resume-header')).not.toBeNull();
-    }
+  it('keeps the template columns and the inline contacts', async () => {
+    const root = await page(twoColumns());
+    expect(root.querySelectorAll('.layout-two-columns')).toHaveLength(1);
+    expect(root.querySelectorAll('aside.resume-sidebar')).toHaveLength(1);
+    expect(root.querySelector('.contact-chip--sheets')).toBeNull();
+    expect(root.querySelectorAll('.resume-details .contact-chip').length)
+      .toBe(7);
   });
 });
 
@@ -422,33 +423,23 @@ describe('owner color scheme', () => {
   const pageTag = (html: string): string =>
     /<div class="public-resume-page"[^>]*>/u.exec(html)?.[0] ?? '';
 
-  it('marks a dark page and writes its dark roles inline', async () => {
-    const html = await renderPublicResume(withScheme('dark'), VERSIONS);
-    expect(pageTag(html)).toBe(
-      '<div class="public-resume-page" data-color-scheme="dark">',
-    );
-    const article = /<article class="resume-document resume-sheets"[^>]*>/u
-      .exec(html)?.[0] ?? '';
-    expect(article).toContain(' lang="en" style="');
-    expect(article.endsWith(' data-color-scheme="dark">')).toBe(true);
-    expect(html).toMatch(/--dark-color-surface:#[0-9a-f]{6};/u);
-    expect(html).toMatch(/--dark-color-heading:#[0-9a-f]{6};/u);
-  });
-
-  it('marks a Match device page the same way', async () => {
-    const html = await renderPublicResume(withScheme('system'), VERSIONS);
-    expect(pageTag(html)).toContain('data-color-scheme="system"');
-    expect(html).toMatch(/--dark-color-surface:#[0-9a-f]{6};/u);
-  });
-
-  it('keeps an absent or light scheme free of the attribute and roles',
-    async () => {
-      for (const scheme of [undefined, 'light']) {
-        const html = await renderPublicResume(withScheme(scheme), VERSIONS);
-        expect(html, String(scheme)).not.toContain('data-color-scheme');
-        expect(html, String(scheme)).not.toContain('--dark-color');
-      }
+  it.each(['dark', 'system'] as const)(
+    'marks only the page for %s and writes no dark roles', async (scheme) => {
+      const html = await renderPublicResume(withScheme(scheme), VERSIONS);
+      expect(pageTag(html)).toBe(
+        `<div class="public-resume-page" data-color-scheme="${scheme}">`,
+      );
+      expect(html.match(/data-color-scheme=/gu)).toHaveLength(1);
+      expect(html).not.toContain('--dark-color');
+      expect(html).not.toContain('--paper-color');
     });
+
+  it('keeps an absent or light scheme free of the attribute', async () => {
+    for (const scheme of [undefined, 'light']) {
+      const html = await renderPublicResume(withScheme(scheme), VERSIONS);
+      expect(html, String(scheme)).not.toContain('data-color-scheme');
+    }
+  });
 
   it('never writes a value outside the two fixed words', async () => {
     const html = await renderPublicResume(
@@ -459,25 +450,13 @@ describe('owner color scheme', () => {
     expect(html).not.toContain('onload');
   });
 
-  it('changes only colors: the markup and text match the light page',
-    async () => {
+  it.each(['dark', 'system'] as const)(
+    'renders the same light article under %s', async (scheme) => {
       const light = await renderPublicResume(withScheme(undefined), VERSIONS);
-      const dark = await renderPublicResume(withScheme('dark'), VERSIONS);
-      const stripped = dark
-        .replaceAll(' data-color-scheme="dark"', '')
-        .replace(/--dark-color-[a-z-]+:#[0-9a-f]{6};/gu, '');
-      expect(stripped).toBe(light);
+      const marked = await renderPublicResume(withScheme(scheme), VERSIONS);
+      expect(marked.replace(` data-color-scheme="${scheme}"`, ''))
+        .toBe(light);
     });
-
-  it('keeps the light roles beside the dark ones for print', async () => {
-    const light = await renderPublicResume(withScheme(undefined), VERSIONS);
-    const dark = await renderPublicResume(withScheme('dark'), VERSIONS);
-    for (const role of ['surface', 'heading', 'body', 'link']) {
-      const match = new RegExp(`--color-${role}:#[0-9a-f]{6};`, 'u')
-        .exec(light)![0];
-      expect(dark).toContain(match);
-    }
-  });
 });
 
 describe('JSON-LD sameAs parity with the Go validator', () => {

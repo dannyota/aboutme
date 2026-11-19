@@ -320,23 +320,17 @@ describe('resume page entry points', () => {
 
 describe('resume page HTML parity with the shared corpus', () => {
   it.each(corpus.cases.map((entry) => [entry.name, entry] as const))(
-    'holds the sheets with numbered folios in the corpus HTML for %s',
+    'holds one continuous article in the corpus HTML for %s',
     (_name, entry) => {
       const page = new JSDOM(entry.html!).window.document;
-      const fullName = ((entry.envelope.publicResume as Envelope)
-        .document as { personalDetails: { fullName: string } })
-        .personalDetails.fullName.replaceAll('\r\n', '\n')
-        .replaceAll('\r', '\n');
-      const sheets = page.querySelectorAll(
-        '.public-resume-page > article.resume-sheets > .resume-sheet',
+      const articles = page.querySelectorAll(
+        'main#public-resume > .public-resume-page > article.resume-document',
       );
-      expect(sheets.length).toBeGreaterThan(1);
-      expect([...page.querySelectorAll('.resume-folio')].map((folio) => [
-        folio.getAttribute('data-folio-name'),
-        folio.getAttribute('data-folio-page'),
-      ])).toEqual([...sheets].map((_sheet, index) => [
-        fullName, `${index + 1} / ${sheets.length}`,
-      ]));
+      expect(articles).toHaveLength(1);
+      expect(articles[0]!.className).toBe('resume-document');
+      expect(page.querySelector(
+        '.resume-sheet, .resume-folio, [data-folio-page], [data-render-mode]',
+      )).toBeNull();
     },
   );
 

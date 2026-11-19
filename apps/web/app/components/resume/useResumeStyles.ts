@@ -8,12 +8,10 @@ import {
   deriveLevelColors,
   mixInSRGB,
 } from './clampContrast';
-import { darkColors, isDarkBackground } from './darkPalette';
 import {
   resolvePageGeometry,
   type ResolvedPageGeometry,
 } from './pageMetrics';
-import { DARK_PAPER, lightPaper } from './paper';
 
 export type ResumeStyleTokens = Customization;
 
@@ -23,13 +21,6 @@ export interface ResumeStyles {
   sidebar?: Record<string, string>;
   page: ResolvedPageGeometry;
 }
-
-export interface ResumeStyleOptions {
-  readonly sheets?: boolean;
-}
-
-const SHEET_TYPE_FLOOR_PX = 16;
-const SHEET_LINE_HEIGHT_FLOOR = 1.5;
 
 type SurfaceTarget = NonNullable<Customization['layout']['surfaceTarget']>;
 
@@ -56,16 +47,13 @@ const requiredClamp = (
   return result;
 };
 
-type ColorScheme = 'light' | 'dark';
-
 const colorRoles = (
   customization: Customization,
   surface: string,
-  scheme: ColorScheme = 'light',
 ): Record<string, string> => {
   const accent = customization.colors.accent ?? customization.colors.primary;
-  const darkSurface = scheme === 'light'
-    && contrastRatio('#ffffff', surface) > contrastRatio('#000000', surface);
+  const darkSurface
+    = contrastRatio('#ffffff', surface) > contrastRatio('#000000', surface);
   const ink = (color: string, lightInk: string): string =>
     darkSurface && contrastRatio(color, surface) < 4.5
       ? lightInk
@@ -103,67 +91,6 @@ const colorRoles = (
   };
 };
 
-const scopedRoles = (
-  roles: Record<string, string>,
-  prefix: string,
-): Record<string, string> =>
-  Object.fromEntries(
-    Object.entries(roles).map(([name, value]) => [
-      name.replace('--color-', prefix),
-      value,
-    ]),
-  );
-
-const darkRoles = (roles: Record<string, string>): Record<string, string> =>
-  scopedRoles(roles, '--dark-color-');
-
-const paperRoles = (
-  tokens: ResumeStyleTokens,
-  target: SurfaceTarget,
-): Record<string, string> => {
-  const paper = lightPaper(tokens.colors);
-  return {
-    ...scopedRoles(colorRoles(tokens, paper), '--paper-color-'),
-    '--paper-color-surface-header':
-      target === 'header' ? tokens.colors.surface! : paper,
-    '--paper-color-surface-sidebar':
-      target === 'sidebar' ? tokens.colors.surface! : paper,
-  };
-};
-
-const fontSizes = (base: number, prefix: string): Record<string, string> => ({
-  [`${prefix}base`]: `${base}px`,
-  [`${prefix}name`]: `${base * 2}px`,
-  [`${prefix}headline`]: `${base * 1.15}px`,
-  [`${prefix}heading`]: `${base * 1.1}px`,
-  [`${prefix}title`]: `${base}px`,
-  [`${prefix}subtitle`]: `${base}px`,
-  [`${prefix}body`]: `${base}px`,
-  [`${prefix}meta`]: `${Math.max(base * 0.9, 9)}px`,
-});
-
-const SHEET_NAME_EM = 2;
-const SHEET_NAME_NARROW_EM = 1.7;
-
-const roundPx = (value: number): string =>
-  `${Math.round(value * 1000) / 1000}px`;
-
-const sheetTokens = (tokens: ResumeStyleTokens): Record<string, string> => {
-  const floored = Math.max(tokens.font.baseSizePx, SHEET_TYPE_FLOOR_PX);
-  const name = tokens.font.baseSizePx * 2;
-  return {
-    ...fontSizes(floored, '--sheet-fs-'),
-    '--sheet-fs-name': roundPx(Math.min(name, floored * SHEET_NAME_EM)),
-    '--sheet-fs-name-narrow':
-      roundPx(Math.min(name, floored * SHEET_NAME_NARROW_EM)),
-    '--body-align-narrow': tokens.font.textAlign === 'justify'
-      ? 'start'
-      : tokens.font.textAlign ?? 'left',
-    '--headline-margin-inline':
-      (tokens.header?.align ?? 'left') === 'center' ? 'auto' : '0',
-  };
-};
-
 const headingTransform = (
   style: Customization['heading']['style'],
   lng: string,
@@ -173,58 +100,29 @@ const headingTransform = (
   return lng.toLowerCase().split('-')[0] === 'vi' ? 'none' : 'capitalize';
 };
 
-function darkScopes(
-  tokens: ResumeStyleTokens,
-  target: SurfaceTarget,
-  paper?: string,
-): { root: Record<string, string>; region?: Record<string, string> } {
-  const colors = darkColors(tokens.colors, paper);
-  const scheme: ColorScheme
-    = isDarkBackground(tokens.colors) ? 'light' : 'dark';
-  const dark = { ...tokens, colors };
-  const pageSurface = colors.background;
-  const region = target === 'none'
-    ? undefined
-    : darkRoles(colorRoles(dark, colors.surface!, scheme));
-  return {
-    root: {
-      ...darkRoles(colorRoles(dark, pageSurface, scheme)),
-      '--dark-color-surface-header':
-        target === 'header' ? colors.surface! : pageSurface,
-      '--dark-color-surface-sidebar':
-        target === 'sidebar' ? colors.surface! : pageSurface,
-    },
-    ...(region === undefined ? {} : { region }),
-  };
-}
-
 export function useResumeStyles(
   tokens: ResumeStyleTokens,
   lng = 'en',
-  colorScheme?: 'dark' | 'system',
-  options: ResumeStyleOptions = {},
 ): ResumeStyles {
-  const sheets = options.sheets === true;
   const page = resolvePageGeometry(tokens);
   const target = effectiveSurfaceTarget(tokens);
   const pageSurface = tokens.colors.background;
-  const dark = colorScheme === undefined
-    ? undefined
-    : darkScopes(tokens, target, sheets ? DARK_PAPER : undefined);
-  const lineHeight = sheets
-    ? Math.max(tokens.spacing.lineHeight, SHEET_LINE_HEIGHT_FLOOR)
-    : tokens.spacing.lineHeight;
   const root = {
     ...colorRoles(tokens, pageSurface),
     '--color-surface-header':
       target === 'header' ? tokens.colors.surface! : pageSurface,
     '--color-surface-sidebar':
       target === 'sidebar' ? tokens.colors.surface! : pageSurface,
-    ...dark?.root,
-    ...(sheets ? paperRoles(tokens, target) : {}),
     '--font-family': resolveFontSelection(tokens.font.family).cssStack,
-    ...fontSizes(tokens.font.baseSizePx, '--fs-'),
-    '--lh-body': String(lineHeight),
+    '--fs-base': `${tokens.font.baseSizePx}px`,
+    '--fs-name': `${tokens.font.baseSizePx * 2}px`,
+    '--fs-headline': `${tokens.font.baseSizePx * 1.15}px`,
+    '--fs-heading': `${tokens.font.baseSizePx * 1.1}px`,
+    '--fs-title': `${tokens.font.baseSizePx}px`,
+    '--fs-subtitle': `${tokens.font.baseSizePx}px`,
+    '--fs-body': `${tokens.font.baseSizePx}px`,
+    '--fs-meta': `${Math.max(tokens.font.baseSizePx * 0.9, 9)}px`,
+    '--lh-body': String(tokens.spacing.lineHeight),
     '--body-align': tokens.font.textAlign ?? 'left',
     '--body-hyphens': tokens.font.textAlign === 'justify' ? 'auto' : 'manual',
     '--lh-heading': '1.2',
@@ -262,21 +160,16 @@ export function useResumeStyles(
     '--tag-padding': '0.15em 0.5em',
     '--tag-radius': '3px',
     '--icon-size': '1em',
-    ...(sheets ? sheetTokens(tokens) : {}),
   };
   const styles: ResumeStyles = { root, page };
   if (target === 'header') {
     styles.header = {
       ...colorRoles(tokens, tokens.colors.surface!),
       '--header-padding': '1em 1.25em',
-      ...dark?.region,
     };
   }
   if (target === 'sidebar') {
-    styles.sidebar = {
-      ...colorRoles(tokens, tokens.colors.surface!),
-      ...dark?.region,
-    };
+    styles.sidebar = colorRoles(tokens, tokens.colors.surface!);
   }
   return styles;
 }

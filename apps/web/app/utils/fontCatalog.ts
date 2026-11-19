@@ -53,8 +53,8 @@ export function resolveFontSelection(id: string): ResolvedFontSelection {
     fallbackCssFamily: entry.fallback.cssFamily,
     cssStack,
     loadDescriptors: [
-      `400 1em ${cssStack}`,
-      `700 1em ${cssStack}`,
+      `400 1em ${selectedFamily}`,
+      `700 1em ${selectedFamily}`,
     ],
   };
 }

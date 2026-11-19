@@ -4,13 +4,15 @@ import { computed, provide } from 'vue';
 
 import type { components } from '../../api/generated/openapi';
 import { ResumeLngKey } from '../resume/formatDate';
+import LayoutColumns from '../resume/LayoutColumns.vue';
 import {
   NO_PROJECT_LINKS,
   type ProjectLinkMap,
   ProjectLinksKey,
 } from '../resume/projectLinks';
 import { resolveRenderModel } from '../resume/resolveRenderModel';
-import ResumeSheets from '../resume/ResumeSheets.vue';
+import ResumeHeader from '../resume/ResumeHeader.vue';
+import { articleStyle } from '../resume/useResumeStyles';
 import PublicDownloadLink from './PublicDownloadLink.vue';
 import PublicMark from './PublicMark.vue';
 
@@ -56,10 +58,7 @@ const colorScheme = computed<'dark' | 'system' | undefined>(() => {
 
 const model = computed(() => resolveRenderModel(document.value, {
   lng: props.publicResume.lng,
-  mode: 'sheets',
-  ...(colorScheme.value === undefined
-    ? {}
-    : { colorScheme: colorScheme.value }),
+  mode: 'continuous',
   ...(props.publicResume.document.personalDetails.photo === undefined
     ? {}
     : { photoUrl: props.publicResume.document.personalDetails.photo.url }),
@@ -67,6 +66,7 @@ const model = computed(() => resolveRenderModel(document.value, {
 provide(ResumeLngKey, computed(() => model.value.lng));
 const projectLinks = computed(() => props.projectLinks ?? NO_PROJECT_LINKS);
 provide(ProjectLinksKey, projectLinks);
+const rootStyle = computed(() => articleStyle(model.value.styles.root));
 
 const vietnamese = computed(() =>
   props.publicResume.lng.split('-')[0]?.toLowerCase() === 'vi');
@@ -117,6 +117,20 @@ const downloadHref = computed(() =>
         />
       </div>
     </div>
-    <ResumeSheets :model="model" />
+    <article
+      class="resume-document"
+      :lang="model.lng"
+      :style="rootStyle"
+    >
+      <div :style="model.styles.header">
+        <ResumeHeader
+          :personal-details="model.personalDetails"
+          :header="model.header"
+          :photo="model.photo"
+          :name-heading="model.nameHeading"
+        />
+      </div>
+      <LayoutColumns :model="model" />
+    </article>
   </div>
 </template>
