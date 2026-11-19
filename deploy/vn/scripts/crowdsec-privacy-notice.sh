@@ -31,9 +31,10 @@ notice_release_read() {
   local number unit image
   notice_recheck_mount && notice_safe_file /var/lib/aboutme/release.json 644 || return 1
   notice_release=$(jq -ce '
-    def image($n): type=="string" and test("^ghcr\\.io/dannyota/aboutme-"+$n+"@sha256:[0-9a-f]{64}$");
+    def image($n): type=="string" and test("^ghcr\\.io/(dannyota|dntmakers)/aboutme-"+$n+"@sha256:[0-9a-f]{64}$");
     select(keys==["caddy_image","maintenance_image","maintenance_number","maintenance_tag","release_number","release_tag","server_image","web_image"])
-    | select((.server_image|image("server")) and (.web_image|image("web")) and (.caddy_image|image("caddy")) and (.maintenance_image|image("caddy")))' /var/lib/aboutme/release.json) || return 1
+    | select((.server_image|image("server")) and (.web_image|image("web")) and (.caddy_image|image("caddy")) and (.maintenance_image|image("caddy"))
+      and ([.server_image,.web_image,.caddy_image]|map(split("/")[1])|unique|length==1))' /var/lib/aboutme/release.json) || return 1
   notice_tag=$(jq -er .release_tag <<<"$notice_release")
   number=$(notice_release_number "$notice_tag") || return 1
   [[ $number == "$(jq -r .release_number <<<"$notice_release")" && \

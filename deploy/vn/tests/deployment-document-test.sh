@@ -31,19 +31,29 @@ case $1:$2 in
     stamp=2026-10-11T01:14:05.123456789Z
     [[ $PODMAN_CASE != bad-time ]] || stamp=secret-canary
     [[ $PODMAN_CASE != extra-field ]] || stamp+=' secret-canary'
-    repo=ghcr.io/dannyota/${5/maintenance/caddy}
+    owner_override=PIN_OWNER_${5#aboutme-}
+    repo=ghcr.io/${!owner_override:-${PIN_OWNER:-dannyota}}/${5/maintenance/caddy}
     printf '%s %s %s %s@sha256:%s %s\n' "$running" "$digest" "$stamp" "$repo" "$(printf '%064d' 8)" "$image_id" ;;
   image:inspect)
     [[ $3 == --format && $4 == '{{range .RepoDigests}}{{println .}}{{end}}' && $5 == "$image_id" ]]
-    for name in server web caddy; do
-      printf 'ghcr.io/dannyota/aboutme-%s@sha256:%s\n' "$name" "$(printf '%064d' 7)"
-      [[ $PODMAN_CASE == pin-unlisted ]] ||
-        printf 'ghcr.io/dannyota/aboutme-%s@sha256:%s\n' "$name" "$(printf '%064d' 8)"
+    for owner in ${REPO_OWNERS:-dannyota}; do
+      for name in server web caddy; do
+        printf 'ghcr.io/%s/aboutme-%s@sha256:%s\n' "$owner" "$name" "$(printf '%064d' 7)"
+        [[ $PODMAN_CASE == pin-unlisted ]] ||
+          printf 'ghcr.io/%s/aboutme-%s@sha256:%s\n' "$owner" "$name" "$(printf '%064d' 8)"
+      done
     done ;;
   *) exit 99 ;;
 esac
 STUB
-chmod +x "$work/bin/podman"
+export REAL_DATE
+REAL_DATE=$(command -v date)
+cat >"$work/bin/date" <<'STUB'
+#!/usr/bin/env bash
+if [[ -n ${FIXED_NOW:-} && $* == '-u +%Y-%m-%dT%H:%M:%SZ' ]]; then printf '%s\n' "$FIXED_NOW"; exit 0; fi
+exec "$REAL_DATE" "$@"
+STUB
+chmod +x "$work/bin/podman" "$work/bin/date"
 export PATH="$work/bin:$PATH"
 generator=$root/deploy/vn/host/deployment-document.sh
 generate() { bash "$generator" "$work/observation" HCM03 >"$work/out" 2>"$work/err"; }
@@ -89,6 +99,46 @@ jq -e 'all(.components[].running_images[]; .digest == ("sha256:" + ("0" * 63) + 
 PODMAN_CASE=maintenance generate
 jq -e '.components[3].name == "maintenance" and .components[3].image == "ghcr.io/dannyota/aboutme-caddy"' \
   "$doc" >/dev/null
+golden=$root/deploy/vn/tests/fixtures/deployment-document/dannyota.json
+owners_doc() {
+  FIXED_NOW=2026-11-19T00:00:00Z PODMAN_CASE=${PODMAN_CASE:-maintenance} generate
+}
+expect_images() {
+  jq -S --arg s "$1" --arg w "$2" --arg c "$3" --arg m "$4" '
+    def owner($o): sub("^ghcr\\.io/dannyota/"; "ghcr.io/" + $o + "/");
+    .components |= map(.name as $name | .image |= owner({server:$s, web:$w, caddy:$c, maintenance:$m}[$name]))' "$golden"
+}
+PODMAN_CASE=maintenance owners_doc
+cmp -s "$doc" "$golden" || fail 'a dannyota release changed the document bytes'
+for case in 'dntmakers dntmakers dntmakers dntmakers' 'dannyota dannyota dannyota dntmakers' 'dannyota dntmakers dannyota dannyota'; do
+  read -r -a owner <<<"$case"
+  PODMAN_CASE=maintenance REPO_OWNERS='dannyota dntmakers' PIN_OWNER_server=${owner[0]} PIN_OWNER_web=${owner[1]} \
+    PIN_OWNER_caddy=${owner[2]} PIN_OWNER_maintenance=${owner[3]} owners_doc
+  [[ $(jq -S . "$doc") == "$(expect_images "${owner[@]}")" ]] || fail "running pins $case did not set only the image owners"
+done
+PODMAN_CASE=maintenance PIN_OWNER=dntmakers REPO_OWNERS=dntmakers owners_doc
+[[ $(jq -S . "$doc") == "$(expect_images dntmakers dntmakers dntmakers dntmakers)" ]] ||
+  fail 'a dntmakers release did not keep the document strings'
+for PODMAN_CASE in stopped missing; do
+  PODMAN_CASE=$PODMAN_CASE PIN_OWNER=dntmakers REPO_OWNERS=dntmakers owners_doc
+  jq -e '[.components[] | {name, image}] == [{name:"server",image:"ghcr.io/dntmakers/aboutme-server"},
+    {name:"web",image:"ghcr.io/dannyota/aboutme-web"},{name:"caddy",image:"ghcr.io/dntmakers/aboutme-caddy"},
+    {name:"maintenance",image:"ghcr.io/dntmakers/aboutme-caddy"}]
+    and .components[1].running_images == [] and .source_repository == "https://github.com/dannyota/aboutme"' "$doc" >/dev/null ||
+    fail "a $PODMAN_CASE component did not report the dannyota namespace"
+done
+PODMAN_CASE=pin-unlisted PIN_OWNER=dntmakers REPO_OWNERS=dannyota owners_doc
+jq -e '[.components[].image] == ["ghcr.io/dntmakers/aboutme-server","ghcr.io/dntmakers/aboutme-web",
+    "ghcr.io/dntmakers/aboutme-caddy","ghcr.io/dntmakers/aboutme-caddy"]
+  and all(.components[].running_images[]; .digest == ("sha256:" + ("0" * 63) + "7")
+    and .links.provenance == ("https://api.github.com/repos/dannyota/aboutme/attestations/" + .digest + "?predicate_type=provenance"))' \
+  "$doc" >/dev/null || fail 'an unlisted dntmakers pin was reported as its digest'
+for owner in evil Dntmakers DANNYOTA; do
+  PODMAN_CASE=running PIN_OWNER=$owner REPO_OWNERS="dannyota dntmakers $owner" owners_doc
+  jq -e 'all(.components[]; .image == ("ghcr.io/dannyota/aboutme-" + .name))
+    and all(.components[].running_images[]; .digest == ("sha256:" + ("0" * 63) + "7"))' "$doc" >/dev/null ||
+    fail "a $owner pin was trusted"
+done
 if bash "$generator" "$work/observation" 'HCM03 secret-canary' >"$work/out" 2>"$work/err"; then
   fail 'accepted invalid region'
 fi

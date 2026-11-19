@@ -53,6 +53,11 @@ case $1 in
   # bytes and SCHEMA_ENTRY its mode and type. As in git, a path given from a
   # subdirectory resolves there unless --full-tree is passed.
   ls-tree)
+    if [[ $* == *' -- scripts/lib/repository.sh' ]]; then
+      printf '%s\n' "$*" >>"$DEPLOY_TEST_DIR/owner.log"
+      [[ -z ${OWNER_FILE:-} ]] || printf '100644 blob %040d\tscripts/lib/repository.sh\n' 0
+      exit 0
+    fi
     printf '%s\n' "$*" >>"$DEPLOY_TEST_DIR/git.log"
     if [[ $* == *packages/schema/released-versions.json* ]]; then
       [[ ${DOCUMENT_CASE:-} != tree-fails ]] || exit 1
@@ -65,6 +70,10 @@ case $1 in
     fi
     ;;
   show)
+    if [[ $* == *:scripts/lib/repository.sh ]]; then
+      printf '# shellcheck shell=bash disable=SC2034\nowner=%s\nname=aboutme\n' "$OWNER_FILE"
+      exit 0
+    fi
     printf '%s\n' "$*" >>"$DEPLOY_TEST_DIR/git.log"
     [[ ${SCHEMA_SHOW:-} != fail ]] || exit 128
     printf '%s' "$SCHEMA_FLOOR"
@@ -91,14 +100,27 @@ if [[ $1 == run ]]; then
   exit 0
 fi
 uri=$3
+printf '%s\n' "$*" >>"$DEPLOY_TEST_DIR/verify.log"
 if [[ $uri == *aboutme-observer@* ]]; then
   printf '%s\n' "$*" >>"$DEPLOY_TEST_DIR/observer-verify.log"
   [[ ${OBSERVER_CASE:-absent} != bad-provenance ]] || exit 1
 fi
+repo=''
+while (($#)); do
+  [[ $1 != --repo ]] || repo=$2
+  shift
+done
+case $repo in
+  dannyota/aboutme) owner_id=244348267 ;;
+  dntmakers/aboutme) owner_id=342323513 ;;
+  *) exit 1 ;;
+esac
 subject=${uri#oci://}
 subject=${subject%@*}
 digest=${uri##*@sha256:}
-printf '[{"verificationResult":{"statement":{"subject":[{"name":"%s","digest":{"sha256":"%s"}}]}}}]\n' "$subject" "$digest"
+jq -cn --arg n "$subject" --arg d "$digest" --arg uri "https://github.com/$repo" --arg oid "$owner_id" \
+  '[{verificationResult:{statement:{subject:[{name:$n,digest:{sha256:$d}}]},
+    signature:{certificate:{sourceRepositoryURI:$uri,sourceRepositoryIdentifier:"1318874703",sourceRepositoryOwnerIdentifier:$oid}}}}]'
 STUB
 
 cat >"$work/bin/sha256sum" <<'STUB'
@@ -156,7 +178,7 @@ if [[ $args == *' /usr/local/lib/aboutme/deploy-host.sh '* ]]; then
     exit 0
   fi
   if [[ $args == *' release-json '* ]]; then
-    if [[ ${DOCUMENT_CASE:-} == missing-tag ]]; then printf '%s\n' '{"maintenance_image":"previous-caddy"}'; else printf '%s\n' '{"release_tag":"v0.1.0","maintenance_image":"previous-caddy"}'; fi
+    if [[ ${DOCUMENT_CASE:-} == missing-tag ]]; then printf '%s\n' '{"maintenance_image":"previous-caddy"}'; else printf '{"release_tag":"v0.1.0","maintenance_image":"%s"}\n' "${MAINTENANCE_IMAGE:-previous-caddy}"; fi
   fi
   if [[ $args == *' running-release '* ]]; then printf '1001\n'; fi
   if [[ ${MIGRATION_CASE:-} == migrate-fails && $args == *' migrate '* ]]; then exit 1; fi
@@ -806,6 +828,77 @@ for prune_case in smoke render activate; do
     prune_fail "the $prune_case case pruned images"
   fi
 done
+
+owner_failures=0
+owner_fail() { echo "$*" >&2; owner_failures=1; }
+owner_reset() {
+  rm -f "$work/edge-count" "$work/ban-count" "$work/probe.pid" "$work/verify.log" "$work/owner.log"
+  : >"$work/host.log"
+  : >"$work/order.log"
+  : >"$work/external.log"
+}
+platform=$(printf '%064d' 0 | tr 0 d)
+observer_digest=$(printf '%064d' 0 | tr 0 b)
+rollback_maintenance=ghcr.io/dntmakers/aboutme-caddy@sha256:$(printf '%064d' 9)
+commit_sha=$(printf '%040d' 0 | tr 0 a)
+for OWNER_FILE in '' dannyota dntmakers; do
+  export OWNER_FILE
+  owner=${OWNER_FILE:-dannyota} other=dntmakers
+  [[ $owner == dannyota ]] || other=dannyota
+  label=${OWNER_FILE:-absent}
+  apps="ghcr.io/$owner/aboutme-server@sha256:$platform ghcr.io/$owner/aboutme-web@sha256:$platform"
+  apps+=" ghcr.io/$owner/aboutme-caddy@sha256:$platform"
+  for mode in deploy rollback activate; do
+    owner_reset
+    args=(v0.1.1)
+    [[ $mode == deploy ]] || args=("--$mode" v0.1.1)
+    status=0
+    OBSERVER_CASE=good EDGE_CASE=delayed MAINTENANCE_IMAGE=$rollback_maintenance \
+      "$repo_root/deploy/vn/scripts/deploy.sh" "${args[@]}" >"$work/owner-$label-$mode.out" 2>&1 || status=$?
+    [[ $status == 0 ]] || owner_fail "$mode with repository file $label failed: $(tail -n 3 "$work/owner-$label-$mode.out")"
+    grep -qsxF -- "ls-tree --full-tree $commit_sha^{commit} -- scripts/lib/repository.sh" "$work/owner.log" ||
+      owner_fail "$mode with repository file $label did not read the owner from the tagged commit"
+    for name in server web caddy; do
+      grep -qF -- "https://ghcr.io/v2/$owner/aboutme-$name/manifests/v0.1.1" "$work/external.log" &&
+        grep -qF -- "scope=repository:$owner/aboutme-$name:pull" "$work/external.log" ||
+        owner_fail "$mode with repository file $label did not read $name from $owner"
+      grep -qxF -- "attestation verify oci://ghcr.io/$owner/aboutme-$name@sha256:$platform --repo $owner/aboutme --cert-identity https://github.com/$owner/aboutme/.github/workflows/release-images.yml@refs/tags/v0.1.1 --source-ref refs/tags/v0.1.1 --source-digest $commit_sha --deny-self-hosted-runners --format json" "$work/verify.log" ||
+        owner_fail "$mode with repository file $label did not verify $name under $owner"
+    done
+    if grep -qF -e "ghcr.io/v2/$other/" -e "repository:$other/" "$work/external.log" ||
+       grep -qF -e "ghcr.io/$other/aboutme-server" -e "ghcr.io/$other/aboutme-web" -e "$other/aboutme --cert" "$work/verify.log"; then
+      owner_fail "$mode with repository file $label read the $other namespace"
+    fi
+    case $mode in
+      activate)
+        if grep -q -e ' pull ' -e ' render ' "$work/host.log"; then
+          owner_fail "activation with repository file $label changed images"
+        fi
+        ;;
+      *)
+        observer=ghcr.io/$owner/aboutme-observer@sha256:$observer_digest
+        grep -qF -- "https://ghcr.io/v2/$owner/aboutme-observer/manifests/v0.1.1-amd64" "$work/external.log" ||
+          owner_fail "$mode with repository file $label did not read the observer from $owner"
+        grep -qF -- " pull $apps $observer " "$work/host.log" && grep -qF -- " render $apps $observer " "$work/host.log" ||
+          owner_fail "$mode with repository file $label did not pull and render $owner images"
+        maintenance=ghcr.io/$owner/aboutme-caddy@sha256:$platform
+        [[ $mode == deploy ]] || maintenance=$rollback_maintenance
+        grep -qF -- " maintenance-up $maintenance " "$work/host.log" ||
+          owner_fail "$mode with repository file $label did not keep the maintenance image $maintenance"
+        ;;
+    esac
+  done
+done
+for OWNER_FILE in evil Dntmakers DANNYOTA 'dntmakers '; do
+  export OWNER_FILE
+  owner_reset
+  if "$repo_root/deploy/vn/scripts/deploy.sh" v0.1.1 >"$work/owner-refused.out" 2>&1 ||
+     [[ -s $work/external.log ]] || ! grep -q 'release-eligibility:.*owner=dannyota or owner=dntmakers' "$work/owner-refused.out"; then
+    owner_fail "repository file owner '$OWNER_FILE' was not refused before SSH or registry access"
+  fi
+done
+unset OWNER_FILE
+((owner_failures == 0)) || exit 1
 
 [[ -s $work/ssh-calls.log ]] || { echo "deploy.sh reached no SSH call" >&2; exit 1; }
 if [[ -s $work/keepalive-missing.log ]]; then
