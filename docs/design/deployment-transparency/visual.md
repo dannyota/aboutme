@@ -113,16 +113,18 @@ match the one before it." It is an `ol` of four steps. Each step has a 40 px
 `--muted` disk with a 20 px icon and a border, a 13 px label, a 16 px weight 600
 value, a 13 px muted line, and a state chip.
 
-| Step    | Icon                    | Label VI / EN       | Value                        | Muted line                                                                              |
-| ------- | ----------------------- | ------------------- | ---------------------------- | --------------------------------------------------------------------------------------- |
-| Source  | `git-commit-horizontal` | Mã nguồn / Source   | Version                      | `dannyota/aboutme` @ short commit, both links                                           |
-| Build   | `workflow`              | Bản dựng / Build    | GitHub Actions               | "release-images, lần chạy / run {id}", a link                                           |
-| Image   | `package`               | Image / Image       | `ghcr.io/dannyota/aboutme-*` | "3 image, đã được GitHub ký" / "3 images, signed by GitHub"                             |
-| Running | `server`                | Đang chạy / Running | aboutme.vn                   | "GreenNode HCM03, {n} bản sao, từ 09:41" / "GreenNode HCM03, {n} replicas, since 09:41" |
+| Step    | Icon                    | Label VI / EN       | Value                       | Muted line                                                                              |
+| ------- | ----------------------- | ------------------- | --------------------------- | --------------------------------------------------------------------------------------- |
+| Source  | `git-commit-horizontal` | Mã nguồn / Source   | Version                     | `dannyota/aboutme` @ short commit, both links                                           |
+| Build   | `workflow`              | Bản dựng / Build    | GitHub Actions              | "release-images, lần chạy / run {id}", a link                                           |
+| Image   | `package`               | Image / Image       | `ghcr.io/<owner>/aboutme-*` | "3 image, đã được GitHub ký" / "3 images, signed by GitHub"                             |
+| Running | `server`                | Đang chạy / Running | aboutme.vn                  | "GreenNode HCM03, {n} bản sao, từ 09:41" / "GreenNode HCM03, {n} replicas, since 09:41" |
 
-The Image value is 14 px monospace with a break opportunity after `dannyota/`.
-Per-component digests live in the component rows, not in the chain. The short
-commit is 7 characters in monospace.
+The Image value is 14 px monospace with a break opportunity after the owner. It
+lists the distinct namespaces of the running `server`, `web` and `caddy` images
+in that order, one per line; a rollback can show both owners. Per-component
+digests live in the component rows, not in the chain. The short commit is 7
+characters in monospace.
 
 Chips are 24 px pills, 12 px weight 600, with a 14 px icon:
 
@@ -263,7 +265,7 @@ disk with `--link` digits and a weight 600 label:
 A command block is a `pre` on `--muted` with no border and the 10 px radius, 13
 px monospace at 1.65 line height, with 14 px padding and 52 px on the right for
 the copy button. The `$` prompt and its space are muted and not copied. Live
-values (component, digest, version) are weight 700 foreground on a
+values (owner, component, digest, version) are weight 700 foreground on a
 `--surface-sun` highlight. The block scrolls sideways inside the card, has
 `tabindex="0"` and the name of its step so keyboard users can scroll it, and
 never widens the page at 360 px.

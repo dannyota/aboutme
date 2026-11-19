@@ -105,7 +105,8 @@ verifies.
      `llms.txt`, the verify page, Telegram runbook links, the issue template,
      README, SECURITY, `instructions/verification.md`, the runbooks
      (`deploy.md`, `approval-probe.md`), the deployment transparency and
-     production pull deployment designs.
+     production pull deployment designs, and the verify page's command owner
+     when no document is available.
    - `CLAUDE.md`'s commands and notification filter change on transfer day.
 
 ## Changes by component
