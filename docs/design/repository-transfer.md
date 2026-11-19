@@ -43,6 +43,8 @@ verifies.
    - The owner in its signer identity must equal the owner in its source
      repository URI and in the image namespace, and that owner must be
      `dannyota` or `dntmakers`.
+   - Its `SourceRepositoryOwnerIdentifier` must be that owner's account ID:
+     244348267 for `dannyota`, 342323513 for `dntmakers`.
    - The ID pin makes both owners safe to accept permanently, so rollback to any
      earlier release keeps working. No boundary tag and no tag freeze are
      needed.
@@ -62,10 +64,12 @@ verifies.
    - The observer carries each component's `image` from the observation into the
      document and takes `build` and `signer_workflow` from each verified
      certificate. It rebuilds `source_repository` and the commit, release, SBOM
-     and provenance links from its own constants, naming the current repository:
-     every old URL redirects there. It fetches attestations from
+     and provenance links from its build-time owner, the
+     `github.repository_owner` that built it. The build refuses any other owner,
+     and the observer refuses to start without one. Every old URL redirects to
+     the current name. It fetches attestations from
      `https://api.github.com/repositories/1318874703/attestations/<digest>` and
-     publishes the provenance link under the current repository's name.
+     publishes the provenance link under its build-time owner.
    - From step 1, the schema and the web decoder accept both owners in
      `source_repository`, `components[].image`, `signer_workflow` and every link
      pattern. A new web can then read the previous observer's document during a
