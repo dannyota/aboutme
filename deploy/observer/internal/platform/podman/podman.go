@@ -97,7 +97,7 @@ func parse(body []byte, now time.Time) ([]platform.Image, time.Time, error) {
 			}
 			for replica := 0; replica < image.Replicas; replica++ {
 				observations = append(observations, platform.Observation{
-					Component: component.Name, Digest: image.Digest, StartedAt: started,
+					Component: component.Name, Repository: component.Image, Digest: image.Digest, StartedAt: started,
 				})
 			}
 		}

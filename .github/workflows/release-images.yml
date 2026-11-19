@@ -277,6 +277,7 @@ jobs:
       DOCKERFILE: deploy/observer/Dockerfile
       VERSION: ${{ github.ref_name }}
       COMMIT: ${{ github.sha }}
+      OWNER: ${{ github.repository_owner }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -366,6 +367,7 @@ jobs:
       DOCKERFILE: deploy/observer/Dockerfile
       VERSION: ${{ github.ref_name }}
       COMMIT: ${{ github.sha }}
+      OWNER: ${{ github.repository_owner }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

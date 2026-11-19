@@ -18,8 +18,10 @@ COPY deploy/observer/ ./deploy/observer/
 
 ARG VERSION=""
 ARG COMMIT=""
+ARG OWNER=""
+RUN case "$OWNER" in dannyota | dntmakers) ;; *) echo "OWNER must be dannyota or dntmakers" >&2; exit 1 ;; esac
 RUN CGO_ENABLED=0 go -C deploy/observer build -trimpath \
-    -ldflags "-s -w -X main.version=${VERSION} -X main.commit=${COMMIT}" \
+    -ldflags "-s -w -X main.version=${VERSION} -X main.commit=${COMMIT} -X main.owner=${OWNER}" \
     -o /out/observer ./cmd/observer
 
 FROM scratch

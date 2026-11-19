@@ -10,6 +10,7 @@ import (
 	"danny.vn/aboutme/deploy/observer/internal/platform"
 	podmanplatform "danny.vn/aboutme/deploy/observer/internal/platform/podman"
 	"danny.vn/aboutme/deploy/observer/internal/publish"
+	"danny.vn/aboutme/deploy/observer/internal/source"
 )
 
 func TestWirePodmanWithoutAWS(t *testing.T) {
@@ -35,6 +36,7 @@ func TestWirePodmanWithoutAWS(t *testing.T) {
 		t.Fatal(err)
 	}
 	doc, err := document.Build(document.Input{
+		Owner:       source.Dannyota,
 		Environment: environment, Site: site, Platform: obs.info,
 		ObservedAt: time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC),
 	})
