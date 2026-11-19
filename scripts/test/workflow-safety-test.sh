@@ -926,7 +926,7 @@ for (const file of readdirSync(directory, { recursive: true, withFileTypes: true
   if (document.errors.length) throw new Error(`${path}: ${document.errors.join("; ")}`);
   // Bind the exception to the whole workflow contract, including its execution steps.
   const trusted = path === join(directory, "vmonitor-renew.yml") &&
-    createHash("sha256").update(source).digest("hex") === "558f3265f8df001dfa34fac4f8ee30171d0de3d78b89e7dfb821681ee304cfcb";
+    createHash("sha256").update(source).digest("hex") === "e5b348b77d75872ff7e5514d64bfeb590d7afccb8f7875fd4846a85858c80d39";
   walk(document.toJS({ mapAsMap: true }), [], path, trusted);
 }
 NODE
@@ -943,6 +943,111 @@ grep -Fxq '    permissions: {}' <<<"$PROBE_APPROVAL" || fail "approval probe app
 grep -Fxq '    environment: approval-probe' <<<"$PROBE_APPROVAL" || fail "approval probe needs its environment gate"
 grep -Fxq '    needs: [prepare-request]' <<<"$PROBE_APPROVAL" || fail "approval probe must need preparation"
 ! grep -Eq 'secrets|uses:|checkout|curl|gh api' "$PROBE_WORKFLOW" || fail "approval probe must only echo fixed text"
+
+assert_repository_guards() {
+  node --input-type=module - "$1" "$ROOT" <<'NODE'
+import { readFileSync, readdirSync } from "node:fs";
+import { createRequire } from "node:module";
+import { join } from "node:path";
+const require = createRequire(join(process.argv[3], "scripts/test/workflow-contract.test.mjs"));
+const { parse } = require("yaml");
+const directory = process.argv[2];
+const subject = String.raw`github\.(?:repository(?:_owner)?|event\.repository\.(?:full_name|owner\.login))(?![\w.])`;
+const reference = new RegExp(subject, "i");
+const comparison = new RegExp(String.raw`${subject}\s*[!=]=|[!=]=\s*${subject}|\b(?:contains|startsWith|endsWith)\s*\(.*${subject}`, "i");
+const owner = /dannyota|dntmakers/i;
+const fixedCheckout = /^\s*[\w.-]+\/aboutme\s*$/;
+function pins(value, key) {
+  if (typeof value === "string") {
+    return (key === "if" && (reference.test(value) || owner.test(value))) ||
+      (key === "repository" && fixedCheckout.test(value)) || comparison.test(value);
+  }
+  if (Array.isArray(value)) return value.some((item) => pins(item));
+  if (value !== null && typeof value === "object") return Object.entries(value).some(([name, item]) => pins(item, name));
+  return false;
+}
+for (const name of readdirSync(directory).filter((file) => /\.ya?ml$/.test(file)).sort()) {
+  if (pins(parse(readFileSync(join(directory, name), "utf8")))) {
+    console.error(`workflow-safety-test: ${name} pins the repository name; guard on github.repository_id and check out \${{ github.repository }}`);
+    process.exit(1);
+  }
+}
+NODE
+}
+assert_repository_guards "$ROOT/.github/workflows"
+mkdir -p "$WORK/guards"
+for drift in \
+  's/github.repository_id == 1318874703/github.repository == '"'"'dannyota\/aboutme'"'"'/' \
+  's/repository: \${{ github.repository }}/repository: dannyota\/aboutme/'; do
+  rm -f "$WORK/guards"/*.yml
+  sed "$drift" "$ROOT/.github/workflows/vmonitor-renew.yml" >"$WORK/guards/vmonitor-renew.yml"
+  ! cmp -s "$ROOT/.github/workflows/vmonitor-renew.yml" "$WORK/guards/vmonitor-renew.yml" ||
+    fail "repository guard drift did not apply: $drift"
+  status=0
+  ( assert_repository_guards "$WORK/guards" ) >"$WORK/guard-drift" 2>&1 || status=$?
+  [ "$status" -eq 1 ] && grep -Fq 'pins the repository name' "$WORK/guard-drift" ||
+    fail "repository guard drift was accepted: $drift"
+done
+guard_fixture() {
+  rm -f "$WORK/guards"/*.yml
+  cat >"$WORK/guards/fixture.yml"
+  status=0
+  ( assert_repository_guards "$WORK/guards" ) >"$WORK/guard-drift" 2>&1 || status=$?
+}
+guard_refused() {
+  [ "$status" -eq 1 ] && grep -Fq 'fixture.yml pins the repository name' "$WORK/guard-drift" ||
+    fail "repository guard drift was accepted: $1"
+}
+while IFS= read -r expression; do
+  printf 'jobs:\n  probe:\n    if: >-\n      %s\n    runs-on: ubuntu-24.04\n' "$expression" | guard_fixture
+  guard_refused "$expression"
+done <<'CASES'
+'dannyota/aboutme' == github.repository
+'dntmakers/aboutme' != github.repository
+github.repository_owner == 'dannyota'
+github.repository_owner != 'dntmakers'
+'dannyota' == github.repository_owner
+contains(github.repository, 'aboutme')
+contains(fromJSON('["someone/aboutme"]'), github.repository)
+startsWith(github.repository, 'someone/')
+github.event.repository.full_name == 'someone/aboutme'
+github.event.repository.owner.login == 'someone'
+github.repository_id == 1318874703 && github.actor == 'dannyota'
+github.repository_id == 1318874703 && github.triggering_actor != 'dntmakers'
+github.repository_id == 1318874703 && github.workflow_ref == 'Dannyota/aboutme/.github/workflows/x.yml@refs/heads/main'
+CASES
+guard_fixture <<'YAML'
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    steps:
+      - if: >-
+          github.repository_id == 1318874703 &&
+          github.actor == 'dannyota'
+        run: echo probe
+YAML
+guard_refused 'a multi-line step condition naming an owner'
+guard_fixture <<'YAML'
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    env:
+      SAME: ${{ 'someone/aboutme' == github.repository }}
+YAML
+guard_refused 'a reversed comparison outside a condition'
+guard_fixture <<'YAML'
+jobs:
+  probe:
+    if: github.repository_id == 1318874703 && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    steps:
+      - if: ${{ github.event_name == 'push' && contains(github.ref, 'refs/tags/') }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: ${{ github.repository }}
+      - run: echo "$GITHUB_REPOSITORY ghcr.io/${{ github.repository_owner }}/aboutme-server"
+YAML
+[ "$status" -eq 0 ] || { cat "$WORK/guard-drift" >&2; fail 'an ID guard and repository context were refused'; }
 
 mkdir -p "$WORK/workflows"
 cp "$WORKFLOW" "$WORK/workflows/ci.yml"
@@ -1052,7 +1157,7 @@ OBSERVER_ARM_JOB=$(release_job_body observer-image)
 [ -n "$OBSERVER_ARM_JOB" ] || fail "release-images workflow lacks the arm64 observer job"
 grep -Fxq '    runs-on: ubuntu-24.04-arm' <<<"$OBSERVER_ARM_JOB" ||
   fail "arm64 observer image does not use the native arm64 runner"
-grep -Fq "IMAGE: ghcr.io/dannyota/aboutme-observer:\${{ github.ref_name }}" <<<"$OBSERVER_ARM_JOB" ||
+grep -Fxq "      IMAGE: ghcr.io/\${{ github.repository_owner }}/aboutme-observer:\${{ github.ref_name }}" <<<"$OBSERVER_ARM_JOB" ||
   fail "arm64 observer image does not keep the plain version tag"
 grep -Fxq '      ARCH: arm64' <<<"$OBSERVER_ARM_JOB" &&
   grep -Fq 'uses: ./.github/actions/release-image-check' <<<"$OBSERVER_ARM_JOB" ||
@@ -1062,7 +1167,7 @@ OBSERVER_AMD_JOB=$(release_job_body observer-image-amd64)
 [ -n "$OBSERVER_AMD_JOB" ] || fail "release-images workflow lacks the amd64 observer job"
 grep -Fxq '    runs-on: ubuntu-24.04' <<<"$OBSERVER_AMD_JOB" ||
   fail "amd64 observer image does not use the native amd64 runner"
-grep -Fq "IMAGE: ghcr.io/dannyota/aboutme-observer:\${{ github.ref_name }}-amd64" <<<"$OBSERVER_AMD_JOB" ||
+grep -Fxq "      IMAGE: ghcr.io/\${{ github.repository_owner }}/aboutme-observer:\${{ github.ref_name }}-amd64" <<<"$OBSERVER_AMD_JOB" ||
   fail "amd64 observer image does not use the platform-suffixed version tag"
 grep -Fxq '      ARCH: amd64' <<<"$OBSERVER_AMD_JOB" &&
   grep -Fq 'uses: ./.github/actions/release-image-check' <<<"$OBSERVER_AMD_JOB" ||
@@ -1104,7 +1209,7 @@ grep -Fq '[ -e artifacts/digest-observer-amd64.txt ] &&' <<<"$RELEASE_JOB" ||
   fail "release job does not require the amd64 observer digest"
 grep -Fq '[ -e artifacts/aboutme-observer-amd64.spdx.json ]' <<<"$RELEASE_JOB" ||
   fail "release job does not require the amd64 observer SBOM"
-grep -Fq 'echo "ghcr.io/dannyota/aboutme-observer@$d linux/$arch" >>release/digests.txt' <<<"$RELEASE_JOB" ||
+grep -Fq 'echo "ghcr.io/$OWNER/aboutme-observer@$d linux/$arch" >>release/digests.txt' <<<"$RELEASE_JOB" ||
   fail "release job does not list each observer platform digest"
 grep -Fq 'cp "artifacts/aboutme-$name-arm64.spdx.json" "release/aboutme-$name.spdx.json"' <<<"$RELEASE_JOB" ||
   fail "release job does not publish the legacy app SBOM name from the AWS arm64 image"

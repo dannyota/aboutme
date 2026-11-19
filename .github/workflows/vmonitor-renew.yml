@@ -18,7 +18,7 @@ concurrency:
 jobs:
   renew:
     name: Renew Synthetic quota
-    if: github.repository == 'dannyota/aboutme' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
+    if: github.repository_id == 1318874703 && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     environment: vmonitor-renew
@@ -28,7 +28,7 @@ jobs:
       - name: Check out trusted main
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          repository: dannyota/aboutme
+          repository: ${{ github.repository }}
           ref: refs/heads/main
           persist-credentials: false
       - name: Log checkout commit

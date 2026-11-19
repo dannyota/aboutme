@@ -15,11 +15,13 @@ root = Path(sys.argv[1])
 sha = "a" * 40
 request_hash = "b" * 64
 run_id = 123
-base = f"https://api.github.com/repos/dannyota/aboutme/actions/runs/{run_id}"
 comment = f"approve production deploy v0.0.0 run {run_id} attempt 1 sha256:{request_hash}"
 # These identities are synthetic and have no connection to enrolled accounts.
 pins = {"repository_id": 11, "workflow_id": 22, "environment_id": 33,
         "maintainer_ids": [44, 55]}
+base = f"https://api.github.com/repositories/{pins['repository_id']}/actions/runs/{run_id}"
+tracked = json.loads((root / "scripts/approval-probe.json").read_text())
+assert tracked["repository_id"] == 1318874703, "the probe must read runs by the pinned repository ID"
 owner, reviewer = pins["maintainer_ids"]
 user = {"id": reviewer, "type": "User"}
 run = {"id": run_id, "repository": {"id": pins["repository_id"],
@@ -170,13 +172,23 @@ for field, value in [(["workflow_id"], 99), (["head_branch"], "topic"), (["head_
         change(base, field, value)(data)
     check("qualified path still binds identity", "RUN_IDENTITY", qualified_mismatch, 1)
 check("self approval allowed", mutate=change(approvals_url, [0, "user", "id"], owner))
+for name in ["dntmakers/aboutme", "other/aboutme"]:
+    check("repository identity is the ID, not the name", mutate=change(base, ["repository", "full_name"], name))
+def drop_full_name(data):
+    body = json.loads(data[base]["body"])
+    del body["repository"]["full_name"]
+    data[base]["body"] = json.dumps(body)
+check("repository name is not required", mutate=drop_full_name)
+def redirect(data):
+    data[base] = response({"message": "Moved Permanently", "url": base}, 59, status=301)
+check("a redirect is refused", "HTTP_ERROR", redirect, 1, 59)
 check("other enrolled dispatcher", mutate=change(base, ["triggering_actor", "id"], reviewer))
 check("job array order does not define execution order", mutate=change(
       jobs_url, ["jobs"], list(reversed(jobs["jobs"]))))
 for field, value, reason in [
     (["id"], run_id + 1, "RUN_IDENTITY"),
     (["repository", "id"], 99, "RUN_IDENTITY"),
-    (["repository", "full_name"], "other/aboutme", "RUN_IDENTITY"),
+    (["repository", "id"], 1318874703, "RUN_IDENTITY"),
     (["workflow_id"], 99, "RUN_IDENTITY"),
     (["path"], ".github/workflows/other.yml", "RUN_IDENTITY"),
     (["event"], "push", "RUN_IDENTITY"),
@@ -196,7 +208,6 @@ check("failed run", "RUN_UNSUCCESSFUL", change(base, ["conclusion"], "failure"))
 for field, value, reason in [
     (["id"], run_id + 1, "RUN_IDENTITY"),
     (["repository", "id"], 99, "RUN_IDENTITY"),
-    (["repository", "full_name"], "other/aboutme", "RUN_IDENTITY"),
     (["workflow_id"], 99, "RUN_IDENTITY"),
     (["path"], ".github/workflows/approval-probe.yml@other", "RUN_IDENTITY"),
     (["event"], "push", "RUN_IDENTITY"),
@@ -391,6 +402,8 @@ for url, parents in [(base, [["repository"], ["actor"], ["triggering_actor"]]),
         for key in parent:
             nested = nested[key]
         for field in nested:
+            if parent == ["repository"] and field == "full_name":
+                continue
             def remove_nested(data, parent=parent, field=field, url=url):
                 body = json.loads(data[url]["body"])
                 target = body

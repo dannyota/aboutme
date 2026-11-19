@@ -128,12 +128,12 @@ report_findings() {
   return 1
 }
 
-# Resolve GitHub's latest published release, or an explicit version, and fetch
-# its digest asset by ID. A reachable Git tag does not prove publication.
 release_assets() {
-  local requested=$1 dest=$2 endpoint=latest metadata selection tag asset_id
+  local requested=$1 dest=$2 endpoint=latest metadata selection tag asset_id owner repository
   mkdir -p "$dest" || return 1
   rm -f "$dest/tag.txt" "$dest/digests.txt" || return 1
+  owner=$(bash "$(dirname "${BASH_SOURCE[0]}")/release-eligibility.sh" --owner) || return 1
+  repository=$owner/aboutme
   if [ -n "$requested" ]; then
     [[ $requested =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || {
       printf 'security-scan: expected a vMAJOR.MINOR.PATCH release\n' >&2
@@ -141,7 +141,7 @@ release_assets() {
     }
     endpoint="tags/$requested"
   fi
-  metadata=$(gh api "repos/dannyota/aboutme/releases/$endpoint") || return 1
+  metadata=$(gh api "repos/$repository/releases/$endpoint") || return 1
   selection=$(jq -er --arg requested "$requested" '
     select(.draft == false and .prerelease == false)
     | select(.published_at | type == "string" and length > 0)
@@ -158,21 +158,28 @@ release_assets() {
   read -r tag asset_id <<<"$selection"
   [[ $asset_id =~ ^[0-9]+$ ]] || return 1
   printf '%s\n' "$tag" >"$dest/tag.txt" || return 1
-  gh api "repos/dannyota/aboutme/releases/assets/$asset_id" \
+  gh api "repos/$repository/releases/assets/$asset_id" \
     -H Accept:application/octet-stream >"$dest/digests.txt" || return 1
   [ -s "$dest/digests.txt" ]
 }
 
-# Require exactly one platform manifest, never the app's multi-platform index.
+release_namespace() {
+  local owners
+  owners=$(awk -F/ '$1 == "ghcr.io" && index($3, "aboutme-") == 1 { print $2 }' "$1" | sort -u) || return 1
+  [[ $owners == dannyota || $owners == dntmakers ]] || return 1
+  printf '%s\n' "$owners"
+}
+
 release_image_ref() {
-  local manifest=$1 name=$2 arch=$3 line ref platform extra
-  line=$(awk -v image="ghcr.io/dannyota/aboutme-$name@" -v platform="linux/$arch" '
+  local manifest=$1 name=$2 arch=$3 owner line ref platform extra
+  owner=$(release_namespace "$manifest") || return 1
+  line=$(awk -v image="ghcr.io/$owner/aboutme-$name@" -v platform="linux/$arch" '
     index($1, image) == 1 && $2 == platform { print }
   ' "$manifest") || return 1
   [ -n "$line" ] && [[ $line != *$'\n'* ]] || return 1
   read -r ref platform extra <<<"$line"
   [ -z "$extra" ] && [ "$platform" = "linux/$arch" ] || return 1
-  [[ $ref =~ ^ghcr\.io/dannyota/aboutme-$name@sha256:[0-9a-f]{64}$ ]] || return 1
+  [[ $ref =~ ^ghcr\.io/$owner/aboutme-$name@sha256:[0-9a-f]{64}$ ]] || return 1
   printf '%s\n' "$ref"
 }
 
