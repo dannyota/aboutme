@@ -327,11 +327,9 @@ say "PGDG repository in place"
 
 if [ "$only" = postgres ]; then
   apt-get update -qq
-  install_pinned "postgresql-common=$POSTGRESQL_COMMON_VERSION"
+  install_pinned "postgresql-common=$POSTGRESQL_COMMON_VERSION" "postgresql-client-common=$POSTGRESQL_COMMON_VERSION"
   chown postgres:postgres /srv/data/postgresql
   chmod 0700 /srv/data/postgresql
-  # pgBackRest's secrets directory: root writes, postgres only reads
-  # (scripts/secrets-host.sh).
   chown root:postgres /srv/data/pgbackrest-conf
   chmod 0750 /srv/data/pgbackrest-conf
   install_pinned "postgresql-18=$POSTGRESQL_VERSION" "postgresql-client-18=$POSTGRESQL_VERSION" \
@@ -360,14 +358,10 @@ install_crowdsec_file "$bundle/edge/crowdsec/acquis.d/aboutme-http.yaml" \
   /etc/crowdsec/acquis.d/aboutme-http.yaml
 install_crowdsec_remove_acquisition
 
-# 3. Packages. postgresql-common creates the postgres user; the data
-# directories on the volume are handed to it before postgresql-18 creates the
-# cluster there.
-install_pinned "postgresql-common=$POSTGRESQL_COMMON_VERSION"
+# 3. Packages. postgresql-common's maintainer scripts create the postgres user.
+install_pinned "postgresql-common=$POSTGRESQL_COMMON_VERSION" "postgresql-client-common=$POSTGRESQL_COMMON_VERSION"
 chown postgres:postgres /srv/data/postgresql
 chmod 0700 /srv/data/postgresql
-# pgBackRest's secrets directory: root writes, postgres only reads
-# (scripts/secrets-host.sh).
 chown root:postgres /srv/data/pgbackrest-conf
 chmod 0750 /srv/data/pgbackrest-conf
 install_pinned "postgresql-18=$POSTGRESQL_VERSION" "postgresql-client-18=$POSTGRESQL_VERSION" \
