@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo=dannyota/aboutme
 admin=aboutme-admin
 lib=/usr/local/lib/aboutme
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -56,6 +55,8 @@ if ((activate && candidate > tracked_floor)); then
 fi
 
 commit=$(bash "$here/../../../scripts/release-eligibility.sh" --deploy-checkout "$tag")
+owner=$(bash "$here/../../../scripts/release-eligibility.sh" --owner "$commit")
+repo=$owner/aboutme
 
 schema_floor_path=apps/server/migrations/schema-floor
 schema_floor_entry='' schema_floor_tag='' schema_floor=0
@@ -93,9 +94,6 @@ work='' ssh_dir='' probe=''
 ssh_opts=()
 ssh_close() { ssh "${ssh_opts[@]}" -O exit "$admin@$host" 2>/dev/null || true; }
 
-# Runs one host script as root. Arguments include tags, digests, operation
-# ids, and release records. Each is quoted for the remote shell; the host
-# validates the values before use.
 on_host() {
   local cmd
   printf -v cmd '%q ' "$lib/$1" "${@:2}"
@@ -428,7 +426,6 @@ grep -qi '^x-content-type-options: *nosniff' <<<"$headers" || {
   say "smoke: nosniff header missing"
   exit 1
 }
-# Read only the ticker from the running edge configuration, not the API key.
 # shellcheck disable=SC2016
 ticker=$(ssh "${ssh_opts[@]}" "$admin@$host" \
   'sudo podman exec aboutme-caddy awk '\''$1 == "ticker_interval" {print $2}'\'' /run/caddy/crowdsec.global') || {

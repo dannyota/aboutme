@@ -18,6 +18,9 @@ stale=$(date -u -d "$observed +180 seconds" +%Y-%m-%dT%H:%M:%SZ)
 components='[]'
 
 for component in server web caddy maintenance; do
+  image=$component
+  [[ $component != maintenance ]] || image=caddy
+  repository=ghcr.io/dannyota/aboutme-$image
   exists=0
   podman container exists "aboutme-$component" >/dev/null 2>&1 || exists=$?
   case $exists in
@@ -30,13 +33,13 @@ for component in server web caddy maintenance; do
       [[ -z $extra && $observation != *$'\n'* ]] || die 'malformed observation'
       case $running in true | false) ;; *) die 'invalid container state' ;; esac
       [[ $running == false || $digest =~ ^sha256:[0-9a-f]{64}$ ]] || die 'invalid running digest'
-      repository=ghcr.io/dannyota/aboutme-$component
-      [[ $component != maintenance ]] || repository=ghcr.io/dannyota/aboutme-caddy
-      if [[ $running == true && $image_id =~ ^[0-9a-f]{64}$ && $pin =~ ^${repository//./\\.}@(sha256:[0-9a-f]{64})$ ]]; then
-        pinned=${BASH_REMATCH[1]}
-        repo_digests=$(podman image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' \
-          "$image_id" 2>/dev/null) || die 'image inspection failed'
-        if grep -qxF -- "$repository@$pinned" <<<"$repo_digests"; then digest=$pinned; fi
+      if [[ $running == true && $pin =~ ^(ghcr\.io/(dannyota|dntmakers)/aboutme-$image)@(sha256:[0-9a-f]{64})$ ]]; then
+        repository=${BASH_REMATCH[1]} pinned=${BASH_REMATCH[3]}
+        if [[ $image_id =~ ^[0-9a-f]{64}$ ]]; then
+          repo_digests=$(podman image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' \
+            "$image_id" 2>/dev/null) || die 'image inspection failed'
+          if grep -qxF -- "$repository@$pinned" <<<"$repo_digests"; then digest=$pinned; fi
+        fi
       fi
       ;;
     1) running=false ;;
@@ -60,10 +63,8 @@ for component in server web caddy maintenance; do
   elif [[ $component == maintenance ]]; then
     continue
   fi
-  image=$component
-  [[ $component != maintenance ]] || image=caddy
   components=$(jq -cn --argjson c "$components" --arg n "$component" \
-    --arg i "ghcr.io/dannyota/aboutme-$image" --argjson images "$images" \
+    --arg i "$repository" --argjson images "$images" \
     '$c + [{name:$n, image:$i, running_images:$images}]')
 done
 

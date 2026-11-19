@@ -567,7 +567,8 @@ describe('component rows and commands', () => {
     ].join('\n'));
     expect(command.lines.flat().filter(({ kind }) => kind === 'live')
       .map(({ text }) => text)).toEqual([
-      'server', server.image.digest.slice(7), 'v0.6.0',
+      'dannyota', 'server', server.image.digest.slice(7), 'dannyota',
+      'dannyota', 'v0.6.0',
     ]);
 
     const maintenance = targets.find(({ component }) =>

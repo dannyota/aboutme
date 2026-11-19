@@ -1,0 +1,147 @@
+{
+  "schema_version": 1,
+  "project": "aboutme",
+  "environment": "production",
+  "site": "https://aboutme.vn",
+  "source_repository": "https://github.com/dannyota/aboutme",
+  "platform": {
+    "provider": "greennode",
+    "orchestrator": "podman",
+    "region": "HCM03"
+  },
+  "observed_at": "2026-11-19T00:00:00Z",
+  "stale_after": "2026-11-19T00:03:00Z",
+  "summary": "unverified",
+  "release": null,
+  "components": [
+    {
+      "name": "server",
+      "image": "ghcr.io/dannyota/aboutme-server",
+      "running_images": [
+        {
+          "digest": "sha256:0000000000000000000000000000000000000000000000000000000000000008",
+          "replicas": 1,
+          "running_since": "2026-10-11T01:14:05Z",
+          "version": null,
+          "commit": null,
+          "signature": {
+            "status": "unchecked",
+            "checked_at": null,
+            "signer_workflow": null,
+            "transparency_log_index": null
+          },
+          "sbom": {
+            "status": "unchecked",
+            "format": null
+          },
+          "links": {
+            "commit": null,
+            "release": null,
+            "build": null,
+            "provenance": "https://api.github.com/repos/dannyota/aboutme/attestations/sha256:0000000000000000000000000000000000000000000000000000000000000008?predicate_type=provenance",
+            "sbom": null,
+            "transparency_log": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "web",
+      "image": "ghcr.io/dannyota/aboutme-web",
+      "running_images": [
+        {
+          "digest": "sha256:0000000000000000000000000000000000000000000000000000000000000008",
+          "replicas": 1,
+          "running_since": "2026-10-11T01:14:05Z",
+          "version": null,
+          "commit": null,
+          "signature": {
+            "status": "unchecked",
+            "checked_at": null,
+            "signer_workflow": null,
+            "transparency_log_index": null
+          },
+          "sbom": {
+            "status": "unchecked",
+            "format": null
+          },
+          "links": {
+            "commit": null,
+            "release": null,
+            "build": null,
+            "provenance": "https://api.github.com/repos/dannyota/aboutme/attestations/sha256:0000000000000000000000000000000000000000000000000000000000000008?predicate_type=provenance",
+            "sbom": null,
+            "transparency_log": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "caddy",
+      "image": "ghcr.io/dannyota/aboutme-caddy",
+      "running_images": [
+        {
+          "digest": "sha256:0000000000000000000000000000000000000000000000000000000000000008",
+          "replicas": 1,
+          "running_since": "2026-10-11T01:14:05Z",
+          "version": null,
+          "commit": null,
+          "signature": {
+            "status": "unchecked",
+            "checked_at": null,
+            "signer_workflow": null,
+            "transparency_log_index": null
+          },
+          "sbom": {
+            "status": "unchecked",
+            "format": null
+          },
+          "links": {
+            "commit": null,
+            "release": null,
+            "build": null,
+            "provenance": "https://api.github.com/repos/dannyota/aboutme/attestations/sha256:0000000000000000000000000000000000000000000000000000000000000008?predicate_type=provenance",
+            "sbom": null,
+            "transparency_log": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "maintenance",
+      "image": "ghcr.io/dannyota/aboutme-caddy",
+      "running_images": [
+        {
+          "digest": "sha256:0000000000000000000000000000000000000000000000000000000000000008",
+          "replicas": 1,
+          "running_since": "2026-10-11T01:14:05Z",
+          "version": null,
+          "commit": null,
+          "signature": {
+            "status": "unchecked",
+            "checked_at": null,
+            "signer_workflow": null,
+            "transparency_log_index": null
+          },
+          "sbom": {
+            "status": "unchecked",
+            "format": null
+          },
+          "links": {
+            "commit": null,
+            "release": null,
+            "build": null,
+            "provenance": "https://api.github.com/repos/dannyota/aboutme/attestations/sha256:0000000000000000000000000000000000000000000000000000000000000008?predicate_type=provenance",
+            "sbom": null,
+            "transparency_log": null
+          }
+        }
+      ]
+    }
+  ],
+  "observer": {
+    "version": null,
+    "commit": null,
+    "source": "self-reported"
+  }
+}

@@ -33,7 +33,6 @@ mode, request_id, root = sys.argv[1:]
 ID = r'[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]'
 UUID = r'[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}'
 SLUG = r'[a-z0-9]+(?:-[a-z0-9]+)*'
-# Reserved roots use the same contract as the public namespace.
 reserved_slugs = {'.well-known','admin','api','app','authorize','forgot-password','guide','healthz','_nuxt','internal-render','llms.txt','login','mcp','oauth','people','print','privacy','readyz','register','reset-password','robots.txt','showcase','sitemap.xml','templates','terms','u','verify','verify-email'}
 def slug(x):
     return isinstance(x, str) and 4 <= len(x) <= 30 and re.fullmatch(SLUG, x) and x not in reserved_slugs
@@ -64,9 +63,13 @@ def release(x):
         tag=x[prefix+'_tag']
         m=re.fullmatch(r'v(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})', tag)
         if not m or x[prefix+'_number'] != sum(int(n)*v for n,v in zip(m.groups(),(1000000,1000,1))): raise ValueError('release')
+    owners=set()
     for name in ('server','web','caddy','maintenance'):
         repo = 'caddy' if name == 'maintenance' else name
-        if not re.fullmatch(r'ghcr\.io/dannyota/aboutme-'+repo+r'@sha256:[0-9a-f]{64}',x[name+'_image']): raise ValueError('image')
+        m=re.fullmatch(r'ghcr\.io/(dannyota|dntmakers)/aboutme-'+repo+r'@sha256:[0-9a-f]{64}',x[name+'_image'])
+        if not m: raise ValueError('image')
+        if name != 'maintenance': owners.add(m[1])
+    if len(owners) != 1: raise ValueError('owner')
 def envelope(x):
     if not isinstance(x,dict): raise ValueError('object')
     verb=x.get('verb')
@@ -210,8 +213,6 @@ try:
             try: fcntl.flock(request_lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
             except BlockingIOError:
                 os.close(request_lock); continue
-            # Reload only after acquiring the request lock. Admission is held,
-            # so writers cannot race accounting or replacements.
             x=state(read(path+'/state.json'))
             if expired(x):
                 x=erase(x)
@@ -223,7 +224,6 @@ try:
                 if not entry.name.startswith('audit-'): continue
                 event=read(entry.path)
                 if utc()>=parse(event['at'])+datetime.timedelta(days=180): os.unlink(entry.path)
-            # Nonpersonal attempt metadata expires after 30 days only when stopped.
             if x['closureQuiescent'] and not x['reserved'] and x['attempts'] and all(a['stopped'] and utc()>=parse(a['startedAt'])+datetime.timedelta(days=30) for a in x['attempts']):
                 x['attempts']=[]; atomic(path+'/state.json',x)
             directory_fd=os.open(path,os.O_DIRECTORY)
@@ -248,8 +248,6 @@ try:
         charge=max(2097152,actual) if old['reserved'] or not old['closureQuiescent'] else actual
         if x['reserved'] and total-charge+2097152>67108864: raise ValueError('capacity')
         if not x['reserved'] and not x['closureQuiescent']: raise ValueError('uncertain closure')
-        # Audit intent is durable before the state replacement. A failed audit
-        # write prevents dispatch, and a failed result write leaves intent unknown.
         event={'at':stamp(utc()),'requestId':request_id,'kind':x['kind'],'phase':x['phase'],'outcome':x['outcome'],'action':x['action']}
         growth=len(json.dumps(event).encode())+2*len(json.dumps(x).encode())+4096
         if actual+growth>2097152 or total-charge+max(actual+growth,2097152 if x['reserved'] else 0)>67108864: raise ValueError('capacity')

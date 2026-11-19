@@ -14,7 +14,6 @@ exit "${GH_EXIT:-0}"
 STUB
 chmod +x "$work/bin/gh"
 
-repo=dannyota/aboutme
 say() { printf '%s\n' "$*" >>"$work/said"; }
 # shellcheck source=deploy/vn/scripts/provenance.sh
 source "$repo_root/deploy/vn/scripts/provenance.sh"
@@ -24,8 +23,15 @@ export CALLS=$work/calls
 hex=$(printf 'ab%062d' 7)
 digest=sha256:$hex
 commit=0123456789abcdef0123456789abcdef01234567
+declare -A owner_id=([dannyota]=244348267 [dntmakers]=342323513)
+attestation() {
+  jq -cn --arg n "$1" --arg d "$2" --arg uri "https://github.com/$3/aboutme" --argjson rid "$4" --argjson oid "$5" \
+    '{verificationResult:{statement:{subject:[{name:$n,digest:{sha256:$d}}]},
+      signature:{certificate:{sourceRepositoryURI:$uri,sourceRepositoryIdentifier:$rid,sourceRepositoryOwnerIdentifier:$oid}}}}'
+}
 statement() {
-  printf '[{"verificationResult":{"statement":{"subject":[{"name":"%s","digest":{"sha256":"%s"}}]}}}]' "$1" "$2"
+  local owner=${3:-dannyota}
+  attestation "$1" "$2" "$owner" '"1318874703"' "\"${owner_id[$owner]}\"" | jq -sc .
 }
 
 fail() { echo "provenance-test: $*" >&2; exit 1; }
@@ -38,12 +44,51 @@ expect() {
 }
 
 export GH_EXIT=0 GH_OUT
-GH_OUT=$(statement ghcr.io/dannyota/aboutme-server "$hex")
-expect ok server 0 "$digest" "$commit"
-want="attestation verify oci://ghcr.io/dannyota/aboutme-server@$digest --repo dannyota/aboutme"
-want+=" --cert-identity https://github.com/dannyota/aboutme/.github/workflows/release-images.yml@refs/tags/v1.2.3"
-want+=" --source-ref refs/tags/v1.2.3 --source-digest $commit --deny-self-hosted-runners --format json"
-[[ $(cat "$CALLS") == "$want" ]] || fail "ok: gh called with '$(cat "$CALLS")'"
+for owner in dannyota dntmakers; do
+  repo=$owner/aboutme
+  GH_OUT=$(statement "ghcr.io/$owner/aboutme-server" "$hex" "$owner")
+  expect "ok $owner" server 0 "$digest" "$commit"
+  want="attestation verify oci://ghcr.io/$owner/aboutme-server@$digest --repo $owner/aboutme"
+  want+=" --cert-identity https://github.com/$owner/aboutme/.github/workflows/release-images.yml@refs/tags/v1.2.3"
+  want+=" --source-ref refs/tags/v1.2.3 --source-digest $commit --deny-self-hosted-runners --format json"
+  [[ $(cat "$CALLS") == "$want" ]] || fail "ok $owner: gh called with '$(cat "$CALLS")'"
+done
+
+repo=dntmakers/aboutme
+for case in other-id no-id numeric-id other-owner-id no-owner-id numeric-owner-id other-source no-certificate mixed; do
+  good=$(attestation ghcr.io/dntmakers/aboutme-server "$hex" dntmakers '"1318874703"' '"342323513"')
+  case $case in
+    other-id) one=$(attestation ghcr.io/dntmakers/aboutme-server "$hex" dntmakers '"1318874704"' '"342323513"') ;;
+    no-id) one=$(jq -c 'del(.verificationResult.signature.certificate.sourceRepositoryIdentifier)' <<<"$good") ;;
+    numeric-id) one=$(attestation ghcr.io/dntmakers/aboutme-server "$hex" dntmakers 1318874703 '"342323513"') ;;
+    other-owner-id) one=$(attestation ghcr.io/dntmakers/aboutme-server "$hex" dntmakers '"1318874703"' '"244348267"') ;;
+    no-owner-id) one=$(jq -c 'del(.verificationResult.signature.certificate.sourceRepositoryOwnerIdentifier)' <<<"$good") ;;
+    numeric-owner-id) one=$(attestation ghcr.io/dntmakers/aboutme-server "$hex" dntmakers '"1318874703"' 342323513) ;;
+    other-source) one=$(attestation ghcr.io/dntmakers/aboutme-server "$hex" dannyota '"1318874703"' '"342323513"') ;;
+    no-certificate) one=$(jq -c 'del(.verificationResult.signature)' <<<"$good") ;;
+    mixed) one=$good$'\n'$(attestation ghcr.io/dntmakers/aboutme-web "$hex" dntmakers '"1318874704"' '"342323513"') ;;
+  esac
+  GH_OUT=$(jq -sc . <<<"$one")
+  expect "identity $case" server 1 "$digest" "$commit"
+  grep -qF "provenance: the build provenance for server@$digest names a different repository or owner" "$work/said" ||
+    fail "identity $case: no message"
+done
+
+GH_OUT=$(statement ghcr.io/dannyota/aboutme-server "$hex" dntmakers)
+expect subject_other_owner server 1 "$digest" "$commit"
+grep -qF "names a different subject" "$work/said" || fail "subject_other_owner: no message"
+
+repo=dannyota/aboutme
+GH_OUT=$(statement ghcr.io/dannyota/aboutme-server "$hex" dntmakers)
+expect dannyota_with_dntmakers_ids server 1 "$digest" "$commit"
+
+for bad in evil/aboutme Dntmakers/aboutme DANNYOTA/aboutme dntmakers/other dntmakers dntmakers/aboutme/x '' 'dntmakers/aboutme '; do
+  repo=$bad
+  GH_OUT=$(statement ghcr.io/dntmakers/aboutme-server "$hex" dntmakers)
+  expect "bad_repo '$bad'" server 1 "$digest" "$commit"
+  [[ ! -s $CALLS ]] || fail "bad_repo '$bad': gh was called"
+done
+repo=dannyota/aboutme
 
 GH_EXIT=1 GH_OUT=
 expect gh_refuses server 1 "$digest" "$commit"
