@@ -1142,12 +1142,14 @@ release_job_body() {
 assert_observer_build() {
   grep -Fq 'observer*)' <<<"$1" &&
     grep -Fq 'docker build --platform "linux/$ARCH" --provenance=false' <<<"$1" &&
-    grep -Fq -- '--build-arg VERSION="$VERSION" --build-arg COMMIT="$COMMIT"' <<<"$1" ||
+    grep -Fq -- '--build-arg VERSION="$VERSION" --build-arg COMMIT="$COMMIT"' <<<"$1" &&
+    grep -Fq -- '--build-arg OWNER="$OWNER"' <<<"$1" &&
+    grep -Fq '[ "${version##* }" = "$OWNER" ]' <<<"$1" ||
     fail "shared observer build must keep a single-platform manifest and build identity"
 }
 IMAGE_CHECK_BODY=$(cat "$IMAGE_CHECK")
 assert_observer_build "$IMAGE_CHECK_BODY"
-for pattern in 'observer*)' '--provenance=false' '--build-arg VERSION='; do
+for pattern in 'observer*)' '--provenance=false' '--build-arg VERSION=' '--build-arg OWNER=' '= "$OWNER" ]'; do
   expect_guard_drift assert_observer_build \
     "$(grep -Fv -- "$pattern" <<<"$IMAGE_CHECK_BODY")" \
     'shared observer build must keep a single-platform manifest and build identity'

@@ -33,7 +33,10 @@
       "enum": ["https://aboutme.vn"]
     },
     "source_repository": {
-      "const": "https://github.com/dannyota/aboutme"
+      "enum": [
+        "https://github.com/dannyota/aboutme",
+        "https://github.com/dntmakers/aboutme"
+      ]
     },
     "platform": {
       "type": "object",
@@ -155,7 +158,10 @@
           "enum": [
             "ghcr.io/dannyota/aboutme-server",
             "ghcr.io/dannyota/aboutme-web",
-            "ghcr.io/dannyota/aboutme-caddy"
+            "ghcr.io/dannyota/aboutme-caddy",
+            "ghcr.io/dntmakers/aboutme-server",
+            "ghcr.io/dntmakers/aboutme-web",
+            "ghcr.io/dntmakers/aboutme-caddy"
           ]
         },
         "running_images": {
@@ -178,7 +184,10 @@
           "then": {
             "properties": {
               "image": {
-                "const": "ghcr.io/dannyota/aboutme-server"
+                "enum": [
+                  "ghcr.io/dannyota/aboutme-server",
+                  "ghcr.io/dntmakers/aboutme-server"
+                ]
               }
             }
           }
@@ -194,7 +203,10 @@
           "then": {
             "properties": {
               "image": {
-                "const": "ghcr.io/dannyota/aboutme-web"
+                "enum": [
+                  "ghcr.io/dannyota/aboutme-web",
+                  "ghcr.io/dntmakers/aboutme-web"
+                ]
               }
             }
           }
@@ -210,7 +222,10 @@
           "then": {
             "properties": {
               "image": {
-                "const": "ghcr.io/dannyota/aboutme-caddy"
+                "enum": [
+                  "ghcr.io/dannyota/aboutme-caddy",
+                  "ghcr.io/dntmakers/aboutme-caddy"
+                ]
               }
             }
           }
@@ -226,7 +241,10 @@
           "then": {
             "properties": {
               "image": {
-                "const": "ghcr.io/dannyota/aboutme-caddy"
+                "enum": [
+                  "ghcr.io/dannyota/aboutme-caddy",
+                  "ghcr.io/dntmakers/aboutme-caddy"
+                ]
               }
             }
           }
@@ -308,7 +326,7 @@
                 },
                 {
                   "type": "string",
-                  "pattern": "^https://github\\.com/dannyota/aboutme/\\.github/workflows/release-images\\.yml@refs/tags/v(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
+                  "pattern": "^https://github\\.com/(dannyota|dntmakers)/aboutme/\\.github/workflows/release-images\\.yml@refs/tags/v(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
                 }
               ]
             },
@@ -364,7 +382,7 @@
                 },
                 {
                   "type": "string",
-                  "pattern": "^https://github\\.com/dannyota/aboutme/commit/[0-9a-f]{40}$"
+                  "pattern": "^https://github\\.com/(dannyota|dntmakers)/aboutme/commit/[0-9a-f]{40}$"
                 }
               ]
             },
@@ -375,7 +393,7 @@
                 },
                 {
                   "type": "string",
-                  "pattern": "^https://github\\.com/dannyota/aboutme/releases/tag/v(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
+                  "pattern": "^https://github\\.com/(dannyota|dntmakers)/aboutme/releases/tag/v(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
                 }
               ]
             },
@@ -386,13 +404,13 @@
                 },
                 {
                   "type": "string",
-                  "pattern": "^https://github\\.com/dannyota/aboutme/actions/runs/[0-9]{1,20}/attempts/[0-9]{1,4}$"
+                  "pattern": "^https://github\\.com/(dannyota|dntmakers)/aboutme/actions/runs/[0-9]{1,20}/attempts/[0-9]{1,4}$"
                 }
               ]
             },
             "provenance": {
               "type": "string",
-              "pattern": "^https://api\\.github\\.com/repos/dannyota/aboutme/attestations/sha256:[0-9a-f]{64}\\?predicate_type=provenance$"
+              "pattern": "^https://api\\.github\\.com/repos/(dannyota|dntmakers)/aboutme/attestations/sha256:[0-9a-f]{64}\\?predicate_type=provenance$"
             },
             "sbom": {
               "oneOf": [
@@ -401,7 +419,7 @@
                 },
                 {
                   "type": "string",
-                  "pattern": "^https://github\\.com/dannyota/aboutme/releases/download/v(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)/aboutme-(server|web|caddy)-amd64\\.spdx\\.json$"
+                  "pattern": "^https://github\\.com/(dannyota|dntmakers)/aboutme/releases/download/v(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)/aboutme-(server|web|caddy)-amd64\\.spdx\\.json$"
                 }
               ]
             },

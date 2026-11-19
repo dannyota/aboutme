@@ -75,3 +75,14 @@ func TestRejects(t *testing.T) {
 		})
 	}
 }
+
+func TestDntmakersDocumentListsItsImages(t *testing.T) {
+	out, err := check([]string{"-now", "2026-10-02T03:21:00Z"}, example(t, "verified-dntmakers.json"))
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	want := "ghcr.io/dntmakers/aboutme-server sha256:" + strings.Repeat("9f2c", 16) + " v0.6.5\n"
+	if !strings.HasPrefix(out, want) || strings.Contains(out, "dannyota") {
+		t.Errorf("output = %q, want dntmakers images starting with %q", out, want)
+	}
+}

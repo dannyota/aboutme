@@ -6,6 +6,8 @@ import (
 	"slices"
 	"sort"
 	"strings"
+
+	"danny.vn/aboutme/deploy/observer/internal/source"
 )
 
 var (
@@ -20,15 +22,17 @@ var (
 		"32-hex ID":         regexp.MustCompile(`(?i)[0-9a-f]{32}`),
 		"UUID":              regexp.MustCompile(`(?i)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`),
 	}
-	scheme      = regexp.MustCompile(`[A-Za-z][A-Za-z0-9+.-]*://`)
-	urlPrefixes = []string{
-		"https://aboutme.vn\"",
-		"https://github.com/dannyota/aboutme\"",
-		"https://github.com/dannyota/aboutme/",
-		"https://api.github.com/repos/dannyota/aboutme/attestations/",
-		"https://search.sigstore.dev/?logIndex=",
-	}
+	scheme = regexp.MustCompile(`[A-Za-z][A-Za-z0-9+.-]*://`)
 )
+
+func urlPrefixes() []string {
+	out := []string{"https://aboutme.vn\"", "https://search.sigstore.dev/?logIndex="}
+	for _, owner := range source.Owners() {
+		out = append(out, source.Repository(owner)+"\"", source.Repository(owner)+"/",
+			"https://api.github.com/repos/"+owner+"/aboutme/attestations/")
+	}
+	return out
+}
 
 func Find(b []byte) []string {
 	s := string(b)
@@ -39,9 +43,10 @@ func Find(b []byte) []string {
 			found = append(found, fmt.Sprintf("holds a %s: %q", name, m))
 		}
 	}
+	prefixes := urlPrefixes()
 	for _, loc := range scheme.FindAllStringIndex(s, -1) {
 		rest := s[loc[0]:]
-		if !slices.ContainsFunc(urlPrefixes, func(p string) bool { return strings.HasPrefix(rest, p) }) {
+		if !slices.ContainsFunc(prefixes, func(p string) bool { return strings.HasPrefix(rest, p) }) {
 			found = append(found, fmt.Sprintf("holds a URL outside the allowed prefixes: %.80q", rest))
 		}
 	}

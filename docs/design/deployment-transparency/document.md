@@ -92,35 +92,35 @@ container runs.
 Every object is closed: the schema sets `additionalProperties: false` at every
 level. Readers ignore fields they do not know (see [versions](#versions)).
 
-| Field                              | Type and rule                                                                                           | Source                                   |
-| ---------------------------------- | ------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
-| `schema_version`                   | Integer, `1`                                                                                            | Constant                                 |
-| `project`                          | `"aboutme"`                                                                                             | Constant                                 |
-| `environment`                      | `"production"`                                                                                          | Observer configuration                   |
-| `site`                             | `"https://aboutme.vn"`                                                                                  | Observer configuration                   |
-| `source_repository`                | `"https://github.com/dannyota/aboutme"`                                                                 | Constant                                 |
-| `platform.provider`                | `greennode`                                                                                             | Observer platform adapter                |
-| `platform.orchestrator`            | `podman`                                                                                                | Observer platform adapter                |
-| `platform.region`                  | A GreenNode region code such as `HCM03`                                                                 | Observer configuration                   |
-| `observed_at`, `stale_after`       | RFC 3339 UTC, whole seconds; `stale_after` is `observed_at` plus 180 s                                  | Podman reporter clock                    |
-| `summary`                          | `verified`, `rolling_out`, `unverified`, or `mismatch` (rules below)                                    | Computed from the components             |
-| `release`                          | Object or `null` (rules below)                                                                          | Computed from the components             |
-| `components[].name`                | `server`, `web`, `caddy`, or `maintenance`, in that order                                               | Fixed mapping from service and container |
-| `components[].image`               | Fixed by `name`: `ghcr.io/dannyota/aboutme-server`, `-web`, `-caddy`; `maintenance` also takes `-caddy` | Fixed mapping, never the platform text   |
-| `running_images[]`                 | One entry per distinct digest, ordered by `running_since`, at most 8                                    | Platform                                 |
-| `running_images[].digest`          | `^sha256:[0-9a-f]{64}$`                                                                                 | Platform                                 |
-| `running_images[].replicas`        | Integer 1 to 64                                                                                         | Platform, counted by the observer        |
-| `running_images[].running_since`   | RFC 3339 UTC; earliest start among that digest's running containers                                     | Platform                                 |
-| `running_images[].version`         | `^v[0-9]+\.[0-9]+\.[0-9]+$` or `null`                                                                   | Signed certificate's source ref          |
-| `running_images[].commit`          | `^[0-9a-f]{40}$` or `null`                                                                              | Signed certificate's source digest       |
-| `signature.status`                 | `verified`, `not_found`, `invalid`, or `unchecked`                                                      | Observer verification                    |
-| `signature.checked_at`             | RFC 3339 UTC or `null`                                                                                  | Observer clock                           |
-| `signature.signer_workflow`        | The exact certificate identity, matching the pattern in [verification][ver]                             | Signed certificate                       |
-| `signature.transparency_log_index` | Integer or `null`                                                                                       | Bundle's Rekor entry                     |
-| `sbom.status`, `sbom.format`       | Status as above; format `spdx-2.3` or `null`                                                            | Observer verification                    |
-| `links.*`                          | Built from constants plus verified values; each matches a fixed URL pattern                             | Observer                                 |
-| `observer.version`                 | `^v[0-9]+\.[0-9]+\.[0-9]+$` or `null`                                                                   | Self-reported, and labelled so           |
-| `observer.commit`                  | `^[0-9a-f]{40}$` or `null`                                                                              | Self-reported, and labelled so           |
+| Field                              | Type and rule                                                                                                                                                     | Source                                                  |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| `schema_version`                   | Integer, `1`                                                                                                                                                      | Constant                                                |
+| `project`                          | `"aboutme"`                                                                                                                                                       | Constant                                                |
+| `environment`                      | `"production"`                                                                                                                                                    | Observer configuration                                  |
+| `site`                             | `"https://aboutme.vn"`                                                                                                                                            | Observer configuration                                  |
+| `source_repository`                | `"https://github.com/dannyota/aboutme"` or `"https://github.com/dntmakers/aboutme"`                                                                               | The observer's build-time owner                         |
+| `platform.provider`                | `greennode`                                                                                                                                                       | Observer platform adapter                               |
+| `platform.orchestrator`            | `podman`                                                                                                                                                          | Observer platform adapter                               |
+| `platform.region`                  | A GreenNode region code such as `HCM03`                                                                                                                           | Observer configuration                                  |
+| `observed_at`, `stale_after`       | RFC 3339 UTC, whole seconds; `stale_after` is `observed_at` plus 180 s                                                                                            | Podman reporter clock                                   |
+| `summary`                          | `verified`, `rolling_out`, `unverified`, or `mismatch` (rules below)                                                                                              | Computed from the components                            |
+| `release`                          | Object or `null` (rules below)                                                                                                                                    | Computed from the components                            |
+| `components[].name`                | `server`, `web`, `caddy`, or `maintenance`, in that order                                                                                                         | Fixed mapping from service and container                |
+| `components[].image`               | `ghcr.io/<owner>/aboutme-server`, `-web`, `-caddy`, with owner `dannyota` or `dntmakers`; `maintenance` also takes `-caddy`; a stopped component takes `dannyota` | The running pin's repository, limited to that allowlist |
+| `running_images[]`                 | One entry per distinct digest, ordered by `running_since`, at most 8                                                                                              | Platform                                                |
+| `running_images[].digest`          | `^sha256:[0-9a-f]{64}$`                                                                                                                                           | Platform                                                |
+| `running_images[].replicas`        | Integer 1 to 64                                                                                                                                                   | Platform, counted by the observer                       |
+| `running_images[].running_since`   | RFC 3339 UTC; earliest start among that digest's running containers                                                                                               | Platform                                                |
+| `running_images[].version`         | `^v[0-9]+\.[0-9]+\.[0-9]+$` or `null`                                                                                                                             | Signed certificate's source ref                         |
+| `running_images[].commit`          | `^[0-9a-f]{40}$` or `null`                                                                                                                                        | Signed certificate's source digest                      |
+| `signature.status`                 | `verified`, `not_found`, `invalid`, or `unchecked`                                                                                                                | Observer verification                                   |
+| `signature.checked_at`             | RFC 3339 UTC or `null`                                                                                                                                            | Observer clock                                          |
+| `signature.signer_workflow`        | The exact certificate identity, matching the pattern in [verification][ver]                                                                                       | Signed certificate                                      |
+| `signature.transparency_log_index` | Integer or `null`                                                                                                                                                 | Bundle's Rekor entry                                    |
+| `sbom.status`, `sbom.format`       | Status as above; format `spdx-2.3` or `null`                                                                                                                      | Observer verification                                   |
+| `links.*`                          | Commit, release, SBOM and provenance links name the build-time owner's repository; the build link follows the certificate; each matches a fixed URL pattern       | Observer                                                |
+| `observer.version`                 | `^v[0-9]+\.[0-9]+\.[0-9]+$` or `null`                                                                                                                             | Self-reported, and labelled so                          |
+| `observer.commit`                  | `^[0-9a-f]{40}$` or `null`                                                                                                                                        | Self-reported, and labelled so                          |
 
 Within a `running_images[]` entry, `version`, `commit`,
 `signature.signer_workflow`, and `signature.transparency_log_index` are `null`
@@ -150,7 +150,7 @@ The observer computes `summary` from the components:
 | `verified`    | Every component runs one verified digest                                                   |
 
 `release` is set only when `summary` is `verified` and `server`, `web`, and
-`caddy` share one version and commit. It holds `version`, `commit`, and
+`caddy` share one version, commit, and owner. It holds `version`, `commit`, and
 `deployed_at`: the latest `running_since` among those three, the moment the
 whole release was running. `maintenance` may run an older Caddy after a rollback
 and does not affect `release`.
@@ -184,10 +184,10 @@ fields, and discards its build claims. Every observer follows the sanitizer
 below.
 
 The sanitizer is an allowlist. The observer never serializes a platform object.
-Platform adapters return one internal type holding only component name, digest,
-replica count, and start time; the document builder fills a closed output type
-from that type, the verification results, and constants. Before writing, the
-observer validates the bytes against the JSON Schema file
+Platform adapters return one internal type holding only component name, image
+repository, digest, replica count, and start time; the document builder fills a
+closed output type from that type, the verification results, and constants.
+Before writing, the observer validates the bytes against the JSON Schema file
 `deploy/observer/schema/deployment.v1.json`, and every string against its field
 pattern. A value that fails its pattern drops the whole write; it is never
 passed through or truncated into place.

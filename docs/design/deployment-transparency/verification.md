@@ -8,12 +8,12 @@ without trusting aboutme.
 
 `release-images.yml` builds `server`, `web`, `caddy`, and `observer` for a
 version tag on a GitHub-hosted runner. For each image it already scans with
-Trivy, pushes to `ghcr.io/dannyota/aboutme-<name>`, and runs
-`actions/attest-build-provenance`, which signs an SLSA provenance v1 statement
-for the pushed digest with a short-lived Sigstore certificate issued to the
-workflow's OIDC identity. The signature is recorded in the public Sigstore
-transparency log (Rekor), stored in GitHub's attestation store, and pushed to
-the registry beside the image.
+Trivy, pushes to `ghcr.io/<owner>/aboutme-<name>`, where `<owner>` is the
+repository's owner, and runs `actions/attest-build-provenance`, which signs an
+SLSA provenance v1 statement for the pushed digest with a short-lived Sigstore
+certificate issued to the workflow's OIDC identity. The signature is recorded in
+the public Sigstore transparency log (Rekor), stored in GitHub's attestation
+store, and pushed to the registry beside the image.
 
 A real statement for `aboutme-server` v0.5.21 names subject digest
 `sha256:d1c33a0a…945c`, workflow ref `refs/tags/v0.5.21`, commit `d73f4043…`,
@@ -71,19 +71,27 @@ checks use the same GitHub and Sigstore commands.
 For one running digest, the observer uses `sigstore-go` with the public-good
 trust root (refreshed through TUF) and requires all of:
 
-1. A bundle for the digest, fetched from the GitHub attestations API filtered by
-   predicate type. When the API answers 403 or 429 (its unauthenticated limit is
-   60 requests an hour per address), the observer reads the same bundle from the
-   registry.
+1. A bundle for the digest, fetched from the GitHub attestations API by
+   repository ID
+   (`https://api.github.com/repositories/1318874703/attestations/sha256:<hex>`)
+   and filtered by predicate type. When the API answers 403 or 429 (its
+   unauthenticated limit is 60 requests an hour per address), the observer reads
+   the same bundle from the registry, in both owners' namespaces. A namespace
+   whose token the registry refuses holds no readable bundle.
 2. A valid signature, a certificate chain to Fulcio, and a Rekor inclusion proof
    and signed timestamp inside the certificate's validity.
 3. Issuer `https://token.actions.githubusercontent.com`.
-4. Certificate identity exactly matching
-   `^https://github\.com/dannyota/aboutme/\.github/workflows/release-images\.yml@refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$`.
-5. Source repository `https://github.com/dannyota/aboutme` and runner
-   environment `github-hosted` in the certificate extensions.
+4. Source repository identifier `1318874703` in the certificate extensions. The
+   [repository transfer](../repository-transfer.md) moves the repository from
+   `dannyota` to `dntmakers`, and the ID stays the same.
+5. Certificate identity exactly matching
+   `^https://github\.com/(dannyota|dntmakers)/aboutme/\.github/workflows/release-images\.yml@refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$`.
+   The owner in it must equal the owner in the source repository URI and in the
+   run URL. The source repository owner identifier must be that owner's account
+   ID: 244348267 for `dannyota`, 342323513 for `dntmakers`. The runner
+   environment must be `github-hosted`.
 6. Statement subject digest equal to the running digest, and subject name equal
-   to the component's image.
+   to the running image's repository, under the signer's owner.
 7. Predicate type `https://slsa.dev/provenance/v1` for the signature, and
    `https://spdx.dev/Document/v2.3` for the SBOM.
 

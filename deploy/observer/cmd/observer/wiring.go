@@ -20,6 +20,7 @@ type publisher interface {
 }
 
 type observer struct {
+	owner     string
 	lister    platform.Lister
 	info      platform.Info
 	verifier  checker
@@ -46,6 +47,7 @@ func newObserver(ctx context.Context, cfg config, lister platform.Lister, info p
 	}
 
 	return &observer{
+		owner:     owner,
 		lister:    lister,
 		info:      info,
 		verifier:  v,
