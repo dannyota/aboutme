@@ -3,6 +3,7 @@ import { createApp, createSSRApp, h, nextTick, shallowRef } from 'vue';
 import type { ShallowRef } from 'vue';
 
 import type { components } from '../api/generated/openapi';
+import PublicPages from '../components/public/PublicPages.vue';
 import PublicResumeApp from '../components/public/PublicResumeApp.vue';
 import { compareRevision, parseRevision } from '../editor/revision';
 import {
@@ -83,6 +84,7 @@ function publicResumeRoot(
     render: () => h(PublicResumeApp, {
       publicResume: publicResume.value,
       homeHref,
+      pages: PublicPages,
       ...(entryPoints
         ? projectEntryPoints(publicResume.value, homeHref)
         : {}),

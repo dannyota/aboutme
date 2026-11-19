@@ -1,0 +1,210 @@
+.public-resume-page .resume-page {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+.public-resume-page .public-pages-live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.public-resume-page .public-pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding-block-start: 8px;
+}
+
+.public-resume-page .public-pager-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--public-desk-ink);
+  cursor: pointer;
+}
+
+.public-resume-page .public-pager-button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.public-resume-page .public-pager-button:focus-visible {
+  outline: 2px solid var(--public-desk-focus);
+  outline-offset: 2px;
+}
+
+.public-resume-page .public-pager-status {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 72px;
+  margin: 0;
+  color: var(--public-desk-muted);
+  font: 500 13px/20px "Be Vietnam Pro", system-ui, sans-serif;
+}
+
+.public-resume-page .public-pager-dots {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+
+.public-resume-page .public-pager-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--public-desk-muted);
+  opacity: 0.4;
+}
+
+.public-resume-page .public-pager-dot[data-current] {
+  background: var(--public-desk-ink);
+  opacity: 1;
+}
+
+@media screen {
+  .public-resume-page {
+    --public-shadow: 74 54 22;
+    --public-desk-ink: #1a1650;
+    --public-desk-muted: #55517d;
+    --public-desk-focus: #1a1650;
+    position: relative;
+    padding-block-end: 24px;
+  }
+
+  .public-resume-page > .resume-document {
+    width: min(100% - 32px, var(--public-page-width, 794px));
+    margin: 24px auto 0;
+    border-radius: 4px;
+    box-shadow: 0 0 0 0.5px rgb(var(--public-shadow) / .14), 0 1px 2px rgb(var(--public-shadow) / .08), 0 10px 26px -8px rgb(var(--public-shadow) / .2), 0 32px 60px -28px rgb(var(--public-shadow) / .22);
+  }
+
+  .public-resume-page[data-pages="shown"] > .resume-document,
+  .public-resume-page[data-pages="updating"] > .resume-document {
+    display: none;
+  }
+
+  .public-resume-page .public-pages {
+    padding-block-start: 24px;
+  }
+
+  .public-resume-page .public-pages[data-state="loading"],
+  .public-resume-page .public-pages[data-state="staging"] {
+    position: absolute;
+    inset: 0 0 auto;
+    height: 0;
+    overflow: hidden;
+    visibility: hidden;
+  }
+
+  .public-resume-page .public-page {
+    position: relative;
+  }
+
+  .public-resume-page .public-page-sheet {
+    border-radius: 4px;
+    box-shadow: 0 0 0 0.5px rgb(var(--public-shadow) / .14), 0 1px 2px rgb(var(--public-shadow) / .08), 0 10px 26px -8px rgb(var(--public-shadow) / .2), 0 32px 60px -28px rgb(var(--public-shadow) / .22);
+  }
+
+  .public-resume-page .public-page-scale {
+    transform-origin: 0 0;
+  }
+
+  .public-resume-page .public-page-scale > .resume-page {
+    border-radius: calc(4px / var(--public-scale, 1));
+  }
+
+  .public-resume-page .public-page-position {
+    position: absolute;
+    inset: 100% 0 auto;
+    height: 24px;
+    margin: 0;
+    color: var(--public-desk-muted);
+    font: 500 12px/24px "Be Vietnam Pro", system-ui, sans-serif;
+    text-align: center;
+  }
+}
+
+@media screen and (width >= 600px) {
+  :root:has(.public-resume-page) {
+    scrollbar-gutter: stable;
+  }
+
+  .public-resume-page .paged-resume {
+    gap: 24px;
+  }
+
+  .public-resume-page .public-pager {
+    display: none;
+  }
+}
+
+@media screen and (width < 600px) {
+  .public-resume-page .paged-resume {
+    position: relative;
+    display: flex;
+    gap: 0;
+    justify-content: normal;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+
+  .public-resume-page .paged-resume[data-zoomed] {
+    scroll-snap-type: none;
+  }
+
+  .public-resume-page .paged-resume:focus-visible {
+    outline: 2px solid var(--public-desk-focus);
+    outline-offset: -2px;
+  }
+
+  .public-resume-page .public-page {
+    display: flex;
+    flex: 0 0 100%;
+    justify-content: center;
+    padding-block-end: 32px;
+  }
+
+  .public-resume-page .public-page-sheet {
+    flex: none;
+    scroll-snap-align: center;
+    scroll-snap-stop: always;
+  }
+
+  .public-resume-page .public-page-position {
+    display: none;
+  }
+}
+
+@media print {
+  .public-resume-page .public-page,
+  .public-resume-page .public-pager {
+    display: none;
+  }
+
+  .public-resume-page > .resume-document {
+    width: auto;
+    margin: 0;
+    padding: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+}

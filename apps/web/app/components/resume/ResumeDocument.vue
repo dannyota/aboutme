@@ -60,6 +60,10 @@ const rootStyle = computed(() => articleStyle(model.value.styles.root));
 
 @import './resumeScreenMargins.css';
 
+@import './pagedResume.css';
+
+@import './publicPages.css';
+
 a[href="#public-resume"]:not(:focus) {
   position: absolute;
   width: 1px;
@@ -119,8 +123,14 @@ body:has(> #public-resume) {
 }
 
 .public-resume-page .public-toolbar-inner {
-  width: min(100% - 20px, 46rem);
+  width: min(100% - 32px, var(--public-page-width, 794px));
   padding-inline: clamp(6px, 2cqi - 2px, 26px);
+}
+
+@media screen and (width < 600px) {
+  .public-resume-page .public-toolbar-inner {
+    width: calc(100% - 20px);
+  }
 }
 
 @media (width < 40rem) {

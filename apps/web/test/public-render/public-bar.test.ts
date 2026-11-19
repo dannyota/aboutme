@@ -298,9 +298,12 @@ describe('public page bar row', () => {
     }
     expect(style(resumeRules, '.public-resume-page .public-toolbar-inner'))
       .toEqual({
-        'width': 'min(100% - 20px, 46rem)',
+        'width': 'min(100% - 32px, var(--public-page-width, 794px))',
         'padding-inline': 'clamp(6px, 2cqi - 2px, 26px)',
       });
+    expect(style(resumeRules, '.public-resume-page .public-toolbar-inner',
+      '@media screen and (width < 600px)'))
+      .toEqual({ width: 'calc(100% - 20px)' });
     expect(matching(resumeRules,
       '.public-resume-page[data-columns="2"] .public-toolbar-inner', ''))
       .toEqual([]);

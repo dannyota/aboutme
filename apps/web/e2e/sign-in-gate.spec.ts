@@ -355,13 +355,15 @@ async function openAndAssertInvite(
   });
 
   const box = await region.boundingBox();
+  const layoutWidth = await page.evaluate(() =>
+    document.documentElement.getBoundingClientRect().width);
   if (cell.placement === 'card') {
     expect(box!.width).toBe(320);
-    expect(cell.width - (box!.x + box!.width)).toBe(16);
+    expect(layoutWidth - (box!.x + box!.width)).toBe(16);
     expect(900 - (box!.y + box!.height)).toBe(16);
   } else {
     expect(box!.x).toBe(0);
-    expect(box!.width).toBe(cell.width);
+    expect(box!.width).toBe(layoutWidth);
     expect(box!.height).toBe(56);
     expect(
       await page.evaluate(

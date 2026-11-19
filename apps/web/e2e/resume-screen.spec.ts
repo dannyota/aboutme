@@ -10,6 +10,8 @@ import {
   screenMutationTests, mutationTest,
 } from './style-mutation';
 import { expectBarPaint } from './public-bar';
+import { publicPagesLiveTests } from './public-pages-live';
+import { publicPagesTests } from './public-pages-tests';
 import { expectRendererContent } from './renderer-content';
 import { rendererWidgetTests } from './renderer-widgets';
 import { expectRendererPaint, rendererTypeRules } from './renderer-details';
@@ -244,7 +246,9 @@ for (const language of ['vi', 'en'] as const) {
       const fixture = language === 'vi' ? 'vn-full' : 'full';
       const response = await page.goto(
         `/_harness/render?fixture=${fixture}&template=${review.template}`
-        + `&mode=public${review.owner === 'dark' ? '&scheme=dark' : ''}`,
+        + `&mode=public&pages=0${review.owner === 'dark'
+          ? '&scheme=dark'
+          : ''}`,
       );
       expect(response?.ok()).toBe(true);
       await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
@@ -394,7 +398,7 @@ for (const mode of ['continuous', 'public'] as const) {
   screenMutationTests(`renderer ${mode}`, async (page) => {
     await page.setViewportSize({ width: 794, height: 1123 });
     await page.goto('/_harness/render?fixture=vn-full&template=modern-sidebar'
-      + `&mode=${mode}`);
+      + `&mode=${mode}${mode === 'public' ? '&pages=0' : ''}`);
     await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
   }, resumeContract('modern-sidebar', 'vi'));
 }
@@ -424,7 +428,7 @@ for (const mode of ['continuous', 'public'] as const) {
     page,
   }) => {
     await page.goto('/_harness/render?fixture=full&template=modern-sidebar'
-      + `&mode=${mode}`);
+      + `&mode=${mode}${mode === 'public' ? '&pages=0' : ''}`);
     await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
     await proveMutation(() =>
       expectRendererContent(page, 'en', mode === 'public'),
@@ -442,7 +446,7 @@ for (const template of ['modern-sidebar', 'executive-band']) {
 
 mutationTest('public rejects changed section order', async ({ page }) => {
   await page.goto('/_harness/render?fixture=full&template=modern-sidebar'
-    + '&mode=public');
+    + '&mode=public&pages=0');
   await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
   const flow = page.locator('.resume-main');
   const assertion = () => assertFlow(flow, 'en', [0, 1, 2, 6, 7]);
@@ -519,7 +523,7 @@ mutationTest('renderer rejects a changed contact destination', async ({
 });
 mutationTest('public rejects changed entry order', async ({ page }) => {
   await page.goto('/_harness/render?fixture=full&template=modern-sidebar'
-    + '&mode=public');
+    + '&mode=public&pages=0');
   await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
   const flow = page.locator('.resume-main');
   const assertion = () => assertFlow(flow, 'en', [0, 1, 2, 6, 7]);
@@ -539,3 +543,5 @@ mutationTest('public rejects changed entry order', async ({ page }) => {
     .toHaveText('B.Sc. Mathematics');
   await expect(assertion()).rejects.toThrow('Renderer entry order.');
 });
+publicPagesTests();
+publicPagesLiveTests();

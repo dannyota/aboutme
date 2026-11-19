@@ -8,6 +8,13 @@
     background: #141210;
   }
 
+  .public-resume-page[data-color-scheme="dark"] {
+    --public-shadow: 0 0 0;
+    --public-desk-ink: #d3cad0;
+    --public-desk-muted: #a3959f;
+    --public-desk-focus: #cdbcd9;
+  }
+
   [data-color-scheme="dark"] .public-toolbar {
     --toolbar-mark: #e2788f;
     --toolbar-credit: #a3959f;
@@ -29,6 +36,13 @@
   :root:has(.public-resume-page[data-color-scheme="system"]) {
     color-scheme: dark;
     background: #141210;
+  }
+
+  .public-resume-page[data-color-scheme="system"] {
+    --public-shadow: 0 0 0;
+    --public-desk-ink: #d3cad0;
+    --public-desk-muted: #a3959f;
+    --public-desk-focus: #cdbcd9;
   }
 
   [data-color-scheme="system"] .public-toolbar {

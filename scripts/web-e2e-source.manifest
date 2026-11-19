@@ -193,8 +193,12 @@ apps/web/app/components/public/ProjectText.vue
 apps/web/app/components/public/PublicDownloadLink.vue
 apps/web/app/components/public/PublicGate.vue
 apps/web/app/components/public/PublicMark.vue
+apps/web/app/components/public/PublicPager.vue
+apps/web/app/components/public/PublicPages.vue
 apps/web/app/components/public/PublicResumeApp.vue
+apps/web/app/components/public/PublicToolbar.vue
 apps/web/app/components/public/evidenceRows.ts
+apps/web/app/components/public/publicPagesCopy.ts
 apps/web/app/components/resume/LayoutColumns.vue
 apps/web/app/components/resume/PagedResume.vue
 apps/web/app/components/resume/ResumeDocument.vue
@@ -210,6 +214,7 @@ apps/web/app/components/resume/formatDate.ts
 apps/web/app/components/resume/icons.ts
 apps/web/app/components/resume/measure.ts
 apps/web/app/components/resume/pageMetrics.ts
+apps/web/app/components/resume/pagedResume.css
 apps/web/app/components/resume/paginate.ts
 apps/web/app/components/resume/primitives/ContactChip.vue
 apps/web/app/components/resume/primitives/EntryHeader.vue
@@ -219,6 +224,7 @@ apps/web/app/components/resume/primitives/Photo.vue
 apps/web/app/components/resume/primitives/RichText.vue
 apps/web/app/components/resume/primitives/SectionHeading.vue
 apps/web/app/components/resume/projectLinks.ts
+apps/web/app/components/resume/publicPages.css
 apps/web/app/components/resume/resolveRenderModel.ts
 apps/web/app/components/resume/resumeColorScheme.css
 apps/web/app/components/resume/resumeScreenMargins.css
@@ -538,7 +544,10 @@ apps/web/app/pages/verify-email.vue
 apps/web/app/pages/verify.vue
 apps/web/app/public-roots.generated.ts
 apps/web/app/public/joinInvite.ts
+apps/web/app/public/pageRule.ts
+apps/web/app/public/pageScroller.ts
 apps/web/app/public/public-resume.client.ts
+apps/web/app/public/publicPages.ts
 apps/web/app/public/viewBeacon.ts
 apps/web/app/realtime/controller.ts
 apps/web/app/realtime/owner.ts
@@ -616,6 +625,9 @@ apps/web/e2e/project-page-details.ts
 apps/web/e2e/project-pages.spec.ts
 apps/web/e2e/projects.spec.ts
 apps/web/e2e/public-bar.ts
+apps/web/e2e/public-pages-live.ts
+apps/web/e2e/public-pages-tests.ts
+apps/web/e2e/public-pages.ts
 apps/web/e2e/renderer-content.ts
 apps/web/e2e/renderer-details.ts
 apps/web/e2e/renderer-membership.ts

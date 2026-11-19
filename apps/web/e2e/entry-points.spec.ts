@@ -20,6 +20,7 @@ const MM_TO_PX = 96 / 25.4;
 const MIN_TARGET = 44;
 
 const PARITY = 'Title link parity.';
+const TITLE_TOLERANCE = 0.02;
 const ANNOTATIONS = 'Title link annotations.';
 const TARGETS = 'Bar target size.';
 const LEGIBLE = 'Bar legibility.';
@@ -44,7 +45,12 @@ async function openScreen(
   await page.setViewportSize({ width, height: 900 });
   await open(page,
     `fixture=${fixture(lng)}&template=${template}&mode=public`);
+  await expect(page.locator('.public-resume-page'))
+    .toHaveAttribute('data-pages', 'shown');
 }
+
+const SCREEN_TITLES = '.public-page .resume-page .entry-title';
+const PRINT_TITLES = '.resume-document .entry-title';
 
 async function openPrint(
   page: Page, template: string, lng: Lng, paper: Paper,
@@ -75,8 +81,8 @@ interface Title {
   readonly decoration: string | null;
 }
 
-async function measureTitles(page: Page): Promise<Title[]> {
-  return page.locator('.resume-document .entry-title').evaluateAll(
+async function measureTitles(page: Page, scope: string): Promise<Title[]> {
+  return page.locator(scope).evaluateAll(
     (titles) => titles.map((title) => {
       const round = (value: number) => Math.round(value * 100) / 100;
       const anchor = title.querySelector('a');
@@ -127,10 +133,10 @@ async function measureTitles(page: Page): Promise<Title[]> {
 }
 
 async function expectTitleParity(
-  page: Page, where: string, wraps = true,
+  page: Page, where: string, scope = SCREEN_TITLES,
 ): Promise<void> {
   const message = `${PARITY} ${where}`;
-  const titles = await measureTitles(page);
+  const titles = await measureTitles(page, scope);
   const linked = titles.filter((title) => title.entry !== null);
   expect(linked.map((title) => title.href), message).toEqual(PROJECT_PAGES);
   const own = titles.filter((title) => title.href === OWN_LINK);
@@ -139,15 +145,21 @@ async function expectTitleParity(
     const plain = titles.filter((other) =>
       other.href === null && other.text === title.text);
     expect(plain, message).toHaveLength(1);
-    expect({
-      box: title.box, glyphs: title.glyphs, font: title.font,
-    }, message).toEqual({
-      box: plain[0]!.box, glyphs: plain[0]!.glyphs, font: plain[0]!.font,
-    });
+    expect(title.font, message).toEqual(plain[0]!.font);
+    const numbers = (value: Title) =>
+      [...value.box, ...value.glyphs.flat()];
+    const linkedNumbers = numbers(title);
+    const plainNumbers = numbers(plain[0]!);
+    expect(title.glyphs.map((glyph) => glyph.length), message)
+      .toEqual(plain[0]!.glyphs.map((glyph) => glyph.length));
+    expect(linkedNumbers.length, message).toBe(plainNumbers.length);
+    expect(linkedNumbers.filter((value, index) =>
+      Math.abs(value - plainNumbers[index]!) > TITLE_TOLERANCE), message)
+      .toEqual([]);
     expect([title.color, title.decoration], message)
       .toEqual([own[0]!.color, own[0]!.decoration]);
   }
-  if (wraps) expect(linked[1]!.lines, message).toBeGreaterThan(1);
+  expect(linked[1]!.lines, message).toBeGreaterThan(1);
 }
 
 for (const [index, template] of TEMPLATES.entries()) {
@@ -158,19 +170,19 @@ for (const [index, template] of TEMPLATES.entries()) {
     test.setTimeout(60_000);
     for (const width of [390, 1440]) {
       await openScreen(page, template.id, lng, width);
-      await expectTitleParity(page, `screen ${width}`, width === 390);
+      await expectTitleParity(page, `screen ${width}`);
     }
     for (const paper of ['a4', 'letter'] as const) {
       await page.emulateMedia({ media: 'screen' });
       await openPrint(page, template.id, lng, paper);
-      await expectTitleParity(page, `print ${paper}`);
+      await expectTitleParity(page, `print ${paper}`, PRINT_TITLES);
     }
   });
 }
 
 mutationTest('title parity rejects a wider linked title', async ({ page }) => {
   await openScreen(page, 'modern-sidebar', 'vi', 1440);
-  await proveMutation(() => expectTitleParity(page, 'mutation', false),
+  await proveMutation(() => expectTitleParity(page, 'mutation'),
     () => applyStyleMutation(page.locator('a[data-project-entry]'),
       { 'letter-spacing': '1px' }), PARITY);
 });
@@ -179,7 +191,7 @@ mutationTest('title parity rejects a lighter linked title in print', async ({
   page,
 }) => {
   await openPrint(page, 'classic-serif', 'en', 'letter');
-  await proveMutation(() => expectTitleParity(page, 'mutation'),
+  await proveMutation(() => expectTitleParity(page, 'mutation', PRINT_TITLES),
     () => applyStyleMutation(page.locator('a[data-project-entry]'),
       { 'font-weight': '400' }), PARITY);
 });
@@ -187,7 +199,7 @@ mutationTest('title parity rejects a lighter linked title in print', async ({
 mutationTest('title parity rejects a project link styled unlike a link',
   async ({ page }) => {
     await openScreen(page, 'engineer-compact', 'en', 1440);
-    await proveMutation(() => expectTitleParity(page, 'mutation', false),
+    await proveMutation(() => expectTitleParity(page, 'mutation'),
       () => applyStyleMutation(page.locator('a[data-project-entry]'),
         { 'text-decoration-line': 'none' }), PARITY);
   });

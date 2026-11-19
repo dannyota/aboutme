@@ -10,6 +10,7 @@ import type { components } from '../../api/generated/openapi';
 import JoinInvite from '../../components/public/JoinInvite.vue';
 import ProjectListPage from '../../components/public/ProjectListPage.vue';
 import ProjectPage from '../../components/public/ProjectPage.vue';
+import PublicPages from '../../components/public/PublicPages.vue';
 import PublicGate from '../../components/public/PublicGate.vue';
 import PublicResumeApp from '../../components/public/PublicResumeApp.vue';
 import ResumeDocument from '../../components/resume/ResumeDocument.vue';
@@ -115,6 +116,7 @@ let requestedZoomValue: number | undefined;
 let sampleLanguage: 'vi' | 'en' | undefined;
 let selectedFontId: string | undefined;
 let entryPoints: EntryPointFixture | undefined;
+let publicPages = true;
 
 if (isCorpus) {
   requireAllowedKeys(new Set(['payload', 'raw']));
@@ -168,8 +170,8 @@ if (isCorpus) {
   requireAllowedKeys(
     new Set(
       [
-        'align', 'fixture', 'font', 'invite', 'links', 'lng', 'mode', 'paper',
-        'print', 'repeat', 'scheme', 'template', 'zoom',
+        'align', 'fixture', 'font', 'invite', 'links', 'lng', 'mode', 'pages',
+        'paper', 'print', 'repeat', 'scheme', 'template', 'zoom',
       ],
     ),
   );
@@ -211,6 +213,12 @@ if (isCorpus) {
       badQuery();
     }
     inviteHref = requestedInvite === 'register' ? '/register' : '/login';
+  }
+
+  const requestedPages = singleton('pages');
+  if (requestedPages !== undefined) {
+    if (resolvedMode !== 'public' || requestedPages !== '0') badQuery();
+    publicPages = false;
   }
 
   const requestedLanguage = singleton('lng');
@@ -532,6 +540,7 @@ onMounted(async () => {
       v-if="publicResume !== undefined"
       :home-href="HOME_HREF"
       :public-resume="publicResume"
+      :pages="publicPages ? PublicPages : undefined"
       v-bind="entryPoints ?? {}"
     />
     <ScaledSheet

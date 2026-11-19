@@ -59,14 +59,9 @@ describe('section pagination parts', () => {
   });
 
   it('gives pagination gap resets higher specificity than base margins', () => {
-    const source = readFileSync(
-      'app/components/resume/PagedResume.vue',
-      'utf8',
-    );
-    const { descriptor } = parse(source, { filename: 'PagedResume.vue' });
     const compiled = compileStyle({
-      source: descriptor.styles[0]?.content ?? '',
-      filename: 'PagedResume.vue',
+      source: readFileSync('app/components/resume/pagedResume.css', 'utf8'),
+      filename: 'pagedResume.css',
       id: 'paged-resume',
       scoped: false,
     });
@@ -88,12 +83,10 @@ describe('section pagination parts', () => {
 
   it('outlines an overflowing page and block only in the editor preview',
     () => {
-      const source = readFileSync(
-        'app/components/resume/PagedResume.vue',
+      const css = readFileSync(
+        'app/components/resume/pagedResume.css',
         'utf8',
       );
-      const { descriptor } = parse(source, { filename: 'PagedResume.vue' });
-      const css = descriptor.styles[0]?.content ?? '';
       const outlined = [...css.matchAll(/([^{}]+)\{([^}]*)\}/gu)]
         .filter(([, , body]) => /\boutline\b/u.test(body!))
         .map(([, selector]) => selector!.trim().replaceAll(/\s+/gu, ' '));
