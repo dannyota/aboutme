@@ -365,6 +365,20 @@
       "maxMissing": 0,
       "maxExtra": 0,
       "maxEntryPageMismatches": 0
+    },
+    "modern-sidebar-letter|en|chromium-normal": {
+      "maxLineBreak": 0,
+      "maxPageBreak": 0,
+      "maxMissing": 0,
+      "maxExtra": 0,
+      "maxEntryPageMismatches": 0
+    },
+    "modern-sidebar-letter|en|webkit": {
+      "maxLineBreak": 0,
+      "maxPageBreak": 0,
+      "maxMissing": 0,
+      "maxExtra": 0,
+      "maxEntryPageMismatches": 0
     }
   }
 }

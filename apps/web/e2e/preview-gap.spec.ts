@@ -7,6 +7,7 @@ import {
   webkit,
 } from '@playwright/test';
 import { SAMPLES, type SampleLanguage } from '@aboutme/schema/samples';
+import { TEMPLATES } from '@aboutme/schema/templates';
 import {
   getDocument,
   OPS,
@@ -17,6 +18,12 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+import {
+  checkParity, FORCED_BREAK, MOVED_BREAK, multiPageCase, type PageStart,
+  PARITY_FIXTURE_PAGES, type ParityResult, PREVIEW_PAGES, proveParityMutation,
+  PUBLIC_PARITY, readPageStarts, readPreviewStarts,
+} from './public-parity';
+import { mutationTest } from './style-mutation';
 import { denyExternalRequests, waitForImages } from './support';
 
 // Chromium PDF text keeps CSS text-transform and splits at wrapped hyphens.
@@ -32,6 +39,24 @@ type ZoomLabel = (typeof ZOOM_VARIANTS)[number][0];
 const ENGINES = ['chromium-normal', 'webkit'] as const;
 type Engine = (typeof ENGINES)[number];
 type Flow = 'header' | 'main' | 'sidebar';
+
+interface GapCase {
+  readonly name: string;
+  readonly templateId: string;
+  readonly lng: SampleLanguage;
+  readonly paper?: 'letter';
+}
+
+const CASES: readonly GapCase[] = [
+  ...SAMPLES.map(({ templateId, lng }) =>
+    ({ name: templateId, templateId, lng })),
+  {
+    name: 'modern-sidebar-letter',
+    templateId: 'modern-sidebar',
+    lng: 'en',
+    paper: 'letter',
+  },
+];
 
 const FLOW_RANK: Readonly<Record<Flow, number>> = {
   header: 0,
@@ -136,6 +161,7 @@ type PreviewResult
     readonly url: string;
     readonly extraction: Extraction;
     readonly geometry: FlowGeometry;
+    readonly starts: readonly PageStart[];
   }
   | {
     readonly ok: false;
@@ -992,26 +1018,27 @@ function browserExtract(wordPattern: string): BrowserExtraction {
 }
 
 function sampleUrl(
-  mode: 'continuous' | 'paged',
-  templateId: string,
-  lng: SampleLanguage,
+  mode: 'continuous' | 'paged' | 'public',
+  gapCase: GapCase,
   options: { readonly print?: boolean; readonly zoom?: number } = {},
 ): string {
+  const { templateId, lng, paper } = gapCase;
   const printParam = options.print === true ? '&print=1' : '';
   const zoomParam = options.zoom === undefined ? '' : `&zoom=${options.zoom}`;
+  const paperParam = paper === undefined ? '' : `&paper=${paper}`;
   return `/_harness/render?fixture=sample-${templateId}-${lng}`
-    + `&template=${templateId}&mode=${mode}${printParam}${zoomParam}`;
+    + `&template=${templateId}&mode=${mode}${printParam}${zoomParam}`
+    + paperParam;
 }
 
 async function producePdf(
   page: Page,
   baseURL: string,
-  templateId: string,
-  lng: SampleLanguage,
+  gapCase: GapCase,
 ): Promise<Buffer> {
   const external = await denyExternalRequests(page);
   const response = await page.goto(
-    `${baseURL}${sampleUrl('continuous', templateId, lng, { print: true })}`,
+    `${baseURL}${sampleUrl('continuous', gapCase, { print: true })}`,
   );
   expect(response?.ok()).toBe(true);
   await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
@@ -1062,8 +1089,7 @@ async function safeCaptureDiagnostics(
 async function producePreview(
   browser: Browser,
   baseURL: string,
-  templateId: string,
-  lng: SampleLanguage,
+  gapCase: GapCase,
   zoomValue: number,
 ): Promise<PreviewResult> {
   const context = await browser.newContext({
@@ -1071,12 +1097,14 @@ async function producePreview(
     locale: 'en-US',
     reducedMotion: 'reduce',
     timezoneId: 'UTC',
-    viewport: { height: 1123, width: 794 },
+    viewport: gapCase.paper === 'letter'
+      ? { height: 1056, width: 816 }
+      : { height: 1123, width: 794 },
   });
   try {
     const page = await context.newPage();
     const external = await denyExternalRequests(page);
-    const url = sampleUrl('paged', templateId, lng, { zoom: zoomValue });
+    const url = sampleUrl('paged', gapCase, { zoom: zoomValue });
     try {
       const response = await page.goto(`${baseURL}${url}`);
       expect(response?.ok()).toBe(true);
@@ -1092,12 +1120,14 @@ async function producePreview(
       };
     }
     const raw = await page.evaluate(browserExtract, WORD_PATTERN);
+    const starts = await page.evaluate(readPageStarts, PREVIEW_PAGES);
     expect(external).toEqual([]);
     return {
       ok: true,
       url,
       extraction: { pages: raw.pages, words: orderByFlow(raw.words) },
       geometry: raw.geometry,
+      starts,
     };
   } finally {
     await context.close();
@@ -1108,6 +1138,7 @@ interface ReportSummary {
   readonly totalCases: number;
   readonly casesWithDrift: number;
   readonly failedCases: number;
+  readonly parityMismatches: number;
   readonly webkitCovered: boolean;
 }
 
@@ -1115,6 +1146,7 @@ interface ReportFile {
   readonly summary: ReportSummary;
   readonly cases: CaseResult[];
   readonly failures: FailedCase[];
+  readonly parity: ParityResult[];
 }
 
 function reportPath(): string {
@@ -1128,12 +1160,16 @@ function reportPath(): string {
 
 async function readExistingReport(
   target: string,
-): Promise<{ cases: CaseResult[]; failures: FailedCase[] }> {
+): Promise<Omit<ReportFile, 'summary'>> {
   try {
     const raw = JSON.parse(await readFile(target, 'utf8')) as ReportFile;
-    return { cases: [...raw.cases], failures: [...raw.failures] };
+    return {
+      cases: [...raw.cases],
+      failures: [...raw.failures],
+      parity: [...raw.parity],
+    };
   } catch {
-    return { cases: [], failures: [] };
+    return { cases: [], failures: [], parity: [] };
   }
 }
 
@@ -1141,12 +1177,14 @@ async function readExistingReport(
 async function appendReport(
   newCases: readonly CaseResult[],
   newFailures: readonly FailedCase[],
+  newParity: readonly ParityResult[],
 ): Promise<void> {
   const target = reportPath();
   await mkdir(resolve(target, '..'), { recursive: true });
   const existing = await readExistingReport(target);
   const cases = [...existing.cases, ...newCases];
   const failures = [...existing.failures, ...newFailures];
+  const parity = [...existing.parity, ...newParity];
   const casesWithDrift = cases.filter((c) =>
     c.counts.lineBreak > 0
     || c.counts.pageBreak > 0
@@ -1157,15 +1195,18 @@ async function appendReport(
     totalCases: cases.length,
     casesWithDrift,
     failedCases: failures.length,
+    parityMismatches: parity.filter((result) => !result.matches).length,
     webkitCovered: true,
   };
-  const report: ReportFile = { summary, cases, failures };
+  const report: ReportFile = { summary, cases, failures, parity };
   await writeFile(target, JSON.stringify(report, null, 2));
 
   console.log(
     `preview-gap: ${summary.totalCases} case(s), `
     + `${summary.casesWithDrift} with drift, `
-    + `${summary.failedCases} failed so far; webkit covered.`,
+    + `${summary.failedCases} failed so far, `
+    + `${summary.parityMismatches} public parity mismatch(es); `
+    + 'webkit covered.',
   );
 }
 
@@ -1173,8 +1214,8 @@ let normalChromium: Browser | undefined;
 let webkitBrowser: Browser | undefined;
 
 test.beforeAll(async () => {
-  const expectedKeys = new Set(SAMPLES.flatMap(({ templateId, lng }) =>
-    ENGINES.map((engine) => caseKey(templateId, lng, engine))));
+  const expectedKeys = new Set(CASES.flatMap(({ name, lng }) =>
+    ENGINES.map((engine) => caseKey(name, lng, engine))));
   const actualKeys = Object.keys(expectations.cases);
   const missingKeys = [...expectedKeys].filter((key) =>
     !Object.hasOwn(expectations.cases, key));
@@ -1201,11 +1242,12 @@ test.afterAll(async () => {
   await webkitBrowser?.close();
 });
 
-for (const { templateId, lng } of SAMPLES) {
-  test(`preview gap: ${templateId} (${lng})`, async ({ page, baseURL }) => {
-    test.setTimeout(60_000);
+for (const gapCase of CASES) {
+  const { name, lng } = gapCase;
+  test(`preview gap: ${name} (${lng})`, async ({ page, baseURL }) => {
+    test.setTimeout(150_000);
     if (baseURL === undefined) throw new Error('baseURL is required.');
-    const pdfBytes = await producePdf(page, baseURL, templateId, lng);
+    const pdfBytes = await producePdf(page, baseURL, gapCase);
     const pdfPages = await readPdfPages(pdfBytes);
 
     const browsers: Record<Engine, Browser> = {
@@ -1215,21 +1257,23 @@ for (const { templateId, lng } of SAMPLES) {
 
     const caseResults: CaseResult[] = [];
     const caseFailures: FailedCase[] = [];
+    const parityResults: ParityResult[] = [];
+    const parityFailures: string[] = [];
 
     for (const engine of ENGINES) {
       const browser = browsers[engine];
       let fullScale: CaseResult | undefined;
+      let fullStarts: readonly PageStart[] | undefined;
       for (const [zoomLabel, zoomValue] of ZOOM_VARIANTS) {
         const previewResult = await producePreview(
           browser,
           baseURL,
-          templateId,
-          lng,
+          gapCase,
           zoomValue,
         );
         if (!previewResult.ok) {
           caseFailures.push({
-            sample: templateId,
+            sample: name,
             lng,
             engine,
             zoomLabel,
@@ -1240,6 +1284,7 @@ for (const { templateId, lng } of SAMPLES) {
           });
           continue;
         }
+        if (zoomLabel === 'full') fullStarts = previewResult.starts;
         const previewExtraction = previewResult.extraction;
         const pdfExtraction = buildPdfExtraction(
           pdfPages,
@@ -1263,7 +1308,7 @@ for (const { templateId, lng } of SAMPLES) {
         const previewPageCount = previewExtraction.pages.length;
         const pdfPageCount = pdfExtraction.pages.length;
         const result: CaseResult = {
-          sample: templateId,
+          sample: name,
           lng,
           engine,
           zoomLabel,
@@ -1277,7 +1322,7 @@ for (const { templateId, lng } of SAMPLES) {
         };
         caseResults.push(result);
         console.log(
-          `preview-gap counts ${caseKey(templateId, lng, engine)}`
+          `preview-gap counts ${caseKey(name, lng, engine)}`
           + ` ${zoomLabel}: ${JSON.stringify(result.counts)}`
           + ` pages ${String(previewPageCount)}/${String(pdfPageCount)}`,
         );
@@ -1300,7 +1345,7 @@ for (const { templateId, lng } of SAMPLES) {
           }
         } catch (error) {
           caseFailures.push({
-            sample: templateId,
+            sample: name,
             lng,
             engine,
             zoomLabel,
@@ -1311,12 +1356,66 @@ for (const { templateId, lng } of SAMPLES) {
           });
         }
       }
+      if (fullStarts !== undefined) {
+        const parity = await checkParity(browser,
+          `${baseURL}${sampleUrl('public', gapCase)}`,
+          { sample: name, lng, engine }, fullStarts);
+        parityResults.push(...parity.results);
+        parityFailures.push(...parity.failures);
+      }
     }
 
-    await appendReport(caseResults, caseFailures);
+    await appendReport(caseResults, caseFailures, parityResults);
     expect(
       caseFailures,
       'preview-gap cases failed; see preview-gap-report.json',
     ).toEqual([]);
+    expect(parityFailures, PUBLIC_PARITY).toEqual([]);
+  });
+}
+
+for (const { id: templateId } of TEMPLATES) {
+  test(`public parity: multi-page ${templateId}`, async ({ baseURL }) => {
+    test.setTimeout(90_000);
+    if (baseURL === undefined) throw new Error('baseURL is required.');
+    const browsers: Record<Engine, Browser> = {
+      'chromium-normal': normalChromium!,
+      'webkit': webkitBrowser!,
+    };
+    const multiPage = multiPageCase(templateId);
+    const results: ParityResult[] = [];
+    const failures: string[] = [];
+    const previewPages: number[] = [];
+    for (const engine of ENGINES) {
+      const starts = await readPreviewStarts(browsers[engine],
+        `${baseURL}${multiPage.preview}`);
+      previewPages.push(starts.length);
+      const parity = await checkParity(browsers[engine],
+        `${baseURL}${multiPage.shown}`,
+        { sample: multiPage.name, lng: 'en', engine }, starts);
+      results.push(...parity.results);
+      failures.push(...parity.failures);
+    }
+    await appendReport([], [], results);
+    expect(failures, PUBLIC_PARITY).toEqual([]);
+    expect(Math.min(...previewPages), PARITY_FIXTURE_PAGES)
+      .toBeGreaterThan(1);
+  });
+}
+
+for (const [title, caseName, mutation] of [
+  ['a forced extra page break', 'modern-sidebar', FORCED_BREAK],
+  ['a moved page break', 'modern-sidebar-letter', MOVED_BREAK],
+] as const) {
+  mutationTest(`public page parity rejects ${title}`, async ({ baseURL }) => {
+    test.setTimeout(60_000);
+    if (baseURL === undefined) throw new Error('baseURL is required.');
+    const gapCase = CASES.find(({ name, lng }) =>
+      name === caseName && lng === 'en')!;
+    const preview = await producePreview(normalChromium!, baseURL, gapCase,
+      FULL_ZOOM);
+    if (!preview.ok) throw new Error(preview.error);
+    await proveParityMutation(normalChromium!,
+      `${baseURL}${sampleUrl('public', gapCase)}`, preview.starts, mutation);
   });
 }

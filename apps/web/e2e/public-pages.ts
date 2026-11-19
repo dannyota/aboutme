@@ -2,7 +2,7 @@ import { expect, type Page } from '@playwright/test';
 import { TEMPLATES } from '@aboutme/schema/templates';
 
 import { expectBarPaint } from './public-bar';
-import { measureTextContainment } from './display-assertions';
+import { measureScreenText } from './screen-containment';
 import { denyExternalRequests, waitForImages } from './support';
 
 export type Lng = 'vi' | 'en';
@@ -434,11 +434,25 @@ export async function expectContinuous(
 }
 
 export async function expectNoClipping(page: Page): Promise<void> {
+  const scroller = page.locator(SCROLLER);
+  const phone = await scroller.evaluate((node) =>
+    getComputedStyle(node).overflowX !== 'visible');
   for (const text of await page.locator(
     `${PAGE_ARTICLE} :is(.entry-body p, .entry-body li, .section-heading h2)`,
   ).all()) {
-    await expect.poll(() => measureTextContainment(text), CLIPPING)
-      .toEqual({ visible: true, contained: true });
+    await expect.poll(async () => {
+      const measured = await measureScreenText(text, undefined,
+        phone ? [SCROLLER] : []);
+      return {
+        visible: measured.visible,
+        contained: measured.contained && measured.separated,
+      };
+    }, CLIPPING).toEqual({ visible: true, contained: true });
+  }
+  if (phone) {
+    expect(await scroller.evaluate((node) =>
+      node.scrollHeight - node.clientHeight), CLIPPING)
+      .toBeLessThanOrEqual(1);
   }
   const overflow = await page.locator(
     `${PAGE}, ${SHEET}, .public-page-scale, ${PAGE_ARTICLE}`,

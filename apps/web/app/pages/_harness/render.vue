@@ -171,7 +171,7 @@ if (isCorpus) {
     new Set(
       [
         'align', 'fixture', 'font', 'invite', 'links', 'lng', 'mode', 'pages',
-        'paper', 'print', 'repeat', 'scheme', 'template', 'zoom',
+        'paper', 'print', 'repeat', 'scheme', 'template', 'wrap', 'zoom',
       ],
     ),
   );
@@ -321,7 +321,22 @@ if (isCorpus) {
     resolvedDocument.customization.colorScheme
       = requestedScheme as Resume['customization']['colorScheme'];
   }
-  if (resolvedMode === 'public') withWrappingBody(resolvedDocument);
+  const requestedWrap = singleton('wrap');
+  if (requestedWrap !== undefined) {
+    if (
+      requestedWrap !== '1'
+      || resolvedMode !== 'paged'
+      || fixture.startsWith('sample-')
+    ) {
+      badQuery();
+    }
+  }
+  if (
+    (resolvedMode === 'public' || requestedWrap === '1')
+    && !fixture.startsWith('sample-')
+  ) {
+    withWrappingBody(resolvedDocument);
+  }
   const requestedLinks = singleton('links');
   if (requestedLinks !== undefined) {
     if (requestedLinks !== '1' || resolvedMode === 'paged') badQuery();

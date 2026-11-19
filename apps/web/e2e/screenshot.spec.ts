@@ -5,7 +5,17 @@ import {
   expectScreen, measureTextContainment, resumeContract,
 } from './display-assertions';
 
-import { applyStyleMutation, mutationTest } from './style-mutation';
+import {
+  CLIPPING, darkDesk, expectNoClipping, expectPagesPaint, expectPhoneSheets,
+  expectSheetScale, expectWideSheets, openPublicPages, type Owner, PAGE,
+  type PaintTemplate, SCROLLER, type Viewer, WIDE_SHEETS,
+} from './public-pages';
+import {
+  expectPhonePosition, pagesContract, PHONE_POSITION,
+} from './public-pages-screen';
+import {
+  applyStyleMutation, mutationTest, proveMutation, screenMutationTests,
+} from './style-mutation';
 import {
   denyExternalRequests,
   FIXTURE_PHOTO_CROP_GEOMETRY,
@@ -238,6 +248,109 @@ for (const [name, styles] of [
     await assertContained();
   });
 }
+
+interface PublicCell {
+  readonly name: string;
+  readonly template: PaintTemplate;
+  readonly width: number;
+  readonly owner?: Owner;
+  readonly viewer?: Viewer;
+}
+
+const PUBLIC_CELLS: readonly PublicCell[] = [
+  { name: 'public--classic-serif--2560.png', template: 'classic-serif',
+    width: 2560 },
+  { name: 'public--modern-sidebar--2560.png', template: 'modern-sidebar',
+    width: 2560 },
+  { name: 'public--modern-sidebar--390.png', template: 'modern-sidebar',
+    width: 390 },
+  { name: 'public--classic-serif--390.png', template: 'classic-serif',
+    width: 390 },
+  { name: 'public--editorial-wide--390.png', template: 'editorial-wide',
+    width: 390 },
+  { name: 'public--modern-sidebar--dark--390.png', template: 'modern-sidebar',
+    width: 390, owner: 'dark' },
+  { name: 'public--creative-accent--dark--1440.png',
+    template: 'creative-accent', width: 1440, owner: 'dark' },
+  { name: 'public--executive-band--dark--1440.png', template: 'executive-band',
+    width: 1440, owner: 'dark' },
+  { name: 'public--classic-serif--system--1440.png', template: 'classic-serif',
+    width: 1440, owner: 'system', viewer: 'dark' },
+];
+
+test.describe('public pages measure', () => {
+  test.use({ locale: 'vi-VN' });
+  for (const cell of PUBLIC_CELLS) {
+    test(cell.name, async ({ page }) => {
+      const owner = cell.owner ?? 'light';
+      const viewer = cell.viewer ?? 'light';
+      const external = await openPublicPages(page, {
+        template: cell.template, lng: 'vi', width: cell.width, owner, viewer,
+      });
+      await expectPagesPaint(page, cell.template, darkDesk(owner, viewer));
+      if (cell.width < 600) {
+        await expectPhoneSheets(page);
+        await expectPhonePosition(page);
+      } else {
+        await expectWideSheets(page);
+      }
+      await expectSheetScale(page);
+      await expectNoClipping(page);
+      await expectScreen(page, pagesContract(cell.template, 'vi'));
+      expect(external).toEqual([]);
+    });
+  }
+});
+
+screenMutationTests('public pages', async (page) => {
+  await openPublicPages(page, {
+    template: 'modern-sidebar', lng: 'vi', width: 390, owner: 'dark',
+  });
+}, pagesContract('modern-sidebar', 'vi'));
+
+mutationTest('public phone position rejects a pager over the sheet', async ({
+  page,
+}) => {
+  await openPublicPages(page, {
+    template: 'classic-serif', lng: 'vi', width: 390,
+  });
+  await proveMutation(() => expectPhonePosition(page),
+    () => applyStyleMutation(page.locator('.public-pager'),
+      { 'margin-top': '-300px' }), PHONE_POSITION);
+});
+
+mutationTest('public phone sheets reject clipped text on page 2', async ({
+  page,
+}) => {
+  await openPublicPages(page, {
+    template: 'classic-serif', lng: 'vi', width: 390,
+  });
+  await proveMutation(() => expectNoClipping(page),
+    () => applyStyleMutation(page.locator(PAGE).nth(1)
+      .locator('.entry-body:has(p, li)').first(),
+    { height: '1px', overflow: 'hidden' }), CLIPPING);
+});
+
+mutationTest('public phone sheets reject a scroller that clips its pages',
+  async ({ page }) => {
+    await openPublicPages(page, {
+      template: 'classic-serif', lng: 'vi', width: 390,
+    });
+    await proveMutation(() => expectNoClipping(page),
+      () => applyStyleMutation(page.locator(SCROLLER), { height: '200px' }),
+      CLIPPING);
+  });
+
+mutationTest('public wide sheets reject an off-center column at 2560', async ({
+  page,
+}) => {
+  await openPublicPages(page, {
+    template: 'classic-serif', lng: 'vi', width: 2560,
+  });
+  await proveMutation(() => expectWideSheets(page),
+    () => applyStyleMutation(page.locator(PAGE).first(),
+      { transform: ['translateX(40px)', /matrix/u] }), WIDE_SHEETS);
+});
 
 interface PublicSurfaces {
   readonly article: string;

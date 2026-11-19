@@ -20,11 +20,12 @@ const WRAPPED_WORK = [
 export async function expectRendererContent(
   page: Page, language: 'vi' | 'en', justify = false,
   template = 'modern-sidebar',
+  scope = '.resume-document:not(.pagination-measurement)',
 ): Promise<void> {
   const fixture = language === 'vi' ? 'vn-full' : 'full';
   const resume = JSON.parse(await readFile(resolve(import.meta.dirname,
     `../../../packages/schema/fixtures/${fixture}.json`), 'utf8')) as Resume;
-  const roots = page.locator('.resume-document:not(.pagination-measurement)');
+  const roots = page.locator(scope);
   await expect(roots.locator('.resume-headline'), 'Renderer headline content.')
     .toHaveText(resume.personalDetails.headline!);
   const fragments: string[] = [];

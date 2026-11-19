@@ -626,8 +626,10 @@ apps/web/e2e/project-pages.spec.ts
 apps/web/e2e/projects.spec.ts
 apps/web/e2e/public-bar.ts
 apps/web/e2e/public-pages-live.ts
+apps/web/e2e/public-pages-screen.ts
 apps/web/e2e/public-pages-tests.ts
 apps/web/e2e/public-pages.ts
+apps/web/e2e/public-parity.ts
 apps/web/e2e/renderer-content.ts
 apps/web/e2e/renderer-details.ts
 apps/web/e2e/renderer-membership.ts

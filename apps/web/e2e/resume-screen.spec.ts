@@ -9,8 +9,11 @@ import {
   applyStyleMutation, mutateAttribute, mutateText, proveMutation,
   screenMutationTests, mutationTest,
 } from './style-mutation';
-import { expectBarPaint } from './public-bar';
+import {
+  expectPagesPaint, expectPhoneSheets, expectWideSheets, openPublicPages,
+} from './public-pages';
 import { publicPagesLiveTests } from './public-pages-live';
+import { PUBLIC_PAGE_ROOTS, pagesContract } from './public-pages-screen';
 import { publicPagesTests } from './public-pages-tests';
 import { expectRendererContent } from './renderer-content';
 import { rendererWidgetTests } from './renderer-widgets';
@@ -228,41 +231,33 @@ mutationTest('renderer rejects a transparent language section', async ({
 const PUBLIC_REVIEW = {
   vi: {
     id: 'public-modern-sidebar-vi-dark-390', template: 'modern-sidebar',
-    owner: 'dark', width: 390, desk: 'rgb(20, 18, 16)',
+    owner: 'dark', width: 390,
   },
   en: {
     id: 'public-executive-band-en-light-1440', template: 'executive-band',
-    owner: 'light', width: 1440, desk: 'rgb(230, 223, 208)',
+    owner: 'light', width: 1440,
   },
 } as const;
 for (const language of ['vi', 'en'] as const) {
   test.describe(`public screen ${language}`, () => {
     test.use({ locale: language === 'vi' ? 'vi-VN' : 'en-US' });
     const review = PUBLIC_REVIEW[language];
-    test(`continuous article ${review.template} ${review.owner} `
-      + `${review.width}`, async ({ page }, testInfo) => {
-      await page.setViewportSize({ width: review.width, height: 900 });
-      const external = await denyExternalRequests(page);
-      const fixture = language === 'vi' ? 'vn-full' : 'full';
-      const response = await page.goto(
-        `/_harness/render?fixture=${fixture}&template=${review.template}`
-        + `&mode=public&pages=0${review.owner === 'dark'
-          ? '&scheme=dark'
-          : ''}`,
-      );
-      expect(response?.ok()).toBe(true);
-      await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
-      await waitForImages(page);
-      await expectScreen(page, resumeContract(review.template, language));
-      await expectRendererContent(page, language, true, review.template);
-      await expect.poll(() => page.evaluate(() =>
-        getComputedStyle(document.documentElement).backgroundColor),
-      'Public desk paint.').toBe(review.desk);
-      await expectBarPaint(page, review.owner === 'dark', 'Public bar paint.');
-      await captureReviewImage(testInfo, review.id, () =>
-        page.screenshot({ animations: 'disabled', timeout: 750 }));
-      expect(external).toEqual([]);
-    });
+    test(`pages ${review.template} ${review.owner} ${review.width}`,
+      async ({ page }, testInfo) => {
+        const external = await openPublicPages(page, {
+          template: review.template, lng: language, width: review.width,
+          owner: review.owner,
+        });
+        await expectScreen(page, pagesContract(review.template, language));
+        await expectRendererContent(page, language, true, review.template,
+          PUBLIC_PAGE_ROOTS);
+        await expectPagesPaint(page, review.template, review.owner === 'dark');
+        if (review.width < 600) await expectPhoneSheets(page);
+        else await expectWideSheets(page);
+        await captureReviewImage(testInfo, review.id, () =>
+          page.screenshot({ animations: 'disabled', timeout: 750 }));
+        expect(external).toEqual([]);
+      });
     for (const viewer of ['light', 'dark'] as const) {
       for (const width of [503, 504]) {
         test(`continuous column and header boundary ${viewer} ${width}`,
@@ -436,6 +431,15 @@ for (const mode of ['continuous', 'public'] as const) {
     'Renderer body content.');
   });
 }
+mutationTest('public pages reject replaced body content', async ({ page }) => {
+  await openPublicPages(page, {
+    template: 'executive-band', lng: 'en', width: 1440,
+  });
+  await proveMutation(() => expectRendererContent(page, 'en', true,
+    'executive-band', PUBLIC_PAGE_ROOTS),
+  () => mutateText(page.locator(`${PUBLIC_PAGE_ROOTS} .entry-body p`).last(),
+    'MUTATED'), 'Renderer body content.');
+});
 for (const template of ['modern-sidebar', 'executive-band']) {
   styleProofs(`renderer ${template}`, async (page) => {
     await page.goto(`/_harness/render?fixture=full&template=${template}`
