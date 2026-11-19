@@ -19,7 +19,6 @@ case $1:$2 in
       running:aboutme-maintenance | missing:aboutme-web) exit 1 ;;
     esac ;;
   container:inspect)
-    # No full inspect may read or print environment secrets.
     [[ $3 == --format && $4 == '{{.State.Running}} {{.ImageDigest}} {{.State.StartedAt.UTC.Format "2006-01-02T15:04:05.999999999Z07:00"}} {{.ImageName}} {{.Image}}' ]]
     if [[ $PODMAN_CASE == inspect-error ]]; then
       echo 'secret-canary-from-podman-error' >&2; exit 125
@@ -219,7 +218,6 @@ FIXTURE_INSTALL=$(command -v ginstall || command -v install)
 set -euo pipefail
 bundle=$FIXTURE_BUNDLE
 install() { "$FIXTURE_INSTALL" "$@"; }
-# Locking has a separate installer regression in install-admission-test.sh.
 install_admission_transition() { "$@"; }
 timeout() {
   [[ $1 != --kill-after=* ]] || shift

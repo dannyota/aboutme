@@ -247,8 +247,8 @@ for owners in 'dntmakers dannyota dannyota dannyota' 'dannyota dntmakers dannyot
   read -r -a owner <<<"$owners"
   mapfile -t refs < <(image_set "${owner[@]}")
   rm -f "$work/pulled" "$work/rendered" "$work/rendered-observer" "$work/maintenance.json"
-  if image_steps step_pull "${refs[@]}" >"$work/out" 2>&1; then image_fail "pulled mixed or foreign images: $owners"; fi
-  if grep -qvF -e "ghcr.io/${owner[0]}/" "$work/pulled" 2>/dev/null; then image_fail "pulled an image of another owner: $owners"; fi
+  if image_steps step_pull "${refs[@]}" >"$work/out" 2>&1; then image_fail "accepted mixed or foreign images: $owners"; fi
+  [[ ! -s $work/pulled ]] || image_fail "pulled $(paste -sd ' ' "$work/pulled") from a mixed or foreign set: $owners"
   if image_steps step_render "${refs[@]}" >"$work/out" 2>&1 || [[ -e $work/rendered || -e $work/rendered-observer ]]; then
     image_fail "rendered mixed or foreign images: $owners"
   fi

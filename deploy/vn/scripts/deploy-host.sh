@@ -230,12 +230,10 @@ step_release_json() {
 }
 
 step_pull() {
-  local name ref arch names=(server web caddy) server=$1
+  local i ref arch names=(server web caddy) pins=("$@")
   [[ -z ${4:-} ]] || names+=(observer)
-  for name in "${names[@]}"; do
-    ref=$1
-    shift
-    image_ok "$name" "$ref" "$server"
+  for i in "${!names[@]}"; do image_ok "${names[i]}" "${pins[i]}" "$1"; done
+  for ref in "${pins[@]:0:${#names[@]}}"; do
     podman pull --quiet --arch amd64 "$ref" >/dev/null || die "could not pull $ref"
     arch=$(podman image inspect --format '{{.Os}}/{{.Architecture}}' "$ref")
     [[ $arch == linux/amd64 ]] || die "$ref resolved to $arch, not linux/amd64"

@@ -49,9 +49,6 @@ case $1 in
     ;;
   fetch) [[ ${RELEASE_CASE:-} != fetch-error ]] ;;
   merge-base) [[ ${RELEASE_CASE:-} != off-main ]] ;;
-  # The tagged commit's tree: SCHEMA_FLOOR holds the schema-floor file's exact
-  # bytes and SCHEMA_ENTRY its mode and type. As in git, a path given from a
-  # subdirectory resolves there unless --full-tree is passed.
   ls-tree)
     if [[ $* == *' -- scripts/lib/repository.sh' ]]; then
       printf '%s\n' "$*" >>"$DEPLOY_TEST_DIR/owner.log"
@@ -142,7 +139,6 @@ case $args in
   *' sha256sum '*) printf '%064d  remote\n' 0 | tr 0 c; exit 0 ;;
   *'SSH_CLIENT'*) printf '198.51.100.10'; exit 0 ;;
   *' ss -Htn '*)
-    # Answer once the held probe runs, as the host sees it only then.
     source "$ABOUTME_TEST_LIB/wait.sh"
     ABOUTME_TEST_SLEEP=/bin/sleep test_wait 'held egress probe' "${ABOUTME_TEST_WAIT_SECONDS:-60}" 0.01 \
       test -f "$DEPLOY_TEST_DIR/probe.pid" || true
