@@ -24,6 +24,24 @@ import (
 
 func linkedPublicService(t *testing.T) (svc *Service, reader *publicresume.Reader, slug, entryID, projectID string) {
 	t.Helper()
+	backing, slug, entryID, projectID := linkedPublicStore(t)
+	coordinator, err := publicstate.NewCoordinator(publicstate.CoordinatorConfig{DiscoveryGeneration: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader, err = publicresume.NewReader(publicresume.ReaderDependencies{Store: backing, Projector: docmigrate.NewIdentityProjector(), Coordinator: coordinator, Origin: mustPublicOrigin(t)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cache, err := publiccache.New(4, time.Minute, time.Now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return newPublicServiceForReader(t, reader, coordinator, cache), reader, slug, entryID, projectID
+}
+
+func linkedPublicStore(t *testing.T) (backing *publicServiceStore, slug, entryID, projectID string) {
+	t.Helper()
 	slug, lng, name, title := "ada-lovelace", "en", "Ada", "Atlas"
 	entryID, projectID = uuid.NewString(), uuid.NewString()
 	document := schema.Resume{SchemaVersion: schema.CurrentVersion, PersonalDetails: schema.PersonalDetails{FullName: &name}, Content: map[string]schema.Section{
@@ -42,24 +60,12 @@ func linkedPublicService(t *testing.T) (svc *Service, reader *publicresume.Reade
 	if err != nil {
 		t.Fatal(err)
 	}
-	coordinator, err := publicstate.NewCoordinator(publicstate.CoordinatorConfig{DiscoveryGeneration: 1})
-	if err != nil {
-		t.Fatal(err)
-	}
-	backing := &publicServiceStore{
+	backing = &publicServiceStore{
 		row: store.Resume{ID: uuid.New(), Slug: &slug, Live: true, SEOGeoEnabled: true, Revision: 1, Lng: &lng, SchemaVersion: int32(schema.CurrentVersion),
 			PersonalDetails: personal, Content: content, Customization: customization},
 		links: json.RawMessage(`[{"entryId":"` + entryID + `","projectSlug":"atlas-tool","document":{"defaultLanguage":"en","text":{"en":{"name":"Atlas"}}}}]`),
 	}
-	reader, err = publicresume.NewReader(publicresume.ReaderDependencies{Store: backing, Projector: docmigrate.NewIdentityProjector(), Coordinator: coordinator, Origin: mustPublicOrigin(t)})
-	if err != nil {
-		t.Fatal(err)
-	}
-	cache, err := publiccache.New(4, time.Minute, time.Now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return newPublicServiceForReader(t, reader, coordinator, cache), reader, slug, entryID, projectID
+	return backing, slug, entryID, projectID
 }
 
 func servePublic(t *testing.T, svc *Service, path string) []byte {

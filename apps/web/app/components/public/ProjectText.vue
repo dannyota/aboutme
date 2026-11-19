@@ -3,13 +3,16 @@ import type {
   ProjectDetail,
 } from '../../../server/utils/public-render/project-envelope';
 import type { ProjectPageCopy } from '../../i18n/project-pages';
+import type { EvidenceRow } from './evidenceRows';
 import ProjectDescription from './ProjectDescription';
+import ProjectEvidence from './ProjectEvidence.vue';
 
 defineProps<{
   readonly project: ProjectDetail;
   readonly copy: ProjectPageCopy;
   readonly listUrl: string;
   readonly otherProjects: boolean;
+  readonly evidence: readonly EvidenceRow[];
 }>();
 </script>
 
@@ -40,6 +43,11 @@ defineProps<{
         :lang="project.lang"
       />
     </section>
+    <ProjectEvidence
+      v-if="evidence.length > 0"
+      :copy="copy"
+      :rows="evidence"
+    />
     <p
       v-if="otherProjects"
       class="project-more"

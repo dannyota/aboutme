@@ -111,7 +111,7 @@ func run() error {
 		return fmt.Errorf("create media backend: %w", err)
 	}
 	projector := docmigrate.NewIdentityProjector()
-	reader, err := app.NewReader(queries, projector, coordinator, blobs, runtime)
+	reader, err := app.NewReader(queries, projector, coordinator, blobs, runtime, cfg.GitHubEvidence)
 	if err != nil {
 		return fmt.Errorf("create public reader: %w", err)
 	}

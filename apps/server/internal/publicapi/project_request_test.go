@@ -68,7 +68,11 @@ func TestProjectRequests_BuildTheCorpusEnvelopes(t *testing.T) {
 		}},
 		publicresume.PublicProject{Slug: "difference-engine", Document: project.Document{DefaultLanguage: en, Text: map[string]project.Text{en: {Name: "Difference Engine study"}}}},
 	)
+	withEvidence := projectTestInput(t, projectTestSnapshot("vi-VN", "Ada Lovelace", schemeOf(schema.Light), schema.MmYyyy, false), 2, corpusEvidenceProject())
+	evidenceOnly := projectTestInput(t, projectTestSnapshot("en", "Ada Lovelace", schemeOf(schema.Dark), schema.MonYYYY, false), 1, corpusEvidenceOnlyProject())
 	for name, build := range map[string]func() (any, error){
+		"project-vi-evidence":      func() (any, error) { return buildProjectRequest(withEvidence) },
+		"project-en-evidence-only": func() (any, error) { return buildProjectRequest(evidenceOnly) },
 		"project-en-every-field": func() (any, error) {
 			request, err := buildProjectRequest(every)
 			request.FaviconHref = "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%2F%3E"

@@ -3004,22 +3004,32 @@ SELECT r.id, r.user_id, r.title, r.slug, r.live, r.download_enabled, r.seo_geo_e
     WHERE s.section->>'sectionType' = 'project'
         AND (e.entry->'isHidden') IS DISTINCT FROM 'true'::jsonb
 ), '[]'::jsonb)::jsonb AS project_links, COALESCE((
-    SELECT jsonb_agg(jsonb_build_object('entryId', e.entry->>'id', 'projectSlug', p.slug, 'document', p.document))
+    SELECT jsonb_agg(jsonb_build_object('entryId', e.entry->>'id', 'projectSlug', p.slug, 'document', p.document, 'evidence', COALESCE((
+        SELECT jsonb_agg(jsonb_build_object(
+            'kind', v.kind, 'title', v.title, 'url', v.url, 'repositoryName', v.repository_name,
+            'itemDate', v.item_date, 'checkedAt', v.checked_at,
+            'confirmed', COALESCE(v.rule_met AND c.github_user_id IS NOT NULL AND c.binding = v.checked_binding, false)
+        ) ORDER BY v.position)
+        FROM project_evidence AS v
+        LEFT JOIN github_connections AS c ON c.user_id = p.user_id
+        WHERE $1::bool AND v.project_id = p.id
+    ), '[]'::jsonb)))
     FROM jsonb_each(r.content) AS s(key, section)
     CROSS JOIN LATERAL jsonb_array_elements(s.section->'entries') AS e(entry)
     JOIN projects AS p
         ON p.user_id = r.user_id AND p.id::text = lower(e.entry->>'projectId')
     WHERE s.section->>'sectionType' = 'project'
         AND (e.entry->'isHidden') IS DISTINCT FROM 'true'::jsonb
-        AND p.slug = $1::text
+        AND p.slug = $2::text
 ), '[]'::jsonb)::jsonb AS projects
 FROM resumes AS r
-WHERE r.slug = $2::text AND r.live = true
+WHERE r.slug = $3::text AND r.live = true
 `
 
 type GetPublicResumeProjectParams struct {
-	ProjectSlug string
-	Slug        string
+	WithEvidence bool
+	ProjectSlug  string
+	Slug         string
 }
 
 type GetPublicResumeProjectRow struct {
@@ -3029,7 +3039,7 @@ type GetPublicResumeProjectRow struct {
 }
 
 func (q *Queries) GetPublicResumeProject(ctx context.Context, arg GetPublicResumeProjectParams) (GetPublicResumeProjectRow, error) {
-	row := q.db.QueryRow(ctx, getPublicResumeProject, arg.ProjectSlug, arg.Slug)
+	row := q.db.QueryRow(ctx, getPublicResumeProject, arg.WithEvidence, arg.ProjectSlug, arg.Slug)
 	var i GetPublicResumeProjectRow
 	err := row.Scan(
 		&i.Resume.ID,

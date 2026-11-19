@@ -87,6 +87,7 @@ func buildProjectRequest(input projectPageInput) (directrender.ProjectRenderRequ
 		EntryLink:     projectEntryLink(available.EntryLink, document.RepositoryURL, document.DemoURL),
 		ListURL:       input.origin.Resolve("/" + input.snapshot.Public.Slug + "/projects"),
 		OtherProjects: input.pages.Available > 1,
+		Evidence:      projectEvidence(available.Evidence),
 	}, nil
 }
 

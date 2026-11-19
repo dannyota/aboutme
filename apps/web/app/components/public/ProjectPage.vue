@@ -3,10 +3,12 @@ import { computed } from 'vue';
 
 import type {
   ProjectDetail,
+  ProjectEvidence,
   ProjectPageResume,
 } from '../../../server/utils/public-render/project-envelope';
 import { PROJECT_PAGE_COPY } from '../../i18n/project-pages';
 import { formatDateRange } from '../resume/formatDate';
+import { evidenceRows } from './evidenceRows';
 import ProjectFacts from './ProjectFacts.vue';
 import ProjectPageBar from './ProjectPageBar.vue';
 import ProjectText from './ProjectText.vue';
@@ -17,6 +19,7 @@ const props = defineProps<{
   readonly entryLink?: string;
   readonly listUrl: string;
   readonly otherProjects: boolean;
+  readonly evidence: readonly ProjectEvidence[];
   readonly homeHref: string;
 }>();
 
@@ -34,8 +37,12 @@ const hasFacts = computed(() => props.project.repositoryUrl !== undefined
   || dates.value !== undefined
   || props.project.technologies.length > 0);
 
+const evidence = computed(() => evidenceRows(props.evidence,
+  props.resume.dateFormat, props.resume.lng, props.resume.uiLng));
+
 const hasText = computed(() => props.project.outcome !== undefined
   || props.project.description !== undefined
+  || evidence.value.length > 0
   || props.otherProjects);
 </script>
 
@@ -80,6 +87,7 @@ const hasText = computed(() => props.project.outcome !== undefined
         />
         <ProjectText
           :copy="copy"
+          :evidence="evidence"
           :list-url="listUrl"
           :other-projects="otherProjects"
           :project="project"
@@ -95,6 +103,7 @@ const hasText = computed(() => props.project.outcome !== undefined
       <ProjectText
         v-else-if="hasText"
         :copy="copy"
+        :evidence="evidence"
         :list-url="listUrl"
         :other-projects="otherProjects"
         :project="project"

@@ -515,6 +515,7 @@ onMounted(async () => {
     data-render-mode="project"
     :data-fonts-ready="fontsSettled ? 'true' : undefined"
     :entry-link="projectDetail.entryLink"
+    :evidence="projectDetail.evidence"
     :home-href="HOME_HREF"
     :list-url="projectDetail.listUrl"
     :other-projects="projectDetail.otherProjects"

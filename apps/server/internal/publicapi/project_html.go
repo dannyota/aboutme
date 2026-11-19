@@ -11,7 +11,7 @@ import (
 	"danny.vn/aboutme/apps/server/internal/publicstate"
 )
 
-const projectFormatVersion = 2
+const projectFormatVersion = 3
 
 const projectPageCSP = "default-src 'none'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'none'; " +
 	"script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; manifest-src 'self'; " +

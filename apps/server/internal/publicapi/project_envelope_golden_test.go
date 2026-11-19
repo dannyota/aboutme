@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	schema "danny.vn/aboutme/packages/schema/gen/go"
 
@@ -116,6 +117,21 @@ func goldenProjectEnvelopes(t *testing.T) []projectEnvelopeCase {
 	dotted := smallProject("dotted", 1, nil)
 	dotted.Document.DemoURL, dotted.EntryLink = "https://i\u0307.example/", "https://\u0130.example/"
 	page("entry link equal to the demo but for a dotted capital I", projectTestInput(t, en, 2, dotted))
+
+	plus7 := time.FixedZone("ICT", 7*60*60)
+	kinds := evidenceProject("evidence-kinds",
+		evidenceAt(project.EvidenceRepository, "octocat/hello", "https://github.com/octocat/hello", true),
+		publicresume.PublicEvidence{
+			Kind: project.EvidencePullRequest, Title: "Fix the parser", URL: "https://github.com/octocat/hello/pull/42", RepositoryName: "octocat/hello",
+			ItemDate: time.Date(2026, time.January, 1, 6, 30, 0, 500, plus7), CheckedAt: time.Date(2026, time.November, 2, 8, 0, 0, 0, plus7), Confirmed: true,
+		},
+		evidenceAt(project.EvidenceRelease, "v1.0.0+build", "https://github.com/octocat/hello/releases/tag/v1.0.0%2Bbuild", true),
+		evidenceAt(project.EvidencePullRequest, "Upstream fix", "https://github.com/upstream/hello/pull/7", false))
+	page("evidence of every kind, confirmed and plain", projectTestInput(t, resume("vi", "Ada", nil), 2, kinds))
+	page("ten evidence items at every bound", projectTestInput(t, en, 2, boundedEvidence()))
+	unsafe := evidenceAt(project.EvidenceRepository, "a\u0007b\u200bc\u2028d\u2029e", "https://github.com/octocat/hello", false)
+	unsafe.RepositoryName = "octocat/\u0085hello"
+	page("evidence with unsafe characters", projectTestInput(t, en, 1, evidenceProject("evidence-unsafe", unsafe)))
 
 	favicon := projectTestSnapshot("en-GB", "Ada", schemeOf(schema.Dark), schema.Yyyy, true)
 	emoji := "🚀"

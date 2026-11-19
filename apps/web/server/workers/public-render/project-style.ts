@@ -307,6 +307,37 @@ const DETAIL = [
     rules('.public-back,.project-external', 'border-color:ButtonBorder;')),
 ];
 
+const EVIDENCE = [
+  rules('.project-evidence-list', 'margin:0;padding:0;list-style:none;',
+    'background:var(--project-card);',
+    'border:1px solid var(--project-border);',
+    'border-radius:var(--project-radius-card);'),
+  rules('.project-evidence-item', 'display:flex;flex-direction:column;',
+    'gap:4px;padding:16px;'),
+  rules('.project-evidence-item + .project-evidence-item',
+    'border-top:1px solid var(--project-hairline);'),
+  rules('.project-evidence-label,.project-evidence-heading', 'display:flex;',
+    'align-items:flex-start;gap:8px;'),
+  rules('.project-evidence-label', 'color:var(--project-ink);',
+    'font-size:14px;line-height:20px;font-weight:500;'),
+  rules('.project-evidence-heading', 'font-size:16px;line-height:24px;',
+    'font-weight:600;'),
+  rules('.project-evidence-item svg', 'display:block;flex-shrink:0;'),
+  rules('.project-evidence-label svg', 'margin-top:2px;'),
+  rules('.project-evidence-heading svg', 'margin-top:4px;',
+    'color:var(--project-muted);'),
+  rules('.project-evidence', 'min-width:0;color:var(--project-link);',
+    'text-decoration:none;'),
+  rules('.project-evidence-meta', 'padding-inline-start:24px;',
+    'color:var(--project-muted);font-size:14px;line-height:20px;'),
+  media('(hover:hover)',
+    rules('.project-evidence:hover', 'text-decoration:underline;')),
+  media('(min-width:40rem)',
+    rules('.project-evidence-item', 'padding:20px 24px;')),
+  media('(forced-colors:active)',
+    rules('.project-evidence-list', 'border-color:CanvasText;')),
+];
+
 export const PROJECT_PAGE_STYLE = [
-  ...SCHEME, ...FRAME, ...BAR, ...CHIPS, ...LIST, ...DETAIL,
+  ...SCHEME, ...FRAME, ...BAR, ...CHIPS, ...LIST, ...DETAIL, ...EVIDENCE,
 ].join('');

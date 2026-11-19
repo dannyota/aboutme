@@ -182,6 +182,8 @@ apps/web/app/components/projects/projectResumesState.ts
 apps/web/app/components/public/JoinInvite.vue
 apps/web/app/components/public/ProjectChips.vue
 apps/web/app/components/public/ProjectDescription.ts
+apps/web/app/components/public/ProjectEvidence.vue
+apps/web/app/components/public/ProjectEvidenceIcon.vue
 apps/web/app/components/public/ProjectFacts.vue
 apps/web/app/components/public/ProjectLinkIcon.vue
 apps/web/app/components/public/ProjectListPage.vue
@@ -192,6 +194,7 @@ apps/web/app/components/public/PublicDownloadLink.vue
 apps/web/app/components/public/PublicGate.vue
 apps/web/app/components/public/PublicMark.vue
 apps/web/app/components/public/PublicResumeApp.vue
+apps/web/app/components/public/evidenceRows.ts
 apps/web/app/components/resume/LayoutColumns.vue
 apps/web/app/components/resume/PagedResume.vue
 apps/web/app/components/resume/ResumeDocument.vue
@@ -612,6 +615,7 @@ apps/web/e2e/print-mutations.spec.ts
 apps/web/e2e/print-pdf.spec.ts
 apps/web/e2e/print-text-containment.ts
 apps/web/e2e/print.spec.ts
+apps/web/e2e/project-evidence-details.ts
 apps/web/e2e/project-evidence-fake.ts
 apps/web/e2e/project-page-details.ts
 apps/web/e2e/project-pages.spec.ts
