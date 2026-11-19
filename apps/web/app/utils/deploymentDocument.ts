@@ -11,11 +11,11 @@ export const servingComponents: readonly ComponentName[] = [
   'server', 'web', 'caddy',
 ];
 
-const componentImages: Readonly<Record<ComponentName, string>> = {
-  server: 'ghcr.io/dannyota/aboutme-server',
-  web: 'ghcr.io/dannyota/aboutme-web',
-  caddy: 'ghcr.io/dannyota/aboutme-caddy',
-  maintenance: 'ghcr.io/dannyota/aboutme-caddy',
+const componentRepositories: Readonly<Record<ComponentName, string>> = {
+  server: 'server',
+  web: 'web',
+  caddy: 'caddy',
+  maintenance: 'caddy',
 };
 
 export type CheckStatus
@@ -75,15 +75,22 @@ const VERSION = /^v[0-9]+\.[0-9]+\.[0-9]+$/u;
 const COMMIT = /^[0-9a-f]{40}$/u;
 const TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/u;
 const REGION = /^[A-Z]{2,4}[0-9]{2}$/u;
-const REPO = 'https://github\\.com/dannyota/aboutme';
+const OWNER = '(dannyota|dntmakers)';
+const REPO = `https://github\\.com/${OWNER}/aboutme`;
 const SEMVER = 'v[0-9]+\\.[0-9]+\\.[0-9]+';
+const SOURCE = new RegExp(`^${REPO}$`, 'u');
+const IMAGE = new RegExp(
+  `^ghcr\\.io/${OWNER}/aboutme-(server|web|caddy)$`, 'u');
+const SIGNER = new RegExp(
+  `^${REPO}/\\.github/workflows/release-images\\.yml@refs/tags/${SEMVER}$`,
+  'u');
 const LINK_PATTERNS = {
   commit: new RegExp(`^${REPO}/commit/[0-9a-f]{40}$`, 'u'),
   release: new RegExp(`^${REPO}/releases/tag/${SEMVER}$`, 'u'),
   build: new RegExp(
     `^${REPO}/actions/runs/[0-9]{1,20}/attempts/[0-9]{1,4}$`, 'u'),
   provenance: new RegExp(
-    '^https://api\\.github\\.com/repos/dannyota/aboutme/attestations/'
+    `^https://api\\.github\\.com/repos/${OWNER}/aboutme/attestations/`
     + 'sha256:[0-9a-f]{64}\\?predicate_type=provenance$', 'u'),
   sbom: new RegExp(
     `^${REPO}/releases/download/${SEMVER}/aboutme-(?:server|web|caddy)`
@@ -131,26 +138,51 @@ function status(value: unknown): CheckStatus {
     : 'unknown';
 }
 
-function links(value: unknown, verified: boolean): ImageLinks {
+interface Owners {
+  readonly source: string;
+  readonly image: string;
+}
+
+function ownedBy<T extends string | null>(
+  value: T,
+  pattern: RegExp,
+  owner: string | null,
+): T {
+  if (value !== null && owner !== null && pattern.exec(value)![1] !== owner) {
+    refuse();
+  }
+  return value;
+}
+
+function links(
+  value: unknown,
+  verified: boolean,
+  owners: Owners,
+): ImageLinks {
   const raw = record(value);
-  const pick = (key: Exclude<keyof ImageLinks, 'provenance'>) => {
-    const decoded = optionalText(
+  const pick = (
+    key: Exclude<keyof ImageLinks, 'provenance'>,
+    owner: string | null,
+  ) => {
+    const pattern = LINK_PATTERNS[key];
+    const decoded = ownedBy(optionalText(
       raw[key === 'transparencyLog' ? 'transparency_log' : key],
-      LINK_PATTERNS[key],
-    );
+      pattern,
+    ), pattern, owner);
     return verified ? decoded : null;
   };
   return {
-    commit: pick('commit'),
-    release: pick('release'),
-    build: pick('build'),
-    provenance: text(raw.provenance, LINK_PATTERNS.provenance),
-    sbom: pick('sbom'),
-    transparencyLog: pick('transparencyLog'),
+    commit: pick('commit', owners.source),
+    release: pick('release', owners.source),
+    build: pick('build', verified ? owners.image : null),
+    provenance: ownedBy(text(raw.provenance, LINK_PATTERNS.provenance),
+      LINK_PATTERNS.provenance, owners.source),
+    sbom: pick('sbom', owners.source),
+    transparencyLog: pick('transparencyLog', null),
   };
 }
 
-function runningImage(value: unknown): RunningImage {
+function runningImage(value: unknown, owners: Owners): RunningImage {
   const raw = record(value);
   const replicas = raw.replicas;
   if (
@@ -159,9 +191,12 @@ function runningImage(value: unknown): RunningImage {
   ) {
     refuse();
   }
-  const signature = status(record(raw.signature).status);
+  const signed = record(raw.signature);
+  const signature = status(signed.status);
   const sbom = status(record(raw.sbom).status);
   const verified = signature === 'verified';
+  ownedBy(optionalText(signed.signer_workflow ?? null, SIGNER), SIGNER,
+    verified ? owners.image : null);
   const version = optionalText(raw.version, VERSION);
   const commit = optionalText(raw.commit, COMMIT);
   if (verified && (version === null || commit === null)) refuse();
@@ -173,27 +208,29 @@ function runningImage(value: unknown): RunningImage {
     commit: verified ? commit : null,
     signature,
     sbom,
-    links: links(raw.links, verified),
+    links: links(raw.links, verified, owners),
   };
 }
 
-function component(value: unknown): DeploymentComponent {
+function component(value: unknown, source: string): DeploymentComponent {
   const raw = record(value);
   const name = raw.name;
   if (!componentNames.includes(name as ComponentName)) refuse();
   const componentName = name as ComponentName;
-  constant(raw.image, componentImages[componentName]);
+  const image = text(raw.image, IMAGE);
+  const [, owner, repository] = IMAGE.exec(image)!;
+  if (repository !== componentRepositories[componentName]) refuse();
   if (!Array.isArray(raw.running_images) || raw.running_images.length > 8) {
     refuse();
   }
-  const images = raw.running_images.map(runningImage);
+  const images = raw.running_images.map((entry) =>
+    runningImage(entry, { source, image: owner! }));
   if (new Set(images.map(({ digest }) => digest)).size !== images.length) {
     refuse();
   }
   images.sort((left, right) =>
     Date.parse(left.runningSince) - Date.parse(right.runningSince));
-  return { name: componentName, image: componentImages[componentName],
-    runningImages: images };
+  return { name: componentName, image, runningImages: images };
 }
 
 function release(value: unknown): Release | null {
@@ -216,7 +253,7 @@ export function decodeDeploymentDocument(value: unknown): DecodeResult {
     constant(raw.project, 'aboutme');
     constant(raw.environment, 'production');
     constant(raw.site, 'https://aboutme.vn');
-    constant(raw.source_repository, 'https://github.com/dannyota/aboutme');
+    const source = SOURCE.exec(text(raw.source_repository, SOURCE))![1]!;
     const platform = record(raw.platform);
     const provider = platform.provider;
     if (provider !== 'greennode') refuse();
@@ -224,7 +261,8 @@ export function decodeDeploymentDocument(value: unknown): DecodeResult {
     if (orchestrator !== 'podman') refuse();
     if (typeof raw.summary !== 'string') refuse();
     if (!Array.isArray(raw.components) || raw.components.length > 4) refuse();
-    const components = raw.components.map(component);
+    const components = raw.components.map((entry) =>
+      component(entry, source));
     const order = components.map(({ name }) => componentNames.indexOf(name));
     if (order.some((index, at) => at > 0 && index <= order[at - 1]!)) {
       refuse();
@@ -246,6 +284,10 @@ export function decodeDeploymentDocument(value: unknown): DecodeResult {
     if (error instanceof Refused) return { kind: 'invalid' };
     throw error;
   }
+}
+
+export function imageOwner(image: string): string {
+  return IMAGE.exec(image)?.[1] ?? '';
 }
 
 function imagesOf(document: DeploymentDocument): RunningImage[] {
@@ -282,10 +324,12 @@ export function recomputeRelease(
   document: DeploymentDocument,
 ): Release | null {
   if (recomputeSummary(document) !== 'verified') return null;
-  const images = servingComponents.map((name) =>
-    servingComponent(document, name)!.runningImages[0]!);
+  const serving = servingComponents.map((name) =>
+    servingComponent(document, name)!);
+  const images = serving.map(({ runningImages }) => runningImages[0]!);
   const [first] = images;
-  if (images.some((image) =>
+  const owners = new Set(serving.map(({ image }) => imageOwner(image)));
+  if (owners.size > 1 || images.some((image) =>
     image.version !== first!.version || image.commit !== first!.commit)) {
     return null;
   }

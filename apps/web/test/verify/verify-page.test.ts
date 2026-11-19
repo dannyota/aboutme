@@ -566,3 +566,61 @@ describe('verify page commands', () => {
     expect(copied).not.toContain('$ ');
   });
 });
+
+describe('verify page image owners', () => {
+  function namespaceLine(wrapper: Wrapper) {
+    return wrapper.get('[data-step="image"] p.font-mono');
+  }
+
+  function markup(wrapper: Wrapper): string {
+    return namespaceLine(wrapper).element.innerHTML
+      .replace(/<!--.*?-->|\sdata-v-[0-9a-f]+=""|\s+/gu, '');
+  }
+
+  it('shows the one namespace of a single-owner document', async () => {
+    serveFixture('verified');
+    const dannyota = await mountVerify();
+    expect(markup(dannyota)).toBe('ghcr.io/dannyota/<wbr>aboutme-*');
+    expect(namespaceLine(dannyota).findAll('br')).toHaveLength(0);
+
+    const document = JSON.parse(
+      JSON.stringify(fixture('verified')).replaceAll('dannyota', 'dntmakers'),
+    ) as Fixture;
+    mockResponse = { status: 200, body: document, date: freshDate(document) };
+    const dntmakers = await mountVerify();
+    expect(status(dntmakers).attributes('data-state')).toBe('verified');
+    expect(namespaceLine(dntmakers).text()).toBe('ghcr.io/dntmakers/aboutme-*');
+    expect(markup(dntmakers)).toBe('ghcr.io/dntmakers/<wbr>aboutme-*');
+  });
+
+  it('shows each namespace of a rollback once, one per line', async () => {
+    serveFixture('rollback');
+    const wrapper = await mountVerify();
+    expect(status(wrapper).attributes('data-state')).toBe('verified');
+    const line = namespaceLine(wrapper);
+    expect(line.findAll('br')).toHaveLength(1);
+    expect(markup(wrapper)).toBe(
+      'ghcr.io/dannyota/<wbr>aboutme-*<br>ghcr.io/dntmakers/<wbr>aboutme-*');
+  });
+
+  it('puts each rollback image\'s own owner in command 2', async () => {
+    serveFixture('rollback');
+    const wrapper = await mountVerify();
+    const command2 = () =>
+      wrapper.get('[data-testid="verify-command-2"]').text();
+    expect(command2()).toContain('oci://ghcr.io/dannyota/aboutme-server@');
+    expect(command2()).toContain('--repo dannyota/aboutme');
+    const option = wrapper.findAll('[data-testid="verify-selector"] button')
+      .find((button) => button.text() === 'maintenance');
+    expect(option).toBeDefined();
+    await option!.trigger('click');
+    await vi.waitFor(() => {
+      expect(command2()).toContain('oci://ghcr.io/dntmakers/aboutme-caddy@');
+    });
+    expect(command2()).toContain('--repo dntmakers/aboutme');
+    expect(command2()).toContain(
+      '--signer-workflow dntmakers/aboutme/.github/workflows/'
+      + 'release-images.yml');
+    expect(command2()).not.toContain('dannyota');
+  });
+});

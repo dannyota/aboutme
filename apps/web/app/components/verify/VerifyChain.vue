@@ -20,6 +20,7 @@ import {
   chainView,
   type ChipKind,
   type ConnectorKind,
+  imageNamespaces,
   shortCommit,
 } from '@/utils/verifyView';
 import type { Locale } from '@/i18n/locale';
@@ -102,6 +103,9 @@ const signaturesVerified = computed(() => {
   return images.length > 0
     && images.every(({ signature }) => signature === 'verified');
 });
+
+const namespaces = computed(() =>
+  document.value ? imageNamespaces(document.value) : []);
 
 const release = computed(() => view.value?.release ?? null);
 const buildLink = computed(() => release.value?.image.links.build ?? null);
@@ -192,7 +196,12 @@ const buildLink = computed(() => release.value?.image.links.build ?? null);
               v-else-if="step === 'image'"
               class="font-mono text-[14px] font-semibold"
             >
-              ghcr.io/dannyota/<wbr>aboutme-*
+              <template
+                v-for="(namespace, at) in namespaces"
+                :key="namespace"
+              >
+                <br v-if="at > 0">{{ namespace }}<wbr>aboutme-*
+              </template>
             </p>
             <p
               v-else
