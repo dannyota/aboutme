@@ -197,8 +197,16 @@ rm scripts/lib/repository.sh
 ln -s "$work/tag-repository" scripts/lib/repository.sh
 repository_text dannyota >"$work/tag-repository"
 if owner_of; then fail 'checkout reader followed a symbolic link'; fi
+grep -q 'release-eligibility: scripts/lib/repository.sh is not a regular file' "$work/out" ||
+  { cat "$work/out" >&2; fail 'symbolic link refused outside the reader'; }
 rm scripts/lib/repository.sh
 repository_text dannyota >scripts/lib/repository.sh
+chmod 0755 scripts/lib/repository.sh
+if owner_of; then fail 'checkout reader accepted an executable file'; fi
+grep -q 'release-eligibility: scripts/lib/repository.sh is not a regular file' "$work/out" ||
+  { cat "$work/out" >&2; fail 'executable file refused outside the reader'; }
+chmod 0644 scripts/lib/repository.sh
+owner_of || { cat "$work/out" >&2; fail 'checkout reader refused the restored file'; }
 mkdir -p "$work/tracked/scripts/lib"
 cp "$root/scripts/release-eligibility.sh" "$work/tracked/scripts/"
 cp "$root/scripts/lib/repository.sh" "$work/tracked/scripts/lib/" 2>/dev/null ||

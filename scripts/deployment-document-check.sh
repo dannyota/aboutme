@@ -159,12 +159,12 @@ owner_id() {
 }
 
 app_owners_agree() {
-  local owners
-  owners=$(awk '$1 ~ /^ghcr\.io\/[^\/]+\/aboutme-(server|web)$/ { split($1, part, "/"); print part[2] }' "$1" | sort -u)
-  [ -n "$owners" ] || return 0
-  [[ $owners != *$'\n'* ]] || return 1
-  awk -v caddy="ghcr.io/$owners/aboutme-caddy" '$1 == caddy { found = 1 } END { exit !found }' "$1" ||
-    ! awk '$1 ~ /\/aboutme-caddy$/ { found = 1 } END { exit !found }' "$1"
+  [ -s "$EVIDENCE/apex.images" ] || return 1
+  jq -e '
+    [.components[] | select(.name == "server" or .name == "web" or .name == "caddy")
+      | select(.running_images | length > 0)
+      | .image | (capture("^ghcr\\.io/(?<owner>[^/]+)/aboutme-(server|web|caddy)$") // error("unknown image")).owner]
+    | unique | length <= 1' "$EVIDENCE/apex.json" >/dev/null 2>&1
 }
 
 verify() {
@@ -190,7 +190,7 @@ verify() {
 check 'apex lists at least one running image' [ -s "$EVIDENCE/apex.images" ]
 check 'www lists the same images as apex' \
   cmp -s "$EVIDENCE/apex.images" "$EVIDENCE/www.images"
-check 'app images share one owner' app_owners_agree "$EVIDENCE/apex.images"
+check 'app images share one owner' app_owners_agree
 while read -r image digest version; do
   [ -n "$image" ] || continue
   tag=${digest#sha256:}

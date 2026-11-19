@@ -188,8 +188,18 @@ images() {
   : >"$STUB/dc-out"
   for line in "$@"; do printf '%s v0.6.5\n' "$line" >>"$STUB/dc-out"; done
 }
+document() {
+  local server=$1 web=$2 caddy=$3 maintenance=${4:-}
+  jq --arg server "$server" --arg web "$web" --arg caddy "$caddy" --arg maintenance "$maintenance" --arg d4 "$D4" '
+    .components |= map(.image = "ghcr.io/\({server: $server, web: $web, caddy: $caddy}[.name])/aboutme-\(.name)")
+    | if $maintenance == "" then . else .components += [.components[] | select(.name == "caddy")
+        | .name = "maintenance" | .image = "ghcr.io/\($maintenance)/aboutme-caddy"
+        | .running_images[0].digest = $d4] end' "$FIXTURE" >"$STUB/body"
+  images "ghcr.io/$server/aboutme-server $D1" "ghcr.io/$web/aboutme-web $D2" "ghcr.io/$caddy/aboutme-caddy $D3" \
+    ${maintenance:+"ghcr.io/$maintenance/aboutme-caddy $D4"}
+}
 reset
-images "$NEW-server $D1" "$NEW-web $D2" "$NEW-caddy $D3"
+document dntmakers dntmakers dntmakers
 run_check
 [ "$RC" -eq 0 ] || fail "dntmakers images exited $RC: $(summary)"
 for pair in "server $D1" "web $D2" "caddy $D3"; do
@@ -199,19 +209,33 @@ done
 ! grep -q 'dannyota' "$STUB/gh.log" || fail 'a dntmakers image was verified under dannyota'
 
 reset
-images "$OLD-server $D1" "$OLD-web $D2" "$OLD-caddy $D3" "$NEW-caddy $D4"
+document dannyota dannyota dannyota dntmakers
 run_check
 [ "$RC" -eq 0 ] || fail "a rollback with a newer maintenance image exited $RC: $(summary)"
+summary | grep -q '^PASS app images share one owner$' || fail 'the rollback app owner check did not pass'
 grep -Fq -- "oci://$NEW-caddy@$D4 --repo dntmakers/aboutme --signer-workflow dntmakers/aboutme/" "$STUB/gh.log" ||
   fail 'the maintenance image was not verified under its own owner'
 
-for mixed in "$OLD-server $D1|$NEW-web $D2|$OLD-caddy $D3" "$NEW-server $D1|$OLD-server $D2|$NEW-caddy $D3" \
-  "$OLD-server $D1|$OLD-web $D2|$NEW-caddy $D3"; do
+reset
+document dntmakers dannyota dntmakers
+jq '.components |= map(if .name == "web" then .running_images = [] else . end)' "$STUB/body" >"$STUB/body.next"
+mv "$STUB/body.next" "$STUB/body"
+images "$NEW-server $D1" "$NEW-caddy $D3"
+run_check
+[ "$RC" -eq 0 ] || fail "a stopped component of the other owner exited $RC: $(summary)"
+
+for mixed in 'dntmakers dntmakers dannyota dntmakers' 'dannyota dntmakers dannyota' \
+  'dannyota dannyota dntmakers' 'dntmakers dannyota dntmakers dannyota' 'dannyota dannyota dntmakers dannyota'; do
   reset
-  IFS='|' read -ra lines <<<"$mixed"
-  images "${lines[@]}"
+  # shellcheck disable=SC2086
+  document $mixed
   expect_fail "mixed app owners: $mixed" 'app images share one owner'
 done
+
+reset
+touch "$STUB/dc-fail"
+run_check
+summary | grep -q '^FAIL app images share one owner$' || fail 'an unvalidated document passed the app owner check'
 
 reset
 images "ghcr.io/evil/aboutme-server $D1"

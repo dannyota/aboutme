@@ -945,12 +945,34 @@ grep -Fxq '    needs: [prepare-request]' <<<"$PROBE_APPROVAL" || fail "approval 
 ! grep -Eq 'secrets|uses:|checkout|curl|gh api' "$PROBE_WORKFLOW" || fail "approval probe must only echo fixed text"
 
 assert_repository_guards() {
-  local directory=$1 file
-  for file in "$directory"/*.yml; do
-    if grep -Eq "github\.repository *(==|!=)|repository: *['\"]?[A-Za-z0-9_.-]+/aboutme" "$file"; then
-      fail "${file##*/} pins the repository name; guard on github.repository_id and check out \${{ github.repository }}"
-    fi
-  done
+  node --input-type=module - "$1" "$ROOT" <<'NODE'
+import { readFileSync, readdirSync } from "node:fs";
+import { createRequire } from "node:module";
+import { join } from "node:path";
+const require = createRequire(join(process.argv[3], "scripts/test/workflow-contract.test.mjs"));
+const { parse } = require("yaml");
+const directory = process.argv[2];
+const subject = String.raw`github\.(?:repository(?:_owner)?|event\.repository\.(?:full_name|owner\.login))(?![\w.])`;
+const reference = new RegExp(subject, "i");
+const comparison = new RegExp(String.raw`${subject}\s*[!=]=|[!=]=\s*${subject}|\b(?:contains|startsWith|endsWith)\s*\(.*${subject}`, "i");
+const owner = /dannyota|dntmakers/i;
+const fixedCheckout = /^\s*[\w.-]+\/aboutme\s*$/;
+function pins(value, key) {
+  if (typeof value === "string") {
+    return (key === "if" && (reference.test(value) || owner.test(value))) ||
+      (key === "repository" && fixedCheckout.test(value)) || comparison.test(value);
+  }
+  if (Array.isArray(value)) return value.some((item) => pins(item));
+  if (value !== null && typeof value === "object") return Object.entries(value).some(([name, item]) => pins(item, name));
+  return false;
+}
+for (const name of readdirSync(directory).filter((file) => /\.ya?ml$/.test(file)).sort()) {
+  if (pins(parse(readFileSync(join(directory, name), "utf8")))) {
+    console.error(`workflow-safety-test: ${name} pins the repository name; guard on github.repository_id and check out \${{ github.repository }}`);
+    process.exit(1);
+  }
+}
+NODE
 }
 assert_repository_guards "$ROOT/.github/workflows"
 mkdir -p "$WORK/guards"
@@ -966,6 +988,66 @@ for drift in \
   [ "$status" -eq 1 ] && grep -Fq 'pins the repository name' "$WORK/guard-drift" ||
     fail "repository guard drift was accepted: $drift"
 done
+guard_fixture() {
+  rm -f "$WORK/guards"/*.yml
+  cat >"$WORK/guards/fixture.yml"
+  status=0
+  ( assert_repository_guards "$WORK/guards" ) >"$WORK/guard-drift" 2>&1 || status=$?
+}
+guard_refused() {
+  [ "$status" -eq 1 ] && grep -Fq 'fixture.yml pins the repository name' "$WORK/guard-drift" ||
+    fail "repository guard drift was accepted: $1"
+}
+while IFS= read -r expression; do
+  printf 'jobs:\n  probe:\n    if: >-\n      %s\n    runs-on: ubuntu-24.04\n' "$expression" | guard_fixture
+  guard_refused "$expression"
+done <<'CASES'
+'dannyota/aboutme' == github.repository
+'dntmakers/aboutme' != github.repository
+github.repository_owner == 'dannyota'
+github.repository_owner != 'dntmakers'
+'dannyota' == github.repository_owner
+contains(github.repository, 'aboutme')
+contains(fromJSON('["someone/aboutme"]'), github.repository)
+startsWith(github.repository, 'someone/')
+github.event.repository.full_name == 'someone/aboutme'
+github.event.repository.owner.login == 'someone'
+github.repository_id == 1318874703 && github.actor == 'dannyota'
+github.repository_id == 1318874703 && github.triggering_actor != 'dntmakers'
+github.repository_id == 1318874703 && github.workflow_ref == 'Dannyota/aboutme/.github/workflows/x.yml@refs/heads/main'
+CASES
+guard_fixture <<'YAML'
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    steps:
+      - if: >-
+          github.repository_id == 1318874703 &&
+          github.actor == 'dannyota'
+        run: echo probe
+YAML
+guard_refused 'a multi-line step condition naming an owner'
+guard_fixture <<'YAML'
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    env:
+      SAME: ${{ 'someone/aboutme' == github.repository }}
+YAML
+guard_refused 'a reversed comparison outside a condition'
+guard_fixture <<'YAML'
+jobs:
+  probe:
+    if: github.repository_id == 1318874703 && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    steps:
+      - if: ${{ github.event_name == 'push' && contains(github.ref, 'refs/tags/') }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: ${{ github.repository }}
+      - run: echo "$GITHUB_REPOSITORY ghcr.io/${{ github.repository_owner }}/aboutme-server"
+YAML
+[ "$status" -eq 0 ] || { cat "$WORK/guard-drift" >&2; fail 'an ID guard and repository context were refused'; }
 
 mkdir -p "$WORK/workflows"
 cp "$WORKFLOW" "$WORK/workflows/ci.yml"

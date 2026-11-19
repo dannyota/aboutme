@@ -13,7 +13,7 @@ parse_owner() {
 checkout_owner() {
   local path=$root/$repository_file text
   if [[ ! -e $path && ! -L $path ]]; then printf 'dannyota\n'; return; fi
-  [[ -f $path && ! -L $path ]] || fail "$repository_file is not a regular file"
+  [[ -f $path && ! -L $path && ! -x $path ]] || fail "$repository_file is not a regular file"
   text=$(cat -- "$path" && printf x) || fail "cannot read $repository_file"
   parse_owner "${text%x}" "$repository_file"
 }
@@ -34,8 +34,6 @@ checkout_on_main() {
   branch=$(git -C "$root" symbolic-ref --quiet --short HEAD) || fail 'deployment checkout must be on main'
   [[ $branch == main ]] || fail 'deployment checkout must be on main'
 }
-# Fetch from the release repository, even if origin points at a fork. Explicit
-# refs refresh main and any tag; a replaced local tag fails instead of moving.
 fetch_main() {
   git -C "$root" fetch -q --no-tags "https://github.com/$repo.git" '+refs/heads/main:refs/remotes/origin/main' "$@"
 }
