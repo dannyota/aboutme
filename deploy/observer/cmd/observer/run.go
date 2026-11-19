@@ -31,6 +31,7 @@ func (o *observer) run(ctx context.Context, now func() time.Time) error {
 		observed = snapshot.ObservationTime()
 	}
 	doc, err := document.Build(document.Input{
+		Owner:       o.owner,
 		Environment: environment,
 		Site:        site,
 		Platform:    o.info,

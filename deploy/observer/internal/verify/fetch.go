@@ -11,13 +11,23 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+
+	"danny.vn/aboutme/deploy/observer/internal/source"
 )
 
 const maxBody = 4 << 20
 
 const bundleMediaType = "application/vnd.dev.sigstore.bundle.v0.3+json"
 
-var registryRepositories = []string{"dannyota/aboutme-server", "dannyota/aboutme-web", "dannyota/aboutme-caddy"}
+func registryRepositories() []string {
+	var out []string
+	for _, owner := range source.Owners() {
+		for _, name := range []string{"aboutme-server", "aboutme-web", "aboutme-caddy"} {
+			out = append(out, owner+"/"+name)
+		}
+	}
+	return out
+}
 
 var errRateLimited = errors.New("github api rate limited")
 
@@ -30,18 +40,15 @@ func (v *Verifier) fetch(ctx context.Context, digest, predicate, apiFilter strin
 		return nil, apiErr
 	}
 	bundles, err := v.fetchRegistry(ctx, digest, predicate)
-	if err != nil {
-		return nil, err
+	if err == nil && len(bundles) == 0 {
+		err = apiErr
 	}
-	if len(bundles) == 0 && apiErr != nil {
-		return nil, apiErr
-	}
-	return bundles, nil
+	return bundles, err
 }
 
 func (v *Verifier) fetchAPI(ctx context.Context, digest, apiFilter string) ([][]byte, error) {
-	u := fmt.Sprintf("%s/repos/dannyota/aboutme/attestations/%s?predicate_type=%s&per_page=30",
-		v.opts.GitHubAPI, url.PathEscape(digest), url.QueryEscape(apiFilter))
+	u := fmt.Sprintf("%s/repositories/%s/attestations/%s?predicate_type=%s&per_page=30",
+		v.opts.GitHubAPI, source.RepositoryID, url.PathEscape(digest), url.QueryEscape(apiFilter))
 	body, status, err := v.get(ctx, u, map[string]string{"Accept": "application/vnd.github+json"})
 	if err != nil {
 		return nil, err
@@ -74,14 +81,15 @@ func (v *Verifier) fetchAPI(ctx context.Context, digest, apiFilter string) ([][]
 
 func (v *Verifier) fetchRegistry(ctx context.Context, digest, predicate string) ([][]byte, error) {
 	var out [][]byte
-	for _, repo := range registryRepositories {
+	var firstErr error
+	for _, repo := range registryRepositories() {
 		got, err := v.fetchRepository(ctx, repo, digest, predicate)
-		if err != nil {
-			return nil, err
+		if err != nil && firstErr == nil {
+			firstErr = err
 		}
 		out = append(out, got...)
 	}
-	return out, nil
+	return out, firstErr
 }
 
 func (v *Verifier) fetchRepository(ctx context.Context, repo, digest, predicate string) ([][]byte, error) {

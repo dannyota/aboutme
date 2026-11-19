@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"danny.vn/aboutme/deploy/observer/internal/platform"
+	"danny.vn/aboutme/deploy/observer/internal/source"
 	"danny.vn/aboutme/deploy/observer/internal/verify"
 )
 
@@ -59,7 +60,7 @@ func exampleVerifiedProvenance(version, commit string, checkedAt time.Time, comp
 	return verify.Provenance{
 		Status:         verify.Verified,
 		CheckedAt:      checkedAt,
-		Subjects:       []string{platform.ImageRepository(component)},
+		Subjects:       []string{platform.Repository(source.Dannyota, component)},
 		Version:        version,
 		Commit:         commit,
 		SignerWorkflow: exampleSignerWorkflow(version),
@@ -69,7 +70,7 @@ func exampleVerifiedProvenance(version, commit string, checkedAt time.Time, comp
 }
 
 func exampleVerifiedSBOM(checkedAt time.Time, component string) verify.SBOM {
-	return verify.SBOM{Status: verify.Verified, CheckedAt: checkedAt, Subjects: []string{platform.ImageRepository(component)}}
+	return verify.SBOM{Status: verify.Verified, CheckedAt: checkedAt, Subjects: []string{platform.Repository(source.Dannyota, component)}}
 }
 
 func exampleNotFoundEvidence(digest string, checkedAt time.Time) verify.Evidence {
@@ -83,7 +84,36 @@ func exampleNotFoundEvidence(digest string, checkedAt time.Time) verify.Evidence
 var examplePlatform = platform.Info{Provider: "greennode", Orchestrator: "podman", Region: "HCM03"}
 
 func exampleImage(component, digest, since string, t *testing.T) platform.Image {
-	return platform.Image{Component: component, Digest: digest, Replicas: 1, RunningSince: exampleMustParse(t, since)}
+	return platform.Image{
+		Component: component, Repository: platform.Repository(source.Dannyota, component),
+		Digest: digest, Replicas: 1, RunningSince: exampleMustParse(t, since),
+	}
+}
+
+func exampleMovedTo(in Input, owner string) Input {
+	moved := func(s string) string { return strings.Replace(s, "/"+source.Dannyota+"/", "/"+owner+"/", 1) }
+	movedAll := func(names []string) []string {
+		out := make([]string, len(names))
+		for i, n := range names {
+			out[i] = moved(n)
+		}
+		return out
+	}
+	in.Owner = owner
+	in.Images = append([]platform.Image{}, in.Images...)
+	for i := range in.Images {
+		in.Images[i].Repository = moved(in.Images[i].Repository)
+	}
+	evidence := map[string]verify.Evidence{}
+	for d, ev := range in.Evidence {
+		ev.Provenance.Subjects = movedAll(ev.Provenance.Subjects)
+		ev.Provenance.SignerWorkflow = moved(ev.Provenance.SignerWorkflow)
+		ev.Provenance.BuildURL = moved(ev.Provenance.BuildURL)
+		ev.SBOM.Subjects = movedAll(ev.SBOM.Subjects)
+		evidence[d] = ev
+	}
+	in.Evidence = evidence
+	return in
 }
 
 // exampleScenarios builds every state the /verify page renders
@@ -105,6 +135,7 @@ func exampleScenarios(t *testing.T) map[string]Input {
 	scenarios := map[string]Input{}
 
 	scenarios["verified"] = Input{
+		Owner:       source.Dannyota,
 		Environment: "production",
 		Site:        "https://aboutme.vn",
 		Platform:    examplePlatform,
@@ -134,6 +165,7 @@ func exampleScenarios(t *testing.T) map[string]Input {
 	scenarios["verified-with-maintenance"] = withMaintenance
 
 	scenarios["rolling-out"] = Input{
+		Owner:       source.Dannyota,
 		Environment: "production",
 		Site:        "https://aboutme.vn",
 		Platform:    examplePlatform,
@@ -154,6 +186,7 @@ func exampleScenarios(t *testing.T) map[string]Input {
 	}
 
 	scenarios["unverified"] = Input{
+		Owner:       source.Dannyota,
 		Environment: "production",
 		Site:        "https://aboutme.vn",
 		Platform:    examplePlatform,
@@ -171,6 +204,7 @@ func exampleScenarios(t *testing.T) map[string]Input {
 	}
 
 	scenarios["mismatch-not-found"] = Input{
+		Owner:       source.Dannyota,
 		Environment: "production",
 		Site:        "https://aboutme.vn",
 		Platform:    examplePlatform,
@@ -189,6 +223,7 @@ func exampleScenarios(t *testing.T) map[string]Input {
 	}
 
 	scenarios["mismatch-invalid"] = Input{
+		Owner:       source.Dannyota,
 		Environment: "production",
 		Site:        "https://aboutme.vn",
 		Platform:    examplePlatform,
@@ -211,6 +246,7 @@ func exampleScenarios(t *testing.T) map[string]Input {
 	}
 
 	scenarios["mismatch-missing-component"] = Input{
+		Owner:       source.Dannyota,
 		Environment: "production",
 		Site:        "https://aboutme.vn",
 		Platform:    examplePlatform,
@@ -227,6 +263,7 @@ func exampleScenarios(t *testing.T) map[string]Input {
 	}
 
 	scenarios["sbom-not-found"] = Input{
+		Owner:       source.Dannyota,
 		Environment: "production",
 		Site:        "https://aboutme.vn",
 		Platform:    examplePlatform,
@@ -257,6 +294,7 @@ func exampleScenarios(t *testing.T) map[string]Input {
 		}
 	}
 	scenarios["stale"] = Input{
+		Owner:       source.Dannyota,
 		Environment: "production",
 		Site:        "https://aboutme.vn",
 		Platform:    examplePlatform,
@@ -273,6 +311,8 @@ func exampleScenarios(t *testing.T) map[string]Input {
 		},
 		Observer: BuildInfo{Version: "v0.6.5", Commit: exampleCommit65},
 	}
+
+	scenarios["verified-dntmakers"] = exampleMovedTo(scenarios["verified"], source.Dntmakers)
 
 	return scenarios
 }

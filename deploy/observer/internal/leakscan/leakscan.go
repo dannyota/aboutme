@@ -26,6 +26,9 @@ var (
 		"https://github.com/dannyota/aboutme\"",
 		"https://github.com/dannyota/aboutme/",
 		"https://api.github.com/repos/dannyota/aboutme/attestations/",
+		"https://github.com/dntmakers/aboutme\"",
+		"https://github.com/dntmakers/aboutme/",
+		"https://api.github.com/repos/dntmakers/aboutme/attestations/",
 		"https://search.sigstore.dev/?logIndex=",
 	}
 )

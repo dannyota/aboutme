@@ -11,6 +11,7 @@ import (
 
 	"danny.vn/aboutme/deploy/observer/internal/document"
 	"danny.vn/aboutme/deploy/observer/internal/platform"
+	"danny.vn/aboutme/deploy/observer/internal/source"
 )
 
 var testNow = time.Date(2026, 10, 11, 1, 15, 0, 0, time.UTC)
@@ -23,11 +24,12 @@ func observation(t *testing.T, maintenance bool) *document.Document {
 			continue
 		}
 		images = append(images, platform.Image{
-			Component: name, Digest: "sha256:" + strings.Repeat("a", 64),
+			Component: name, Repository: platform.Repository(source.Dannyota, name), Digest: "sha256:" + strings.Repeat("a", 64),
 			Replicas: 1, RunningSince: testNow.Add(-time.Minute),
 		})
 	}
 	doc, err := document.Build(document.Input{
+		Owner:       source.Dannyota,
 		Environment: "production", Site: "https://aboutme.vn", ObservedAt: testNow,
 		Platform: platform.Info{Provider: "greennode", Orchestrator: "podman", Region: "HCM03"},
 		Images:   images,
@@ -65,7 +67,8 @@ func TestRunning(t *testing.T) {
 		t.Fatal("lost the reporter's observation timestamp")
 	}
 	for _, image := range images {
-		if image.Replicas != 1 || image.Digest != "sha256:"+strings.Repeat("a", 64) || !image.RunningSince.Equal(testNow.Add(-time.Minute)) {
+		if image.Replicas != 1 || image.Digest != "sha256:"+strings.Repeat("a", 64) || !image.RunningSince.Equal(testNow.Add(-time.Minute)) ||
+			image.Repository != platform.Repository(source.Dannyota, image.Component) {
 			t.Fatalf("unexpected image: %+v", image)
 		}
 	}
@@ -94,6 +97,8 @@ func TestParseRejectsInvalidObservation(t *testing.T) {
 		{"duplicate component", func(d *document.Document) { d.Components[1] = d.Components[0] }},
 		{"missing component", func(d *document.Document) { d.Components = d.Components[1:] }},
 		{"empty maintenance", func(d *document.Document) { d.Components[3].RunningImages = []document.RunningImage{} }},
+		{"another owner's image", func(d *document.Document) { d.Components[0].Image = "ghcr.io/someone/aboutme-server" }},
+		{"another component's image", func(d *document.Document) { d.Components[0].Image = "ghcr.io/dntmakers/aboutme-web" }},
 		{"duplicate digest", func(d *document.Document) {
 			d.Components[0].RunningImages = append(d.Components[0].RunningImages, d.Components[0].RunningImages[0])
 		}},
@@ -163,5 +168,26 @@ func TestRunningBoundsRead(t *testing.T) {
 	}
 	if _, err := New(path).Running(t.Context()); err == nil {
 		t.Fatal("accepted an oversized file")
+	}
+}
+
+func TestParseCarriesEachComponentImage(t *testing.T) {
+	doc := observation(t, true)
+	doc.Components[0].Image = "ghcr.io/dntmakers/aboutme-server"
+	doc.Components[3].Image = "ghcr.io/dntmakers/aboutme-caddy"
+	images, _, err := parse(marshal(t, doc), testNow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{
+		platform.Server:      "ghcr.io/dntmakers/aboutme-server",
+		platform.Web:         "ghcr.io/dannyota/aboutme-web",
+		platform.Caddy:       "ghcr.io/dannyota/aboutme-caddy",
+		platform.Maintenance: "ghcr.io/dntmakers/aboutme-caddy",
+	}
+	for _, image := range images {
+		if image.Repository != want[image.Component] {
+			t.Errorf("%s repository = %q, want %q", image.Component, image.Repository, want[image.Component])
+		}
 	}
 }

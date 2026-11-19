@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"danny.vn/aboutme/deploy/observer/internal/platform"
+	"danny.vn/aboutme/deploy/observer/internal/source"
 	"danny.vn/aboutme/deploy/observer/internal/verify"
 )
 
@@ -18,10 +19,18 @@ func digest(n int) string { return fmt.Sprintf("sha256:%064x", n) }
 func commitOf(n int) string { return fmt.Sprintf("%040x", n) }
 
 func img(component string, n int, since time.Time) platform.Image {
-	return platform.Image{Component: component, Digest: digest(n), Replicas: 1, RunningSince: since}
+	return ownedImg(source.Dannyota, component, n, since)
+}
+
+func ownedImg(owner, component string, n int, since time.Time) platform.Image {
+	return platform.Image{Component: component, Repository: platform.Repository(owner, component), Digest: digest(n), Replicas: 1, RunningSince: since}
 }
 
 func verified(repo, version string, commit int) verify.Evidence {
+	return signedBy(source.Dannyota, repo, version, commit)
+}
+
+func signedBy(owner, repo, version string, commit int) verify.Evidence {
 	return verify.Evidence{
 		Provenance: verify.Provenance{
 			Status:         verify.Verified,
@@ -29,9 +38,9 @@ func verified(repo, version string, commit int) verify.Evidence {
 			Subjects:       []string{repo},
 			Version:        version,
 			Commit:         commitOf(commit),
-			SignerWorkflow: "https://github.com/dannyota/aboutme/.github/workflows/release-images.yml@refs/tags/" + version,
+			SignerWorkflow: "https://github.com/" + owner + "/aboutme/.github/workflows/release-images.yml@refs/tags/" + version,
 			LogIndex:       2965228543,
-			BuildURL:       "https://github.com/dannyota/aboutme/actions/runs/36218940587/attempts/1",
+			BuildURL:       "https://github.com/" + owner + "/aboutme/actions/runs/36218940587/attempts/1",
 		},
 		SBOM: verify.SBOM{Status: verify.Verified, CheckedAt: observed.Add(-time.Minute), Subjects: []string{repo}},
 	}
@@ -46,6 +55,7 @@ const (
 func release065() Input {
 	t0 := observed.Add(-10 * time.Minute)
 	return Input{
+		Owner:       source.Dannyota,
 		Environment: "production",
 		Site:        "https://aboutme.vn",
 		Platform:    platform.Info{Provider: "greennode", Orchestrator: "podman", Region: "HCM03"},
@@ -124,7 +134,7 @@ func TestSBOMLinksNameAMD64Assets(t *testing.T) {
 	in.Evidence[digest(4)] = verified(caddyRepo, "v0.6.4", 6)
 	for _, c := range build(t, in).Components {
 		ri := c.RunningImages[0]
-		want := SourceRepository + "/releases/download/" + *ri.Version + "/" + imageBase(c.Image) + "-amd64.spdx.json"
+		want := "https://github.com/dannyota/aboutme/releases/download/" + *ri.Version + "/" + imageBase(c.Image) + "-amd64.spdx.json"
 		if ri.Links.SBOM == nil || *ri.Links.SBOM != want {
 			t.Errorf("%s SBOM = %v, want %s", c.Name, ri.Links.SBOM, want)
 		}
@@ -140,7 +150,7 @@ func TestSBOMLinksRefuseUnexpectedAssets(t *testing.T) {
 	} {
 		t.Run(asset, func(t *testing.T) {
 			doc := build(t, release065())
-			doc.Components[0].RunningImages[0].Links.SBOM = optional(SourceRepository + "/releases/download/v0.6.5/" + asset)
+			doc.Components[0].RunningImages[0].Links.SBOM = optional("https://github.com/dannyota/aboutme/releases/download/v0.6.5/" + asset)
 			if _, err := Encode(doc); err == nil {
 				t.Fatal("encoded an unsupported SBOM asset")
 			}
@@ -301,12 +311,21 @@ func TestTooManyDigestsRefused(t *testing.T) {
 }
 
 func TestSizeCap(t *testing.T) {
+	for _, owner := range source.Owners() {
+		t.Run(owner, func(t *testing.T) {
+			testSizeCap(t, owner)
+		})
+	}
+}
+
+func testSizeCap(t *testing.T, owner string) {
 	in := release065()
+	in.Owner = owner
 	for _, c := range []string{platform.Server, platform.Web, platform.Caddy, platform.Maintenance} {
 		for n := 0; n < MaxImages; n++ {
 			d := 100*len(c) + n + 1000
-			in.Images = append(in.Images, img(c, d, observed.Add(-time.Duration(n)*time.Minute)))
-			in.Evidence[digest(d)] = verified(platform.ImageRepository(c), "v0.6.5", 7)
+			in.Images = append(in.Images, ownedImg(owner, c, d, observed.Add(-time.Duration(n)*time.Minute)))
+			in.Evidence[digest(d)] = signedBy(owner, platform.Repository(owner, c), "v0.6.5", 7)
 		}
 	}
 	in.Images = in.Images[3:]

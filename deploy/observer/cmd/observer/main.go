@@ -10,11 +10,14 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	"danny.vn/aboutme/deploy/observer/internal/source"
 )
 
 var (
 	version string
 	commit  string
+	owner   string
 )
 
 func versionString() string {
@@ -31,6 +34,9 @@ func main() {
 func dispatch(args []string) error {
 	if len(args) == 0 {
 		return errors.New("usage: observer <run|version>")
+	}
+	if !source.Valid(owner) {
+		return fmt.Errorf("observer was built for source owner %q, not dannyota or dntmakers", owner)
 	}
 	switch args[0] {
 	case "version":
