@@ -5,6 +5,21 @@ repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 # shellcheck source=../host/crowdsec-offline.sh
 source "$repo_root/deploy/vn/host/crowdsec-offline.sh"
 
+pinned_postgresql=(postgresql-common=293.pgdg24.04+1 postgresql-client-common=293.pgdg24.04+1
+  postgresql-18=18.6-1.pgdg24.04+2 postgresql-client-18=18.6-1.pgdg24.04+2)
+
+apt_run() {
+  "$@" >"$apt_log" 2>&1 && rm -f -- "$apt_log"
+}
+
+apt_failed() {
+  if [[ -f $apt_log ]]; then
+    echo "apt failed with status $1; last output lines:" >&2
+    tail -n 200 -- "$apt_log" >&2 || true
+  fi
+  return "$1"
+}
+
 if [[ ${1:-} == packages ]]; then
   if [[ ! -d ${ABOUTME_VN_DEBS:-} || ! -f ${ABOUTME_VN_DEBS:-}/Packages || ! -f ${ABOUTME_VN_DEBS:-}/SHA256SUMS ]]; then
     echo 'ABOUTME_VN_DEBS must contain Packages and SHA256SUMS' >&2
@@ -15,14 +30,15 @@ if [[ ${1:-} == packages ]]; then
   mount -t tmpfs -o size=512m,mode=0700 tmpfs "$proof"
   trap 'status=$?; systemctl mask --runtime crowdsec.service crowdsec-firewall-bouncer.service >/dev/null 2>&1; umount "$proof"; rmdir "$proof"; exit "$status"' EXIT
   trap 'echo "FAIL pinned-package-proof" >&2' ERR
+  apt_log=$proof/apt.log
   (cd "$ABOUTME_VN_DEBS" && sha256sum -c --quiet SHA256SUMS)
   printf 'deb [trusted=yes] file:%s ./\n' "$ABOUTME_VN_DEBS" >/etc/apt/sources.list.d/aboutme-ci-debs.list
   apt_options=(-o Dir::Etc::sourcelist=/etc/apt/sources.list.d/aboutme-ci-debs.list -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0)
   cp "$ABOUTME_VN_DEBS/crowdsec_1.8.2_amd64.deb" "$ABOUTME_VN_DEBS/crowdsec-firewall-bouncer-nftables_0.0.36_amd64.deb" "$proof/"
-  apt-get "${apt_options[@]}" update -qq >/dev/null 2>&1
-  apt-get "${apt_options[@]}" -o Dir::Log::Terminal=/dev/null -o Dir::Log::History=/dev/null -o DPkg::Options::=--log=/dev/null \
-    install -y -qq postgresql-common=293.pgdg24.04+1 postgresql-18=18.6-1.pgdg24.04+2 \
-    postgresql-client-18=18.6-1.pgdg24.04+2 python3-yaml nftables gettext-base strace >/dev/null 2>&1
+  apt_run apt-get "${apt_options[@]}" update -q || apt_failed $?
+  DEBIAN_FRONTEND=noninteractive apt_run apt-get "${apt_options[@]}" -o Dir::Log::Terminal=/dev/null \
+    -o Dir::Log::History=/dev/null -o DPkg::Options::=--log=/dev/null install -y -q --allow-downgrades \
+    "${pinned_postgresql[@]}" python3-yaml nftables gettext-base strace || apt_failed $?
   printf '%s\n' \
     "d534ad21e6eed3d82a8fd748fa19f34970e95bfccd99735c0ebebcbad1e6366e  $proof/crowdsec_1.8.2_amd64.deb" \
     "fb3f38d222793cd031dac7e2b33076033a05c5bb476f323129d431cdc8b69b78  $proof/crowdsec-firewall-bouncer-nftables_0.0.36_amd64.deb" |
@@ -87,8 +103,8 @@ PY
   before=$(catalog | sha256sum)
   [[ $(runuser -u postgres -- /usr/lib/postgresql/18/bin/psql -X -qAt -w -h /run/postgresql -p 5432 -d postgres \
     -c "SELECT count(*) FROM pg_database WHERE datname='crowdsec';" 2>/dev/null) == 0 ]]
-  crowdsec_install_offline apt-get "${apt_options[@]}" -o Dir::Log::Terminal=/dev/null -o Dir::Log::History=/dev/null \
-    -o DPkg::Options::=--log=/dev/null install -y -qq crowdsec=1.8.2
+  crowdsec_install_offline apt_run apt-get "${apt_options[@]}" -o Dir::Log::Terminal=/dev/null -o Dir::Log::History=/dev/null \
+    -o DPkg::Options::=--log=/dev/null install -y -q crowdsec=1.8.2 || apt_failed $?
   [[ $(dpkg-query -W -f='${Status}\t${Version}' crowdsec) == $'install ok installed\t1.8.2' ]]
   systemctl unmask --runtime crowdsec.service >/dev/null 2>&1
   systemctl daemon-reload
@@ -340,6 +356,46 @@ unset CROWDSEC_TEST_CLEANUP_MASK_FAIL
   echo "policy-rc.d symlink was not restored after mask failure" >&2
   exit 1
 }
+
+apt_log=$work/apt.log
+apt_refusal_stub() {
+  printf '%s\n' 'The following packages have unmet dependencies:' \
+    ' postgresql-common : Depends: postgresql-client-common (= 293.pgdg24.04+1) but 295.pgdg24.04+1 is to be installed'
+  echo 'E: Unable to correct problems, you have held broken packages.' >&2
+  return 100
+}
+for wrapper in '' crowdsec_install_offline; do
+  status=0
+  { ${wrapper:+"$wrapper"} apt_run apt_refusal_stub crowdsec=1.8.2 || apt_failed $?; } >"$work/apt-output" 2>&1 || status=$?
+  [[ $status -eq 100 ]] || { echo "failed apt step via ${wrapper:-apt_run} returned $status, not 100" >&2; exit 1; }
+  if ! grep -qF 'postgresql-common : Depends: postgresql-client-common (= 293.pgdg24.04+1)' "$work/apt-output" ||
+    ! grep -qxF 'E: Unable to correct problems, you have held broken packages.' "$work/apt-output"; then
+    echo "failed apt step via ${wrapper:-apt_run} hid its decision and error lines" >&2
+    exit 1
+  fi
+done
+apt_long_stub() { seq 1 500; return 100; }
+status=0
+{ apt_run apt_long_stub || apt_failed $?; } >"$work/apt-output" 2>&1 || status=$?
+[[ $status -eq 100 && $(wc -l <"$work/apt-output") -le 201 && $(tail -n 1 "$work/apt-output") == 500 ]] || {
+  echo "failed apt output was not bounded to its last lines" >&2
+  exit 1
+}
+apt_ok_stub() { echo 'Setting up crowdsec (1.8.2) ...'; }
+status=0
+{ apt_run apt_ok_stub && apt_failed 7; } >"$work/apt-output" 2>&1 || status=$?
+[[ $status -eq 7 && ! -e $apt_log && ! -s $work/apt-output ]] || {
+  echo "successful apt step printed output or left it for a later failure" >&2
+  exit 1
+}
+declare -A pinned=()
+for spec in "${pinned_postgresql[@]}"; do pinned[${spec%%=*}]=${spec#*=}; done
+for pair in postgresql-common:postgresql-client-common postgresql-18:postgresql-client-18; do
+  [[ -n ${pinned[${pair%:*}]:-} && ${pinned[${pair#*:}]:-} == "${pinned[${pair%:*}]}" ]] || {
+    echo "pinned ${pair%:*} needs ${pair#*:} pinned at the same version" >&2
+    exit 1
+  }
+done
 
 base=$work/config.yaml
 local_config=$work/config.yaml.local

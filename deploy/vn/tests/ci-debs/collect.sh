@@ -11,7 +11,8 @@ echo 'deb [signed-by=/etc/apt/keyrings/postgresql.asc] https://apt.postgresql.or
 apt-get -o Acquire::Retries=5 update -qq
 rm -f /var/cache/apt/archives/*.deb
 apt-get install -y -qq --download-only \
-  postgresql-common=293.pgdg24.04+1 postgresql-18=18.6-1.pgdg24.04+2 postgresql-client-18=18.6-1.pgdg24.04+2 \
+  postgresql-common=293.pgdg24.04+1 postgresql-client-common=293.pgdg24.04+1 \
+  postgresql-18=18.6-1.pgdg24.04+2 postgresql-client-18=18.6-1.pgdg24.04+2 \
   python3-yaml nftables gettext-base strace crowdsec=1.8.2 crowdsec-firewall-bouncer-nftables=0.0.36 >/dev/null
 mkdir -p /out/debs
 cp /var/cache/apt/archives/*.deb /out/debs/
