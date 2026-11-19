@@ -68,17 +68,18 @@ func TestProjectRequests_MeetTheRendererDecoder(t *testing.T) {
 		return input
 	}
 	for name, input := range map[string]projectPageInput{
-		"thirty rows, vi resume":          projectTestInput(t, named("Ada Lovelace", nil, "vi-VN"), 30, thirty...),
-		"blank-name fallback":             projectTestInput(t, named("Ada", nil, "vi"), 2, differs),
-		"und resume":                      projectTestInput(t, named("Ada", nil, "und"), 2, differs),
-		"cards off":                       cardsOff(projectTestInput(t, named("Ada", nil, "en"), 1, sparse)),
-		"entry link differs":              projectTestInput(t, named("Ada", nil, "en-GB"), 2, differs),
-		"entry link equal but host case":  projectTestInput(t, named("Ada", nil, "en"), 2, hostCase),
-		"entry link equal in bytes":       projectTestInput(t, named("Ada", nil, "en"), 2, sameBytes),
-		"equal repository and demo":       projectTestInput(t, named("Ada", nil, "en"), 2, equalButtons),
-		"longest owner from public title": projectTestInput(t, named(" ", &title, "zh-Hant-TW"), 2, differs),
-		"owner with no name and no title": projectTestInput(t, named("", nil, "x-private"), 1, sparse),
-		"longest full name":               projectTestInput(t, named(wideText(160), nil, "en"), 2, differs),
+		"thirty rows, vi resume":            projectTestInput(t, named("Ada Lovelace", nil, "vi-VN"), 30, thirty...),
+		"blank-name fallback":               projectTestInput(t, named("Ada", nil, "vi"), 2, differs),
+		"und resume":                        projectTestInput(t, named("Ada", nil, "und"), 2, differs),
+		"cards off":                         cardsOff(projectTestInput(t, named("Ada", nil, "en"), 1, sparse)),
+		"entry link differs":                projectTestInput(t, named("Ada", nil, "en-GB"), 2, differs),
+		"entry link equal but host case":    projectTestInput(t, named("Ada", nil, "en"), 2, hostCase),
+		"entry link equal in bytes":         projectTestInput(t, named("Ada", nil, "en"), 2, sameBytes),
+		"equal repository and demo":         projectTestInput(t, named("Ada", nil, "en"), 2, equalButtons),
+		"longest owner from public title":   projectTestInput(t, named(" ", &title, "zh-Hant-TW"), 2, differs),
+		"owner with no name and no title":   projectTestInput(t, named("", nil, "x-private"), 1, sparse),
+		"longest full name":                 projectTestInput(t, named(wideText(160), nil, "en"), 2, differs),
+		"ten evidence items at every bound": projectTestInput(t, named("Ada", nil, "vi"), 2, boundedEvidence()),
 	} {
 		t.Run(name, func(t *testing.T) {
 			list, err := buildProjectListRequest(input)
@@ -129,10 +130,43 @@ func TestProjectDecoderRules_CatchEachViolation(t *testing.T) {
 		t.Fatal("the page envelope has no project object")
 	}
 	project["role"] = ""
+	evidence := []any{}
+	for i := range 11 {
+		item := map[string]any{
+			"kind": "repository", "title": "octocat/hello", "url": "https://github.com/octocat/hello", "repositoryName": "octocat/hello",
+			"itemDate": "2026-01-01T00:00:00Z", "checkedAt": "2026-01-01T00:00:00Z", "confirmed": true,
+		}
+		switch i {
+		case 0:
+			item["kind"] = "gist"
+		case 1:
+			item["url"] = "https://github.com/octocat/hello/"
+		case 2:
+			item["title"] = ""
+		case 3:
+			item["repositoryName"] = "octocat/\u2028hello"
+		case 4:
+			item["itemDate"] = "2026-01-01T00:00:00+07:00"
+		case 5:
+			item["checkedAt"] = "2026-01-01T00:00:00.5Z"
+		case 6:
+			item["confirmed"] = "true"
+		case 7:
+			item["id"] = "0190c2f2-0000-7000-8000-000000000000"
+		}
+		evidence = append(evidence, item)
+	}
+	envelope["evidence"] = evidence
 	broken := strings.Join(decodeProjectEnvelopeRules(t, envelope), "\n")
 	for _, rule := range []string{
 		"uiLng follows lng's primary subtag", "entryLink differs from both buttons", "project url is listUrl/slug",
 		"preview title is 1 to 683 code points and 2727 bytes", "role is omitted or 1 to its limit",
+		"evidence is an array of at most 10 items", "evidence kind is repository, pullRequest or release",
+		"evidence url follows its kind's grammar in at most 300 code points",
+		"evidence title is 1 to 200 code points with no Cc, Cf, Zl or Zp character",
+		"evidence repositoryName is 1 to 200 code points with no Cc, Cf, Zl or Zp character",
+		"evidence itemDate is a UTC instant at second precision", "evidence checkedAt is a UTC instant at second precision",
+		"evidence confirmed is a boolean", "evidence keys: id allowed",
 	} {
 		if !strings.Contains(broken, rule) {
 			t.Errorf("decoder mirror missed %q; broken = %q", rule, broken)

@@ -57,9 +57,10 @@ func decodeProjectEnvelopeRules(t *testing.T, request any) []string {
 			seen[fields["slug"]] = true
 		}
 	case "project":
-		d.keys(envelope, append(common, "project", "listUrl", "otherProjects"), []string{"entryLink"}, "envelope keys")
+		d.keys(envelope, append(common, "project", "listUrl", "otherProjects", "evidence"), []string{"entryLink"}, "envelope keys")
 		listURL := d.common(envelope) + "/projects"
 		project := d.detail(envelope["project"], listURL)
+		d.evidence(envelope["evidence"])
 		d.require(envelope["listUrl"] == listURL, "listUrl")
 		d.require(envelope["pageUrl"] == project["url"], "pageUrl is the project url")
 		_, isBool := envelope["otherProjects"].(bool)

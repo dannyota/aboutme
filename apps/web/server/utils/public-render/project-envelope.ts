@@ -35,6 +35,18 @@ export interface ProjectDetail extends ProjectTextFields {
   demoUrl?: string;
 }
 
+export type ProjectEvidenceKind = 'repository' | 'pullRequest' | 'release';
+
+export interface ProjectEvidence {
+  kind: ProjectEvidenceKind;
+  title: string;
+  url: string;
+  repositoryName: string;
+  itemDate: string;
+  checkedAt: string;
+  confirmed: boolean;
+}
+
 interface ProjectRenderCommon {
   canonicalOrigin: string;
   pageUrl: string;
@@ -56,4 +68,5 @@ export interface PublicRenderProjectRequest extends ProjectRenderCommon {
   entryLink?: string;
   listUrl: string;
   otherProjects: boolean;
+  evidence: ProjectEvidence[];
 }

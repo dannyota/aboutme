@@ -135,7 +135,7 @@ describe('project editor evidence section', () => {
       expect(row.querySelector('[data-evidence-date]')?.textContent)
         .toBe('January 2, 2026');
       expect(row.querySelector('[data-evidence-checked]')?.textContent)
-        .toBe('checked on November 17, 2026');
+        .toBe('checked November 17, 2026');
     });
 
   it.each([

@@ -261,6 +261,59 @@ const projectDetail = (value: unknown, listURL: string): ProjectDetail => {
   return project as unknown as ProjectDetail;
 };
 
+const MAX_EVIDENCE = 10;
+const MAX_EVIDENCE_TEXT = 200;
+const MAX_EVIDENCE_URL = 300;
+const EVIDENCE_KEYS = [
+  'kind', 'title', 'url', 'repositoryName', 'itemDate', 'checkedAt',
+  'confirmed',
+];
+const SEGMENT = '[^/?#\\t\\n\\v\\f\\r ]+';
+const REPOSITORY = `^https://github\\.com/${SEGMENT}/${SEGMENT}`;
+const EVIDENCE_URL: Readonly<Record<string, RegExp>> = {
+  repository: new RegExp(`${REPOSITORY}$`, 'u'),
+  pullRequest: new RegExp(`${REPOSITORY}/pull/[1-9][0-9]*$`, 'u'),
+  release: new RegExp(`${REPOSITORY}/releases/tag/${SEGMENT}$`, 'u'),
+};
+const UNSAFE_TEXT = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u;
+const INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/u;
+
+const evidenceText = (value: unknown): boolean =>
+  text(value, MAX_EVIDENCE_TEXT) && value.length > 0
+  && !UNSAFE_TEXT.test(value);
+
+const evidenceURL = (kind: unknown, value: unknown): boolean =>
+  typeof kind === 'string'
+  && Object.hasOwn(EVIDENCE_URL, kind)
+  && typeof value === 'string'
+  && codePoints(value) <= MAX_EVIDENCE_URL
+  && storable(value)
+  && EVIDENCE_URL[kind]!.test(value);
+
+const instant = (value: unknown): boolean => {
+  if (typeof value !== 'string' || !INSTANT.test(value)) return false;
+  const time = Date.parse(value);
+  return !Number.isNaN(time)
+    && new Date(time).toISOString() === value.replace('Z', '.000Z');
+};
+
+const evidenceItems = (value: unknown): void => {
+  if (!Array.isArray(value) || value.length > MAX_EVIDENCE) fail();
+  for (const entry of value as unknown[]) {
+    const item = requireKeys(entry, EVIDENCE_KEYS);
+    if (
+      !evidenceURL(item.kind, item.url)
+      || !evidenceText(item.title)
+      || !evidenceText(item.repositoryName)
+      || !instant(item.itemDate)
+      || !instant(item.checkedAt)
+      || typeof item.confirmed !== 'boolean'
+    ) {
+      fail();
+    }
+  }
+};
+
 const PROJECT_PREVIEW: PreviewBounds = {
   titleBytes: 2727,
   titleCodePoints: 683,
@@ -321,11 +374,12 @@ export function decodeProjectEnvelope(
   envelope: Fields,
 ): PublicRenderProjectRequest {
   requireKeys(envelope, [
-    ...COMMON_KEYS, 'project', 'listUrl', 'otherProjects',
+    ...COMMON_KEYS, 'project', 'listUrl', 'otherProjects', 'evidence',
   ], ['entryLink']);
   const resume = commonFields(envelope);
   const listURL = `${resume.url}/projects`;
   const project = projectDetail(envelope.project, listURL);
+  evidenceItems(envelope.evidence);
   const entryLink = envelope.entryLink;
   const description = project.summary ?? (project.outcome === undefined
     ? ''

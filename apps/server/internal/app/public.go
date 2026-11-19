@@ -41,10 +41,11 @@ func NewPublicState(ctx context.Context, queries *store.Queries) (*publicstate.C
 }
 
 func NewReader(queries *store.Queries, projector *docmigrate.Projector, coordinator *publicstate.Coordinator,
-	blobs media.Backend, runtime PublicRuntime,
+	blobs media.Backend, runtime PublicRuntime, evidence config.GitHubEvidenceConfig,
 ) (*publicresume.Reader, error) {
 	return publicresume.NewReader(publicresume.ReaderDependencies{
 		Store: queries, Projector: projector, Coordinator: coordinator, Media: blobs, Origin: runtime.PublicOrigin,
+		Evidence: evidence.Enabled(),
 	})
 }
 

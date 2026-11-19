@@ -18,6 +18,7 @@ type PublicProject struct {
 	URL       string
 	EntryLink string
 	Document  project.Document
+	Evidence  []PublicEvidence
 }
 
 type ProjectPages struct {
@@ -33,6 +34,7 @@ type storedProject struct {
 	EntryID     string          `json:"entryId"`
 	ProjectSlug string          `json:"projectSlug"`
 	Document    json.RawMessage `json:"document"`
+	Evidence    json.RawMessage `json:"evidence"`
 }
 
 type ProjectRead struct {
@@ -41,6 +43,7 @@ type ProjectRead struct {
 	rawLinks    json.RawMessage
 	rawProjects json.RawMessage
 	projectSlug string
+	evidence    bool
 }
 
 func (r *Reader) ReadProjects(ctx context.Context, slug, projectSlug string) (Snapshot, ProjectRead, *publicstate.Lease, error) {
@@ -74,7 +77,7 @@ func (r *Reader) ReadProjects(ctx context.Context, slug, projectSlug string) (Sn
 			lease.Release()
 			return Snapshot{}, ProjectRead{}, nil, ErrUnavailable
 		}
-		read := ProjectRead{public: snapshot.Public, origin: r.origin, rawLinks: links, rawProjects: projects, projectSlug: projectSlug}
+		read := ProjectRead{public: snapshot.Public, origin: r.origin, rawLinks: links, rawProjects: projects, projectSlug: projectSlug, evidence: r.evidence}
 		return snapshot, read, lease, nil
 	}
 	return Snapshot{}, ProjectRead{}, nil, ErrUnavailable
@@ -85,7 +88,7 @@ func (r *Reader) readProjectRow(ctx context.Context, slug, projectSlug string) (
 		read, err := r.store.GetPublicResumeProjectList(ctx, slug)
 		return read.Resume, read.Projects, read.Projects, err
 	}
-	read, err := r.store.GetPublicResumeProject(ctx, store.GetPublicResumeProjectParams{Slug: slug, ProjectSlug: projectSlug})
+	read, err := r.store.GetPublicResumeProject(ctx, store.GetPublicResumeProjectParams{Slug: slug, ProjectSlug: projectSlug, WithEvidence: r.evidence})
 	return read.Resume, read.ProjectLinks, read.Projects, err
 }
 
@@ -99,7 +102,7 @@ func (p ProjectRead) Pages() (ProjectPages, error) {
 	if err != nil {
 		return ProjectPages{}, ErrUnavailable
 	}
-	var others map[string]json.RawMessage
+	var others map[string]storedProject
 	if projectSlug != "" {
 		if others, err = storedDocuments(p.rawLinks, ""); err != nil {
 			return ProjectPages{}, ErrUnavailable
@@ -113,7 +116,7 @@ func (p ProjectRead) Pages() (ProjectPages, error) {
 		}
 		seen[entry.link.ProjectSlug] = true
 		if projectSlug != "" && entry.link.ProjectSlug != projectSlug {
-			renderable, err := renderableProject(others[entry.link.EntryID], p.public.Lng)
+			renderable, err := renderableProject(others[entry.link.EntryID].Document, p.public.Lng)
 			if err != nil {
 				return ProjectPages{}, ErrUnavailable
 			}
@@ -122,22 +125,28 @@ func (p ProjectRead) Pages() (ProjectPages, error) {
 			}
 			continue
 		}
-		raw, found := documents[entry.link.EntryID]
+		stored, found := documents[entry.link.EntryID]
 		if !found && projectSlug != "" {
 			continue
 		}
 		if !found {
 			return ProjectPages{}, ErrUnavailable
 		}
-		document, err := publicDocument(raw)
+		document, err := publicDocument(stored.Document)
 		if err != nil {
 			return ProjectPages{}, ErrUnavailable
 		}
 		if _, _, renderable := project.ChooseText(document, p.public.Lng); !renderable {
 			continue
 		}
+		var evidence []PublicEvidence
+		if projectSlug != "" {
+			if evidence, err = p.pageEvidence(stored.Evidence); err != nil {
+				return ProjectPages{}, ErrUnavailable
+			}
+		}
 		pages.Available++
-		pages.Projects = append(pages.Projects, PublicProject{Slug: entry.link.ProjectSlug, URL: entry.link.URL, EntryLink: entry.entryLink, Document: document})
+		pages.Projects = append(pages.Projects, PublicProject{Slug: entry.link.ProjectSlug, URL: entry.link.URL, EntryLink: entry.entryLink, Document: document, Evidence: evidence})
 	}
 	return pages, nil
 }
@@ -166,18 +175,18 @@ func publicDocument(raw json.RawMessage) (project.Document, error) {
 	return document, nil
 }
 
-func storedDocuments(raw json.RawMessage, projectSlug string) (map[string]json.RawMessage, error) {
+func storedDocuments(raw json.RawMessage, projectSlug string) (map[string]storedProject, error) {
 	var stored []storedProject
 	if err := json.Unmarshal(raw, &stored); err != nil || stored == nil {
 		return nil, errLinkContext
 	}
-	documents := make(map[string]json.RawMessage, len(stored))
+	documents := make(map[string]storedProject, len(stored))
 	for _, row := range stored {
 		if row.EntryID == "" || !project.ValidSlug(row.ProjectSlug) {
 			return nil, errLinkContext
 		}
 		if projectSlug == "" || row.ProjectSlug == projectSlug {
-			documents[row.EntryID] = row.Document
+			documents[row.EntryID] = row
 		}
 	}
 	return documents, nil

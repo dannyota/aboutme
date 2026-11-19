@@ -1,5 +1,11 @@
 export type ProjectPageLanguage = 'vi' | 'en';
 
+export type ProjectEvidenceLabels = {
+  readonly repository: string;
+  readonly pullRequest: string;
+  readonly release: string;
+};
+
 export type ProjectPageCopy = {
   readonly projects: string;
   readonly outcome: string;
@@ -13,6 +19,9 @@ export type ProjectPageCopy = {
   readonly link: string;
   readonly credit: string;
   readonly back: (name: string) => string;
+  readonly evidence: string;
+  readonly evidenceLabels: ProjectEvidenceLabels;
+  readonly checked: (date: string) => string;
 };
 
 export const PROJECT_PAGE_COPY: Readonly<
@@ -31,6 +40,13 @@ export const PROJECT_PAGE_COPY: Readonly<
     link: 'Liên kết',
     credit: 'Tạo bằng aboutme.vn',
     back: (name) => `Về CV của ${name}`,
+    evidence: 'Bằng chứng trên GitHub',
+    evidenceLabels: {
+      repository: 'Chủ sở hữu kho mã này',
+      pullRequest: 'Tác giả của pull request đã được merge',
+      release: 'Tác giả của bản phát hành này',
+    },
+    checked: (date) => `kiểm tra ${date}`,
   },
   en: {
     projects: 'Projects',
@@ -45,5 +61,12 @@ export const PROJECT_PAGE_COPY: Readonly<
     link: 'Link',
     credit: 'Built with aboutme.vn',
     back: (name) => `Back to ${name}'s resume`,
+    evidence: 'GitHub evidence',
+    evidenceLabels: {
+      repository: 'Owner of this repository',
+      pullRequest: 'Author of a merged pull request',
+      release: 'Author of this release',
+    },
+    checked: (date) => `checked ${date}`,
   },
 };

@@ -44,6 +44,7 @@ type ReaderDependencies struct {
 	Coordinator *publicstate.Coordinator
 	Media       media.Backend
 	Origin      PublicOrigin
+	Evidence    bool
 }
 
 type Reader struct {
@@ -52,13 +53,17 @@ type Reader struct {
 	coordinator *publicstate.Coordinator
 	media       media.Backend
 	origin      PublicOrigin
+	evidence    bool
 }
 
 func NewReader(dependencies ReaderDependencies) (*Reader, error) {
 	if dependencies.Store == nil || dependencies.Projector == nil || dependencies.Coordinator == nil || dependencies.Origin.value == "" {
 		return nil, errors.New("invalid public reader dependencies")
 	}
-	return &Reader{store: dependencies.Store, projector: dependencies.Projector, coordinator: dependencies.Coordinator, media: dependencies.Media, origin: dependencies.Origin}, nil
+	return &Reader{
+		store: dependencies.Store, projector: dependencies.Projector, coordinator: dependencies.Coordinator, media: dependencies.Media,
+		origin: dependencies.Origin, evidence: dependencies.Evidence,
+	}, nil
 }
 
 func (r *Reader) ReadResume(ctx context.Context, slug string, representation publicstate.Representation) (Snapshot, *publicstate.Lease, error) {

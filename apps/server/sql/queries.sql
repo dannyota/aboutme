@@ -437,7 +437,16 @@ SELECT sqlc.embed(r), COALESCE((
     WHERE s.section->>'sectionType' = 'project'
         AND (e.entry->'isHidden') IS DISTINCT FROM 'true'::jsonb
 ), '[]'::jsonb)::jsonb AS project_links, COALESCE((
-    SELECT jsonb_agg(jsonb_build_object('entryId', e.entry->>'id', 'projectSlug', p.slug, 'document', p.document))
+    SELECT jsonb_agg(jsonb_build_object('entryId', e.entry->>'id', 'projectSlug', p.slug, 'document', p.document, 'evidence', COALESCE((
+        SELECT jsonb_agg(jsonb_build_object(
+            'kind', v.kind, 'title', v.title, 'url', v.url, 'repositoryName', v.repository_name,
+            'itemDate', v.item_date, 'checkedAt', v.checked_at,
+            'confirmed', COALESCE(v.rule_met AND c.github_user_id IS NOT NULL AND c.binding = v.checked_binding, false)
+        ) ORDER BY v.position)
+        FROM project_evidence AS v
+        LEFT JOIN github_connections AS c ON c.user_id = p.user_id
+        WHERE sqlc.arg(with_evidence)::bool AND v.project_id = p.id
+    ), '[]'::jsonb)))
     FROM jsonb_each(r.content) AS s(key, section)
     CROSS JOIN LATERAL jsonb_array_elements(s.section->'entries') AS e(entry)
     JOIN projects AS p

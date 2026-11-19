@@ -23,6 +23,7 @@ type projectExpectation struct {
 	listed      []string
 	external    map[string]int
 	description string
+	evidence    []directrender.ProjectEvidence
 }
 
 func projectListHTMLRejection(source []byte, request directrender.ProjectListRenderRequest, origin publicresume.PublicOrigin) string {
@@ -42,7 +43,7 @@ func projectHTMLRejection(source []byte, request directrender.ProjectRenderReque
 		resume: request.Resume, title: request.PageTitle, faviconHref: request.FaviconHref, pageURL: request.PageURL,
 		preview: request.Preview, description: request.Project.Description,
 		internal: map[string]bool{request.Resume.URL: true, request.ListURL: true, request.Project.URL: true},
-		external: map[string]int{},
+		external: map[string]int{}, evidence: request.Evidence,
 	}
 	for _, link := range []string{request.Project.RepositoryURL, request.Project.DemoURL, request.EntryLink} {
 		if link != "" {
@@ -63,6 +64,7 @@ type projectValidator struct {
 	stylesheetVersions                      map[string]string
 	skipLinks, credits, backs, descriptions int
 	internalSeen, externalSeen              map[string]int
+	evidenceSeen                            int
 }
 
 func projectPageRejection(source []byte, want projectExpectation, origin publicresume.PublicOrigin) string {
@@ -232,6 +234,8 @@ func (v *projectValidator) finish() string {
 		return "back_link"
 	case v.descriptions != boolToInt(v.want.description != ""):
 		return "description_region"
+	case v.evidenceSeen != len(v.want.evidence):
+		return "evidence_link"
 	}
 	for _, url := range v.want.listed {
 		if v.internalSeen[url] != 1 {

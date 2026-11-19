@@ -98,6 +98,10 @@ func TestProjectDecoderRules_TypesAreExact(t *testing.T) {
 		"resume url array":           field([]string{"resume", "url"}, []any{"https://aboutme.example/ada"}),
 		"project lang empty":         field([]string{"project", "lang"}, ""),
 		"technologies [empty, null]": field([]string{"project", "technologies"}, []any{"", nil}),
+		"evidence null":              field([]string{"evidence"}, nil),
+		"evidence object":            field([]string{"evidence"}, map[string]any{}),
+		"evidence [null]":            field([]string{"evidence"}, []any{nil}),
+		"evidence [string]":          field([]string{"evidence"}, []any{"x"}),
 	}
 	listCases := map[string]mutation{
 		"projects null":                 field([]string{"projects"}, nil),
@@ -107,6 +111,7 @@ func TestProjectDecoderRules_TypesAreExact(t *testing.T) {
 		"row moreTechnologies string":   field([]string{"projects", "moreTechnologies"}, "1"),
 		"row slug null":                 field([]string{"projects", "slug"}, nil),
 		"row summary null":              field([]string{"projects", "summary"}, nil),
+		"evidence on the list":          field([]string{"evidence"}, []any{}),
 	}
 	for name, mutate := range pageCases {
 		envelope := envelopeMap(t, page)
