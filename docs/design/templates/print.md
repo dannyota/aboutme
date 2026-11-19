@@ -6,12 +6,12 @@ renderer-owned (`tokens.md` §1).
 
 ## 1. Render targets
 
-| Target          | Route         | Pagination model                                                                                           | Authority               |
-| --------------- | ------------- | ---------------------------------------------------------------------------------------------------------- | ----------------------- |
-| Editor preview  | `/app/**`     | JS measure-and-break between entries and body blocks, selected A4/Letter page, `transform: scale()` to fit | approximate             |
-| Public SSR page | `/[slug]`     | screen sheets of the [web layout](../public-web-layout.md); browser print flattens them                    | not paginated at all    |
-| PDF             | `/print/[id]` | CSS `@page` plus fragmentation properties                                                                  | **authoritative**       |
-| Share image     | `/print/[id]` | Fixed 1200 by 630 pixel viewport; top crop, no page fragmentation                                          | One fixed image variant |
+| Target         | Route         | Pagination model                                                                                                     | Authority               |
+| -------------- | ------------- | -------------------------------------------------------------------------------------------------------------------- | ----------------------- |
+| Editor preview | `/app/**`     | JS measure-and-break between entries and body blocks, selected A4/Letter page, `transform: scale()` to fit           | approximate             |
+| Public page    | `/[slug]`     | continuous server HTML; the editor's measure-and-break in the reader's browser ([PDF pages](../public-pdf-pages.md)) | approximate             |
+| PDF            | `/print/[id]` | CSS `@page` plus fragmentation properties                                                                            | **authoritative**       |
+| Share image    | `/print/[id]` | Fixed 1200 by 630 pixel viewport; top crop, no page fragmentation                                                    | One fixed image variant |
 
 The [renderer boundary](../system.md#renderer-boundary) makes editor pagination
 an approximation and Chromium print pagination authoritative. JavaScript

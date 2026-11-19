@@ -1,6 +1,6 @@
 # 0013: Resume header, contact details, and body text rendering
 
-Status: Accepted (2026-08-11, 2026-09-19).
+Status: Accepted (2026-08-11, 2026-09-19, 2026-11-19).
 
 ## Context
 
@@ -28,10 +28,7 @@ the name, a project subtitle, and justified body text.
    (`header.iconStyle` other than `none`), a typed detail omits its default
    label because its icon names the type. A user label is still shown, even when
    it equals the default, and a `custom` detail always shows its label because
-   its icon is generic. With `iconStyle: none`, every detail shows its label. On
-   the screen sheets of the public web layout (owner, 2026-11-18), contacts are
-   labelled rows, so a typed detail shows its default label beside its icon. The
-   PDF and every other surface keep this rule.
+   its icon is generic. With `iconStyle: none`, every detail shows its label.
 3. **URL links.** The four URL types, and a `custom` value, render as an anchor
    with `rel="noopener noreferrer"` only when the value passes the renderer's
    own check for an exact lowercase `https://` prefix, made at render time and
@@ -150,5 +147,6 @@ the name, a project subtitle, and justified body text.
   released as document v4.
 - Amended 2026-11-18 with the
   [public web layout](../design/public-web-layout.md): on the screen sheets a
-  typed detail shows its default label beside its icon; a link with `display`
-  `label` stays one anchor showing the label.
+  typed detail showed its default label beside its icon. Withdrawn 2026-11-19
+  with [PDF pages](../design/public-pdf-pages.md): every surface follows the
+  label rule above.

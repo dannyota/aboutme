@@ -1,8 +1,8 @@
 # 0020: Application visual identity: the seal, the canvas, and the resume ground
 
 Status: Accepted (2026-09-04, 2026-09-24, 2026-09-27, 2026-09-28, 2026-11-01,
-2026-11-15, 2026-11-18). The owner chose each direction, including the public
-page color scheme below.
+2026-11-15, 2026-11-18, 2026-11-19). The owner chose each direction, including
+the public page color scheme below.
 
 ## Context
 
@@ -104,38 +104,35 @@ language; Vietnamese is the default.
 reaches the resume renderer, the render harness, the print path, or the document
 area of a public page. Chrome tokens apply only under `html[data-ui="app"]`, and
 the public page bar carries its own copy scoped to `.public-toolbar`, as the
-maintenance page does. Outside the public page and the editor's Web preview the
-sheet keeps its 2 px radius, neutral paper shadow, and authored ground in both
-application themes. There the resume sits on paper sheets whose radius, shadow
-and colors are renderer values, as amended below.
+maintenance page does. Outside the public page the sheet keeps its 2 px radius,
+neutral paper shadow, and authored ground in both application themes. On the
+public page the resume's PDF pages sit on a desk whose radius, shadow and colors
+are renderer values, as amended below.
 
-**Public page color scheme.** On screen the public page and the editor's Web
-preview set the resume on warm paper sheets in Light and charcoal sheets in Dark
-([web layout](../design/public-web-layout.md)); everywhere else it keeps its
-authored ground.
+**Public page color scheme.** On screen the public page shows the resume's PDF
+pages, always in their light authored colors, on a desk that follows the scheme
+([PDF pages](../design/public-pdf-pages.md)).
 
 - The owner picks Light (the default), Dark, or Match device per resume, as the
   document field `customization.colorScheme` (ADR 0004). Match device follows
   each viewer's `prefers-color-scheme` through a CSS media query. Viewers get no
   toggle, and the page runs no script for it.
-- The scheme applies only to the public page on screen and the editor's Web
-  preview. The PDF, the print path, the link-preview card, the sign-in gate,
-  thumbnails, template pages, and the landing sample stay light; browser print
-  flattens the sheets.
-- The dark colors come from one pure rule over the resume's own five colors,
-  with the charcoal paper as the ground on the screen sheets, followed by the
-  unchanged role derivation and its contrast floors. No chrome token enters the
-  document area, and no template has hand-picked dark colors.
+- The scheme sets only the desk and the page bar on the public page on screen.
+  The resume itself, the PDF, the print path, the link-preview card, the sign-in
+  gate, thumbnails, template pages, and the landing sample stay light.
+- No chrome token enters the document area, and no template has hand-picked dark
+  colors.
 - The page bar takes the light or dark values of its scoped tokens to match the
   page's scheme. Its mark is the logo's seal mark in `--seal-text`.
 
 ## Alternatives rejected
 
-- **One long sheet, sideways page turning, or large Call and Email buttons on
-  the public page.** Shown to the owner as mockups on 2026-11-18; separate
-  sheets keep the paper's edges in view while scrolling, page turning needs
-  horizontal gestures and script for page counts, and the buttons broke the
-  paper feel.
+- **One long sheet, or large Call and Email buttons on the public page.** Shown
+  to the owner as mockups on 2026-11-18; separate sheets keep the paper's edges
+  in view while scrolling, and the buttons broke the paper feel. Sideways page
+  turning, rejected then, is the phone layout since 2026-11-19.
+- **Dark resume pages on screen.** Shown to the owner on 2026-11-19; the pages
+  stay light like the PDF.
 - **The toolkit default, or the grey desk.** Consistent and cheap, but generic.
 - **Gradient everywhere, or a gradient logo.** Competes with the resume, weakens
   each color's meaning, and reads like other SaaS products.
@@ -181,6 +178,17 @@ authored ground.
   the page bar, the scheme, and the dark palette rule.
 
 ## History
+
+### Amendment: PDF pages on screen (2026-11-19)
+
+Accepted with [public resume as PDF pages](../design/public-pdf-pages.md), from
+the owner's three decisions of 2026-11-19 recorded there. It replaces the paper
+sheets amendment below. On screen the public resume shows the PDF's layout as
+separate pages on the desk, paginated in the reader's browser by the editor's
+paged renderer; under 600 px the pages are scaled and swiped. The server HTML is
+the continuous resume, complete without script. The pages keep the PDF's light
+colors, and `customization.colorScheme` sets only the desk and the page bar. The
+editor's Web preview is removed.
 
 ### Amendment: paper sheets on screen (2026-11-18)
 
