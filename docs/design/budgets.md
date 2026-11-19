@@ -221,6 +221,12 @@ Notes on rows whose reason is not obvious:
   overflow of [ADR 0007](../adr/0007-bounded-rate-limiter.md). Resume read and
   write limits leave room for several editor tabs above the one-second autosave
   cadence. Operation counts per request are separate from the 256 KiB body cap.
+- **MCP slots.** Every `/mcp` request answers at once, so the four slots per
+  user bound only work in progress. The server advertises `tools` without
+  `listChanged` and no `logging`, so a client opens no `subscriptions/listen`
+  ([ADR 0018](../adr/0018-mcp-agent-access.md)). A capability that keeps a
+  request open, such as list-change or resource subscriptions, needs a design
+  change first, because each open request holds a slot.
 - **Showcase.** The listing limiter keeps the ADR 0007 overflow. Card images
   count against the public artifact limit, so one showcase page uses 12 of the
   300 a minute

@@ -41,6 +41,8 @@ func NewServer(dependencies ServerDependencies) (http.Handler, error) {
 	}
 	server := mcp.NewServer(serverImplementation(dependencies.Bearer.publicOrigin), &mcp.ServerOptions{
 		Instructions: serverInstructions,
+		// The MCP Go SDK defaults tools.listChanged to true; a subscriptions/listen on it holds the POST until the client leaves.
+		Capabilities: &mcp.ServerCapabilities{Tools: &mcp.ToolCapabilities{}},
 	})
 	runtime := &toolRuntime{resumes: dependencies.Resumes, projects: dependencies.Projects}
 	registerReadTools(server, runtime)
