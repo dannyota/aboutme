@@ -31,7 +31,7 @@ func ProjectLinks(raw json.RawMessage, public PublicResume, origin PublicOrigin)
 	}
 	out := make([]ProjectLink, 0, len(entries))
 	for _, entry := range entries {
-		available, err := renderableProject(documents[entry.link.EntryID], public.Lng)
+		available, err := renderableProject(documents[entry.link.EntryID].Document, public.Lng)
 		if err != nil {
 			return nil, errLinkContext
 		}

@@ -101,10 +101,66 @@ describe('project page tokens', () => {
     expect(lastIndex(rules, page, '@media (min-width:64rem)'))
       .toBeGreaterThan(lastIndex(rules, page, '@media (min-width:48rem)'));
     for (const card of ['.project-rows', '.project-facts',
-      '.project-outcome']) {
+      '.project-outcome', '.project-evidence-list']) {
       expect(style(rules, `${page} ${card}`)['border-radius'], card)
         .toBe('var(--project-radius-card)');
     }
+  });
+
+  it('draws evidence as one bordered card of hairline rows', () => {
+    const rules = parseCss(PROJECT_PAGE_STYLE);
+    const page = '.public-project-page';
+    expect(style(rules, `${page} .project-evidence-list`)).toMatchObject({
+      'margin': '0', 'padding': '0', 'list-style': 'none',
+      'background': 'var(--project-card)',
+      'border': '1px solid var(--project-border)',
+    });
+    expect(style(rules,
+      `${page} .project-evidence-item + .project-evidence-item`))
+      .toEqual({ 'border-top': '1px solid var(--project-hairline)' });
+    expect(style(rules, `${page} .project-evidence-item`))
+      .toMatchObject({ padding: '16px' });
+    expect(style(rules, `${page} .project-evidence-item`,
+      '@media (min-width:40rem)')).toEqual({ padding: '20px 24px' });
+    expect(style(rules, `${page} .project-evidence-heading`)).toMatchObject({
+      'font-size': '16px', 'line-height': '24px', 'font-weight': '600',
+    });
+    expect(style(rules, `${page} .project-evidence-label`)).toMatchObject({
+      'color': 'var(--project-ink)', 'font-size': '14px',
+      'line-height': '20px', 'font-weight': '500',
+    });
+    expect(style(rules, `${page} .project-evidence-meta`)).toMatchObject({
+      'color': 'var(--project-muted)', 'font-size': '14px',
+      'line-height': '20px',
+    });
+    expect(style(rules, `${page} .project-evidence`))
+      .toMatchObject({ color: 'var(--project-link)' });
+    expect(style(rules, `${page} .project-evidence-list`,
+      '@media (forced-colors:active)'))
+      .toEqual({ 'border-color': 'CanvasText' });
+  });
+
+  it('colors evidence with page tokens only and adds no breakpoint', () => {
+    const rules = parseCss(PROJECT_PAGE_STYLE);
+    const evidence = rules.filter((rule) =>
+      rule.selector.includes('project-evidence'));
+    expect(evidence.length).toBeGreaterThan(0);
+    for (const rule of evidence) {
+      for (const [property, value] of Object.entries(rule.body)) {
+        if (/color|background|border|fill|stroke/u.test(property)
+          && rule.at !== '@media (forced-colors:active)') {
+          expect(value, `${rule.selector} ${property}`)
+            .not.toMatch(/#|rgb|hsl|\b(?:red|black|white)\b/u);
+        }
+      }
+    }
+    expect([...new Set(rules.map((rule) => rule.at))].sort()).toEqual([
+      '', '@media (forced-colors:active)', '@media (hover:hover)',
+      '@media (min-width:40rem)', '@media (min-width:48rem)',
+      '@media (min-width:56rem)', '@media (min-width:64rem)',
+      '@media (pointer:coarse)', '@media (width < 30rem)', '@media print',
+      '@media screen', '@media screen and (prefers-color-scheme:dark)',
+    ]);
   });
 
   it('writes every token into the page style', () => {
@@ -129,6 +185,8 @@ describe('project page copy', () => {
   it('has the same keys in both languages', () => {
     expect(Object.keys(PROJECT_PAGE_COPY.vi).sort())
       .toEqual(Object.keys(PROJECT_PAGE_COPY.en).sort());
+    expect(Object.keys(PROJECT_PAGE_COPY.vi.evidenceLabels).sort())
+      .toEqual(Object.keys(PROJECT_PAGE_COPY.en.evidenceLabels).sort());
   });
 
   it('holds the page copy', () => {
@@ -137,18 +195,24 @@ describe('project page copy', () => {
       return [
         copy.projects, copy.outcome, copy.about, copy.role, copy.dates,
         copy.technologies, copy.otherProjects, copy.repository, copy.demo,
-        copy.link, copy.credit, copy.back('Ada'),
+        copy.link, copy.credit, copy.back('Ada'), copy.evidence,
+        copy.evidenceLabels.repository, copy.evidenceLabels.pullRequest,
+        copy.evidenceLabels.release, copy.checked('11/2026'),
       ];
     };
     expect(pick('vi')).toEqual([
       'Dự án', 'Kết quả', 'Mô tả', 'Vai trò', 'Thời gian', 'Công nghệ',
       'Xem các dự án khác', 'Repository', 'Demo', 'Liên kết',
-      'Tạo bằng aboutme.vn', 'Về CV của Ada',
+      'Tạo bằng aboutme.vn', 'Về CV của Ada', 'Bằng chứng trên GitHub',
+      'Chủ sở hữu kho mã này', 'Tác giả của pull request đã được merge',
+      'Tác giả của bản phát hành này', 'kiểm tra 11/2026',
     ]);
     expect(pick('en')).toEqual([
       'Projects', 'Outcome', 'About the project', 'Role', 'Dates',
       'Technologies', 'See other projects', 'Repository', 'Demo', 'Link',
-      'Built with aboutme.vn', 'Back to Ada\'s resume',
+      'Built with aboutme.vn', 'Back to Ada\'s resume', 'GitHub evidence',
+      'Owner of this repository', 'Author of a merged pull request',
+      'Author of this release', 'checked 11/2026',
     ]);
   });
 });

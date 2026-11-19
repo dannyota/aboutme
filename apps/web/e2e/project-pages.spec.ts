@@ -2,6 +2,15 @@ import { expect, test, type Page } from '@playwright/test';
 
 import { expectScreen } from './display-assertions';
 import {
+  EVIDENCE_ARIA, EVIDENCE_COLORS, EVIDENCE_CONTAINMENT, EVIDENCE_CONTENT,
+  EVIDENCE_COUNTS, EVIDENCE_ICONS, EVIDENCE_LINKS, EVIDENCE_PLACEMENT,
+  EVIDENCE_SHAPE, EVIDENCE_TYPOGRAPHY, expectEvidenceAria,
+  expectEvidenceColors, expectEvidenceContainment, expectEvidenceContent,
+  expectEvidenceCounts, expectEvidenceIcons, expectEvidenceLinks,
+  expectEvidencePlacement, expectEvidenceShape, expectEvidenceTypography,
+  expectProjectEvidence, mutateEvidence,
+} from './project-evidence-details';
+import {
   expectProjectBarRow,
   expectProjectColors,
   expectProjectColumns,
@@ -19,8 +28,8 @@ import {
   type Scheme,
 } from './project-page-details';
 import {
-  applyStyleMutation, mutateAttribute, mutationTest, proveMutation,
-  screenMutationTests,
+  applyStyleMutation, mutateAttribute, mutateText, mutationTest,
+  proveMutation, screenMutationTests,
 } from './style-mutation';
 
 const KINDS: readonly ProjectPageKind[] = ['project-list', 'project'];
@@ -38,6 +47,7 @@ async function assertProjectPage(
   await expectProjectMeasure(page, kind);
   if (kind === 'project') {
     await expectProjectColumns(page);
+    await expectProjectEvidence(page, lng, scheme);
   } else {
     await expectRowMeta(page);
   }
@@ -187,3 +197,59 @@ test.describe('project bar at 360 px', () => {
         { 'column-gap': '200px' }), PROJECT_BAR_ROW);
   });
 });
+
+const openEvidence = (width: number) => async (page: Page) => {
+  await page.setViewportSize({ width, height: 900 });
+  await openProjectPage(page, 'project', 'vi', 'light');
+};
+
+for (const [name, width, assertion, mutate, message] of [
+  ['a mutated label', 1280, (page: Page) => expectEvidenceContent(page, 'vi'),
+    (page: Page) => mutateText(page.locator('.project-evidence-label')
+      .first(), 'MUTATED'), EVIDENCE_CONTENT],
+  ['reordered rows', 1280, (page: Page) => expectEvidenceContent(page, 'vi'),
+    (page: Page) => mutateEvidence(page, 'reorder'), EVIDENCE_CONTENT],
+  ['a label on a plain row', 1280,
+    (page: Page) => expectEvidenceContent(page, 'vi'),
+    (page: Page) => mutateEvidence(page, 'plainLabel'), EVIDENCE_CONTENT],
+  ['a weaker rel', 1280, (page: Page) => expectEvidenceLinks(page, 'vi'),
+    (page: Page) => mutateAttribute(page.locator('a.project-evidence')
+      .first(), 'rel', 'noopener'), EVIDENCE_LINKS],
+  ['an added target', 1280, (page: Page) => expectEvidenceLinks(page, 'vi'),
+    (page: Page) => mutateAttribute(page.locator('a.project-evidence')
+      .first(), 'target', '_blank'), EVIDENCE_LINKS],
+  ['a section moved first', 768, expectEvidencePlacement,
+    (page: Page) => applyStyleMutation(
+      page.locator('.project-evidence-section'), { order: '-1' }),
+    EVIDENCE_PLACEMENT],
+  ['a section inside the facts panel', 1280, expectEvidencePlacement,
+    (page: Page) => mutateEvidence(page, 'intoFacts'), EVIDENCE_PLACEMENT],
+  ['a duplicated row', 1280, expectEvidenceCounts,
+    (page: Page) => mutateEvidence(page, 'duplicate'), EVIDENCE_COUNTS],
+  ['a red link', 1280, (page: Page) => expectEvidenceColors(page, 'light'),
+    (page: Page) => applyStyleMutation(page.locator('a.project-evidence')
+      .first(), { color: 'rgb(255, 0, 0)' }), EVIDENCE_COLORS],
+  ['larger meta text', 1280, expectEvidenceTypography,
+    (page: Page) => applyStyleMutation(page.locator('.project-evidence-meta')
+      .first(), { 'font-size': '16px' }), EVIDENCE_TYPOGRAPHY],
+  ['a squared card', 1280, expectEvidenceShape,
+    (page: Page) => applyStyleMutation(page.locator('.project-evidence-list'),
+      { 'border-radius': '10px' }), EVIDENCE_SHAPE],
+  ['a removed icon', 1280, expectEvidenceIcons,
+    (page: Page) => mutateEvidence(page, 'removeIcon'), EVIDENCE_ICONS],
+  ['a wide icon', 1280, expectEvidenceIcons,
+    (page: Page) => applyStyleMutation(
+      page.locator('.project-evidence-heading > svg').first(),
+      { width: '24px' }), EVIDENCE_ICONS],
+  ['an unnamed region', 1280, (page: Page) => expectEvidenceAria(page, 'vi'),
+    (page: Page) => mutateAttribute(page.locator('.project-evidence-section'),
+      'aria-labelledby', 'missing-title'), EVIDENCE_ARIA],
+  ['an unwrapped long title', 320, expectEvidenceContainment,
+    (page: Page) => applyStyleMutation(page.locator('a.project-evidence')
+      .nth(1), { 'white-space': 'nowrap' }), EVIDENCE_CONTAINMENT],
+] as const) {
+  mutationTest(`project evidence rejects ${name}`, async ({ page }) => {
+    await openEvidence(width)(page);
+    await proveMutation(() => assertion(page), () => mutate(page), message);
+  });
+}

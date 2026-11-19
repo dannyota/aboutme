@@ -1,13 +1,9 @@
 import type {
   ProjectDetail,
+  ProjectEvidence,
   ProjectPageResume,
   ProjectSummary,
 } from '../../../server/utils/public-render/project-envelope';
-
-// Fixed project pages for the render harness, as the public render worker
-// receives them (docs/design/projects-contract.md "Render envelope"). Each
-// language has a list with a fallback-language row and a project page with
-// every field, so both pages show every part at every width.
 
 type Lng = 'vi' | 'en';
 type Scheme = ProjectPageResume['colorScheme'];
@@ -26,6 +22,7 @@ export interface ProjectFixture {
   readonly entryLink: string;
   readonly listUrl: string;
   readonly otherProjects: boolean;
+  readonly evidence: readonly ProjectEvidence[];
 }
 
 const resume = (lng: Lng, colorScheme: Scheme): ProjectPageResume => ({
@@ -91,7 +88,46 @@ const PAYMENTS: Readonly<Record<Lng, ProjectDetail>> = {
   },
 };
 
-// The list's first row is the payments project as a list row carries it.
+const GITHUB = 'https://github.com/example';
+
+const evidence = (
+  kind: ProjectEvidence['kind'], title: string, url: string,
+  fields: Partial<ProjectEvidence> = {},
+): ProjectEvidence => ({
+  kind, title, url, repositoryName: 'example/payments',
+  itemDate: '2024-06-14T09:30:00Z', checkedAt: '2026-11-02T08:00:00Z',
+  confirmed: true, ...fields,
+});
+
+const EVIDENCE: Readonly<Record<Lng, readonly ProjectEvidence[]>> = {
+  vi: [
+    evidence('repository', 'example/payments', `${GITHUB}/payments`, {
+      itemDate: '2022-03-01T02:00:00Z',
+    }),
+    evidence('pullRequest', 'Thêm cơ chế thử lại có giới hạn cho bước đối '
+    + 'soát và hàng đợi thư lỗi cho đối_soát_thất_bại_ở_mọi_đối_tác_thanh_'
+    + 'toán_trong_khu_vực', `${GITHUB}/payments/pull/128`),
+    evidence('release', 'v2.4.0', `${GITHUB}/payments/releases/tag/v2.4.0`),
+    evidence('pullRequest', 'Sửa lỗi tranh chấp trong bộ nhớ đệm sổ cái',
+      'https://github.com/upstream/ledger/pull/7', {
+        repositoryName: 'upstream/ledger', confirmed: false,
+      }),
+  ],
+  en: [
+    evidence('repository', 'example/payments', `${GITHUB}/payments`, {
+      itemDate: '2022-03-01T02:00:00Z',
+    }),
+    evidence('pullRequest', 'Add bounded settlement retries with a '
+    + 'dead-letter queue for reconciliation_failures_across_every_regional_'
+    + 'payment_partner', `${GITHUB}/payments/pull/128`),
+    evidence('release', 'v2.4.0', `${GITHUB}/payments/releases/tag/v2.4.0`),
+    evidence('pullRequest', 'Fix a race in the ledger cache',
+      'https://github.com/upstream/ledger/pull/7', {
+        repositoryName: 'upstream/ledger', confirmed: false,
+      }),
+  ],
+};
+
 const paymentsRow = (lng: Lng): ProjectSummary => {
   const { slug, url, name, role, dates, summary } = PAYMENTS[lng];
   return {
@@ -161,5 +197,6 @@ export function projectFixture(lng: Lng, scheme: Scheme): ProjectFixture {
       : 'https://blog.example.com/payments',
     listUrl: LIST_URL,
     otherProjects: true,
+    evidence: EVIDENCE[lng],
   };
 }

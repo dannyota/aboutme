@@ -48,6 +48,16 @@ type ProjectDetail struct {
 	DemoURL       string            `json:"demoUrl,omitempty"`
 }
 
+type ProjectEvidence struct {
+	Kind           string `json:"kind"`
+	Title          string `json:"title"`
+	URL            string `json:"url"`
+	RepositoryName string `json:"repositoryName"`
+	ItemDate       string `json:"itemDate"`
+	CheckedAt      string `json:"checkedAt"`
+	Confirmed      bool   `json:"confirmed"`
+}
+
 type ProjectListRenderRequest struct {
 	Mode             string            `json:"mode"`
 	CanonicalOrigin  string            `json:"canonicalOrigin"`
@@ -73,4 +83,5 @@ type ProjectRenderRequest struct {
 	EntryLink        string            `json:"entryLink,omitempty"`
 	ListURL          string            `json:"listUrl"`
 	OtherProjects    bool              `json:"otherProjects"`
+	Evidence         []ProjectEvidence `json:"evidence"`
 }

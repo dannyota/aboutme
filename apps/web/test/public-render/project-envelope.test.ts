@@ -510,6 +510,106 @@ describe('project envelope values Go can and cannot send', () => {
   });
 });
 
+describe('project evidence', () => {
+  const evidence = () => envelopeNamed('project-vi-evidence');
+  const items = () => structuredClone(evidence().evidence as Envelope[]);
+  const withItem = (fields: Envelope, index = 1): Envelope => {
+    const next = items();
+    next[index] = { ...next[index], ...fields };
+    return { ...evidence(), evidence: next };
+  };
+  const release = (fields: Envelope = {}): Envelope => ({
+    ...items()[2], ...fields,
+  });
+
+  it('is required on a project page and refused on the list', () => {
+    rejects(without(evidence(), 'evidence'));
+    for (const value of [null, {}, 'x', [null], ['x']]) {
+      rejects({ ...evidence(), evidence: value });
+    }
+    expect(decode({ ...evidence(), evidence: [] }).evidence).toEqual([]);
+    rejects({ ...list(), evidence: [] });
+  });
+
+  it('holds at most ten items, each at every bound', () => {
+    const prefix = 'https://github.com/ada/may-phan-tich/releases/tag/';
+    const bounded = release({
+      title: '😀'.repeat(200), repositoryName: 'ệ'.repeat(200),
+      url: prefix + 't'.repeat(300 - prefix.length),
+      itemDate: '0001-01-01T00:00:00Z', checkedAt: '9999-12-31T23:59:59Z',
+    });
+    const ten = Array.from({ length: 10 }, () => bounded);
+    expect(decode({ ...evidence(), evidence: ten }).evidence).toEqual(ten);
+    rejects({ ...evidence(), evidence: [...ten, bounded] });
+    rejects({ ...evidence(), evidence: [release({ title: '😀'.repeat(201) })] });
+    rejects({ ...evidence(), evidence: [release({
+      repositoryName: 'a'.repeat(201) })] });
+    rejects({ ...evidence(), evidence: [release({
+      url: `${prefix}${'t'.repeat(301 - prefix.length)}` })] });
+  });
+
+  it('has exactly its seven keys', () => {
+    for (const key of Object.keys(items()[0]!)) {
+      rejects({ ...evidence(), evidence: [without(items()[0]!, key)] });
+    }
+    rejects(withItem({ id: '0190c2f2-0000-7000-8000-000000000000' }));
+    rejects(withItem({ flagReason: null }));
+  });
+
+  it('takes a closed kind and its own link grammar', () => {
+    for (const kind of ['gist', '', 'Repository', 'pull_request', null]) {
+      rejects(withItem({ kind }));
+    }
+    const repository = 'https://github.com/ada/may-phan-tich';
+    rejects(withItem({ kind: 'repository' }));
+    rejects(withItem({ kind: 'release' }));
+    for (const url of [
+      repository, `${repository}/pull/7/`, `${repository}/pull/0`,
+      `${repository}/pull/07`, `${repository}/pull/7?x=1`,
+      `${repository}/pull/7#x`, 'http://github.com/ada/may-phan-tich/pull/7',
+      'https://www.github.com/ada/may-phan-tich/pull/7',
+      'https://gitlab.com/ada/may-phan-tich/pull/7',
+      'https://github.com/ada/may phan/pull/7',
+      'https://github.com/ada/may\u000bphan/pull/7',
+      'https://github.com//may-phan-tich/pull/7', 7,
+    ]) {
+      rejects(withItem({ url }));
+    }
+    rejects(withItem({ url: `${repository}/` }, 0));
+    rejects(withItem({ url: `${repository}/releases/tag/` }, 2));
+    rejects(withItem({ url: `${repository}/releases/tag/a/b` }, 2));
+    expect(decode(withItem({ url: `${repository}/releases/tag/v1.0%2Bb` },
+      2))).toBeDefined();
+  });
+
+  it('refuses empty text and each unsafe character class', () => {
+    for (const key of ['title', 'repositoryName']) {
+      rejects(withItem({ [key]: '' }));
+      rejects(withItem({ [key]: 7 }));
+      for (const unsafe of ['\u0007', '\u0085', '\u200b', '\u00ad',
+        '\u2028', '\u2029', '\u0000', '\ud800']) {
+        rejects(withItem({ [key]: `ada${unsafe}engine` }));
+      }
+      expect(decode(withItem({ [key]: ' Sửa lỗi ' }))).toBeDefined();
+    }
+  });
+
+  it('takes a boolean mark and UTC instants at second precision', () => {
+    for (const confirmed of ['true', 1, null]) {
+      rejects(withItem({ confirmed }));
+    }
+    for (const instant of [
+      '2025-12-31T23:30:00+07:00', '2025-12-31T23:30:00.000Z',
+      '2025-12-31 23:30:00Z', '2025-12-31T23:30:00z', '2025-02-30T00:00:00Z',
+      '2025-12-31T24:00:00Z', '2025-13-01T00:00:00Z', '12/2025',
+      '+002025-12-31T23:30:00Z', 1767223800, null,
+    ]) {
+      rejects(withItem({ itemDate: instant }));
+      rejects(withItem({ checkedAt: instant }));
+    }
+  });
+});
+
 describe('gate envelope page', () => {
   const gate = {
     mode: 'gate',

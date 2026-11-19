@@ -33,11 +33,12 @@ import (
 var projectTestOwner = uuid.MustParse("00000000-0000-0000-0000-0000000000d1")
 
 type projectStoreRow struct {
-	entryID string
-	owner   uuid.UUID
-	slug    string
-	doc     project.Document
-	raw     json.RawMessage
+	entryID  string
+	owner    uuid.UUID
+	slug     string
+	doc      project.Document
+	raw      json.RawMessage
+	evidence []map[string]any
 }
 
 func (row projectStoreRow) stored() any {
@@ -48,11 +49,12 @@ func (row projectStoreRow) stored() any {
 }
 
 type projectPagesStore struct {
-	mu    sync.Mutex
-	row   store.Resume
-	rows  []projectStoreRow
-	err   error
-	calls int
+	mu           sync.Mutex
+	row          store.Resume
+	rows         []projectStoreRow
+	err          error
+	calls        int
+	withEvidence []bool
 }
 
 func (s *projectPagesStore) GetPublicState(context.Context) (store.PublicState, error) {
@@ -116,6 +118,7 @@ func withoutDescriptions(rows []projectStoreRow) []map[string]any {
 }
 
 func (s *projectPagesStore) GetPublicResumeProject(_ context.Context, arg store.GetPublicResumeProjectParams) (store.GetPublicResumeProjectRow, error) {
+	s.update(func(s *projectPagesStore) { s.withEvidence = append(s.withEvidence, arg.WithEvidence) })
 	resume, rows, err := s.live(arg.Slug)
 	if err != nil {
 		return store.GetPublicResumeProjectRow{}, err
@@ -123,7 +126,11 @@ func (s *projectPagesStore) GetPublicResumeProject(_ context.Context, arg store.
 	links, projects := withoutDescriptions(rows), []map[string]any{}
 	for _, row := range rows {
 		if row.slug == arg.ProjectSlug {
-			projects = append(projects, map[string]any{"entryId": row.entryID, "projectSlug": row.slug, "document": row.stored()})
+			evidence := []map[string]any{}
+			if arg.WithEvidence && row.evidence != nil {
+				evidence = row.evidence
+			}
+			projects = append(projects, map[string]any{"entryId": row.entryID, "projectSlug": row.slug, "document": row.stored(), "evidence": evidence})
 		}
 	}
 	rawLinks, linksErr := json.Marshal(links)
@@ -187,11 +194,18 @@ func projectTestReader(t *testing.T, readStore *projectPagesStore) *publicresume
 
 func projectTestReaderAndCoordinator(t *testing.T, readStore *projectPagesStore) (*publicresume.Reader, *publicstate.Coordinator) {
 	t.Helper()
+	return projectReaderWithEvidence(t, readStore, false)
+}
+
+func projectReaderWithEvidence(t *testing.T, readStore *projectPagesStore, evidence bool) (*publicresume.Reader, *publicstate.Coordinator) {
+	t.Helper()
 	coordinator, err := publicstate.NewCoordinator(publicstate.CoordinatorConfig{DiscoveryGeneration: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
-	reader, err := publicresume.NewReader(publicresume.ReaderDependencies{Store: readStore, Projector: docmigrate.NewIdentityProjector(), Coordinator: coordinator, Origin: mustPublicOrigin(t)})
+	reader, err := publicresume.NewReader(publicresume.ReaderDependencies{
+		Store: readStore, Projector: docmigrate.NewIdentityProjector(), Coordinator: coordinator, Origin: mustPublicOrigin(t), Evidence: evidence,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -238,6 +252,7 @@ type fakeProjectRenderer struct {
 	calls     map[string]int
 	envelopes map[string][]byte
 	mutate    func(string) string
+	respond   func(mode string) string
 }
 
 func newFakeProjectRenderer(t *testing.T) (*fakeProjectRenderer, *directrender.Client) {
@@ -273,9 +288,12 @@ func (f *fakeProjectRenderer) serve(w http.ResponseWriter, request *http.Request
 	f.mu.Lock()
 	f.calls[head.Mode]++
 	f.envelopes[head.Mode] = body
-	mutate := f.mutate
+	mutate, respond := f.mutate, f.respond
 	f.mu.Unlock()
 	page := f.page(head.Mode, body)
+	if respond != nil && head.Mode != directrender.GateRenderMode {
+		page = respond(head.Mode)
+	}
 	if mutate != nil && head.Mode != directrender.GateRenderMode {
 		page = mutate(page)
 	}
@@ -335,6 +353,11 @@ func newProjectHandlers(t *testing.T, reader *publicresume.Reader, renderer *dir
 	if err != nil {
 		t.Fatal(err)
 	}
+	return newProjectHandlersWithCache(t, reader, renderer, cache)
+}
+
+func newProjectHandlersWithCache(t *testing.T, reader *publicresume.Reader, renderer *directrender.Client, cache *publiccache.Cache) projectHandlers {
+	t.Helper()
 	logger, logs := newGateCapturingLogger()
 	views := &countingViews{}
 	dependencies := HTMLDependencies{

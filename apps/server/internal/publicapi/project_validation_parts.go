@@ -19,6 +19,10 @@ func projectBackLabel(resume directrender.ProjectPageResume) string {
 }
 
 func (v *projectValidator) visitAnchor(node *html.Node) {
+	if relHasToken(attribute(node, "class"), projectEvidenceClass) {
+		v.visitEvidence(node)
+		return
+	}
 	href := attribute(node, "href")
 	if attributeCount(node, "href") != 1 {
 		v.reject("anchor_href")

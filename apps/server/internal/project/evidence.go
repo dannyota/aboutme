@@ -4,7 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 
@@ -21,6 +24,9 @@ const (
 
 	FlagRuleFailed = "rule_failed"
 	FlagGone       = "gone"
+
+	MaxEvidenceURLCharacters = 300
+	evidenceURLPrefix        = "https://github.com/"
 )
 
 var (
@@ -55,6 +61,28 @@ type Evidence struct {
 
 func ValidEvidenceKind(kind string) bool {
 	return kind == EvidenceRepository || kind == EvidencePullRequest || kind == EvidenceRelease
+}
+
+var (
+	evidenceRepositoryURL  = regexp.MustCompile(`^https://github\.com/[^/?#[:space:]]+/[^/?#[:space:]]+$`)
+	evidencePullRequestURL = regexp.MustCompile(`^https://github\.com/[^/?#[:space:]]+/[^/?#[:space:]]+/pull/[1-9][0-9]*$`)
+	evidenceReleaseURL     = regexp.MustCompile(`^https://github\.com/[^/?#[:space:]]+/[^/?#[:space:]]+/releases/tag/[^/?#[:space:]]+$`)
+)
+
+func ValidEvidenceURL(kind, url string) bool {
+	var grammar *regexp.Regexp
+	switch kind {
+	case EvidenceRepository:
+		grammar = evidenceRepositoryURL
+	case EvidencePullRequest:
+		grammar = evidencePullRequestURL
+	case EvidenceRelease:
+		grammar = evidenceReleaseURL
+	default:
+		return false
+	}
+	return utf8.ValidString(url) && utf8.RuneCountInString(url) <= MaxEvidenceURLCharacters &&
+		strings.HasPrefix(url, evidenceURLPrefix) && grammar.MatchString(url)
 }
 
 func evidenceOf(row store.ListEvidenceForProjectsRow) Evidence {

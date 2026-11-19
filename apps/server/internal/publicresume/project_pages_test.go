@@ -56,7 +56,7 @@ func projectColumn(t *testing.T, pairs ...string) json.RawMessage {
 	rows := []map[string]any{}
 	for i := 0; i < len(pairs); i += 2 {
 		document := map[string]any{"defaultLanguage": "en", "text": map[string]any{"en": map[string]string{"name": pairs[i+1]}}}
-		rows = append(rows, map[string]any{"entryId": pairs[i], "projectSlug": pairs[i+1], "document": document})
+		rows = append(rows, map[string]any{"entryId": pairs[i], "projectSlug": pairs[i+1], "document": document, "evidence": []any{}})
 	}
 	raw, err := json.Marshal(rows)
 	if err != nil {

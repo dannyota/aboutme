@@ -97,6 +97,7 @@ export async function renderPublicProject(
       : { entryLink: request.entryLink }),
     listUrl: request.listUrl,
     otherProjects: request.otherProjects,
+    evidence: request.evidence,
     homeHref: `${request.canonicalOrigin}/`,
   });
 }
