@@ -59,12 +59,17 @@ func TestVersionString(t *testing.T) {
 	t.Cleanup(func() { version, commit = oldVersion, oldCommit })
 
 	version, commit = "", ""
-	if got := versionString(); got != "observer  " {
-		t.Errorf("versionString() with unset build info = %q, want %q", got, "observer  ")
+	withOwner(t, "")
+	if got := versionString(); got != "observer   " {
+		t.Errorf("versionString() with unset build info = %q, want %q", got, "observer   ")
 	}
 
 	version, commit = "v0.6.5", "deadbeef"
-	if got := versionString(); got != "observer v0.6.5 deadbeef" {
-		t.Errorf("versionString() = %q, want %q", got, "observer v0.6.5 deadbeef")
+	for _, value := range []string{"dannyota", "dntmakers"} {
+		withOwner(t, value)
+		want := "observer v0.6.5 deadbeef " + value
+		if got := versionString(); got != want {
+			t.Errorf("versionString() = %q, want %q", got, want)
+		}
 	}
 }

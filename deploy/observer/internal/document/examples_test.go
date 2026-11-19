@@ -116,9 +116,6 @@ func exampleMovedTo(in Input, owner string) Input {
 	return in
 }
 
-// exampleScenarios builds every state the /verify page renders
-// (docs/design/deployment-transparency/document.md, "Summary and release").
-// Each Input mirrors a fixed, realistic deployment, never invented data.
 func exampleScenarios(t *testing.T) map[string]Input {
 	t.Helper()
 	checked := exampleMustParse(t, "2026-10-02T03:15:00Z")

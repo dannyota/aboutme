@@ -94,7 +94,7 @@ func (v *Verifier) fetchRegistry(ctx context.Context, digest, predicate string) 
 
 func (v *Verifier) fetchRepository(ctx context.Context, repo, digest, predicate string) ([][]byte, error) {
 	token, err := v.registryToken(ctx, repo)
-	if err != nil {
+	if err != nil || token == "" {
 		return nil, err
 	}
 	auth := map[string]string{"Authorization": "Bearer " + token}
@@ -188,7 +188,12 @@ func (v *Verifier) registryToken(ctx context.Context, repo string) (string, erro
 	if err != nil {
 		return "", err
 	}
-	if status != http.StatusOK {
+	switch status {
+	case http.StatusOK:
+	// ghcr.io refuses an anonymous token for a package that does not exist or is private (GHCR token endpoint).
+	case http.StatusUnauthorized, http.StatusForbidden:
+		return "", nil
+	default:
 		return "", fmt.Errorf("registry token: status %d", status)
 	}
 	var tok struct {

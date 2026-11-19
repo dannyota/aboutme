@@ -148,3 +148,21 @@ func TestStoppedComponentNamesTheDannyotaImage(t *testing.T) {
 		t.Errorf("summary %q components %+v", doc.Summary, doc.Components)
 	}
 }
+
+func TestMixedAppOwnersHaveNoRelease(t *testing.T) {
+	for _, name := range []string{platform.Server, platform.Web, platform.Caddy} {
+		t.Run(name, func(t *testing.T) {
+			in := release065()
+			for i, image := range in.Images {
+				if image.Component == name {
+					in.Images[i].Repository = platform.Repository(source.Dntmakers, name)
+					in.Evidence[image.Digest] = signedBy(source.Dntmakers, in.Images[i].Repository, "v0.6.5", 7)
+				}
+			}
+			doc := build(t, in)
+			if doc.Summary != SummaryVerified || doc.Release != nil {
+				t.Errorf("summary %q release %+v, want verified with no release", doc.Summary, doc.Release)
+			}
+		})
+	}
+}

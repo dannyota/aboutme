@@ -71,7 +71,21 @@ func apiBody(bundles ...json.RawMessage) string {
 type fakeGitHub struct {
 	api      map[string]response
 	registry map[string]response
+	tokens   map[string]response
 	calls    atomic.Int64
+}
+
+const deniedToken = `{"errors":[{"code":"DENIED","message":"requested access to the resource is denied"}]}`
+
+func (f *fakeGitHub) token(scope string) response {
+	owner, _, _ := strings.Cut(strings.TrimPrefix(scope, "repository:"), "/")
+	if resp, ok := f.tokens[owner]; ok {
+		return resp
+	}
+	if owner == "dntmakers" {
+		return response{http.StatusForbidden, deniedToken}
+	}
+	return response{200, `{"token":"anonymous"}`}
 }
 
 type response struct {
@@ -88,7 +102,7 @@ func (f *fakeGitHub) server(t *testing.T) *httptest.Server {
 		if strings.HasPrefix(r.URL.Path, "/repositories/1318874703/attestations/") {
 			resp, ok = f.api[r.URL.Query().Get("predicate_type")]
 		} else if r.URL.Path == "/token" {
-			resp, ok = response{200, `{"token":"anonymous"}`}, true
+			resp, ok = f.token(r.URL.Query().Get("scope")), true
 		} else {
 			resp, ok = f.registry[r.URL.Path]
 		}
@@ -324,6 +338,14 @@ func TestUnansweredChecksAreUncheckedAndNotCached(t *testing.T) {
 			registry: map[string]response{"/v2/dannyota/aboutme-web/manifests/sha256-" + strings.TrimPrefix(recordedDigest, "sha256:"): {500, ``}},
 		},
 		"api malformed": {api: map[string]response{"provenance": {200, `{"attestations":`}, "spdx": {200, `nope`}}},
+		"api empty, token outage": {
+			api:    map[string]response{"provenance": {404, `{}`}, "spdx": {404, `{}`}},
+			tokens: map[string]response{"dannyota": {http.StatusInternalServerError, ``}},
+		},
+		"api empty, token rate limited": {
+			api:    map[string]response{"provenance": {404, `{}`}, "spdx": {404, `{}`}},
+			tokens: map[string]response{"dntmakers": {http.StatusTooManyRequests, ``}},
+		},
 	}
 	for name, f := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -518,8 +540,12 @@ func rateLimited() map[string]response {
 	}
 }
 
+func publishedDntmakers() map[string]response {
+	return map[string]response{"dntmakers": {200, `{"token":"anonymous"}`}}
+}
+
 func TestRegistryFallbackReadsTheDntmakersNamespace(t *testing.T) {
-	f := &fakeGitHub{api: rateLimited(), registry: registryBundle("dntmakers/aboutme-server", recordedBundle(t))}
+	f := &fakeGitHub{api: rateLimited(), registry: registryBundle("dntmakers/aboutme-server", recordedBundle(t)), tokens: publishedDntmakers()}
 	ev := newVerifier(t, f.server(t), nil).Check(context.Background(), recordedDigest)
 	if ev.Provenance.Status != Verified || ev.Provenance.Version != "v0.5.21" {
 		t.Fatalf("provenance = %+v, want verified v0.5.21", ev.Provenance)
@@ -527,15 +553,34 @@ func TestRegistryFallbackReadsTheDntmakersNamespace(t *testing.T) {
 }
 
 func TestRegistryFallbackSurvivesAnAbsentNamespace(t *testing.T) {
-	registry := registryBundle("dannyota/aboutme-server", recordedBundle(t))
-	for _, name := range []string{"server", "web", "caddy"} {
-		registry["/v2/dntmakers/aboutme-"+name+"/manifests/sha256-"+strings.TrimPrefix(recordedDigest, "sha256:")] =
-			response{http.StatusUnauthorized, `{"errors":[{"code":"UNAUTHORIZED"}]}`}
-	}
-	f := &fakeGitHub{api: rateLimited(), registry: registry}
+	f := &fakeGitHub{api: rateLimited(), registry: registryBundle("dannyota/aboutme-server", recordedBundle(t))}
 	ev := newVerifier(t, f.server(t), nil).Check(context.Background(), recordedDigest)
 	if ev.Provenance.Status != Verified {
 		t.Fatalf("provenance = %+v, want verified despite an unreadable namespace", ev.Provenance)
+	}
+}
+
+func TestUnreadableNamespaceHoldsNoBundle(t *testing.T) {
+	for _, status := range []int{http.StatusUnauthorized, http.StatusForbidden} {
+		tokens := map[string]response{"dntmakers": {status, deniedToken}}
+		t.Run(fmt.Sprintf("%d, absent everywhere", status), func(t *testing.T) {
+			f := &fakeGitHub{api: map[string]response{"provenance": {404, `{}`}, "spdx": {404, `{}`}}, tokens: tokens}
+			cache := NewMemoryCache()
+			ev := newVerifier(t, f.server(t), cache).Check(context.Background(), recordedDigest)
+			if ev.Provenance.Status != NotFound || ev.SBOM.Status != NotFound {
+				t.Fatalf("evidence = %+v, want both not_found", ev)
+			}
+			if _, found, err := cache.Get(context.Background(), recordedDigest); err != nil || !found {
+				t.Error("a finished absence was not cached")
+			}
+		})
+		t.Run(fmt.Sprintf("%d, tampered in dannyota", status), func(t *testing.T) {
+			f := &fakeGitHub{api: rateLimited(), registry: registryBundle("dannyota/aboutme-server", tamperedBundle(t)), tokens: tokens}
+			ev := newVerifier(t, f.server(t), nil).Check(context.Background(), recordedDigest)
+			if ev.Provenance.Status != Invalid {
+				t.Fatalf("status = %q, want invalid", ev.Provenance.Status)
+			}
+		})
 	}
 }
 
@@ -543,7 +588,7 @@ func TestIncompleteRegistryFallbackIsUncheckedNotInvalid(t *testing.T) {
 	registry := registryBundle("dannyota/aboutme-server", tamperedBundle(t))
 	registry["/v2/dntmakers/aboutme-server/manifests/sha256-"+strings.TrimPrefix(recordedDigest, "sha256:")] = response{500, ``}
 	cache := NewMemoryCache()
-	f := &fakeGitHub{api: rateLimited(), registry: registry}
+	f := &fakeGitHub{api: rateLimited(), registry: registry, tokens: publishedDntmakers()}
 	ev := newVerifier(t, f.server(t), cache).Check(context.Background(), recordedDigest)
 	if ev.Provenance.Status != Unchecked {
 		t.Fatalf("status = %q, want unchecked while a namespace is unread", ev.Provenance.Status)

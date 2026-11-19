@@ -21,7 +21,7 @@ var (
 )
 
 func versionString() string {
-	return fmt.Sprintf("observer %s %s", version, commit)
+	return fmt.Sprintf("observer %s %s %s", version, commit, owner)
 }
 
 func main() {

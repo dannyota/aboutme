@@ -266,7 +266,7 @@ func release(summary string, components []Component) *Release {
 	if summary != SummaryVerified {
 		return nil
 	}
-	var version, commit, deployed string
+	var version, commit, owner, deployed string
 	for _, c := range components {
 		if !slices.Contains(platform.Required, c.Name) {
 			continue
@@ -275,9 +275,10 @@ func release(summary string, components []Component) *Release {
 		if ri.Version == nil || ri.Commit == nil {
 			return nil
 		}
+		imageOwner, _ := platform.RepositoryOwner(c.Name, c.Image)
 		if version == "" {
-			version, commit = *ri.Version, *ri.Commit
-		} else if *ri.Version != version || *ri.Commit != commit {
+			version, commit, owner = *ri.Version, *ri.Commit, imageOwner
+		} else if *ri.Version != version || *ri.Commit != commit || imageOwner != owner {
 			return nil
 		}
 		if ri.RunningSince > deployed {
