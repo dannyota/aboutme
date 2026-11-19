@@ -1,17 +1,27 @@
 package publicapi
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	schema "danny.vn/aboutme/packages/schema/gen/go"
 
 	"danny.vn/aboutme/apps/server/internal/directrender"
 	"danny.vn/aboutme/apps/server/internal/project"
 	"danny.vn/aboutme/apps/server/internal/publicresume"
+	"danny.vn/aboutme/apps/server/internal/publicstate"
+	"danny.vn/aboutme/apps/server/internal/resume/docmigrate"
+	"danny.vn/aboutme/apps/server/internal/store"
+	"danny.vn/aboutme/apps/server/internal/testutil"
 )
 
 func evidenceProject(slug string, evidence ...publicresume.PublicEvidence) publicresume.PublicProject {
@@ -70,6 +80,98 @@ func TestBuildProjectRequest_WritesEvidenceInstantsAsUTCSeconds(t *testing.T) {
 	}
 	if got := page.Evidence[0]; got.ItemDate != "2025-12-31T23:30:00Z" || got.CheckedAt != "2026-02-28T17:00:01Z" {
 		t.Fatalf("instants = %q, %q; want 2025-12-31T23:30:00Z and 2026-02-28T17:00:01Z", got.ItemDate, got.CheckedAt)
+	}
+}
+
+func zoneEvidenceTx(t *testing.T) (context.Context, pgx.Tx) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	t.Cleanup(cancel)
+	pool, err := pgxpool.New(ctx, testutil.RequireMigratedTestDatabaseURL(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(pool.Close)
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := tx.Rollback(context.Background()); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
+			t.Errorf("Rollback() error: %v", err)
+		}
+	})
+	if _, err := tx.Exec(ctx, `SET LOCAL TIME ZONE 'Asia/Ho_Chi_Minh'`); err != nil {
+		t.Fatal(err)
+	}
+	return ctx, tx
+}
+
+func insertZoneEvidenceResume(ctx context.Context, t *testing.T, tx pgx.Tx, at time.Time) string {
+	t.Helper()
+	var owner, projectID uuid.UUID
+	if err := tx.QueryRow(ctx, `INSERT INTO users (email, name) VALUES ($1, 'Ada') RETURNING id`, uuid.NewString()+"@example.com").Scan(&owner); err != nil {
+		t.Fatalf("insert user: %v", err)
+	}
+	if err := tx.QueryRow(ctx, `INSERT INTO projects (user_id, slug, document) VALUES ($1, 'atlas', $2) RETURNING id`,
+		owner, `{"defaultLanguage":"en","text":{"en":{"name":"Atlas"}}}`).Scan(&projectID); err != nil {
+		t.Fatalf("insert project: %v", err)
+	}
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO project_evidence (project_id, position, kind, repository_id, item_id, url, repository_name, title, item_date, checked_at, checked_binding, rule_met)
+		VALUES ($1, 0, 'repository', 9000, 9000, 'https://github.com/octocat/hello', 'octocat/hello', 'Boundary', $2, $2, 1, true)
+	`, projectID, at); err != nil {
+		t.Fatalf("insert evidence: %v", err)
+	}
+	name, title, linked, slug := "Ada", "Atlas", projectID.String(), "zone-"+uuid.NewString()[:8]
+	content := map[string]schema.Section{"projects": {SectionType: schema.Project, ProjectEntries: []schema.ProjectEntry{{ID: uuid.NewString(), Title: &title, ProjectID: &linked}}}}
+	var customization schema.Customization
+	customization.Layout.Sections.Main = []string{"projects"}
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO resumes (user_id, title, slug, live, schema_version, lng, personal_details, content, customization)
+		VALUES ($1, 'Zone', $2, true, $3, 'en', $4, $5, $6)
+	`, owner, slug, docmigrate.CurrentVersion, mustJSONBytes(t, schema.PersonalDetails{FullName: &name}), mustJSONBytes(t, content), mustJSONBytes(t, customization)); err != nil {
+		t.Fatalf("insert resume: %v", err)
+	}
+	return slug
+}
+
+func TestBuildProjectRequest_DatabaseInstantUnderAnotherSessionZoneIsUTCSeconds(t *testing.T) {
+	ctx, tx := zoneEvidenceTx(t)
+	boundary := time.Date(2025, time.December, 31, 23, 30, 0, 500_000_000, time.UTC)
+	slug := insertZoneEvidenceResume(ctx, t, tx, boundary)
+	coordinator, err := publicstate.NewCoordinator(publicstate.CoordinatorConfig{DiscoveryGeneration: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	origin := mustPublicOrigin(t)
+	reader, err := publicresume.NewReader(publicresume.ReaderDependencies{
+		Store: store.New(tx), Projector: docmigrate.NewIdentityProjector(), Coordinator: coordinator, Origin: origin, Evidence: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot, read, lease, err := reader.ReadProjects(ctx, slug, "atlas")
+	if err != nil {
+		t.Fatalf("ReadProjects() error: %v", err)
+	}
+	lease.Release()
+	pages, err := read.Pages()
+	if err != nil || len(pages.Projects) != 1 || len(pages.Projects[0].Evidence) != 1 {
+		t.Fatalf("pages = %+v (%v), want one project with one evidence item", pages, err)
+	}
+	item := pages.Projects[0].Evidence[0]
+	for key, instant := range map[string]time.Time{"itemDate": item.ItemDate, "checkedAt": item.CheckedAt} {
+		if instant.Location() != time.UTC || !instant.Equal(boundary) || instant.Format(time.RFC3339) != "2025-12-31T23:30:00Z" {
+			t.Fatalf("reader %s = %s, want %s in UTC, 2025-12-31T23:30:00Z at second precision", key, instant, boundary)
+		}
+	}
+	page, err := buildProjectRequest(projectPageInput{snapshot: snapshot, pages: pages, origin: origin})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := page.Evidence[0]; got.ItemDate != "2025-12-31T23:30:00Z" || got.CheckedAt != "2025-12-31T23:30:00Z" {
+		t.Fatalf("envelope instants = %q, %q; want 2025-12-31T23:30:00Z for both", got.ItemDate, got.CheckedAt)
 	}
 }
 

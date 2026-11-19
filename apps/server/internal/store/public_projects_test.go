@@ -307,11 +307,13 @@ func TestGetPublicResumeProject_ConfirmedEqualsTheOwnerReadInEveryState(t *testi
 				t.Fatal(err)
 			}
 		}, []bool{true, false}},
+		{"continue with the same account after the recheck", func() { install(202) }, []bool{true, false}},
 		{"after ClearGitHubConnection", func() {
 			if _, err := queries.ClearGitHubConnection(ctx, owner); err != nil {
 				t.Fatal(err)
 			}
 		}, []bool{false, false}},
+		{"reconnecting the same account after ClearGitHubConnection", func() { install(202) }, []bool{false, false}},
 	} {
 		step.change()
 		var public []bool
@@ -332,6 +334,33 @@ func TestGetPublicResumeProject_ConfirmedEqualsTheOwnerReadInEveryState(t *testi
 		}
 		if !slices.Equal(public, step.want) || !slices.Equal(listed, public) {
 			t.Fatalf("%s: public confirmed = %v, owner read %v; want both %v", step.name, public, listed, step.want)
+		}
+	}
+}
+
+func TestGetPublicResumeProject_EvidenceInstantsKeepTheInstantUnderAnotherSessionZone(t *testing.T) {
+	ctx, _, tx, queries := newPublicStoreTx(t)
+	if _, err := tx.Exec(ctx, `SET LOCAL TIME ZONE 'Asia/Ho_Chi_Minh'`); err != nil {
+		t.Fatal(err)
+	}
+	fixture := newPublicProjectsFixture(ctx, t, tx)
+	boundary := evidenceInstant(t, "2025-12-31T23:30:00.5Z")
+	insertPublicStoreEvidence(ctx, t, tx, fixture.ids[0], publicEvidenceRow{0, "repository", "https://github.com/octocat/hello", "Boundary", true, 1, boundary, boundary})
+	items := requestedEvidence(ctx, t, queries, fixture.slug, true)
+	if len(items) != 1 {
+		t.Fatalf("evidence = %v, want the one stored item", items)
+	}
+	for _, key := range []string{"itemDate", "checkedAt"} {
+		var raw string
+		if err := json.Unmarshal(items[0][key], &raw); err != nil {
+			t.Fatal(err)
+		}
+		parsed, err := time.Parse(time.RFC3339Nano, raw)
+		if err != nil {
+			t.Fatalf("%s = %q: %v", key, raw, err)
+		}
+		if !parsed.Equal(boundary) || parsed.UTC().Format(time.RFC3339) != "2025-12-31T23:30:00Z" {
+			t.Fatalf("%s = %q, want the instant 2025-12-31T23:30:00.5Z, 2025-12-31T23:30:00Z in UTC seconds", key, raw)
 		}
 	}
 }

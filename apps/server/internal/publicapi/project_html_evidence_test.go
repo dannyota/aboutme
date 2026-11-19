@@ -209,6 +209,13 @@ func TestPublicRepresentations_CarryNoEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	plain.links = projects
+	leaks := []string{"Thêm ghi chú G", "ada/may-phan-tich", "github.com", "evidence"}
+	for _, leak := range leaks {
+		if !bytes.Contains(plain.links, []byte(leak)) {
+			t.Fatalf("the resume read's link context lacks %q: %s", leak, plain.links)
+		}
+	}
 	backing := &evidenceServiceStore{publicServiceStore: plain, projects: projects}
 	coordinator, err := publicstate.NewCoordinator(publicstate.CoordinatorConfig{DiscoveryGeneration: 1})
 	if err != nil {
@@ -242,17 +249,28 @@ func TestPublicRepresentations_CarryNoEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if len(snapshot.ProjectLinks) != 1 || snapshot.ProjectLinks[0].ProjectSlug != "atlas-tool" {
+		t.Fatalf("resume read links = %+v, want the evidence-bearing link decoded", snapshot.ProjectLinks)
+	}
 	svc := newPublicServiceForReader(t, reader, coordinator, cache)
+	calls := plain.calls
+	publicJSON := servePublic(t, svc, "/api/v1/public/resumes/"+slug)
+	if !bytes.Contains(publicJSON, []byte(`"projectSlug":"atlas-tool"`)) {
+		t.Fatalf("public json = %s, want the project link from the evidence-bearing read", publicJSON)
+	}
 	for name, body := range map[string][]byte{
-		"public json": servePublic(t, svc, "/api/v1/public/resumes/"+slug),
+		"public json": publicJSON,
 		"markdown":    servePublic(t, svc, "/"+slug+".md"),
 		"json-ld":     jsonLD.JSON,
 	} {
-		for _, leak := range []string{"Thêm ghi chú G", "ada/may-phan-tich", "github.com", "evidence"} {
+		for _, leak := range leaks {
 			if bytes.Contains(body, []byte(leak)) {
 				t.Fatalf("%s carries %q: %s", name, leak, body)
 			}
 		}
+	}
+	if plain.calls-calls != 2 {
+		t.Fatalf("resume reads = %d, want public json and markdown each to read the evidence-bearing row", plain.calls-calls)
 	}
 }
 

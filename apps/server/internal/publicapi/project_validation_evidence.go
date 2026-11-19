@@ -19,7 +19,12 @@ func (v *projectValidator) visitEvidence(node *html.Node) {
 		v.reject("evidence_attributes")
 	case attribute(node, "rel") != projectExternalRel:
 		v.reject("evidence_rel")
-	case textNode(node) != item.Title:
+	case !soleTextChild(node, item.Title):
 		v.reject("evidence_text")
 	}
+}
+
+func soleTextChild(node *html.Node, text string) bool {
+	child := node.FirstChild
+	return child != nil && child.NextSibling == nil && child.Type == html.TextNode && child.Data == text
 }
