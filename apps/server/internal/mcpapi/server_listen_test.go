@@ -141,11 +141,36 @@ func modernExchange(name string, id int, method, toolName, params string) mcpExc
 	return mcpExchange{name: name, version: "2026-07-28", method: method, toolName: toolName, body: body}
 }
 
-func toolListSubscription(id int) mcpExchange {
-	return modernExchange("subscriptions/listen tools", id, "subscriptions/listen", "", `"notifications":{"toolsListChanged":true}`)
+func everySubscription(id int) mcpExchange {
+	return modernExchange("subscriptions/listen every notification", id, "subscriptions/listen", "",
+		`"notifications":{"toolsListChanged":true,"promptsListChanged":true,"resourcesListChanged":true,"resourceSubscriptions":["aboutme://x"]}`)
 }
 
-func TestServer_EveryClientMessageIsAnsweredWithinBound(t *testing.T) {
+func acknowledgedNotifications(t *testing.T, body string) string {
+	t.Helper()
+	for _, line := range strings.Split(body, "\n") {
+		data, ok := strings.CutPrefix(line, "data: ")
+		if !ok {
+			continue
+		}
+		var message struct {
+			Method string `json:"method"`
+			Params struct {
+				Notifications json.RawMessage `json:"notifications"`
+			} `json:"params"`
+		}
+		if err := json.Unmarshal([]byte(data), &message); err != nil {
+			t.Fatalf("decode event %q: %v", data, err)
+		}
+		if message.Method == "notifications/subscriptions/acknowledged" {
+			return string(message.Params.Notifications)
+		}
+	}
+	t.Fatalf("no notifications/subscriptions/acknowledged event in %q", body)
+	return ""
+}
+
+func TestServer_ClientMessagesAreNeverHeldOpen(t *testing.T) {
 	handler, raw := newStaticMCPHandler(t)
 	legacy := func(name, body string) mcpExchange {
 		return mcpExchange{name: name, version: "2025-06-18", body: body}
@@ -165,7 +190,7 @@ func TestServer_EveryClientMessageIsAnsweredWithinBound(t *testing.T) {
 		legacy("legacy client response", `{"jsonrpc":"2.0","id":"server-1","result":{"roots":[]}}`),
 		modernExchange("server/discover", 10, "server/discover", "", ""),
 		modernExchange("tools/list", 11, "tools/list", "", ""),
-		toolListSubscription(12),
+		everySubscription(12),
 		modernExchange("subscriptions/listen empty", 13, "subscriptions/listen", "", `"notifications":{}`),
 		modernExchange("tools/call", 14, "tools/call", "list_resumes", `"name":"list_resumes","arguments":{}`),
 		{name: "notifications/cancelled", version: "2026-07-28", method: "notifications/cancelled", body: `{"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":12}}`}, //nolint:misspell // MCP method name.
@@ -179,6 +204,11 @@ func TestServer_EveryClientMessageIsAnsweredWithinBound(t *testing.T) {
 			}
 			if code := served.recorder.Code; code != http.StatusOK && code != http.StatusAccepted {
 				t.Fatalf("status = %d body %q", code, served.recorder.Body.String())
+			}
+			if exchange.method == "subscriptions/listen" {
+				if granted := acknowledgedNotifications(t, served.recorder.Body.String()); granted != "{}" {
+					t.Fatalf("acknowledged notifications = %s, want {}", granted)
+				}
 			}
 		})
 	}
@@ -222,7 +252,7 @@ func TestServer_ToolListSubscriptionsCannotExhaustRequestSlots(t *testing.T) {
 	handler, raw := newStaticMCPHandler(t)
 	subscriptions := make([]*servedExchange, 4)
 	for i := range subscriptions {
-		subscriptions[i] = startMCPExchange(t, handler, raw, toolListSubscription(20+i))
+		subscriptions[i] = startMCPExchange(t, handler, raw, everySubscription(20+i))
 	}
 	deadline := time.Now().Add(answerBound)
 	open := 0

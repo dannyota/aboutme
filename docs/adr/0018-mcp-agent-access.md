@@ -27,8 +27,11 @@ cookie? And what may it do with that authority?
 
 **One remote Streamable HTTP MCP endpoint.** Agents connect to `/mcp` on the
 canonical origin. The handler runs in stateless JSON mode: one JSON-RPC message
-per POST, one JSON response, no SSE stream and no server notification. There is
-no local stdio distribution. The handler is built on the pinned official
+per POST, one JSON response, no SSE stream and no server notification. The
+server advertises no list-change capability, so no request stays open; a
+`subscriptions/listen` a client sends anyway gets the SDK's short event stream,
+the acknowledgement and then the result, and closes. There is no local stdio
+distribution. The handler is built on the pinned official
 `modelcontextprotocol/go-sdk`, so the protocol version and its framing are an
 upstream contract.
 
@@ -115,3 +118,5 @@ Former ADR 0026, unchanged in substance.
   recorded Claude Code proof; retained the outstanding verification gaps.
 - 2026-11-11: The owner approved project scopes, so a resume grant does not
   silently reach the project library.
+- 2026-11-19: Recorded the capability rule after the SDK's default tool-list
+  capability let listen requests fill every request slot in production.

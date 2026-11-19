@@ -170,15 +170,15 @@ Agent traffic uses fixed roots outside `/api/v1`. Only `/oauth/authorize` reads
 a session, and it is a redirecting `GET`; every other route below ignores
 cookies entirely, so no CSRF surface exists there.
 
-| Route                                     | Method | Contract                                                                              |
-| ----------------------------------------- | ------ | ------------------------------------------------------------------------------------- |
-| `/.well-known/oauth-authorization-server` | GET    | RFC 8414 metadata derived only from the canonical origin                              |
-| `/.well-known/oauth-protected-resource`   | GET    | RFC 9728 metadata naming the authorization server                                     |
-| `/oauth/register`                         | POST   | RFC 7591 dynamic client registration; strict JSON, bounded                            |
-| `/oauth/authorize`                        | GET    | Session-aware; validates fully, then redirects to the consent page                    |
-| `/oauth/token`                            | POST   | Exact `application/x-www-form-urlencoded`; closed parameter set                       |
-| `/oauth/revoke`                           | POST   | RFC 7009 revocation of a grant and its token families                                 |
-| `/mcp`                                    | POST   | MCP Streamable HTTP in stateless JSON mode; one message per request, answered at once |
+| Route                                     | Method | Contract                                                                             |
+| ----------------------------------------- | ------ | ------------------------------------------------------------------------------------ |
+| `/.well-known/oauth-authorization-server` | GET    | RFC 8414 metadata derived only from the canonical origin                             |
+| `/.well-known/oauth-protected-resource`   | GET    | RFC 9728 metadata naming the authorization server                                    |
+| `/oauth/register`                         | POST   | RFC 7591 dynamic client registration; strict JSON, bounded                           |
+| `/oauth/authorize`                        | GET    | Session-aware; validates fully, then redirects to the consent page                   |
+| `/oauth/token`                            | POST   | Exact `application/x-www-form-urlencoded`; closed parameter set                      |
+| `/oauth/revoke`                           | POST   | RFC 7009 revocation of a grant and its token families                                |
+| `/mcp`                                    | POST   | MCP Streamable HTTP in stateless JSON mode; one message per request, never held open |
 
 `/oauth/authorize` is the Go validator; `/authorize` is the Nuxt consent page it
 redirects to. The OAuth error vocabulary is closed and carries one fixed generic
