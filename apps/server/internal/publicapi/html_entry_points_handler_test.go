@@ -104,7 +104,7 @@ func TestPublicHTMLSendsTheLinksAndValidatesTheirAnchors(t *testing.T) {
 }
 
 func TestEntryPointsRaiseTheHTMLAndPDFFormatVersions(t *testing.T) {
-	if htmlFormatVersion != 4 || publicPDFFormatVersion != 2 {
-		t.Fatalf("format versions html %d pdf %d, want 4 and 2 so no cached page or PDF without entry points is reused", htmlFormatVersion, publicPDFFormatVersion)
+	if htmlFormatVersion != 5 || publicPDFFormatVersion != 2 {
+		t.Fatalf("format versions html %d pdf %d, want 5 and 2 so no cached sheets page and no cached page or PDF without entry points is reused", htmlFormatVersion, publicPDFFormatVersion)
 	}
 }
