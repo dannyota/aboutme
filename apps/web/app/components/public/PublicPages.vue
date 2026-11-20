@@ -99,7 +99,10 @@ const bindScroller = (): void => {
 const afterPages = (update: boolean): void => {
   bindScroller();
   if (phone.value) scroller?.scrollTo(index.value, false);
-  if (update && focusInside && phone.value) {
+  const active = window.document.activeElement;
+  const lost = active === null || active === window.document.body
+    || !active.isConnected;
+  if (update && focusInside && phone.value && lost) {
     scrollerElement()?.focus({ preventScroll: true });
   }
   focusInside = false;
@@ -165,8 +168,7 @@ watch(() => renderPageRule(geometry.value), (rule) => {
 
 watch(() => [props.document, props.context] as const, () => {
   const active = window.document.activeElement;
-  focusInside = active === null || active === window.document.body
-    || root.value?.contains(active) === true;
+  focusInside = active !== null && root.value?.contains(active) === true;
   measureViewport();
   controller.load(loadFonts());
 });

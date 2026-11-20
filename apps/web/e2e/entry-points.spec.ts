@@ -136,6 +136,7 @@ async function expectTitleParity(
   page: Page, where: string, scope = SCREEN_TITLES,
 ): Promise<void> {
   const message = `${PARITY} ${where}`;
+  const tolerance = scope === SCREEN_TITLES ? TITLE_TOLERANCE : 0;
   const titles = await measureTitles(page, scope);
   const linked = titles.filter((title) => title.entry !== null);
   expect(linked.map((title) => title.href), message).toEqual(PROJECT_PAGES);
@@ -154,7 +155,7 @@ async function expectTitleParity(
       .toEqual(plain[0]!.glyphs.map((glyph) => glyph.length));
     expect(linkedNumbers.length, message).toBe(plainNumbers.length);
     expect(linkedNumbers.filter((value, index) =>
-      Math.abs(value - plainNumbers[index]!) > TITLE_TOLERANCE), message)
+      Math.abs(value - plainNumbers[index]!) > tolerance), message)
       .toEqual([]);
     expect([title.color, title.decoration], message)
       .toEqual([own[0]!.color, own[0]!.decoration]);

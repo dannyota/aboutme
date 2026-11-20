@@ -7,6 +7,7 @@ import {
   pageProgress,
   pageScale,
   type PagesState,
+  type PagesVisibility,
 } from '../../app/public/publicPages';
 
 const frames: FrameRequestCallback[] = [];
@@ -33,7 +34,39 @@ interface Harness {
   readonly pages: [number, boolean][];
   within: boolean;
   readonly controller: ReturnType<typeof createPagesController>;
+  readonly visibility: FakeVisibility;
 }
+
+interface FakeVisibility {
+  hidden: boolean;
+  readonly listeners: Set<() => void>;
+  hide(): void;
+  show(): void;
+  api(): PagesVisibility;
+}
+
+const fakeVisibility = (): FakeVisibility => {
+  const value: FakeVisibility = {
+    hidden: false,
+    listeners: new Set(),
+    hide: () => {
+      value.hidden = true;
+      for (const listener of [...value.listeners]) listener();
+    },
+    show: () => {
+      value.hidden = false;
+      for (const listener of [...value.listeners]) listener();
+    },
+    api: () => ({
+      hidden: () => value.hidden,
+      subscribe: (listener) => {
+        value.listeners.add(listener);
+        return () => value.listeners.delete(listener);
+      },
+    }),
+  };
+  return value;
+};
 
 const harness = (): Harness => {
   const value = {
@@ -41,13 +74,15 @@ const harness = (): Harness => {
     pages: [] as [number, boolean][],
     within: true,
   } as Harness & { within: boolean };
+  const visibility = fakeVisibility();
   const controller = createPagesController({
     withinFirstPage: () => value.within,
     onState: (state) => value.states.push(state),
     onPages: (count, update) => value.pages.push([count, update]),
     timers,
+    visibility: visibility.api(),
   });
-  return Object.assign(value, { controller });
+  return Object.assign(value, { controller, visibility });
 };
 
 const fonts = () => {
@@ -219,6 +254,40 @@ describe('pages controller', () => {
       expect(run.controller.state()).toBe('continuous');
     });
 
+  it('times out a live update from its start when the fonts never load',
+    async () => {
+      const run = harness();
+      run.controller.load(Promise.resolve());
+      await vi.advanceTimersByTimeAsync(0);
+      run.controller.settled(2);
+      runFrame();
+      const font = fonts();
+      run.controller.load(font.promise);
+      expect(run.controller.state()).toBe('updating');
+      await vi.advanceTimersByTimeAsync(PAGES_TIMEOUT_MS - 1);
+      expect(run.controller.state()).toBe('updating');
+      await vi.advanceTimersByTimeAsync(1);
+      expect(run.controller.state()).toBe('continuous');
+      font.resolve();
+      await vi.advanceTimersByTimeAsync(PAGES_TIMEOUT_MS);
+      expect(run.controller.state()).toBe('continuous');
+    });
+
+  it('keeps the live update timer from its start when the fonts load late',
+    async () => {
+      const run = harness();
+      run.controller.load(Promise.resolve());
+      await vi.advanceTimersByTimeAsync(0);
+      run.controller.settled(2);
+      runFrame();
+      const font = fonts();
+      run.controller.load(font.promise);
+      await vi.advanceTimersByTimeAsync(PAGES_TIMEOUT_MS - 1_000);
+      font.resolve();
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(run.controller.state()).toBe('continuous');
+    });
+
   it('shows the new continuous article when a live update fails',
     async () => {
       const run = harness();
@@ -282,5 +351,69 @@ describe('pages controller', () => {
     await vi.advanceTimersByTimeAsync(PAGES_TIMEOUT_MS);
     runFrame();
     expect(run.controller.state()).toBe('staging');
+  });
+
+  it('does not fall back while a live update runs in a hidden tab',
+    async () => {
+      const run = harness();
+      run.controller.load(Promise.resolve());
+      await vi.advanceTimersByTimeAsync(0);
+      run.controller.settled(2);
+      runFrame();
+      run.controller.load(Promise.resolve());
+      run.visibility.hide();
+      await vi.advanceTimersByTimeAsync(PAGES_TIMEOUT_MS * 5);
+      expect(run.controller.state()).toBe('updating');
+      run.controller.settled(3);
+      expect(run.controller.state()).toBe('shown');
+    });
+
+  it('does not start the update timer in a hidden tab', async () => {
+    const run = harness();
+    run.controller.load(Promise.resolve());
+    await vi.advanceTimersByTimeAsync(0);
+    run.controller.settled(2);
+    runFrame();
+    run.visibility.hide();
+    run.controller.load(Promise.resolve());
+    await vi.advanceTimersByTimeAsync(PAGES_TIMEOUT_MS * 5);
+    expect(run.controller.state()).toBe('updating');
+  });
+
+  it('restarts the full timeout when the tab becomes visible', async () => {
+    const run = harness();
+    run.controller.load(Promise.resolve());
+    await vi.advanceTimersByTimeAsync(0);
+    run.controller.settled(2);
+    runFrame();
+    run.controller.load(Promise.resolve());
+    await vi.advanceTimersByTimeAsync(PAGES_TIMEOUT_MS - 1_000);
+    run.visibility.hide();
+    await vi.advanceTimersByTimeAsync(PAGES_TIMEOUT_MS * 5);
+    run.visibility.show();
+    await vi.advanceTimersByTimeAsync(PAGES_TIMEOUT_MS - 1);
+    expect(run.controller.state()).toBe('updating');
+    await vi.advanceTimersByTimeAsync(1);
+    expect(run.controller.state()).toBe('continuous');
+  });
+
+  it('starts no timer on visibility changes when no run is waiting',
+    async () => {
+      const run = harness();
+      run.controller.load(Promise.resolve());
+      await vi.advanceTimersByTimeAsync(0);
+      run.controller.settled(2);
+      runFrame();
+      run.visibility.hide();
+      run.visibility.show();
+      await vi.advanceTimersByTimeAsync(PAGES_TIMEOUT_MS * 2);
+      expect(run.controller.state()).toBe('shown');
+    });
+
+  it('drops its visibility listener when disposed', () => {
+    const run = harness();
+    expect(run.visibility.listeners.size).toBe(1);
+    run.controller.dispose();
+    expect(run.visibility.listeners.size).toBe(0);
   });
 });

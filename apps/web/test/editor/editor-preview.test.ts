@@ -8,6 +8,7 @@ import { editorShellCopy } from '../../app/i18n/editor-shell';
 import { acceptedFixture } from './fixture';
 import { setSiteLocale } from '../support/locale';
 
+const unavailable = editorShellCopy.en.previewUnavailable;
 const WIDE_LAYOUT_WIDTH = 1440;
 const PHONE_LAYOUT_WIDTH = 390;
 
@@ -181,6 +182,53 @@ describe('EditorPreview', () => {
       );
       expect(wrapper.find('[data-testid="preview-sheet"]').exists())
         .toBe(false);
+      wrapper.unmount();
+    });
+
+  it('keeps the last pages when pagination fails after it settled',
+    async () => {
+      const accepted = acceptedFixture();
+      const wrapper = mount(EditorPreview, {
+        props: { document: accepted.document, lng: accepted.metadata.lng },
+        global: { stubs: { ResumeDocument: true } },
+      });
+      await nextTick();
+      const renderer = wrapper.getComponent({ name: 'ResumeDocument' });
+      renderer.vm.$emit('settled', 2);
+      renderer.vm.$emit('failed', new Error('later run failed'));
+      await nextTick();
+
+      expect(wrapper.text()).not.toContain(unavailable);
+      expect(wrapper.find('[data-testid="preview-sheet"]').exists())
+        .toBe(true);
+      wrapper.unmount();
+    });
+
+  it('retries the preview when the document changes after a failure',
+    async () => {
+      const accepted = acceptedFixture();
+      const wrapper = mount(EditorPreview, {
+        props: { document: accepted.document, lng: accepted.metadata.lng },
+        global: { stubs: { ResumeDocument: true } },
+      });
+      await nextTick();
+      wrapper.getComponent({ name: 'ResumeDocument' }).vm
+        .$emit('failed', new Error('fonts failed'));
+      await nextTick();
+      expect(wrapper.find('[data-testid="preview-sheet"]').exists())
+        .toBe(false);
+
+      await wrapper.setProps({
+        document: { ...accepted.document },
+      });
+
+      expect(wrapper.text()).not.toContain(unavailable);
+      expect(wrapper.find('[data-testid="preview-sheet"]').exists())
+        .toBe(true);
+      wrapper.getComponent({ name: 'ResumeDocument' }).vm
+        .$emit('failed', new Error('fails again'));
+      await nextTick();
+      expect(wrapper.text()).toContain(unavailable);
       wrapper.unmount();
     });
 

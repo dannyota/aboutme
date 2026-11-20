@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 import { mutationTest, proveMutation } from './style-mutation';
 import {
   expectContinuous, expectPageIndex, expectPagesState, FOCUS, PAGE,
-  PAGES_COPY, SCROLLER,
+  SCROLLER,
 } from './public-pages';
 
 const SLUG = 'harness-live';
@@ -138,17 +138,79 @@ async function openLivePage(
   };
 }
 
-async function updatedPhone(page: Page): Promise<void> {
+const PREVIOUS = '.public-pager > button:first-of-type';
+const PROBE = '#focus-probe';
+
+interface PhonePages {
+  readonly live: LivePage;
+  readonly count: number;
+}
+
+async function openPhone(page: Page): Promise<PhonePages> {
   const live = await openLivePage(page, 390);
   await expectPagesState(page, 'shown');
   const count = await page.locator(PAGE).count();
   expect(count).toBeGreaterThan(1);
-  await page.getByRole('button', { name: PAGES_COPY.vi.next }).click();
+  return { live, count };
+}
+
+async function pageForward(page: Page, count: number): Promise<void> {
+  await page.locator(SCROLLER).focus();
+  await page.keyboard.press('ArrowRight');
   await expectPageIndex(page, 'vi', 1, count);
+}
+
+async function deliverUpdate(page: Page, live: LivePage): Promise<void> {
   await live.update(2, NEXT_NAME);
   await expect(page.locator(`${PAGE} .resume-name`).first())
     .toHaveText(NEXT_NAME);
   await expectPagesState(page, 'shown');
+}
+
+async function expectFocusOn(page: Page, selector: string): Promise<void> {
+  await expect.poll(() => page.evaluate(
+    (target) => document.activeElement === document.querySelector(target),
+    selector,
+  ), FOCUS).toBe(true);
+}
+
+async function armFocusProbe(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const pages = document.querySelector('.public-pages')!;
+    const probe = document.createElement('button');
+    probe.id = 'focus-probe';
+    probe.type = 'button';
+    probe.textContent = 'probe';
+    pages.append(probe);
+    probe.focus();
+    const observer = new MutationObserver((records) => {
+      if (records.every((record) => probe.contains(record.target))) return;
+      observer.disconnect();
+      probe.remove();
+    });
+    observer.observe(pages, {
+      childList: true, characterData: true, subtree: true,
+    });
+  });
+  await expect(page.locator(PROBE)).toBeFocused();
+}
+
+async function lostFocusUpdate(page: Page): Promise<void> {
+  const { live, count } = await openPhone(page);
+  await pageForward(page, count);
+  await armFocusProbe(page);
+  await deliverUpdate(page, live);
+  await expect(page.locator(PROBE), 'The update removes the focused node.')
+    .toHaveCount(0);
+}
+
+async function keptFocusUpdate(page: Page): Promise<void> {
+  const { live, count } = await openPhone(page);
+  await pageForward(page, count);
+  await page.locator(PREVIOUS).focus();
+  await expectFocusOn(page, PREVIOUS);
+  await deliverUpdate(page, live);
+  await expectPageIndex(page, 'vi', 1, count);
 }
 
 async function failedUpdate(page: Page): Promise<string> {
@@ -165,15 +227,29 @@ async function failedUpdate(page: Page): Promise<string> {
 
 export function publicPagesLiveTests(): void {
   test.describe('public page live', () => {
-    test('an SSE update re-paginates and keeps the page index', async ({
-      page,
-    }) => {
-      await updatedPhone(page);
-      await expectPageIndex(page, 'vi', 1, await page.locator(PAGE).count());
-      await expect(page.locator(SCROLLER), FOCUS).toBeFocused();
-      await expect(page.locator('style[data-public-page-rule]'))
-        .toHaveCount(1);
-    });
+    test('an SSE update re-paginates and keeps the index and scroller focus',
+      async ({ page }) => {
+        const { live, count } = await openPhone(page);
+        await pageForward(page, count);
+        await expectFocusOn(page, SCROLLER);
+        await deliverUpdate(page, live);
+        await expectPageIndex(page, 'vi', 1, count);
+        await expectFocusOn(page, SCROLLER);
+        await expect(page.locator('style[data-public-page-rule]'))
+          .toHaveCount(1);
+      });
+
+    test('an SSE update leaves focus on a pager button the reader chose',
+      async ({ page }) => {
+        await keptFocusUpdate(page);
+        await expectFocusOn(page, PREVIOUS);
+      });
+
+    test('an SSE update that removes the focused node refocuses the scroller',
+      async ({ page }) => {
+        await lostFocusUpdate(page);
+        await expectFocusOn(page, SCROLLER);
+      });
 
     test('a failed SSE update shows the newest continuous article',
       async ({ page }) => {
@@ -201,20 +277,35 @@ export function publicPagesLiveTests(): void {
     });
   });
 
-  mutationTest('public live update rejects lost scroller focus', async ({
-    page,
-  }) => {
-    await updatedPhone(page);
-    const scroller = page.locator(SCROLLER);
-    await proveMutation(() => expect(scroller, FOCUS).toBeFocused(),
-      async () => {
-        await page.locator('.public-credit').focus();
-        await expect(page.locator('.public-credit')).toBeFocused();
-        return async () => {
-          await scroller.focus();
-        };
-      }, FOCUS);
-  });
+  mutationTest('public live update rejects focus left on body after loss',
+    async ({ page }) => {
+      await lostFocusUpdate(page);
+      await proveMutation(() => expectFocusOn(page, SCROLLER),
+        async () => {
+          await page.evaluate(() => {
+            (document.activeElement as HTMLElement | null)?.blur();
+          });
+          await expect.poll(() => page.evaluate(() =>
+            document.activeElement === document.body),
+          'The mutation leaves focus on the body.').toBe(true);
+          return async () => {
+            await page.locator(SCROLLER).focus();
+          };
+        }, FOCUS);
+    });
+
+  mutationTest('public live update rejects focus pulled off a pager button',
+    async ({ page }) => {
+      await keptFocusUpdate(page);
+      await proveMutation(() => expectFocusOn(page, PREVIOUS),
+        async () => {
+          await page.locator(SCROLLER).focus();
+          await expectFocusOn(page, SCROLLER);
+          return async () => {
+            await page.locator(PREVIOUS).focus();
+          };
+        }, FOCUS);
+    });
 
   mutationTest('public fallback rejects a stale page after a failed update',
     async ({ page }) => {

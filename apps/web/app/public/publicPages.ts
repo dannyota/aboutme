@@ -17,12 +17,18 @@ export interface PagesTimers {
   cancelAnimationFrame(id: number): void;
 }
 
+export interface PagesVisibility {
+  hidden(): boolean;
+  subscribe(listener: () => void): () => void;
+}
+
 export interface PagesControllerOptions {
   readonly withinFirstPage: () => boolean;
   readonly onState: (state: PagesState) => void;
   readonly onPages?: (count: number, update: boolean) => void;
   readonly timeoutMs?: number;
   readonly timers?: PagesTimers;
+  readonly visibility?: PagesVisibility;
 }
 
 export interface PagesController {
@@ -56,10 +62,22 @@ const browserTimers = (): PagesTimers => ({
   cancelAnimationFrame: (id) => window.cancelAnimationFrame(id),
 });
 
+const browserVisibility = (): PagesVisibility => ({
+  hidden: () => window.document.visibilityState === 'hidden',
+  subscribe: (listener) => {
+    window.document.addEventListener('visibilitychange', listener);
+    return () => window.document.removeEventListener(
+      'visibilitychange',
+      listener,
+    );
+  },
+});
+
 export function createPagesController(
   options: PagesControllerOptions,
 ): PagesController {
   const timers = options.timers ?? browserTimers();
+  const visibility = options.visibility ?? browserVisibility();
   const timeoutMs = options.timeoutMs ?? PAGES_TIMEOUT_MS;
   let state: PagesState = 'loading';
   let attempt = 0;
@@ -67,6 +85,7 @@ export function createPagesController(
   let timer: number | undefined;
   let frame: number | undefined;
   let disposed = false;
+  let waiting = false;
 
   const setState = (next: PagesState): void => {
     if (state === next) return;
@@ -76,6 +95,7 @@ export function createPagesController(
   const clearTimer = (): void => {
     if (timer !== undefined) timers.clearTimeout(timer);
     timer = undefined;
+    waiting = false;
   };
   const clearFrame = (): void => {
     if (frame !== undefined) timers.cancelAnimationFrame(frame);
@@ -87,15 +107,30 @@ export function createPagesController(
     clearFrame();
     setState('continuous');
   };
+  const schedule = (): void => {
+    timer = timers.setTimeout(() => {
+      timer = undefined;
+      waiting = false;
+      failed();
+    }, timeoutMs);
+  };
+  const startTimer = (): void => {
+    clearTimer();
+    waiting = true;
+    if (!visibility.hidden()) schedule();
+  };
+  const unsubscribe = visibility.subscribe(() => {
+    if (disposed || !waiting) return;
+    if (timer !== undefined) {
+      timers.clearTimeout(timer);
+      timer = undefined;
+    }
+    if (!visibility.hidden()) schedule();
+  });
   const arm = (current: number): void => {
     if (disposed || current !== attempt || settledAttempt === current) return;
     if (state === 'loading') setState('staging');
-    if (state !== 'staging' && state !== 'updating') return;
-    clearTimer();
-    timer = timers.setTimeout(() => {
-      timer = undefined;
-      failed();
-    }, timeoutMs);
+    if (state === 'staging') startTimer();
   };
 
   return {
@@ -106,8 +141,10 @@ export function createPagesController(
       const current = attempt;
       clearTimer();
       clearFrame();
-      if (state === 'shown' || state === 'updating') setState('updating');
-      else if (state === 'continuous') setState('loading');
+      if (state === 'shown' || state === 'updating') {
+        setState('updating');
+        startTimer();
+      } else if (state === 'continuous') setState('loading');
       fonts.then(() => arm(current), () => {
         if (current === attempt) failed();
       });
@@ -140,6 +177,7 @@ export function createPagesController(
     failed,
     dispose: () => {
       disposed = true;
+      unsubscribe();
       clearTimer();
       clearFrame();
     },
