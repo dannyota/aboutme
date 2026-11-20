@@ -7,18 +7,17 @@ The primary session runs as `manager`. It plans, briefs, verifies each worker it
 |Work|Model|
 |-|-|
 |Design, documents, and decisions|The primary|
-|Implementation, troubleshooting with its fix, and QA proofs|Latest Claude Opus, currently Opus 5.5, as a subagent of the primary or of the Ubuntu host session|
-|UI design and visual direction (owner, 2026-11-15)|Claude Opus or Fable as such a subagent|
-|Frontend implementation|Latest Claude Opus as such a subagent; Fable never writes code (owner, 2026-11-18)|
-|Independent review and fix confirmation: code, architecture and contract designs, adversarial passes|A fresh latest-Opus subagent of the primary (owner, 2026-11-18)|
+|Implementation, troubleshooting with its fix, and QA proofs|Claude Sonnet as a subagent of the primary, or Codex Terra (`implementer`, `troubleshooter`, `qa`)|
+|Independent review and fix confirmation: code, architecture and contract designs, adversarial passes|A fresh Claude Opus subagent of the primary, or Codex Sol (`code_reviewer`, `design_reviewer`)|
+|Hard and complex work: security, concurrency or migration code, or a task that failed twice|Claude Fable or Codex Astra, never a default|
+|UI design and visual direction (owner, 2026-11-15)|Claude Opus or Fable as a subagent|
 |Exploration, searches, summaries, mechanical reading|An Explore subagent|
-|A second model family, when the primary judges it worth the cost|Codex roles through `scripts/codex-agent.sh` (optional)|
 
-Work runs on Claude models (owner, 2026-11-18). Subagents each work in their own worktree, run bounded build, vet, lint, and test commands under the managed lock, and never change Git state or dispatch other agents.
+Model routing is the owner's (2026-11-20). When Codex is out, Opus reviews, Sonnet implements, and Fable takes the hard and complex work. The reviewing model is never the one that implemented the work. Subagents each work in their own worktree, run bounded build, vet, lint, and test commands under the managed lock, and never change Git state or dispatch other agents.
 
 The primary (owner, 2026-11-10) writes designs, ADR edits, and documentation itself, reviews them, and makes the decisions. Its documentation and prose need no independent review. An architecture or contract design and all code still get one independent review (owner, 2026-11-10). The reviewer is a separate agent with fresh context: it gets the code or design, the authorities and the check output, never the author's conclusions, and it never implements what it reviews.
 
-The owner chooses the primary session's model. Workers and subagents never run on Sonnet. Implementers work in any lane within the brief's owned paths. When the primary dispatches Codex, it uses `scripts/codex-agent.sh [--model <m>] [--effort <e>] [--search] <role> <worktree> <brief-file> <report-file>` with the role TOML defaults in `.codex/agents/`.
+The owner chooses the primary session's model. Implementers work in any lane within the brief's owned paths. When the primary dispatches Codex, it uses `scripts/codex-agent.sh [--model <m>] [--effort <e>] [--search] <role> <worktree> <brief-file> <report-file>` with the role TOML defaults in `.codex/agents/`.
 
 Design proposals cover benefits, trade-offs, dependencies, limits, alternatives, migration and loss rules, older-client behavior, security, size, and release order. The owner approves product-visible choices before code starts. UI specs give exact values, breakpoints, and copy in both languages. Research cites first-party sources and marks claims supported only by secondary sources as needing verification.
 
