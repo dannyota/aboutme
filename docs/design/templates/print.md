@@ -24,7 +24,10 @@ follow:
 
 - The editor's page count is **advisory** and must be labelled as an estimate in
   the UI. No product rule — publish policy, quota, pricing, validation — may
-  depend on it.
+  depend on it. The public page's `n / N` under each sheet is a position on that
+  page, not a count ([PDF pages](../public-pdf-pages.md#page-positions)).
+- Browser print of the public page prints its continuous article with the
+  template's `@page` rule, so Chromium paginates it as it does the PDF.
 - The server never accepts a client-supplied page count. A client measurement
   cannot become load-bearing input to a server render.
 

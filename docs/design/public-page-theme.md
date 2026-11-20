@@ -2,15 +2,18 @@
 
 This page specifies two changes to the public resume page at `/{slug}`: a
 compact page bar in the application identity, and an owner-chosen color scheme
-that can show the resume on a dark ground. The PDF, print, and the link-preview
-card stay light in every case.
+for the desk and the bar around the resume's pages. The resume pages, the PDF,
+print, and the link-preview card stay light in every case.
 
 Status: approved (2026-09-27) and built. The owner approved the direction: light
 by default, the owner chooses the scheme per resume, and viewers see the owner's
 choice. The dark scheme changes the white-sheet rule of
 [ADR 0020](../adr/0020-application-visual-identity.md) and adds document v5 to
 [ADR 0004](../adr/0004-resume-document-contract.md). Both records now carry the
-change as accepted (2026-09-27); the page bar needs no contract change.
+change as accepted (2026-09-27); the page bar needs no contract change. On
+2026-11-19 the owner kept the pages light in Dark
+([PDF pages](public-pdf-pages.md#owner-decisions)): the scheme sets only the
+desk and the bar.
 
 ## Owner decisions
 
@@ -19,7 +22,8 @@ change as accepted (2026-09-27); the page bar needs no contract change.
   Match device. Match device follows each viewer's `prefers-color-scheme`.
 - Viewers see what the owner chose. The page has no viewer toggle (see
   [No viewer toggle](#no-viewer-toggle)).
-- The PDF, browser print, and the link-preview card are always light.
+- The resume pages, the PDF, browser print, and the link-preview card are always
+  light; the scheme sets the desk and the bar (2026-11-19).
 
 ## Open decisions
 
@@ -47,8 +51,8 @@ every item as written on 2026-09-27.
    follows the page's scheme with its own palette, so a light card never sits on
    a dark page. Its card floats with `--shadow-float`, and its Create action is
    a main pill (`#594BAD` light, `#7267C0` dark, white label).
-6. **Editor copy and preview.** Approved (2026-09-27): the field copy below, and
-   a Web preview that follows the editing device for Match device.
+6. **Editor copy and preview.** Approved (2026-09-27): the field copy below. The
+   Web preview was removed on 2026-11-19; the editor shows the PDF preview.
 
 ## Page bar
 
@@ -132,25 +136,21 @@ The field is the first item of the Design panel's Colors group, above the five
 colors. It uses the same select control as the panel's other enum fields, and it
 shows and clears an absent value as `font.textAlign` does.
 
-| Item         | Vietnamese                                                                    | English                                                               |
-| ------------ | ----------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| Label        | `Giao diện trang web`                                                         | `Web page theme`                                                      |
-| Option light | `Sáng`                                                                        | `Light`                                                               |
-| Option dark  | `Tối`                                                                         | `Dark`                                                                |
-| Option match | `Theo thiết bị`                                                               | `Match device`                                                        |
-| Hint         | `Người xem thấy giao diện này trên trang công khai. PDF và bản in luôn sáng.` | `Readers see this on your public page. The PDF and print stay light.` |
+| Item         | Vietnamese                                                                                                | English                                                                                                          |
+| ------------ | --------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Label        | `Giao diện trang web`                                                                                     | `Web page theme`                                                                                                 |
+| Option light | `Sáng`                                                                                                    | `Light`                                                                                                          |
+| Option dark  | `Tối`                                                                                                     | `Dark`                                                                                                           |
+| Option match | `Theo thiết bị`                                                                                           | `Match device`                                                                                                   |
+| Hint         | `Người xem thấy giao diện này ở nền và thanh của trang công khai. Các trang CV, PDF và bản in luôn sáng.` | `Readers see this behind the pages and in the bar of your public page. The pages, the PDF and print stay light.` |
 
 The label says web page because the setting applies only there. Match device
 says what readers get in plainer words than System.
 
 ### Editor preview
 
-- Web mode shows the chosen scheme on the paper sheets of the
-  [web layout](public-web-layout.md), with no chrome frame.
-- Match device follows the editing device's `prefers-color-scheme`, which is
-  what a reader on the same device sees. The editor's own light or dark theme
-  does not drive the preview.
-- PDF mode is always light, because it shows the PDF.
+- The editor shows only the PDF preview, always light, because the public page
+  shows the same pages. The scheme changes only the public page's desk and bar.
 - Template thumbnails, the Library, template pages, the homepage sample, and the
   new-resume screens always render light.
 
@@ -162,32 +162,25 @@ remembered choice would also need a script to run before first paint, which the
 public page's strict script policy forbids, so the page would flash the wrong
 scheme on every load.
 
-## Dark palette rule
+## Desk and bar
 
-The [dark palette rule](public-page-dark-palette.md) maps the resume's five
-authored colors to dark source colors, and defines how the dark roles reach the
-page and the dark values for each preset.
-
-### How it reaches the page
-
-See
-[How it reaches the page](public-page-dark-palette.md#how-it-reaches-the-page).
-
-### Template mapping
-
-See [Template mapping](public-page-dark-palette.md#template-mapping).
+The [PDF pages](public-pdf-pages.md#what-a-viewer-sees) design owns the desk
+color per scheme, and the [page bar](public-page-bar.md) its scoped tokens. The
+[dark palette rule](public-page-dark-palette.md) is superseded: no rule darkens
+the resume.
 
 ## What stays light
 
-| Output                                      | Why it stays light                                            |
-| ------------------------------------------- | ------------------------------------------------------------- |
-| PDF download and the owner's PDF            | Snapshot drops the field; the print app passes no scheme      |
-| Browser print of the public page            | Screen-only dark rule; print flattens the sheets (web layout) |
-| Link-preview card                           | The card envelope carries no scheme                           |
-| Sign-in gate page                           | aboutme chrome before the resume; its envelope is unchanged   |
-| Library, template pages, thumbnails, sample | Their render context carries no scheme                        |
-| "What an ATS reads" tab                     | A sample's text on a `.paper-surface` panel, unchanged        |
-| `/{slug}.md` and the PDF text layer         | Text only; the scheme changes no content, order, or wording   |
+| Output                                      | Why it stays light                                          |
+| ------------------------------------------- | ----------------------------------------------------------- |
+| PDF download and the owner's PDF            | Snapshot drops the field; the print app passes no scheme    |
+| Resume pages on the public page             | Pages keep the PDF's colors in every scheme (PDF pages)     |
+| Browser print of the public page            | Print shows the continuous article on its authored ground   |
+| Link-preview card                           | The card envelope carries no scheme                         |
+| Sign-in gate page                           | aboutme chrome before the resume; its envelope is unchanged |
+| Library, template pages, thumbnails, sample | Their render context carries no scheme                      |
+| "What an ATS reads" tab                     | A sample's text on a `.paper-surface` panel, unchanged      |
+| `/{slug}.md` and the PDF text layer         | Text only; the scheme changes no content, order, or wording |
 
 The ATS text is the same in both schemes: the scheme changes only colors, never
 the DOM order, text, or hidden state.
@@ -208,10 +201,9 @@ Tests to add or change:
   bar is hidden in print.
 - The Go validator tests pass the new bar markup in Vietnamese and English, with
   download on and off.
-- A unit test runs the dark rule over all twenty presets and both columns and
-  asserts every [floor](public-page-dark-palette.md) on every surface.
-- A dark public page under print media computes the light surface color.
-- The render and hydration tests cover `data-color-scheme` and the bar markup.
+- A dark public page keeps light pages on screen and in print; the desk and bar
+  follow the scheme.
+- The render and hydration tests cover the desk scheme and the bar markup.
 - Go tests cover the v4 and v5 converters in both directions, the declared v4
   loss, a v1 to v4 write keeping the stored scheme, the customization allowlist
   set and unset paths, the public projection copying it, and the print snapshot

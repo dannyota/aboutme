@@ -11,11 +11,10 @@ on a phone.
 
 ## Structure
 
-The bar is the first child of `.public-resume-page`, above the sheets. It has no
+The bar is the first child of `.public-resume-page`, above the pages. It has no
 ground or bottom rule of its own and sits on the desk of the
-[web layout](public-web-layout.md#page-bar-and-invite), inside `main` and
-outside the article, with its inner row at the sheet's outer width. Project
-pages keep the bar with its ground and bottom rule.
+[PDF pages](public-pdf-pages.md#what-a-viewer-sees), inside `main` and outside
+the article. Project pages keep the bar with its ground and bottom rule.
 
 ```html
 <div class="public-toolbar">
@@ -90,19 +89,19 @@ and under Match device when the viewer prefers dark.
 | Focus ring            | `#1A1650` | `#CDBCD9` | Ring             |
 | Button shadow         | none      | none      |                  |
 
-On the desk of the [web layout](public-web-layout.md#page-bar-and-invite) the
-mark measures 3.59:1 light and 6.51:1 dark, the credit text 5.54:1 and 6.55:1,
-and the button label 12.42:1 and 11.68:1. Before the desk, measured contrast
-was: the mark 4.76:1 light and 6.85:1 dark; credit text 7.34:1 and 6.89:1; the
-button label 16.48:1 light and 12.29:1 dark, 14.49:1 and 10.42:1 on the hover
-fill; the button border is the label color.
+On the desk of the [PDF pages](public-pdf-pages.md#what-a-viewer-sees) the mark
+measures 3.59:1 light and 6.51:1 dark, the credit text 5.54:1 and 6.55:1, and
+the button label 12.42:1 and 11.68:1. Before the desk, measured contrast was:
+the mark 4.76:1 light and 6.85:1 dark; credit text 7.34:1 and 6.89:1; the button
+label 16.48:1 light and 12.29:1 dark, 14.49:1 and 10.42:1 on the hover fill; the
+button border is the label color.
 
 ## Size and placement
 
 | Property               | Value                                                                                         |
 | ---------------------- | --------------------------------------------------------------------------------------------- |
 | Bar height             | 48 px, or 56 px on a touch screen; 8 px block padding at top and bottom                       |
-| Inner row width        | the sheet width of the web layout, centered                                                   |
+| Inner row width        | `min(100% - 32px, page width)`, centered; `calc(100% - 20px)` under 600 px                    |
 | Inner inline padding   | `clamp(6px, 2cqi - 2px, 26px)`                                                                |
 | Row layout             | brand left, actions right; 16 px gap, 8 px on phones                                          |
 | Wrap                   | one row down to 360 px; below that the row wraps with an 8 px row gap and the actions go last |
@@ -119,22 +118,20 @@ fill; the button border is the label color.
 
 The buttons match the application `outline` pill at size `sm`.
 
-The row spans the sheet's outer width from the
-[web layout](public-web-layout.md#sheets) with inline padding
-`clamp(6px, 2cqi - 2px, 26px)`, so on a phone the row starts 16 px from the
-edge: 10 px of desk plus 6 px.
-
-At 1440 px the brand sits 26 px inside the first sheet's left edge and the
-button's right edge 26 px inside its right edge. On a phone the bar keeps a 16
-px gutter. Both languages fit one row at 360 px on a touch screen with both
-buttons. At 320 px the row may wrap, and the actions sit under the credit.
+The row is as wide as the page, `min(100% - 32px, page width)`, with inline
+padding `clamp(6px, 2cqi - 2px, 26px)`; at 1440 px the brand sits 26 px inside
+the first page's left edge and the button's right edge 26 px inside its right
+edge. Under 600 px the row is `calc(100% - 20px)`, so its text starts 16 px from
+the screen edge (10 px of desk plus 6 px) and the row keeps one line at 360 px.
+Both languages fit one row at 360 px on a touch screen with both buttons. At 320
+px the row may wrap, and the actions sit under the credit.
 
 ## Behavior
 
 - The bar is not sticky. It scrolls away with the page, so it never covers the
   resume on any screen. A reader sees it first, where the download is most
   useful, and the page needs no script for it.
-- The first sheet starts below the bar with the sheet gap.
+- The first page starts below the bar with the page gap.
 - When the owner turned PDF download off, the bar drops only Download PDF, at
   the same height. With no available project, the brand stands alone on the
   left.

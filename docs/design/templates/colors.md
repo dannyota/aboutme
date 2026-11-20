@@ -9,11 +9,8 @@ Templates and components address roles, never the raw hex values. Every role is
 derived by `useResumeStyles`; the raw values in `customization.colors` are never
 mutated.
 
-A dark or `system` `customization.colorScheme` on the public page first maps the
-five authored colors to dark sources, then runs this same derivation and its
-floors once more. The
-[dark palette rule](../public-page-theme.md#dark-palette-rule) owns that
-mapping.
+`customization.colorScheme` never changes the resume's colors: it sets only the
+public page's desk and bar ([PDF pages](../public-pdf-pages.md)).
 
 | Role                      | Source                                                                         | Contrast target              |
 | ------------------------- | ------------------------------------------------------------------------------ | ---------------------------- |
@@ -146,14 +143,12 @@ color choice.
 can produce is `--fs-meta` at `max(0.9 × base, 9px)`. A base below 13 px (≈ 9.75
 pt) is below normal print-legibility practice; the renderer must not silently
 override the user's explicit choice, so the containment is an editor warning,
-and the residual risk is recorded in `limitations.md` §9.7. The one exception is
-the screen-only floor of the
-[web layout](../public-web-layout.md#inside-a-sheet), which never reaches the
-PDF. The same reasoning applies to `spacing.*` at `0`: legal, explicit, and not
-overridden. That includes `spacing.pageMargin` at `0`, which puts content inside
-the unprintable edge of most desktop printers — again an editor warning, never a
-schema rejection, since a screen-only or professionally trimmed resume is a
-legitimate use.
+and the residual risk is recorded in `limitations.md` §9.7. The same reasoning
+applies to `spacing.*` at `0`: legal, explicit, and not overridden. That
+includes `spacing.pageMargin` at `0`, which puts content inside the unprintable
+edge of most desktop printers — again an editor warning, never a schema
+rejection, since a screen-only or professionally trimmed resume is a legitimate
+use.
 
 **Contrast.** Measured as the WCAG 2.x relative-luminance ratio.
 
