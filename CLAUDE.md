@@ -19,10 +19,10 @@
 - Before every push: `make pre-push` (static checks only; transition rules in resources).
 - Owner landing gate: the [local gate](instructions/verification.md#local-gate) on the Ubuntu host for the paths a change touches; follow [workflow](instructions/workflow.md#flow).
 - Land: push a branch without a pull request; after review where required and a passing local gate, merge with a signed `--no-ff` merge and push `main`. Follow [workflow](instructions/workflow.md#flow).
-- Close notifications after landing: list with `gh api 'notifications?all=true&per_page=100' --paginate --jq '.[] | select(.repository.full_name=="dannyota/aboutme") | "\(.id) \(.subject.title)"'`, review, then `gh api -X DELETE notifications/threads/<id>` for each handled thread.
+- Close notifications after landing: list with `gh api 'notifications?all=true&per_page=100' --paginate --jq '.[] | select(.repository.id==1318874703) | "\(.id) \(.subject.title)"'`, review, then `gh api -X DELETE notifications/threads/<id>` for each handled thread.
 - Troubleshoot: save each failing job's whole log with `gh run view <run> --job <job> --log > <scratchpad>/run-<run>-<job>.log` and the run's artifacts with `gh run download <run> -D <scratchpad>/run-<run>`, then dispatch `troubleshooter` with those paths.
-- Find a commit's runs with `gh api "repos/dannyota/aboutme/actions/runs?head_sha=<sha>"`; `gh run list --branch` lags after a push.
-- For a finished job while its run is still in progress, get its log with `gh api --allow-escape-sequences repos/dannyota/aboutme/actions/jobs/<job-id>/logs` and strip ANSI codes; `gh run view --log` refuses until the run completes.
+- Find a commit's runs with `gh api "repos/dntmakers/aboutme/actions/runs?head_sha=<sha>"`; `gh run list --branch` lags after a push.
+- For a finished job while its run is still in progress, get its log with `gh api --allow-escape-sequences repos/dntmakers/aboutme/actions/jobs/<job-id>/logs` and strip ANSI codes; `gh run view --log` refuses until the run completes.
 - Display checks: follow [web rules](instructions/web.md) for display assertions, mutation tests and optional review images. Native Mac proofs remain pending runner acceptance; contributor heads use hosted CI.
 - Release: `gh workflow run release-check.yml --ref main`; when green, `git tag -s vX.Y.Z <sha>`, push the tag, wait for `release-images`, then deploy ([releases](instructions/releases.md)).
 - Deploy: `DEPLOY_HOST=<host> bash deploy/vn/scripts/deploy.sh vX.Y.Z` after green `main` CI and release-images ([releases](instructions/releases.md)).
@@ -36,8 +36,8 @@
 - GNU tools come first on PATH on the Mac: `sed -i`, not `sed -i ''`.
 - Start long jobs with `run_in_background` (or a done-file plus a background waiter); `( … ) &` inside one Bash call is not tracked.
 - Pushing a commit to a branch with an open pull request cancels its running CI (workflow concurrency); batch fixes instead of pushing mid-run.
-- Worktrees have no `node_modules`: ESM scripts ignore `NODE_PATH`. For one-off checks symlink the main checkout's ignored `node_modules` and remove it after; `make pre-push` refuses symlinked dependencies, so run Prettier and markdownlint from the main checkout's `node_modules/.bin`.
-- New GHCR packages start private; only the owner can make one public, in its settings page. Check anonymous pulls with the registry token flow (`curl "https://ghcr.io/token?scope=repository:dannyota/<pkg>:pull"`, then the manifest URL); an empty podman auth file can falsely report a denial.
+- `make pre-push` and `make ci-local` require checkout-local dependencies; `NODE_PATH` does not fix ESM resolution. For standalone Markdown checks, invoke installed Prettier and markdownlint directly. Those checks do not replace `make pre-push`.
+- If a new GHCR package is private, its owner makes it public in package settings. Check anonymous pulls with the registry token flow (`curl "https://ghcr.io/token?scope=repository:<owner>/<pkg>:pull"`, then the manifest URL); an empty podman auth file can falsely report a denial.
 - Chain checks and push with `&&`, never `;`: a `;` pushed a branch once after pre-push failed.
 - A CI job proves its result only on its runner image: read the `Image`/`Version` lines in the job log. A green rerun on an older image proves nothing.
 - Nuxt Vitest in a worktree with symlinked `node_modules` needs `pnpm exec --config.verify-deps-before-run=false` and the main checkout's path in `server.fs.allow`; prefer hosted CI there.
