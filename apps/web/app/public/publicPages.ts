@@ -87,15 +87,17 @@ export function createPagesController(
     clearFrame();
     setState('continuous');
   };
-  const arm = (current: number): void => {
-    if (disposed || current !== attempt || settledAttempt === current) return;
-    if (state === 'loading') setState('staging');
-    if (state !== 'staging' && state !== 'updating') return;
+  const startTimer = (): void => {
     clearTimer();
     timer = timers.setTimeout(() => {
       timer = undefined;
       failed();
     }, timeoutMs);
+  };
+  const arm = (current: number): void => {
+    if (disposed || current !== attempt || settledAttempt === current) return;
+    if (state === 'loading') setState('staging');
+    if (state === 'staging') startTimer();
   };
 
   return {
@@ -106,8 +108,10 @@ export function createPagesController(
       const current = attempt;
       clearTimer();
       clearFrame();
-      if (state === 'shown' || state === 'updating') setState('updating');
-      else if (state === 'continuous') setState('loading');
+      if (state === 'shown' || state === 'updating') {
+        setState('updating');
+        startTimer();
+      } else if (state === 'continuous') setState('loading');
       fonts.then(() => arm(current), () => {
         if (current === attempt) failed();
       });

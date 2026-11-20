@@ -165,8 +165,7 @@ watch(() => renderPageRule(geometry.value), (rule) => {
 
 watch(() => [props.document, props.context] as const, () => {
   const active = window.document.activeElement;
-  focusInside = active === null || active === window.document.body
-    || root.value?.contains(active) === true;
+  focusInside = active !== null && root.value?.contains(active) === true;
   measureViewport();
   controller.load(loadFonts());
 });

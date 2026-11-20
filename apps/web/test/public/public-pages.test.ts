@@ -219,6 +219,40 @@ describe('pages controller', () => {
       expect(run.controller.state()).toBe('continuous');
     });
 
+  it('times out a live update from its start when the fonts never load',
+    async () => {
+      const run = harness();
+      run.controller.load(Promise.resolve());
+      await vi.advanceTimersByTimeAsync(0);
+      run.controller.settled(2);
+      runFrame();
+      const font = fonts();
+      run.controller.load(font.promise);
+      expect(run.controller.state()).toBe('updating');
+      await vi.advanceTimersByTimeAsync(PAGES_TIMEOUT_MS - 1);
+      expect(run.controller.state()).toBe('updating');
+      await vi.advanceTimersByTimeAsync(1);
+      expect(run.controller.state()).toBe('continuous');
+      font.resolve();
+      await vi.advanceTimersByTimeAsync(PAGES_TIMEOUT_MS);
+      expect(run.controller.state()).toBe('continuous');
+    });
+
+  it('keeps the live update timer from its start when the fonts load late',
+    async () => {
+      const run = harness();
+      run.controller.load(Promise.resolve());
+      await vi.advanceTimersByTimeAsync(0);
+      run.controller.settled(2);
+      runFrame();
+      const font = fonts();
+      run.controller.load(font.promise);
+      await vi.advanceTimersByTimeAsync(PAGES_TIMEOUT_MS - 1_000);
+      font.resolve();
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(run.controller.state()).toBe('continuous');
+    });
+
   it('shows the new continuous article when a live update fails',
     async () => {
       const run = harness();
