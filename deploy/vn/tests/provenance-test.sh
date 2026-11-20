@@ -49,6 +49,7 @@ for owner in dannyota dntmakers; do
   GH_OUT=$(statement "ghcr.io/$owner/aboutme-server" "$hex" "$owner")
   expect "ok $owner" server 0 "$digest" "$commit"
   want="attestation verify oci://ghcr.io/$owner/aboutme-server@$digest --repo $owner/aboutme"
+  [[ $owner != dannyota ]] || want+=" --bundle-from-oci"
   want+=" --cert-identity https://github.com/$owner/aboutme/.github/workflows/release-images.yml@refs/tags/v1.2.3"
   want+=" --source-ref refs/tags/v1.2.3 --source-digest $commit --deny-self-hosted-runners --format json"
   [[ $(cat "$CALLS") == "$want" ]] || fail "ok $owner: gh called with '$(cat "$CALLS")'"
@@ -81,6 +82,11 @@ grep -qF "names a different subject" "$work/said" || fail "subject_other_owner: 
 repo=dannyota/aboutme
 GH_OUT=$(statement ghcr.io/dannyota/aboutme-server "$hex" dntmakers)
 expect dannyota_with_dntmakers_ids server 1 "$digest" "$commit"
+GH_OUT=$(attestation ghcr.io/dannyota/aboutme-server "$hex" dannyota '"1318874704"' '"244348267"' | jq -sc .)
+expect dannyota_other_id server 1 "$digest" "$commit"
+grep -qF -- " --bundle-from-oci" "$CALLS" || fail "dannyota_other_id: no legacy bundle option"
+grep -qF "provenance: the build provenance for server@$digest names a different repository or owner" "$work/said" ||
+  fail "dannyota_other_id: no message"
 
 for bad in evil/aboutme Dntmakers/aboutme DANNYOTA/aboutme dntmakers/other dntmakers dntmakers/aboutme/x '' 'dntmakers/aboutme '; do
   repo=$bad
@@ -93,6 +99,14 @@ repo=dannyota/aboutme
 GH_EXIT=1 GH_OUT=
 expect gh_refuses server 1 "$digest" "$commit"
 grep -qF "no valid build provenance for server@$digest from v1.2.3" "$work/said" || fail "gh_refuses: no message"
+[[ $(wc -l <"$CALLS") == 1 ]] || fail "gh_refuses: gh called more than once"
+grep -qF -e " --bundle-from-oci" "$CALLS" || fail "gh_refuses: no legacy bundle option"
+repo=dntmakers/aboutme
+expect gh_refuses_dntmakers server 1 "$digest" "$commit"
+[[ $(wc -l <"$CALLS") == 1 ]] || fail "gh_refuses_dntmakers: gh called more than once"
+grep -qF "no valid build provenance for server@$digest from v1.2.3" "$work/said" || fail "gh_refuses_dntmakers: no message"
+! grep -qF -e "--bundle-from-oci" "$CALLS" || fail "gh_refuses_dntmakers: legacy bundle option"
+repo=dannyota/aboutme
 GH_EXIT=0
 
 GH_OUT=$(statement ghcr.io/dannyota/aboutme-web "$hex")

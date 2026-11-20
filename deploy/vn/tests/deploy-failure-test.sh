@@ -858,11 +858,13 @@ for OWNER_FILE in '' dannyota dntmakers; do
       grep -qF -- "https://ghcr.io/v2/$owner/aboutme-$name/manifests/v0.1.1" "$work/external.log" &&
         grep -qF -- "scope=repository:$owner/aboutme-$name:pull" "$work/external.log" ||
         owner_fail "$mode with repository file $label did not read $name from $owner"
-      grep -qxF -- "attestation verify oci://ghcr.io/$owner/aboutme-$name@sha256:$platform --repo $owner/aboutme --cert-identity https://github.com/$owner/aboutme/.github/workflows/release-images.yml@refs/tags/v0.1.1 --source-ref refs/tags/v0.1.1 --source-digest $commit_sha --deny-self-hosted-runners --format json" "$work/verify.log" ||
+      legacy_option=''
+      [[ $owner != dannyota ]] || legacy_option=' --bundle-from-oci'
+      grep -qxF -- "attestation verify oci://ghcr.io/$owner/aboutme-$name@sha256:$platform --repo $owner/aboutme$legacy_option --cert-identity https://github.com/$owner/aboutme/.github/workflows/release-images.yml@refs/tags/v0.1.1 --source-ref refs/tags/v0.1.1 --source-digest $commit_sha --deny-self-hosted-runners --format json" "$work/verify.log" ||
         owner_fail "$mode with repository file $label did not verify $name under $owner"
     done
     if grep -qF -e "ghcr.io/v2/$other/" -e "repository:$other/" "$work/external.log" ||
-       grep -qF -e "ghcr.io/$other/aboutme-server" -e "ghcr.io/$other/aboutme-web" -e "$other/aboutme --cert" "$work/verify.log"; then
+       grep -qF -e "ghcr.io/$other/aboutme-server" -e "ghcr.io/$other/aboutme-web" -e "--repo $other/aboutme" "$work/verify.log"; then
       owner_fail "$mode with repository file $label read the $other namespace"
     fi
     case $mode in
