@@ -843,7 +843,7 @@ test('proves a published resume hydrates in a real browser', async ({
       .toHaveAttribute('data-pages', 'shown');
     await expect(publicPage.locator('.public-resume-page > .resume-document'))
       .toHaveCSS('display', 'none');
-    expect(await publicPage.locator(VISIBLE_PAGES).count()).toBeGreaterThan(0);
+    expect(await publicPage.locator(VISIBLE_PAGES).count()).toBe(1);
     const visibleLinks = await publicPage.evaluate((visible) =>
       Array.from(document.querySelectorAll(visible)).flatMap((resume) =>
         Array.from(resume.querySelectorAll('a[href]'),
@@ -1051,7 +1051,7 @@ test('proves a published resume hydrates in a real browser', async ({
     expect(layout.pageGround).toBe('rgba(0, 0, 0, 0)');
     const paper = rgbOf(String(authored.background).toLowerCase());
     expect(paper).not.toBe(DARK_DESK);
-    expect(layout.pages.length).toBeGreaterThan(0);
+    expect(layout.pages.length).toBe(1);
     layout.pages.forEach((sheet, index) => {
       expect(sheet.ground, `sheet ${index + 1} paper`).toBe(paper);
       expect(sheet.shadow, `sheet ${index + 1} shadow`).toBe(DARK_SHEET_SHADOW);

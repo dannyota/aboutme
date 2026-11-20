@@ -216,6 +216,7 @@ apps/web/app/components/resume/measure.ts
 apps/web/app/components/resume/pageMetrics.ts
 apps/web/app/components/resume/pagedResume.css
 apps/web/app/components/resume/paginate.ts
+apps/web/app/components/resume/paginationError.ts
 apps/web/app/components/resume/primitives/ContactChip.vue
 apps/web/app/components/resume/primitives/EntryHeader.vue
 apps/web/app/components/resume/primitives/Icon.vue

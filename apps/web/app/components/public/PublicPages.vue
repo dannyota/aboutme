@@ -99,7 +99,10 @@ const bindScroller = (): void => {
 const afterPages = (update: boolean): void => {
   bindScroller();
   if (phone.value) scroller?.scrollTo(index.value, false);
-  if (update && focusInside && phone.value) {
+  const active = window.document.activeElement;
+  const lost = active === null || active === window.document.body
+    || !active.isConnected;
+  if (update && focusInside && phone.value && lost) {
     scrollerElement()?.focus({ preventScroll: true });
   }
   focusInside = false;

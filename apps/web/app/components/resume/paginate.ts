@@ -1,7 +1,10 @@
 import type { Resume } from '@aboutme/schema';
 
+import { PaginationError } from './paginationError';
 import type { RenderContext } from './resolveRenderModel';
 import type { ResumeStyles } from './useResumeStyles';
+
+export { PaginationError, type PaginationErrorCode } from './paginationError';
 
 export interface BlockRef {
   sectionKey: string;
@@ -41,22 +44,6 @@ export interface Page {
   sidebar: PlacedBlock[];
   contentHeightPx: number;
   overflow: boolean;
-}
-
-export type PaginationErrorCode
-  = | 'pagination_measurement_required'
-    | 'invalid_measurement'
-    | 'invalid_page_geometry'
-    | 'non_normalized_one_column_flow';
-
-export class PaginationError extends Error {
-  readonly code: PaginationErrorCode;
-
-  constructor(code: PaginationErrorCode, message: string) {
-    super(message);
-    this.name = 'PaginationError';
-    this.code = code;
-  }
 }
 
 interface FlowPage {

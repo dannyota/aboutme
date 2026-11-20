@@ -151,6 +151,15 @@ async function updatedPhone(page: Page): Promise<void> {
   await expectPagesState(page, 'shown');
 }
 
+async function expectFocusKept(page: Page): Promise<void> {
+  await expect.poll(() => page.evaluate(() => {
+    const active = document.activeElement;
+    const pages = document.querySelector('.public-pages');
+    return active !== null && active !== document.body
+      && pages?.contains(active) === true;
+  }), FOCUS).toBe(true);
+}
+
 async function failedUpdate(page: Page): Promise<string> {
   const live = await openLivePage(page, 1440);
   await expectPagesState(page, 'shown');
@@ -170,7 +179,7 @@ export function publicPagesLiveTests(): void {
     }) => {
       await updatedPhone(page);
       await expectPageIndex(page, 'vi', 1, await page.locator(PAGE).count());
-      await expect(page.locator(SCROLLER), FOCUS).toBeFocused();
+      await expectFocusKept(page);
       await expect(page.locator('style[data-public-page-rule]'))
         .toHaveCount(1);
     });
@@ -206,7 +215,7 @@ export function publicPagesLiveTests(): void {
   }) => {
     await updatedPhone(page);
     const scroller = page.locator(SCROLLER);
-    await proveMutation(() => expect(scroller, FOCUS).toBeFocused(),
+    await proveMutation(() => expectFocusKept(page),
       async () => {
         await page.locator('.public-credit').focus();
         await expect(page.locator('.public-credit')).toBeFocused();

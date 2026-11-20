@@ -46,6 +46,7 @@ const copy = computed(() => editorShellCopy[locale.value]);
 const previewRoot = shallowRef<HTMLElement | null>(null);
 const estimatedPages = ref<number | null>(null);
 const renderFailed = ref(false);
+const hasSettled = ref(false);
 const viewportWidth = ref<number | null>(null);
 const windowWidth = ref<number | null>(null);
 const projected = computed(() =>
@@ -202,6 +203,16 @@ function startPageCountObservation(): void {
   );
 }
 
+watch(() => props.document, () => {
+  if (!renderFailed.value) return;
+  renderFailed.value = false;
+  hasSettled.value = false;
+});
+
+function onRenderFailed(): void {
+  if (!hasSettled.value) renderFailed.value = true;
+}
+
 watch(currentZoom, (step) => writeStoredPreviewZoom(step));
 
 onErrorCaptured(() => {
@@ -278,7 +289,8 @@ onBeforeUnmount(() => {
             <ResumeDocument
               :context="context"
               :document="projected"
-              @failed="renderFailed = true"
+              @failed="onRenderFailed"
+              @settled="hasSettled = true"
             />
           </ScaledSheet>
         </div>

@@ -275,7 +275,7 @@ describe('PublicPages', () => {
     expect(wrapper.find('.paged-resume').exists()).toBe(false);
   });
 
-  it('returns focus to the scroller after a live update only from inside the pages',
+  it('returns focus to the scroller after a live update only when it was lost from inside the pages',
     async () => {
       stubBrowser();
       blockHeight = 700;
@@ -300,6 +300,17 @@ describe('PublicPages', () => {
       const again = structuredClone(updated);
       again.personalDetails.fullName = 'Ada Lovelace';
       await wrapper.setProps({ document: again });
+      await runFrames();
+      expect(states(wrapper).at(-1)).toBe('shown');
+      expect(window.document.activeElement).toBe(pagerButton);
+      expect(window.document.activeElement).not.toBe(scroller);
+
+      pagerButton.focus();
+      const lost = structuredClone(again);
+      lost.personalDetails.fullName = 'Hedy Lamarr';
+      await wrapper.setProps({ document: lost });
+      pagerButton.blur();
+      expect(window.document.activeElement).toBe(window.document.body);
       await runFrames();
       expect(states(wrapper).at(-1)).toBe('shown');
       expect(window.document.activeElement).toBe(scroller);

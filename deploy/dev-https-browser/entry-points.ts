@@ -3,7 +3,9 @@ import type { Locator, Page } from '@playwright/test';
 export const ENTRY_POINTS_MARKER = 'data-entry-points-proof';
 
 export const VISIBLE_PAGES =
-  'main#public-resume .public-pages[data-state="shown"] .public-page';
+  'main#public-resume'
+  + ' .public-pages:is([data-state="shown"], [data-state="updating"])'
+  + ' .public-page';
 export const VISIBLE_CONTINUOUS =
   'main#public-resume .public-resume-page:not([data-pages="shown"])'
   + ':not([data-pages="updating"]) > .resume-document';

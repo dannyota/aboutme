@@ -1,6 +1,6 @@
 import type { Customization } from '@aboutme/schema';
 
-import { PaginationError } from './paginate';
+import { PaginationError } from './paginationError';
 
 export type ResolvedPageGeometry = {
   marginXmm: number;
