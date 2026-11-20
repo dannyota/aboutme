@@ -169,7 +169,11 @@ export async function expectScreen(
 ): Promise<void> {
   await preserveScreenScroll(page, async () => {
     for (const kind of SCREEN_CLASSES) {
-      await checkScreenClass(page, contract, kind);
+      if (contract.scrolling === undefined) {
+        await checkScreenClass(page, contract, kind);
+      } else {
+        await expectScreenClass(page, contract, kind);
+      }
     }
   });
 }

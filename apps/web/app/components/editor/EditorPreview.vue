@@ -21,38 +21,12 @@ import {
 } from '../../editor/previewZoom';
 import type { PdfDownloadController } from '../../editor/pdfDownload';
 import type { PhotoReadState } from '../../stores/resumes';
-import { Button } from '../ui/button';
 import PDFOpenButton from './PDFOpenButton.vue';
 import PreviewZoomControls from './PreviewZoomControls.vue';
 import ResumeDocument from '../resume/ResumeDocument.vue';
 import ScaledSheet from '../resume/ScaledSheet.vue';
 import { previewProjection } from './previewProjection';
 import { editorShellCopy } from '../../i18n/editor-shell';
-
-type PreviewMode = 'pdf' | 'web';
-const PREVIEW_MODE_STORAGE_KEY = 'aboutme.editorPreviewMode';
-const modeClass = 'h-[30px] rounded-full px-3 text-[13px] font-semibold '
-  + 'text-muted-foreground aria-[pressed=false]:hover:text-foreground '
-  + 'hover:no-underline focus-visible:no-underline '
-  + 'aria-pressed:bg-foreground aria-pressed:text-background';
-
-function readStoredPreviewMode(): PreviewMode {
-  try {
-    return window.localStorage.getItem(PREVIEW_MODE_STORAGE_KEY) === 'web'
-      ? 'web'
-      : 'pdf';
-  } catch {
-    return 'pdf';
-  }
-}
-
-function writeStoredPreviewMode(mode: PreviewMode): void {
-  try {
-    window.localStorage.setItem(PREVIEW_MODE_STORAGE_KEY, mode);
-  } catch {
-    // A blocked or full store keeps today's in-memory choice for this tab.
-  }
-}
 
 const props = withDefaults(defineProps<{
   readonly document: Resume;
@@ -70,7 +44,6 @@ const { locale } = useLocale();
 const copy = computed(() => editorShellCopy[locale.value]);
 
 const previewRoot = shallowRef<HTMLElement | null>(null);
-const previewMode = ref<PreviewMode>(readStoredPreviewMode());
 const estimatedPages = ref<number | null>(null);
 const renderFailed = ref(false);
 const viewportWidth = ref<number | null>(null);
@@ -78,21 +51,11 @@ const windowWidth = ref<number | null>(null);
 const projected = computed(() =>
   previewProjection(props.document, props.photoUrl),
 );
-const colorScheme = computed<'dark' | 'system' | undefined>(() => {
-  if (previewMode.value !== 'web') return undefined;
-  const scheme = props.document.customization.colorScheme;
-  return scheme === 'dark' || scheme === 'system' ? scheme : undefined;
-});
 const context = computed(() => ({
   lng: props.lng,
-  mode: previewMode.value === 'web'
-    ? 'sheets' as const
-    : 'paged' as const,
+  mode: 'paged' as const,
   nameHeading: 'p' as const,
   ...(props.photoUrl === undefined ? {} : { photoUrl: props.photoUrl }),
-  ...(colorScheme.value === undefined
-    ? {}
-    : { colorScheme: colorScheme.value }),
 }));
 let stopObserving: (() => void) | undefined;
 let resizeObserver: ResizeObserver | undefined;
@@ -114,9 +77,7 @@ const zoomPercent = computed(() => (
   previewZoomPercent(currentZoom.value, fitPercent.value)
 ));
 const isFit = computed(() => currentZoom.value === 'fit');
-const showZoomControls = computed(() => (
-  previewMode.value === 'pdf' && !isPhoneLayout.value
-));
+const showZoomControls = computed(() => !isPhoneLayout.value);
 const zoomOutDisabled = computed(() => currentZoom.value === 50);
 const zoomInDisabled = computed(() => currentZoom.value === 200);
 const zoomAnnouncement = ref('');
@@ -185,11 +146,7 @@ function announceZoom(step: PreviewZoomStep): void {
 }
 
 function onPreviewKeydown(event: KeyboardEvent): void {
-  if (
-    previewMode.value !== 'pdf'
-    || isPhoneLayout.value
-    || !(event.ctrlKey || event.metaKey)
-  ) return;
+  if (isPhoneLayout.value || !(event.ctrlKey || event.metaKey)) return;
   if (event.key === '0') {
     event.preventDefault();
     applyZoom('fit');
@@ -215,11 +172,7 @@ function resetWheelAccumulator(): void {
 }
 
 function onPreviewWheel(event: WheelEvent): void {
-  if (
-    previewMode.value !== 'pdf'
-    || isPhoneLayout.value
-    || !(event.ctrlKey || event.metaKey)
-  ) return;
+  if (isPhoneLayout.value || !(event.ctrlKey || event.metaKey)) return;
   event.preventDefault();
   const direction: 1 | -1 = event.deltaY < 0 ? 1 : -1;
   if (direction !== wheelDirection) {
@@ -248,11 +201,6 @@ function startPageCountObservation(): void {
     },
   );
 }
-
-watch(previewMode, (mode) => {
-  writeStoredPreviewMode(mode);
-  if (mode === 'web') estimatedPages.value = null;
-});
 
 watch(currentZoom, (step) => writeStoredPreviewZoom(step));
 
@@ -296,50 +244,13 @@ onBeforeUnmount(() => {
 <template>
   <section
     :aria-label="copy.previewLabel"
-    class="relative grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]"
+    class="relative grid h-full min-h-0 grid-rows-[minmax(0,1fr)]"
     @keydown="onPreviewKeydown"
   >
     <div
-      class="flex items-center justify-end px-4 py-2 max-[42rem]:px-2"
-      data-testid="preview-toolbar"
-    >
-      <div
-        :aria-label="copy.previewMode"
-        class="flex w-fit items-center gap-0.5 rounded-full bg-card p-[3px]"
-        data-testid="preview-mode-switch"
-        role="group"
-      >
-        <Button
-          :aria-pressed="previewMode === 'pdf'"
-          :class="modeClass"
-          data-mode="pdf"
-          size="sm"
-          type="button"
-          variant="link"
-          @click="previewMode = 'pdf'"
-        >
-          {{ copy.previewModePdf }}
-        </Button>
-        <Button
-          :aria-pressed="previewMode === 'web'"
-          :class="modeClass"
-          data-mode="web"
-          size="sm"
-          type="button"
-          variant="link"
-          @click="previewMode = 'web'"
-        >
-          {{ copy.previewModeWeb }}
-        </Button>
-      </div>
-    </div>
-    <div
       ref="previewRoot"
-      class="overflow-auto"
-      :class="previewMode === 'web'
-        ? undefined
-        : ['bg-editor-canvas p-6 max-[42rem]:p-4',
-           showZoomControls ? 'pb-18' : undefined]"
+      class="overflow-auto bg-editor-canvas p-6 max-[42rem]:p-4"
+      :class="showZoomControls ? 'pb-18' : undefined"
       data-testid="preview-scroll"
       tabindex="0"
       @wheel="onPreviewWheel"
@@ -352,24 +263,6 @@ onBeforeUnmount(() => {
       >
         {{ copy.previewUnavailable }}
       </p>
-      <div
-        v-else-if="previewMode === 'web'"
-        class="preview-web flex min-h-full flex-col"
-        data-testid="preview-web"
-      >
-        <ResumeDocument
-          :context="context"
-          :document="projected"
-        />
-        <p
-          v-if="photoStatus !== ''"
-          class="px-4 py-3 text-sm text-muted-foreground"
-          data-photo-state
-          role="status"
-        >
-          {{ photoStatus }}
-        </p>
-      </div>
       <div
         v-else
         class="mx-auto w-fit"
@@ -385,6 +278,7 @@ onBeforeUnmount(() => {
             <ResumeDocument
               :context="context"
               :document="projected"
+              @failed="renderFailed = true"
             />
           </ScaledSheet>
         </div>
@@ -445,15 +339,6 @@ onBeforeUnmount(() => {
 </template>
 
 <style>
-.preview-web {
-  container-type: inline-size;
-}
-
-.preview-web > .resume-document.resume-sheets {
-  flex: 1 0 auto;
-  padding-block-start: clamp(14px, 2.5cqi, 26px);
-}
-
 .preview-sheet:has(.paged-resume) {
   background: transparent;
   box-shadow: none;

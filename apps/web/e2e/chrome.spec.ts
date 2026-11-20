@@ -30,9 +30,6 @@ import {
   expectRendererBoundary, expectSampleIsolation, expectSlugPrefixCell,
   leakChromeIntoResume, placeAuthArtworkOverPoints,
 } from './chrome-details';
-import {
-  EDITOR_WEB_SHEETS, expectEditorWebSheets,
-} from './editor-web-sheets';
 
 import type { ScreenContract } from './screen-contract';
 import {
@@ -131,38 +128,6 @@ for (const surface of ['template page', 'editor preview'] as const) {
       expect(response?.status()).toBe(200);
     }
     await expectRendererBoundary(page);
-  });
-}
-
-async function openEditorWeb(page: Page): Promise<void> {
-  await page.setViewportSize({ width: 1440, height: 900 });
-  await openEditorPreview(page);
-  await page.locator('[data-mode="web"]').click();
-  await expect(page.locator('.preview-web .resume-sheet').first())
-    .toBeVisible();
-}
-
-test('the editor Web preview shows the sheets on the desk unframed', async ({
-  page,
-}) => {
-  await openEditorWeb(page);
-  await expectEditorWebSheets(page);
-});
-
-for (const [kind, selector, styles] of [
-  ['a clipping frame', '.preview-web', { overflow: 'hidden' }],
-  ['a lost desk', '.preview-web > .resume-sheets', {
-    'background-color': 'rgb(255, 0, 0)',
-  }],
-  ['a frame on the pane', '[data-testid="preview-scroll"]', {
-    'padding-left': '24px',
-  }],
-] as const) {
-  mutationTest(`the editor Web preview rejects ${kind}`, async ({ page }) => {
-    await openEditorWeb(page);
-    await proveMutation(() => expectEditorWebSheets(page),
-      () => applyStyleMutation(page.locator(selector), styles),
-      EDITOR_WEB_SHEETS);
   });
 }
 

@@ -14,7 +14,7 @@
     --screen-measure: 70em;
   }
 
-  .template-paper[data-web-columns] .resume-document:not(.resume-sheets) {
+  .template-paper[data-web-columns] .resume-document {
     padding: var(--screen-margin-y) var(--screen-margin-x);
   }
 }

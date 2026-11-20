@@ -1,6 +1,17 @@
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 
 export const ENTRY_POINTS_MARKER = 'data-entry-points-proof';
+
+export const VISIBLE_PAGES =
+  'main#public-resume .public-pages[data-state="shown"] .public-page';
+export const VISIBLE_CONTINUOUS =
+  'main#public-resume .public-resume-page:not([data-pages="shown"])'
+  + ':not([data-pages="updating"]) > .resume-document';
+export const VISIBLE_RESUME = `${VISIBLE_PAGES}, ${VISIBLE_CONTINUOUS}`;
+
+export function visibleResume(page: Page): Locator {
+  return page.locator(VISIBLE_RESUME);
+}
 
 export interface TitleLink {
   readonly entry: string;
@@ -36,20 +47,22 @@ export async function markPublicRoot(page: Page): Promise<void> {
 }
 
 export async function entryPointFacts(page: Page): Promise<EntryPointFacts> {
-  const facts = await page.evaluate((marker) => {
+  const facts = await page.evaluate(({ marker, visible }) => {
     const root = document.querySelector('main#public-resume');
+    const roots = Array.from(document.querySelectorAll(visible));
     return {
-      titles: Array.from(root?.querySelectorAll('a[data-project-entry]') ?? [], (anchor) => ({
-        entry: anchor.getAttribute('data-project-entry') ?? '',
-        href: anchor.getAttribute('href') ?? '',
-      })),
+      titles: roots.flatMap((resume) =>
+        Array.from(resume.querySelectorAll('a[data-project-entry]'), (anchor) => ({
+          entry: anchor.getAttribute('data-project-entry') ?? '',
+          href: anchor.getAttribute('href') ?? '',
+        }))),
       bars: Array.from(root?.querySelectorAll('a.public-projects') ?? [], (anchor) => ({
         label: anchor.textContent?.trim() ?? '',
         href: anchor.getAttribute('href') ?? '',
       })),
       kept: root?.getAttribute(marker) === 'kept',
     };
-  }, ENTRY_POINTS_MARKER);
+  }, { marker: ENTRY_POINTS_MARKER, visible: VISIBLE_RESUME });
   return { ...facts, titles: sortedTitles(facts.titles) };
 }
 

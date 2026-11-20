@@ -15,6 +15,7 @@ import {
   JOIN_INVITE_ENTRANCE,
   joinInviteContainerStyle,
   joinInviteIsDark,
+  joinInvitePageProgress,
   joinInvitePalette,
   joinInvitePlacement,
   recordJoinInviteClosed,
@@ -121,6 +122,9 @@ onMounted(() => {
       updatePlacement();
       animateEntrance();
     });
+  }, {
+    progress: () => joinInvitePageProgress(props.root),
+    progressTarget: props.root,
   });
 });
 

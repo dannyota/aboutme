@@ -11,12 +11,15 @@ import {
   resolveRenderModel,
 } from './resolveRenderModel';
 import ResumeHeader from './ResumeHeader.vue';
-import ResumeSheets from './ResumeSheets.vue';
 import { articleStyle } from './useResumeStyles';
 
 const props = defineProps<{
   document: Resume;
   context: RenderContext;
+}>();
+const emit = defineEmits<{
+  settled: [pages: number];
+  failed: [error: unknown];
 }>();
 
 const model = computed(() => resolveRenderModel(props.document, props.context));
@@ -31,10 +34,8 @@ const rootStyle = computed(() => articleStyle(model.value.styles.root));
     v-if="context.mode === 'paged'"
     :document="document"
     :context="context"
-  />
-  <ResumeSheets
-    v-else-if="context.mode === 'sheets'"
-    :model="model"
+    @settled="emit('settled', $event)"
+    @failed="emit('failed', $event)"
   />
   <article
     v-else
@@ -59,7 +60,9 @@ const rootStyle = computed(() => articleStyle(model.value.styles.root));
 
 @import './resumeScreenMargins.css';
 
-@import './resumeSheets.css';
+@import './pagedResume.css';
+
+@import './publicPages.css';
 
 a[href="#public-resume"]:not(:focus) {
   position: absolute;
@@ -95,12 +98,6 @@ body:has(> #public-resume) {
   min-height: 100vh;
 }
 
-@media screen {
-  .public-resume-page > .public-toolbar + .resume-sheets {
-    padding-block-start: clamp(14px, 2.5cqi, 26px);
-  }
-}
-
 .public-toolbar {
   --toolbar-mark: #de1b5a;
   --toolbar-credit: #55517d;
@@ -126,8 +123,14 @@ body:has(> #public-resume) {
 }
 
 .public-resume-page .public-toolbar-inner {
-  width: min(100% - 20px, 46rem);
+  width: min(100% - 32px, var(--public-page-width, 794px));
   padding-inline: clamp(6px, 2cqi - 2px, 26px);
+}
+
+@media screen and (width < 600px) {
+  .public-resume-page .public-toolbar-inner {
+    width: calc(100% - 20px);
+  }
 }
 
 @media (width < 40rem) {
@@ -364,12 +367,11 @@ body:has(> #public-resume) {
 }
 
 @container (width < 36em) {
-  .resume-document:not(.resume-page):not(.resume-sheets)
-    .resume-header[data-photo-position] {
+  .resume-document:not(.resume-page) .resume-header[data-photo-position] {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .resume-document:not(.resume-page):not(.resume-sheets)
+  .resume-document:not(.resume-page)
     .resume-header[data-photo-position] .resume-photo {
     grid-row: auto;
     grid-column: auto;

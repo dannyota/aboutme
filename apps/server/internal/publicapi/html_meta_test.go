@@ -110,9 +110,8 @@ func projectedPreviewResume(t *testing.T) publicresume.PublicResume {
 }
 
 func pageWithHead(public publicresume.PublicResume, head string) string {
-	base := strings.Replace(strings.Replace(validHTMLIn(public.Lng, "Ada", "https://aboutme.example/"+public.Slug, public.Revision, ""),
-		"Built with aboutme.vn", creditText(public.Lng), 1),
-		folioSequence("Ada", 1), folioSequence(public.Document.PersonalDetails.FullName, 1), 1)
+	base := strings.Replace(validHTMLIn(public.Lng, "Ada", "https://aboutme.example/"+public.Slug, public.Revision, ""),
+		"Built with aboutme.vn", creditText(public.Lng), 1)
 	start := strings.Index(base, `<meta name="description"`)
 	end := strings.Index(base, "</head>")
 	return base[:start] + head + base[end:]

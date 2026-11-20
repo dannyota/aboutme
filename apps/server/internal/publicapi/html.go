@@ -18,7 +18,7 @@ import (
 	"danny.vn/aboutme/apps/server/internal/publicstate"
 )
 
-const htmlFormatVersion = 4
+const htmlFormatVersion = 5
 
 type HTMLDependencies struct {
 	Reader           *publicresume.Reader

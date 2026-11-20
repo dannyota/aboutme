@@ -1,3 +1,5 @@
+import { PAGE_CHANGE_EVENT, PHONE_QUERY, pageProgress } from './publicPages';
+
 const JOIN_INVITE_MIN_DELAY_MS = 5_000;
 const JOIN_INVITE_VISIBLE_MS = 20_000;
 const JOIN_INVITE_SCROLL_FRACTION = 0.6;
@@ -8,7 +10,10 @@ const JOIN_INVITE_CLOSED_MS = 90 * 24 * 60 * 60 * 1000;
 const CARD_MIN_VIEWPORT_WIDTH = 1_024;
 const CARD_MIN_RIGHT_MARGIN = 360;
 
-const JOIN_INVITE_SHEET_SELECTOR = '.resume-sheets > .resume-sheet';
+const JOIN_INVITE_ANCHORS = [
+  '.public-pages .public-page-sheet',
+  '.public-resume-page > .resume-document',
+] as const;
 
 const JOIN_INVITE_BAR_BAND = '56px';
 export const JOIN_INVITE_BAR_HEIGHT
@@ -22,6 +27,8 @@ export interface JoinInviteTimingOptions {
   readonly now?: () => number;
   readonly setTimeout?: typeof setTimeout;
   readonly clearTimeout?: typeof clearTimeout;
+  readonly progress?: () => number | null;
+  readonly progressTarget?: EventTarget;
 }
 
 export function startJoinInviteTiming(
@@ -49,6 +56,8 @@ export function startJoinInviteTiming(
   }
 
   function scrollFraction(): number {
+    const pages = options.progress?.() ?? null;
+    if (pages !== null) return pages;
     const scrollable = doc.documentElement.scrollHeight - win.innerHeight;
     if (scrollable <= 0) return 0;
     return Math.min(1, Math.max(0, win.scrollY / scrollable));
@@ -112,10 +121,15 @@ export function startJoinInviteTiming(
     }
     clearCheckTimer();
     win.removeEventListener('scroll', onScroll);
+    options.progressTarget?.removeEventListener(
+      PAGE_CHANGE_EVENT,
+      onScroll,
+    );
     doc.removeEventListener('visibilitychange', onVisibilityChange);
   }
 
   win.addEventListener('scroll', onScroll, { passive: true });
+  options.progressTarget?.addEventListener(PAGE_CHANGE_EVENT, onScroll);
   doc.addEventListener('visibilitychange', onVisibilityChange);
   minDelayTimer = setTimeoutFn(() => {
     minDelayTimer = null;
@@ -132,7 +146,8 @@ export function joinInvitePlacement(
   window_: Window = window,
 ): JoinInvitePlacement {
   if (window_.innerWidth < CARD_MIN_VIEWPORT_WIDTH) return 'bar';
-  const sheet = root.querySelector(JOIN_INVITE_SHEET_SELECTOR) ?? root;
+  const sheet = JOIN_INVITE_ANCHORS.map((selector) =>
+    root.querySelector(selector)).find((anchor) => anchor !== null) ?? root;
   const rect = sheet.getBoundingClientRect();
   const rightMargin = window_.innerWidth - rect.right;
   return rightMargin >= CARD_MIN_RIGHT_MARGIN ? 'card' : 'bar';
@@ -162,6 +177,21 @@ export function recordJoinInviteClosed(
   } catch {
     // Private browsing, a full quota, or storage disabled: never surface it.
   }
+}
+
+export function joinInvitePageProgress(
+  root: Element,
+  window_: Window = window,
+): number | null {
+  if (window_.matchMedia?.(PHONE_QUERY).matches !== true) return null;
+  const pages = root.querySelector<HTMLElement>(
+    '.public-pages[data-state="shown"], .public-pages[data-state="updating"]',
+  );
+  if (pages === null) return null;
+  return pageProgress(
+    Number(pages.dataset.pageIndex),
+    Number(pages.dataset.pageCount),
+  );
 }
 
 export const JOIN_INVITE_BAR_TEXT_MIN_WIDTH = 360;

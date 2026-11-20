@@ -54,7 +54,6 @@ withDefaults(
           :key="detail.id"
           :detail="detail"
           :icon-style="header.iconStyle"
-          :row="header.detailsLayout === 'rows'"
         />
       </div>
     </div>

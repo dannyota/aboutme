@@ -19,12 +19,13 @@ const WRAPPED_WORK = [
 
 export async function expectRendererContent(
   page: Page, language: 'vi' | 'en', justify = false,
-  template = 'modern-sidebar', sheets = false,
+  template = 'modern-sidebar',
+  scope = '.resume-document:not(.pagination-measurement)',
 ): Promise<void> {
   const fixture = language === 'vi' ? 'vn-full' : 'full';
   const resume = JSON.parse(await readFile(resolve(import.meta.dirname,
     `../../../packages/schema/fixtures/${fixture}.json`), 'utf8')) as Resume;
-  const roots = page.locator('.resume-document:not(.pagination-measurement)');
+  const roots = page.locator(scope);
   await expect(roots.locator('.resume-headline'), 'Renderer headline content.')
     .toHaveText(resume.personalDetails.headline!);
   const fragments: string[] = [];
@@ -74,13 +75,13 @@ export async function expectRendererContent(
       : detail.value;
     const label = detail.label || defaults[detail.type]!;
     const icons = ['engineer-compact', 'modern-sidebar'].includes(template);
-    const showLabel = sheets || (detail.display !== 'label'
-      && (!icons || Boolean(detail.label) || detail.type === 'custom'));
+    const showLabel = detail.display !== 'label'
+      && (!icons || Boolean(detail.label) || detail.type === 'custom');
     await expect(chip.locator('.contact-label'), 'Renderer contact label.')
       .toHaveCount(showLabel ? 1 : 0);
     if (showLabel) {
       await expect(chip.locator('.contact-label'), 'Renderer contact label.')
-        .toHaveText(sheets ? label : `${label}:`);
+        .toHaveText(`${label}:`);
     }
     await expect(chip.locator(':scope > :last-child'),
       'Renderer contact content.').toHaveText(shown);

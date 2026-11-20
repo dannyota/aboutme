@@ -34,35 +34,19 @@ const presetFilenames = () =>
     .filter((name) => name.endsWith('.json'))
     .sort();
 
-export const SHEETS_SCHEMES = ['light', 'dark', 'system'];
-
 export function buildGoldenMatrix() {
   return presetFilenames().flatMap((presetFilename) => {
     const presetId = presetFilename.slice(0, -'.json'.length);
-    return [1, 2].flatMap((start) => [
-      ...['continuous', 'paged'].map((mode) => ({
+    return [1, 2].flatMap((start) =>
+      ['continuous', 'paged'].map((mode) => ({
         presetFilename,
         presetId,
         start,
         mode,
         filename: `${presetId}--start-${start}--${mode}.html`,
       })),
-      ...SHEETS_SCHEMES.map((scheme) => ({
-        presetFilename,
-        presetId,
-        start,
-        mode: 'sheets',
-        scheme,
-        filename: `${presetId}--start-${start}--sheets-${scheme}.html`,
-      })),
-    ]);
+    );
   });
-}
-
-export function sheetsColorScheme(scheme) {
-  if (scheme === undefined || scheme === 'light') return {};
-  if (scheme === 'dark' || scheme === 'system') return { colorScheme: scheme };
-  throw new Error(`Unsupported golden color scheme: ${scheme}`);
 }
 
 export function localeForFixture(name) {
@@ -198,7 +182,6 @@ export async function renderGoldenCell(cell) {
       {
         ...startingDocument.customization,
         pageFormat: preset.customization.pageFormat,
-        ...(cell.scheme === undefined ? {} : { colorScheme: cell.scheme }),
       },
       preset,
       startingDocument.content,
@@ -209,7 +192,6 @@ export async function renderGoldenCell(cell) {
     lng: localeForFixture('full'),
     mode: cell.mode,
     photoUrl: FIXED_PHOTO_DATA_URL,
-    ...sheetsColorScheme(cell.scheme),
   };
   const ResumeDocument = await loadResumeDocument();
   const app = createSSRApp({

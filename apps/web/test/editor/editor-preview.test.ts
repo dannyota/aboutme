@@ -100,6 +100,90 @@ describe('EditorPreview', () => {
     },
   );
 
+  it('shows only the PDF preview, with no mode toggle above it', () => {
+    const accepted = acceptedFixture();
+    const wrapper = mount(EditorPreview, {
+      props: { document: accepted.document, lng: accepted.metadata.lng },
+      global: { stubs: { ResumeDocument: true } },
+    });
+
+    for (const selector of ['[data-testid="preview-toolbar"]',
+      '[data-testid="preview-mode-switch"]', '[data-mode]',
+      '[data-testid="preview-web"]', '[role="group"]']) {
+      expect(wrapper.find(selector).exists(), selector).toBe(false);
+    }
+    expect(wrapper.get('section').classes())
+      .toContain('grid-rows-[minmax(0,1fr)]');
+    expect(wrapper.get('section').element.firstElementChild)
+      .toBe(wrapper.get('[data-testid="preview-scroll"]').element);
+    expect(wrapper.get('[data-testid="preview-sheet"]').classes())
+      .toEqual(expect.arrayContaining([
+        'rounded-[var(--radius-sheet)]',
+        'shadow-[var(--shadow-paper)]',
+        'bg-white',
+      ]));
+    expect(wrapper.get('[data-testid="page-count"]').text())
+      .toMatch(/— pages/u);
+    expect(
+      wrapper.getComponent({ name: 'ResumeDocument' }).props('context'),
+    ).toEqual({ lng: 'en', mode: 'paged', nameHeading: 'p' });
+    wrapper.unmount();
+  });
+
+  it('ignores a stored Web preview mode and never writes the old key',
+    async () => {
+      window.localStorage.setItem('aboutme.editorPreviewMode', 'web');
+      const setItem = vi.spyOn(Storage.prototype, 'setItem');
+      const getItem = vi.spyOn(Storage.prototype, 'getItem');
+      const accepted = acceptedFixture();
+      const wrapper = mount(EditorPreview, {
+        props: { document: accepted.document, lng: accepted.metadata.lng },
+        global: { stubs: { ResumeDocument: true } },
+      });
+      await nextTick();
+
+      expect(
+        wrapper.getComponent({ name: 'ResumeDocument' }).props('context'),
+      ).toEqual({ lng: 'en', mode: 'paged', nameHeading: 'p' });
+      expect(wrapper.find('[data-testid="preview-sheet"]').exists())
+        .toBe(true);
+      expect(wrapper.find('[data-testid="preview-web"]').exists())
+        .toBe(false);
+      const touched = [...setItem.mock.calls, ...getItem.mock.calls]
+        .map(([key]) => key);
+      expect(touched).not.toContain('aboutme.editorPreviewMode');
+      wrapper.unmount();
+      expect(window.localStorage.getItem('aboutme.editorPreviewMode'))
+        .toBe('web');
+    });
+
+  it('says the preview is unavailable when pagination reports a failure',
+    async () => {
+      const accepted = acceptedFixture();
+      const wrapper = mount(EditorPreview, {
+        props: { document: accepted.document, lng: accepted.metadata.lng },
+        global: {
+          stubs: {
+            ResumeDocument: defineComponent({
+              emits: ['failed'],
+              mounted() {
+                this.$emit('failed', new Error('fonts failed'));
+              },
+              template: '<div class="paged-resume" />',
+            }),
+          },
+        },
+      });
+      await nextTick();
+
+      expect(wrapper.get('[role="status"]').text()).toBe(
+        editorShellCopy.en.previewUnavailable,
+      );
+      expect(wrapper.find('[data-testid="preview-sheet"]').exists())
+        .toBe(false);
+      wrapper.unmount();
+    });
+
   it('restarts page counting when a hidden phone preview becomes active',
     async () => {
       const host = document.createElement('div');
@@ -139,102 +223,6 @@ describe('EditorPreview', () => {
       host.remove();
     });
 
-  it(
-    'renders the page-count mark under the sheet, with only the mode '
-    + 'switch in a toolbar above it',
-    () => {
-      const accepted = acceptedFixture();
-      const wrapper = mount(EditorPreview, {
-        props: {
-          document: accepted.document,
-          lng: accepted.metadata.lng,
-        },
-        global: { stubs: { ResumeDocument: true } },
-      });
-
-      expect(wrapper.find('[data-preview-header]').exists()).toBe(false);
-      expect(wrapper.get('[data-testid="preview-toolbar"]').text()).toBe(
-        wrapper.get('[data-testid="preview-mode-switch"]').text(),
-      );
-      expect(wrapper.get('[data-testid="page-count"]').text()).toMatch(
-        /— pages/,
-      );
-      expect(wrapper.get('[data-testid="preview-sheet"]').classes()).toEqual(
-        expect.arrayContaining([
-          'rounded-[var(--radius-sheet)]',
-          'shadow-[var(--shadow-paper)]',
-          'bg-white',
-        ]),
-      );
-    },
-  );
-
-  it(
-    'sets the mode toggle on the canvas as a card pill track with an ink pill',
-    async () => {
-      const accepted = acceptedFixture();
-      const wrapper = mount(EditorPreview, {
-        props: {
-          document: accepted.document,
-          lng: accepted.metadata.lng,
-        },
-        global: { stubs: { ResumeDocument: true } },
-      });
-      const toolbar = wrapper.get('[data-testid="preview-toolbar"]').classes();
-      const track = wrapper.get('[data-testid="preview-mode-switch"]')
-        .classes();
-
-      expect(toolbar).not.toContain('bg-card');
-      expect(toolbar).not.toContain('border-b');
-      expect(track).toEqual(expect.arrayContaining([
-        'rounded-full',
-        'bg-card',
-        'p-[3px]',
-      ]));
-      expect(track).not.toContain('rounded-md');
-      expect(track).not.toContain('border');
-      const modes = wrapper.findAll('[data-mode]');
-      expect(modes).toHaveLength(2);
-      for (const mode of modes) {
-        expect(mode.attributes('data-variant')).toBe('link');
-        expect(mode.classes()).toEqual(expect.arrayContaining([
-          'h-[30px]',
-          'rounded-full',
-          'text-muted-foreground',
-          'aria-pressed:bg-foreground',
-          'aria-pressed:text-background',
-        ]));
-      }
-      await wrapper.get('[data-mode="web"]').trigger('click');
-      expect(wrapper.get('[data-mode="web"]').attributes('aria-pressed'))
-        .toBe('true');
-      expect(wrapper.get('[data-mode="web"]').attributes('data-variant'))
-        .toBe('link');
-      wrapper.unmount();
-    },
-  );
-
-  it('defaults the preview to PDF mode', () => {
-    const accepted = acceptedFixture();
-    const wrapper = mount(EditorPreview, {
-      props: {
-        document: accepted.document,
-        lng: accepted.metadata.lng,
-      },
-      global: { stubs: { ResumeDocument: true } },
-    });
-
-    const pdfButton = wrapper.get('[data-mode="pdf"]');
-    const webButton = wrapper.get('[data-mode="web"]');
-    expect(pdfButton.attributes('aria-pressed')).toBe('true');
-    expect(webButton.attributes('aria-pressed')).toBe('false');
-    expect(pdfButton.text()).toBe(editorShellCopy.en.previewModePdf);
-    expect(webButton.text()).toBe(editorShellCopy.en.previewModeWeb);
-    expect(
-      wrapper.getComponent({ name: 'ResumeDocument' }).props('context'),
-    ).toEqual({ lng: 'en', mode: 'paged', nameHeading: 'p' });
-  });
-
   it('scales the PDF sheet with a transform, not CSS zoom', () => {
     const accepted = acceptedFixture();
     const wrapper = mount(EditorPreview, {
@@ -253,133 +241,6 @@ describe('EditorPreview', () => {
     const match = /scale\(([^)]+)\)/u.exec(transformStyle);
     expect(match).not.toBeNull();
     expect(Number(match?.[1])).toBeCloseTo(zoom, 4);
-  });
-
-  it(
-    'switches to the Web sheets on the desk with no sheet frame or canvas',
-    async () => {
-      const accepted = acceptedFixture();
-      const wrapper = mount(EditorPreview, {
-        props: {
-          document: accepted.document,
-          lng: accepted.metadata.lng,
-        },
-        global: { stubs: { ResumeDocument: true } },
-      });
-      const pane = () => wrapper.get('[data-testid="preview-scroll"]');
-      expect(pane().classes()).toEqual(expect.arrayContaining([
-        'bg-editor-canvas', 'p-6', 'max-[42rem]:p-4',
-      ]));
-
-      await wrapper.get('[data-mode="web"]').trigger('click');
-
-      expect(wrapper.get('[data-mode="web"]').attributes('aria-pressed'))
-        .toBe('true');
-      expect(wrapper.get('[data-mode="pdf"]').attributes('aria-pressed'))
-        .toBe('false');
-      expect(
-        wrapper.getComponent({ name: 'ResumeDocument' }).props('context'),
-      ).toEqual({ lng: 'en', mode: 'sheets', nameHeading: 'p' });
-      expect(wrapper.find('[data-testid="page-count"]').exists()).toBe(false);
-      expect(wrapper.find('[data-testid="preview-sheet"]').exists())
-        .toBe(false);
-      expect(wrapper.find('.preview-sheet').exists()).toBe(false);
-      expect(wrapper.find('.scaled-sheet').exists()).toBe(false);
-      for (const name of ['bg-editor-canvas', 'p-6', 'max-[42rem]:p-4']) {
-        expect(pane().classes(), name).not.toContain(name);
-      }
-      const web = wrapper.get('[data-testid="preview-web"]');
-      expect(web.element.parentElement).toBe(pane().element);
-      for (const name of ['bg-white', 'overflow-hidden', 'rounded-full']) {
-        expect(web.classes(), name).not.toContain(name);
-      }
-      expect(web.classes().some((name) => name.startsWith('shadow')))
-        .toBe(false);
-      expect(web.classes().some((name) => name.startsWith('rounded')))
-        .toBe(false);
-    },
-  );
-
-  it('remembers a chosen mode across mounts in the same browser', async () => {
-    const accepted = acceptedFixture();
-    const first = mount(EditorPreview, {
-      props: {
-        document: accepted.document,
-        lng: accepted.metadata.lng,
-      },
-      global: { stubs: { ResumeDocument: true } },
-    });
-    await first.get('[data-mode="web"]').trigger('click');
-    first.unmount();
-
-    const second = mount(EditorPreview, {
-      props: {
-        document: accepted.document,
-        lng: accepted.metadata.lng,
-      },
-      global: { stubs: { ResumeDocument: true } },
-    });
-    expect(second.get('[data-mode="web"]').attributes('aria-pressed'))
-      .toBe('true');
-    expect(
-      second.getComponent({ name: 'ResumeDocument' }).props('context'),
-    ).toEqual({ lng: 'en', mode: 'sheets', nameHeading: 'p' });
-    second.unmount();
-  });
-
-  it(
-    'falls back to PDF and keeps switching modes when storage throws',
-    async () => {
-      const getItem = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(
-        () => { throw new Error('blocked'); },
-      );
-      const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(
-        () => { throw new Error('blocked'); },
-      );
-      const accepted = acceptedFixture();
-      const wrapper = mount(EditorPreview, {
-        props: {
-          document: accepted.document,
-          lng: accepted.metadata.lng,
-        },
-        global: { stubs: { ResumeDocument: true } },
-      });
-
-      expect(wrapper.get('[data-mode="pdf"]').attributes('aria-pressed'))
-        .toBe('true');
-
-      await wrapper.get('[data-mode="web"]').trigger('click');
-      expect(wrapper.get('[data-mode="web"]').attributes('aria-pressed'))
-        .toBe('true');
-
-      getItem.mockRestore();
-      setItem.mockRestore();
-      wrapper.unmount();
-    },
-  );
-
-  it('labels the mode switch in Vietnamese too', () => {
-    setSiteLocale('vi');
-    const accepted = acceptedFixture();
-    const wrapper = mount(EditorPreview, {
-      props: {
-        document: accepted.document,
-        lng: accepted.metadata.lng,
-      },
-      global: { stubs: { ResumeDocument: true } },
-    });
-
-    expect(wrapper.get('[data-mode="pdf"]').text()).toBe(
-      editorShellCopy.vi.previewModePdf,
-    );
-    expect(wrapper.get('[data-mode="web"]').text()).toBe(
-      editorShellCopy.vi.previewModeWeb,
-    );
-    expect(
-      wrapper.get('[data-testid="preview-mode-switch"]').attributes(
-        'aria-label',
-      ),
-    ).toBe(editorShellCopy.vi.previewMode);
   });
 
   it('fits the whole A4 sheet inside a 390 px preview', async () => {
@@ -836,32 +697,6 @@ describe('EditorPreview zoom controls', () => {
       wrapper.unmount();
     });
 
-  it(
-    'ignores the Ctrl/Cmd zoom keyboard shortcut and wheel in Web mode',
-    async () => {
-      const wrapper = await mountPreviewAtWidth(WIDE_LAYOUT_WIDTH);
-      await wrapper.get('[data-mode="web"]').trigger('click');
-
-      expect(
-        wrapper.find('[data-testid="preview-zoom-controls"]').exists(),
-      ).toBe(false);
-
-      wrapper.element.dispatchEvent(new KeyboardEvent('keydown', {
-        bubbles: true, cancelable: true, ctrlKey: true, key: '=',
-      }));
-      const scroll = wrapper.get('[data-testid="preview-scroll"]').element;
-      const wheelEvent = ctrlWheelEvent(-100, { x: 20, y: 20 });
-      scroll.dispatchEvent(wheelEvent);
-      await nextTick();
-
-      expect(wheelEvent.defaultPrevented).toBe(false);
-
-      await wrapper.get('[data-mode="pdf"]').trigger('click');
-      expect(wrapper.get('[data-testid="zoom-percent"]').text()).toBe('84%');
-      wrapper.unmount();
-    },
-  );
-
   it('moves one step for one coarse mouse-wheel notch', async () => {
     const wrapper = await mountPreviewAtWidth(WIDE_LAYOUT_WIDTH);
     const scroll = wrapper.get('[data-testid="preview-scroll"]').element;
@@ -936,10 +771,6 @@ describe('EditorPreview zoom controls', () => {
       const wrapper = await mountPreviewAtWidth(WIDE_LAYOUT_WIDTH);
       expect(wrapper.get('[data-testid="preview-scroll"]').classes())
         .toContain('pb-18');
-
-      await wrapper.get('[data-mode="web"]').trigger('click');
-      expect(wrapper.get('[data-testid="preview-scroll"]').classes())
-        .not.toContain('pb-18');
       wrapper.unmount();
     });
 
@@ -983,39 +814,6 @@ describe('EditorPreview zoom controls', () => {
         .toBe('');
       wrapper.unmount();
     });
-});
-
-describe('EditorPreview Web sheets', () => {
-  async function mountMode(mode: 'pdf' | 'web', columns: 1 | 2) {
-    window.localStorage.setItem('aboutme.editorPreviewMode', mode);
-    const accepted = acceptedFixture();
-    accepted.document.customization.layout.columns = columns;
-    const wrapper = mount(EditorPreview, {
-      props: { document: accepted.document, lng: accepted.metadata.lng },
-      global: { stubs: { ResumeDocument: true } },
-    });
-    await nextTick();
-    return wrapper;
-  }
-
-  it.each([1, 2] as const)(
-    'renders %s columns as sheets with no column hook',
-    async (columns) => {
-      const wrapper = await mountMode('web', columns);
-      expect(wrapper.find('[data-web-columns]').exists()).toBe(false);
-      expect(
-        wrapper.getComponent({ name: 'ResumeDocument' }).props('context'),
-      ).toMatchObject({ mode: 'sheets' });
-      wrapper.unmount();
-    },
-  );
-
-  it('leaves the paged PDF sheet unmarked', async () => {
-    const wrapper = await mountMode('pdf', 2);
-    expect(wrapper.get('[data-testid="preview-sheet"]')
-      .attributes('data-web-columns')).toBeUndefined();
-    wrapper.unmount();
-  });
 });
 
 async function animationFrames(count: number): Promise<void> {

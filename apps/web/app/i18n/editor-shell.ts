@@ -65,9 +65,6 @@ export type EditorShellCopy = {
   readonly pageCount: (count: number | null) => string;
   readonly photoLoading: string;
   readonly photoUnavailable: string;
-  readonly previewMode: string;
-  readonly previewModePdf: string;
-  readonly previewModeWeb: string;
   readonly issueFor: (code: string) => string;
   readonly zoomOut: string;
   readonly zoomIn: string;
@@ -150,9 +147,6 @@ export const editorShellCopy: WorkspaceCopy<EditorShellCopy> = {
     photoLoading: 'Đang tải ảnh. Bản xem trước hiển thị không có ảnh.',
     photoUnavailable:
       'Không thể tải ảnh. Bản xem trước hiển thị không có ảnh.',
-    previewMode: 'Chế độ xem trước',
-    previewModePdf: 'PDF',
-    previewModeWeb: 'Web',
     issueFor: (code) => {
       if (code === 'required') return 'Thêm giá trị bắt buộc.';
       if (code === 'maxLength' || code === 'maxItems' || code === 'maximum') {
@@ -243,9 +237,6 @@ export const editorShellCopy: WorkspaceCopy<EditorShellCopy> = {
     pageCount: (count) => count === 1 ? '1 page' : `${count ?? '—'} pages`,
     photoLoading: 'Photo is loading. The preview is shown without it.',
     photoUnavailable: 'Photo unavailable. The preview is shown without it.',
-    previewMode: 'Preview mode',
-    previewModePdf: 'PDF',
-    previewModeWeb: 'Web',
     issueFor: (code) => {
       if (code === 'required') return 'Add the required value.';
       if (code === 'maxLength' || code === 'maxItems' || code === 'maximum') {

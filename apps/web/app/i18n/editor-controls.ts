@@ -155,8 +155,8 @@ export const editorControlsCopy: WorkspaceCopy<EditorControlsCopy> = {
       colorInvalid: 'Nhập mã màu hex gồm sáu chữ số.',
       colorRemove: 'Xóa',
       colorSchemeHint:
-        'Người xem thấy giao diện này trên trang công khai. PDF và bản in '
-        + 'luôn sáng.',
+        'Người xem thấy giao diện này ở nền và thanh của trang công khai. '
+        + 'Các trang CV, PDF và bản in luôn sáng.',
       removeSurfaceTarget: 'Xóa mục tiêu bề mặt',
       cropHint:
         'Kéo hình vuông để chọn phần hiển thị trên CV. '
@@ -412,7 +412,8 @@ export const editorControlsCopy: WorkspaceCopy<EditorControlsCopy> = {
       colorInvalid: 'Enter a six-digit hex color.',
       colorRemove: 'Remove',
       colorSchemeHint:
-        'Readers see this on your public page. The PDF and print stay light.',
+        'Readers see this behind the pages and in the bar of your public '
+        + 'page. The pages, the PDF and print stay light.',
       removeSurfaceTarget: 'Remove surface target',
       cropHint:
         'Drag the square to choose what your resume shows. '

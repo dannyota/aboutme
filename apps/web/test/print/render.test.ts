@@ -97,17 +97,15 @@ describe('resume language in shared renderers', () => {
 });
 
 describe('private print Vue document', () => {
-  it('keeps the public sheets and the print document on one renderer',
+  it('keeps the public page and the print document on one article',
     async () => {
       const envelope = printEnvelope();
-      const shared = (mode: 'continuous' | 'sheets') => renderToString(
-        createSSRApp({
-          render: () => h(ResumeDocument, {
-            document: envelope.document as unknown as Resume,
-            context: { lng: envelope.lng, mode },
-          }),
+      const continuous = await renderToString(createSSRApp({
+        render: () => h(ResumeDocument, {
+          document: envelope.document as unknown as Resume,
+          context: { lng: envelope.lng, mode: 'continuous' },
         }),
-      );
+      }));
       const page = await renderToString(createSSRApp({
         render: () => h(PublicResumeApp, {
           publicResume: {
@@ -115,20 +113,21 @@ describe('private print Vue document', () => {
             revision: envelope.revision,
             lng: envelope.lng,
             downloadEnabled: false,
-            document: envelope.document,
+            document: {
+              ...envelope.document,
+              customization: {
+                ...envelope.document.customization,
+                colorScheme: 'dark' as const,
+              },
+            },
           },
           homeHref: 'https://aboutme.example/',
         }),
       }));
-      const sheets = await shared('sheets');
-      expect(sheets)
-        .toMatch(/^<article class="resume-document resume-sheets"/u);
-      expect(page).toContain(sheets);
-      const continuous = await shared('continuous');
       expect(continuous).toMatch(/^<article class="resume-document"/u);
+      expect(page).toContain(continuous);
       const html = await renderPrintResume(envelope);
       expect(html).toContain(continuous);
-      expect(html).not.toContain('resume-sheets');
       expect(html).toContain('<title>Ada Lovelace - Resume</title>');
     });
 

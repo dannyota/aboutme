@@ -49,8 +49,8 @@ The sheet shadow is
 `0 0 0 0.5px rgb(S / .14), 0 1px 2px rgb(S / .08), 0 10px 26px -8px rgb(S / .2), 0 32px 60px -28px rgb(S / .22)`,
 a renderer value: chrome tokens such as `--shadow-paper` stay off the public
 page. A root rule paints the desk color for the scheme, so overscroll shows it.
-The page bar's inner row is as wide as the page on a wide screen and spans the
-viewport minus 16 px gutters on a phone.
+The page bar's inner row is as wide as the page on a wide screen; on a phone its
+text starts 16 px from the screen edge.
 
 ## How the page is built
 
@@ -104,14 +104,15 @@ grows its page and is never clipped.
 
 ### Scale and scroller
 
-- The script computes the scale from `documentElement.clientWidth`, which
-  excludes the scrollbar gutter, and the page format: 794 px for A4, 816 px for
-  Letter. Each sheet uses `transform: scale()` inside a box sized to the scaled
-  page, the `ScaledSheet.vue` technique; CSS `zoom` stays rejected because
-  WebKit clamps small text.
+- The script computes the scale from the width of `.public-resume-page`, which
+  excludes the scrollbar gutter, falling back to `documentElement.clientWidth`,
+  and the page format: 794 px for A4, 816 px for Letter. Each sheet uses
+  `transform: scale()` inside a box sized to the scaled page, the
+  `ScaledSheet.vue` technique; CSS `zoom` stays rejected because WebKit clamps
+  small text.
 - The 600 px breakpoint is a viewport media query, so the orientation needs no
-  script and cannot flip back and forth. The root sets
-  `scrollbar-gutter: stable`.
+  script and cannot flip back and forth. From 600 px the root sets
+  `scrollbar-gutter: stable`; phones use overlay scrollbars.
 - On a phone, `scroll-snap-type: x mandatory` sits on the scroller, and
   `scroll-snap-align: center` and `scroll-snap-stop: always` on the
   untransformed wrapper, which also draws the radius and shadow. The scroller

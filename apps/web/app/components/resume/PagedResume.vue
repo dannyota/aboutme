@@ -3,6 +3,7 @@ import type { Resume, Section } from '@aboutme/schema';
 import {
   type CSSProperties,
   defineComponent,
+  Fragment,
   h,
   inject,
   nextTick,
@@ -12,7 +13,9 @@ import {
   ref,
   shallowRef,
   type ShallowRef,
+  type SlotsType,
   toRaw,
+  type VNode,
   watch,
 } from 'vue';
 
@@ -37,6 +40,14 @@ import {
   type ResolvedRenderModel,
   resolveRenderModel,
 } from './resolveRenderModel';
+
+export interface PagedResumePageSlot {
+  readonly index: number;
+  readonly count: number;
+  readonly widthPx: number;
+  readonly heightPx: number;
+  readonly page: VNode;
+}
 
 interface PaginationSnapshot {
   model: ResolvedRenderModel;
@@ -168,7 +179,12 @@ export default defineComponent({
     document: { type: Object as PropType<Resume>, required: true },
     context: { type: Object as PropType<RenderContext>, required: true },
   },
-  setup(props) {
+  emits: {
+    settled: (pages: number) => Number.isInteger(pages),
+    failed: (error: unknown) => error !== undefined,
+  },
+  slots: Object as SlotsType<{ page: PagedResumePageSlot }>,
+  setup(props, { emit, slots }) {
     const measure = inject(PaginationMeasureKey, null);
     const snapshot = (): PaginationSnapshot => {
       const model = resolveRenderModel(props.document, props.context);
@@ -289,7 +305,7 @@ export default defineComponent({
         for (const block of [...placedPage.main, ...placedPage.sidebar]) {
           gaps.set(block, block.appliedGapBeforePx);
         }
-        return h('article', {
+        const article = h('article', {
           'class': ['resume-document', 'resume-page'],
           'key': pageIndex,
           'lang': model.lng,
@@ -318,6 +334,15 @@ export default defineComponent({
             gaps,
           ),
         ]);
+        return slots.page === undefined
+          ? article
+          : h(Fragment, { key: pageIndex }, slots.page({
+              index: pageIndex,
+              count: pages.length,
+              widthPx: page.widthPx,
+              heightPx: expandedHeightPx,
+              page: article,
+            }));
       });
       const measuredModel = measured.model;
       const measuredRequest = measured.request;
@@ -432,15 +457,16 @@ export default defineComponent({
       try {
         const layout = await measurePagination(root, current.request);
         if (!active || currentGeneration !== generation) return;
-        rendered.value = {
-          ...current,
-          pages: pagesFrom(current.request, layout),
-        };
+        const pages = pagesFrom(current.request, layout);
+        rendered.value = { ...current, pages };
         await nextTick();
         if (active && currentGeneration === generation) {
           bindObserver();
           settled.value = true;
+          emit('settled', pages.length);
         }
+      } catch (error) {
+        if (active && currentGeneration === generation) emit('failed', error);
       } finally {
         measuring = false;
         if (queued) {
@@ -508,51 +534,3 @@ export default defineComponent({
   },
 });
 </script>
-
-<style>
-.paged-resume {
-  display: grid;
-  gap: 24px;
-  justify-content: center;
-
-  /* Chromium on Linux hints glyph advances to whole pixels by default. */
-  text-rendering: geometricPrecision;
-}
-
-.resume-page {
-  overflow: visible;
-}
-
-.resume-page[data-page-overflow='true'] {
-  outline: 2px solid #b42318;
-  outline-offset: 2px;
-}
-
-.pagination-atomic[data-block-overflow='true'] {
-  outline: 2px dashed #b42318;
-  outline-offset: 2px;
-}
-
-.pagination-measurement {
-  position: fixed;
-  inset: 0 auto auto -100000px;
-  z-index: -1;
-  visibility: hidden;
-  pointer-events: none;
-}
-
-.resume-document.resume-page .resume-header,
-.resume-document .pagination-atomic .resume-section,
-.resume-document .pagination-atomic .section-heading,
-.resume-document .pagination-atomic .entry {
-  margin-block-end: 0;
-}
-
-.resume-document .pagination-atomic .section-heading:empty {
-  min-block-size: 1px;
-}
-
-.resume-document .pagination-atomic .entry {
-  min-block-size: 1px;
-}
-</style>

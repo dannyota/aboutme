@@ -23,18 +23,38 @@ function mountInvite(
 }
 
 // happy-dom does no layout, so both boxes are stubbed.
+function pagesDom(root: HTMLElement, rights: readonly number[]) {
+  const page = document.createElement('div');
+  page.className = 'public-resume-page';
+  const article = document.createElement('article');
+  article.className = 'resume-document';
+  article.getBoundingClientRect = () => ({ right: window.innerWidth }) as DOMRect;
+  const pages = document.createElement('div');
+  pages.className = 'public-pages';
+  pages.dataset.state = 'shown';
+  pages.dataset.pageIndex = '0';
+  pages.dataset.pageCount = String(rights.length);
+  const scroller = document.createElement('div');
+  scroller.className = 'paged-resume';
+  for (const right of rights) {
+    const section = document.createElement('section');
+    section.className = 'public-page';
+    const sheet = document.createElement('div');
+    sheet.className = 'public-page-sheet';
+    sheet.getBoundingClientRect = () => ({ right }) as DOMRect;
+    section.append(sheet);
+    scroller.append(section);
+  }
+  pages.append(scroller);
+  page.append(article, pages);
+  root.append(page);
+  return pages;
+}
+
 function mountInviteOnPage(measureRight: number) {
   const root = document.createElement('main');
   root.getBoundingClientRect = () => ({ right: window.innerWidth }) as DOMRect;
-  const article = document.createElement('article');
-  article.className = 'resume-document resume-sheets';
-  for (const right of [measureRight, window.innerWidth]) {
-    const sheet = document.createElement('div');
-    sheet.className = 'resume-sheet';
-    sheet.getBoundingClientRect = () => ({ right }) as DOMRect;
-    article.append(sheet);
-  }
-  root.append(article);
+  pagesDom(root, [measureRight, window.innerWidth]);
   document.body.append(root);
   const wrapper = mount(JoinInvite, {
     attachTo: document.body,
@@ -209,6 +229,44 @@ describe('JoinInvite', () => {
       expect((wrapper.get('a').element as HTMLElement).style.borderRadius)
         .toBe('999px');
     });
+
+  describe('on a phone', () => {
+    const originalMatchMedia = window.matchMedia;
+    afterEach(() => {
+      window.matchMedia = originalMatchMedia;
+    });
+
+    it('shows once the reader reaches 60 percent of the pages', async () => {
+      Object.defineProperty(window, 'innerWidth', {
+        configurable: true,
+        value: 390,
+      });
+      window.matchMedia = ((query: string) => ({
+        matches: query === '(width < 600px)',
+        media: query,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      })) as unknown as typeof window.matchMedia;
+      const root = document.createElement('main');
+      const pages = pagesDom(root, [370, 370, 370, 370, 370]);
+      document.body.append(root);
+      const wrapper = mount(JoinInvite, {
+        attachTo: document.body,
+        props: { lng: 'en', href: '/register', root },
+      });
+      mounted.push(wrapper);
+      await vi.advanceTimersByTimeAsync(5_000);
+      pages.dataset.pageIndex = '1';
+      pages.dispatchEvent(new Event('public-page-change', { bubbles: true }));
+      await wrapper.vm.$nextTick();
+      expect(wrapper.find('[role="region"]').exists()).toBe(false);
+      pages.dataset.pageIndex = '2';
+      pages.dispatchEvent(new Event('public-page-change', { bubbles: true }));
+      await wrapper.vm.$nextTick();
+      expect(wrapper.get('[role="region"]').attributes('data-placement'))
+        .toBe('bar');
+    });
+  });
 
   it('places the card from the first sheet, not the page root', async () => {
     const wrapper = mountInviteOnPage(1_440 - 400);

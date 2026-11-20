@@ -25,7 +25,6 @@ mockNuxtImport('useLocale', () => () => ({ locale }));
 beforeEach(() => {
   locale.value = 'en';
   setSiteLocale('en');
-  window.localStorage.clear();
 });
 
 type Scheme = 'light' | 'dark' | 'system';
@@ -96,7 +95,8 @@ describe('Web page theme field (docs/design/public-page-theme.md)', () => {
     expect(wrapper.get('[data-field="colorScheme"] label').text())
       .toBe('Web page theme');
     expect(wrapper.get('[data-field="colorScheme"]').text()).toContain(
-      'Readers see this on your public page. The PDF and print stay light.',
+      'Readers see this behind the pages and in the bar of your public page. '
+      + 'The pages, the PDF and print stay light.',
     );
   });
 
@@ -109,8 +109,8 @@ describe('Web page theme field (docs/design/public-page-theme.md)', () => {
     expect(field.findAll('option').map((option) => option.text()))
       .toEqual(['Sáng', 'Tối', 'Theo thiết bị']);
     expect(field.text()).toContain(
-      'Người xem thấy giao diện này trên trang công khai. '
-      + 'PDF và bản in luôn sáng.',
+      'Người xem thấy giao diện này ở nền và thanh của trang công khai. '
+      + 'Các trang CV, PDF và bản in luôn sáng.',
     );
   });
 
@@ -230,75 +230,32 @@ describe('EditorPreview color scheme', () => {
     setup: (props) => () => h('div', {
       'data-probe': '',
       'data-mode': props.context.mode,
-      'data-scheme': props.context.colorScheme,
+      'data-context-keys': Object.keys(props.context).join(' '),
     }),
   });
 
-  async function mountPreview(scheme: Scheme | undefined, mode: 'pdf' | 'web') {
-    window.localStorage.setItem('aboutme.editorPreviewMode', mode);
-    const accepted = acceptedFixture();
-    accepted.document.customization = withScheme(
-      accepted.document.customization,
-      scheme,
-    );
-    const wrapper = mount(EditorPreview, {
-      props: { document: accepted.document, lng: accepted.metadata.lng },
-      global: { stubs: { ResumeDocument: Probe } },
-    });
-    await nextTick();
-    return wrapper;
-  }
-
-  it.each(['dark', 'system'] as const)(
-    'passes %s to the Web sheets, which paint it without a frame',
-    async (scheme) => {
-      const wrapper = await mountPreview(scheme, 'web');
-      expect(wrapper.find('[data-testid="preview-sheet"]').exists())
-        .toBe(false);
-      expect(wrapper.find('[data-color-scheme]').exists()).toBe(false);
-      expect(wrapper.get('[data-probe]').attributes('data-scheme'))
-        .toBe(scheme);
-      expect(wrapper.get('[data-probe]').attributes('data-mode'))
-        .toBe('sheets');
-    },
-  );
-
-  it.each([undefined, 'light'] as const)(
-    'keeps a %s scheme light on the Web preview',
-    async (scheme) => {
-      const wrapper = await mountPreview(scheme, 'web');
-      expect(wrapper.find('[data-testid="preview-sheet"]').exists())
-        .toBe(false);
-      expect(wrapper.get('[data-probe]').attributes('data-scheme'))
-        .toBeUndefined();
-      expect(wrapper.get('[data-probe]').attributes('data-mode'))
-        .toBe('sheets');
-    },
-  );
-
   it.each(['dark', 'system', 'light', undefined] as const)(
-    'keeps the white PDF sheet light for %s',
-    async (scheme) => {
-      const wrapper = await mountPreview(scheme, 'pdf');
+    'keeps the white PDF preview light for %s', async (scheme) => {
+      const accepted = acceptedFixture();
+      accepted.document.customization = withScheme(
+        accepted.document.customization,
+        scheme,
+      );
+      const wrapper = mount(EditorPreview, {
+        props: { document: accepted.document, lng: accepted.metadata.lng },
+        global: { stubs: { ResumeDocument: Probe } },
+      });
+      await nextTick();
       const sheet = wrapper.get('[data-testid="preview-sheet"]');
-      expect(sheet.attributes('data-color-scheme')).toBeUndefined();
       expect(sheet.classes('bg-white')).toBe(true);
-      expect(wrapper.get('[data-probe]').attributes('data-scheme'))
-        .toBeUndefined();
+      expect(wrapper.find('[data-color-scheme]').exists()).toBe(false);
       expect(wrapper.get('[data-probe]').attributes('data-mode'))
         .toBe('paged');
+      expect(wrapper.get('[data-probe]').attributes('data-context-keys'))
+        .toBe('lng mode nameHeading');
+      wrapper.unmount();
     },
   );
-
-  it('shows the scheme when the reader switches from PDF to Web', async () => {
-    const wrapper = await mountPreview('dark', 'pdf');
-    await wrapper.get('[data-mode="web"]').trigger('click');
-    expect(wrapper.find('[data-testid="preview-sheet"]').exists()).toBe(false);
-    expect(wrapper.get('[data-probe]').attributes('data-scheme'))
-      .toBe('dark');
-    expect(wrapper.get('[data-probe]').attributes('data-mode'))
-      .toBe('sheets');
-  });
 });
 
 describe('public page skip link focus colors', () => {

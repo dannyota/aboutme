@@ -10,6 +10,7 @@ import type { components } from '../../api/generated/openapi';
 import JoinInvite from '../../components/public/JoinInvite.vue';
 import ProjectListPage from '../../components/public/ProjectListPage.vue';
 import ProjectPage from '../../components/public/ProjectPage.vue';
+import PublicPages from '../../components/public/PublicPages.vue';
 import PublicGate from '../../components/public/PublicGate.vue';
 import PublicResumeApp from '../../components/public/PublicResumeApp.vue';
 import ResumeDocument from '../../components/resume/ResumeDocument.vue';
@@ -28,7 +29,6 @@ import { GATE_STYLE } from '../../../server/workers/public-render/gate-style';
 import { resolveFontSelection } from '../../utils/fontCatalog';
 import { fontsReady } from '../../utils/fontsReady';
 import { sanitizeRichText } from '../../utils/sanitizeRichText';
-import { withDarkGround } from './dark-ground-fixture';
 import { withWrappingBody } from './justify-fixture';
 import {
   type EntryPointFixture,
@@ -116,6 +116,7 @@ let requestedZoomValue: number | undefined;
 let sampleLanguage: 'vi' | 'en' | undefined;
 let selectedFontId: string | undefined;
 let entryPoints: EntryPointFixture | undefined;
+let publicPages = true;
 
 if (isCorpus) {
   requireAllowedKeys(new Set(['payload', 'raw']));
@@ -169,8 +170,8 @@ if (isCorpus) {
   requireAllowedKeys(
     new Set(
       [
-        'align', 'fixture', 'font', 'ground', 'invite', 'links', 'lng', 'mode',
-        'paper', 'print', 'repeat', 'scheme', 'template', 'zoom',
+        'align', 'fixture', 'font', 'invite', 'links', 'lng', 'mode', 'pages',
+        'paper', 'print', 'repeat', 'scheme', 'template', 'wrap', 'zoom',
       ],
     ),
   );
@@ -212,6 +213,12 @@ if (isCorpus) {
       badQuery();
     }
     inviteHref = requestedInvite === 'register' ? '/register' : '/login';
+  }
+
+  const requestedPages = singleton('pages');
+  if (requestedPages !== undefined) {
+    if (resolvedMode !== 'public' || requestedPages !== '0') badQuery();
+    publicPages = false;
   }
 
   const requestedLanguage = singleton('lng');
@@ -314,12 +321,22 @@ if (isCorpus) {
     resolvedDocument.customization.colorScheme
       = requestedScheme as Resume['customization']['colorScheme'];
   }
-  const requestedGround = singleton('ground');
-  if (requestedGround !== undefined) {
-    if (requestedGround !== 'dark' || resolvedMode !== 'public') badQuery();
-    withDarkGround(resolvedDocument);
+  const requestedWrap = singleton('wrap');
+  if (requestedWrap !== undefined) {
+    if (
+      requestedWrap !== '1'
+      || resolvedMode !== 'paged'
+      || fixture.startsWith('sample-')
+    ) {
+      badQuery();
+    }
   }
-  if (resolvedMode === 'public') withWrappingBody(resolvedDocument);
+  if (
+    (resolvedMode === 'public' || requestedWrap === '1')
+    && !fixture.startsWith('sample-')
+  ) {
+    withWrappingBody(resolvedDocument);
+  }
   const requestedLinks = singleton('links');
   if (requestedLinks !== undefined) {
     if (requestedLinks !== '1' || resolvedMode === 'paged') badQuery();
@@ -538,6 +555,7 @@ onMounted(async () => {
       v-if="publicResume !== undefined"
       :home-href="HOME_HREF"
       :public-resume="publicResume"
+      :pages="publicPages ? PublicPages : undefined"
       v-bind="entryPoints ?? {}"
     />
     <ScaledSheet

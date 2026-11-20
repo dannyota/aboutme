@@ -59,14 +59,9 @@ describe('section pagination parts', () => {
   });
 
   it('gives pagination gap resets higher specificity than base margins', () => {
-    const source = readFileSync(
-      'app/components/resume/PagedResume.vue',
-      'utf8',
-    );
-    const { descriptor } = parse(source, { filename: 'PagedResume.vue' });
     const compiled = compileStyle({
-      source: descriptor.styles[0]?.content ?? '',
-      filename: 'PagedResume.vue',
+      source: readFileSync('app/components/resume/pagedResume.css', 'utf8'),
+      filename: 'pagedResume.css',
       id: 'paged-resume',
       scoped: false,
     });
@@ -84,13 +79,28 @@ describe('section pagination parts', () => {
     expect(compiled.code).toContain(
       '.resume-document .pagination-atomic .entry {\n  min-block-size: 1px',
     );
-    expect(compiled.code).toContain(
-      '.resume-page[data-page-overflow=\'true\']',
-    );
-    expect(compiled.code).toContain(
-      '.pagination-atomic[data-block-overflow=\'true\']',
-    );
   });
+
+  it('outlines an overflowing page and block only in the editor preview',
+    () => {
+      const css = readFileSync(
+        'app/components/resume/pagedResume.css',
+        'utf8',
+      );
+      const outlined = [...css.matchAll(/([^{}]+)\{([^}]*)\}/gu)]
+        .filter(([, , body]) => /\boutline\b/u.test(body!))
+        .map(([, selector]) => selector!.trim().replaceAll(/\s+/gu, ' '));
+
+      expect(outlined).toEqual([
+        '.preview-sheet .resume-page[data-page-overflow=\'true\']',
+        '.preview-sheet .pagination-atomic[data-block-overflow=\'true\']',
+      ]);
+      const pageRule = /\.resume-page \{([^}]*)\}/u.exec(css)?.[1] ?? '';
+      expect(pageRule).toContain('overflow: visible');
+      expect(css).not.toMatch(
+        /\.resume-page[^{]*\{[^}]*overflow: (?:hidden|clip)/u,
+      );
+    });
 
   it('renders a heading without retaining entry content', async () => {
     const html = await renderPart('heading');

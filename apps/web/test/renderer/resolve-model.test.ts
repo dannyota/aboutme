@@ -79,4 +79,28 @@ describe('resolved render boundary', () => {
       { lng: 'en', mode: 'paged' },
     )).toThrow(ResumeRenderError);
   });
+
+  it.each(['dark', 'system'] as const)(
+    'renders a stored %s scheme with the light roles in every mode',
+    (colorScheme) => {
+      for (const mode of ['continuous', 'paged'] as const) {
+        const light = fixture('full');
+        const marked = fixture('full');
+        marked.customization.colorScheme = colorScheme;
+        const context = {
+          lng: 'en',
+          mode,
+          photoUrl: 'data:image/png;base64,AA==',
+        };
+        const model = resolveRenderModel(marked, context);
+        expect(model, mode).toEqual(resolveRenderModel(light, context));
+        expect(model, mode).not.toHaveProperty('colorScheme');
+        for (const scope of [model.styles.root, model.styles.sidebar]) {
+          expect(Object.keys(scope ?? {}).filter((name) =>
+            !name.startsWith('--color-') && name.includes('color-')))
+            .toEqual([]);
+        }
+      }
+    },
+  );
 });

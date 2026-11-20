@@ -87,8 +87,8 @@ and `y` once present. `customization.header` requires `align`, `detailsLayout`,
 and `iconStyle` together, while `photoPosition` remains optional. A margin or a
 header missing any required child is invalid rather than partially defaulted.
 
-`colorScheme` sets the screen scheme of the public page and the editor's Web
-preview: `system` follows each viewer's `prefers-color-scheme`. The PDF and
+`colorScheme` sets the scheme of the public page's desk and bar: `system`
+follows each viewer's `prefers-color-scheme`. The resume pages, the PDF and
 print always render light. A template switch keeps the user's choice, so presets
 do not set it. The
 [public page theme](../public-page-theme.md#color-scheme-setting) owns its
@@ -107,9 +107,7 @@ rewrite it (ADR 0004). A preset never contains section keys.
 ### 3.1 Scale
 
 Every size is a renderer-fixed multiple of `--fs-base`, which is
-`font.baseSizePx`, or at least 16 px in the screen sheets of the
-[web layout](../public-web-layout.md#inside-a-sheet). A template varies size
-only by moving the base.
+`font.baseSizePx`. A template varies size only by moving the base.
 
 | Property        | Multiple of base | Weight | Line height    | Used by                    |
 | --------------- | ---------------- | ------ | -------------- | -------------------------- |

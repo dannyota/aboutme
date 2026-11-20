@@ -118,6 +118,48 @@ describe('startJoinInviteTiming', () => {
     expect(onShow).toHaveBeenCalledTimes(1);
   });
 
+  it('shows at 60 percent of the pages when the page reports progress',
+    async () => {
+      const doc = new FakeDoc();
+      const win = new FakeWindow();
+      const pages = new EventTarget();
+      let progress: number | null = 1 / 5;
+      const onShow = vi.fn();
+      startJoinInviteTiming(onShow, {
+        window: win as unknown as Window,
+        document: doc as unknown as Document,
+        progress: () => progress,
+        progressTarget: pages,
+      });
+      await vi.advanceTimersByTimeAsync(5_000);
+      win.scrollY = 9_200;
+      win.dispatchEvent(new Event('scroll'));
+      expect(onShow).not.toHaveBeenCalled();
+      progress = 2 / 5;
+      pages.dispatchEvent(new Event('public-page-change'));
+      expect(onShow).not.toHaveBeenCalled();
+      progress = 3 / 5;
+      pages.dispatchEvent(new Event('public-page-change'));
+      expect(onShow).toHaveBeenCalledTimes(1);
+    });
+
+  it('falls back to the scroll position when no page progress applies',
+    async () => {
+      const doc = new FakeDoc();
+      const win = new FakeWindow();
+      const onShow = vi.fn();
+      startJoinInviteTiming(onShow, {
+        window: win as unknown as Window,
+        document: doc as unknown as Document,
+        progress: () => null,
+        progressTarget: new EventTarget(),
+      });
+      await vi.advanceTimersByTimeAsync(5_000);
+      win.scrollY = 9_200 * 0.6;
+      win.dispatchEvent(new Event('scroll'));
+      expect(onShow).toHaveBeenCalledTimes(1);
+    });
+
   it('stop() cancels timers and listeners before it fires', async () => {
     const doc = new FakeDoc();
     const win = new FakeWindow();
@@ -156,15 +198,18 @@ describe('joinInvitePlacement', () => {
   });
 });
 
-describe('joinInvitePlacement measures the first sheet', () => {
-  function page(measureRight: number, viewport: number): Element {
+describe('joinInvitePlacement measures the first page', () => {
+  function page(
+    measureRight: number,
+    viewport: number,
+    selector = '.public-pages .public-page-sheet',
+  ): Element {
     const sheet = {
       getBoundingClientRect: () => ({ right: measureRight }),
     };
     return {
       getBoundingClientRect: () => ({ right: viewport }),
-      querySelector: (selector: string) =>
-        selector === '.resume-sheets > .resume-sheet' ? sheet : null,
+      querySelector: (query: string) => query === selector ? sheet : null,
     } as unknown as Element;
   }
 
@@ -176,6 +221,15 @@ describe('joinInvitePlacement measures the first sheet', () => {
   it('uses the bar when the first sheet leaves under 360 px', () => {
     const win = { innerWidth: 1_920 } as unknown as Window;
     expect(joinInvitePlacement(page(1_920 - 359, 1_920), win)).toBe('bar');
+  });
+
+  it('falls back to the continuous article when no page shows', () => {
+    const win = { innerWidth: 1_920 } as unknown as Window;
+    const article = '.public-resume-page > .resume-document';
+    expect(joinInvitePlacement(page(1_920 - 360, 1_920, article), win))
+      .toBe('card');
+    expect(joinInvitePlacement(page(1_920 - 359, 1_920, article), win))
+      .toBe('bar');
   });
 
   it('falls back to the root when it holds no sheet', () => {
