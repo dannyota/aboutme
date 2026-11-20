@@ -3,9 +3,9 @@
 ## Claude Code specifics
 
 - The primary session runs as `manager` in `.claude/settings.json`; its duties are in AGENTS.md "AI agent definitions".
-- The owner chooses the primary session's model; workers and subagents never run on Sonnet. Use the latest Opus for Claude subagents when a job needs one.
+- The owner chooses the primary session's model. Subagent models follow [workflow](instructions/workflow.md#models-and-ownership): Sonnet implements, Opus reviews, Fable only for hard and complex work (owner, 2026-11-20).
 - Follow [workflow](instructions/workflow.md#models-and-ownership) for Claude subagents, model routing, and independent reviews.
-- Codex is optional (owner, 2026-11-18). When used, run it with `scripts/codex-agent.sh [--model <m>] [--effort <e>] [--search] <role> <worktree> <brief-file> <report-file>`. The script loads model, effort, sandbox, and developer instructions from `<worktree>/.codex/agents/<role>.toml` and redirects stdin from `/dev/null`.
+- Codex Terra implements and Codex Sol reviews when Codex is available (owner, 2026-11-20). Run it with `scripts/codex-agent.sh [--model <m>] [--effort <e>] [--search] <role> <worktree> <brief-file> <report-file>`. The script loads model, effort, sandbox, and developer instructions from `<worktree>/.codex/agents/<role>.toml` and redirects stdin from `/dev/null`.
 - `workspace-write` Codex roles get network access and write only the worktree, fixed per-user Go and golangci-lint caches, a new private `$TMPDIR` per launch (not `/tmp`), and the shared lock directory, never `.git` or the pnpm store or cache; install a worktree's dependencies before dispatching a worker. They run their own bounded checks through the managed lock under [resources](instructions/resources.md), like Opus subagents. Read-only roles get network only with `--search`. The primary still runs `make pre-push` before pushing; reviewers read check output and exact-commit CI evidence. Sandboxes have no user systemd bus.
 - The launcher drops credential environment variables, Codex shell snapshots, login shells, the owner's shell startup files, and Git credential helpers. The login keychain and credential files stay readable from the sandbox, so network access is not credential isolation.
 - Codex sandboxes mount `.codex/` read-only, so workers cannot edit `.codex/agents/*.toml`; the primary applies those edits.
