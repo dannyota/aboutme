@@ -38,4 +38,7 @@
 - Pushing a commit to a branch with an open pull request cancels its running CI (workflow concurrency); batch fixes instead of pushing mid-run.
 - Worktrees have no `node_modules`: ESM scripts ignore `NODE_PATH`. For one-off checks symlink the main checkout's ignored `node_modules` and remove it after; `make pre-push` refuses symlinked dependencies, so run Prettier and markdownlint from the main checkout's `node_modules/.bin`.
 - New GHCR packages start private; only the owner can make one public, in its settings page. Check anonymous pulls with the registry token flow (`curl "https://ghcr.io/token?scope=repository:dannyota/<pkg>:pull"`, then the manifest URL); an empty podman auth file can falsely report a denial.
+- Chain checks and push with `&&`, never `;`: a `;` pushed a branch once after pre-push failed.
+- A CI job proves its result only on its runner image: read the `Image`/`Version` lines in the job log. A green rerun on an older image proves nothing.
+- Nuxt Vitest in a worktree with symlinked `node_modules` needs `pnpm exec --config.verify-deps-before-run=false` and the main checkout's path in `server.fs.allow`; prefer hosted CI there.
 - The Bash tool blocks foreground `sleep` chains: wait with `run_in_background` and an until-loop. Background waiters die with the session, so write `.dev/handoff/<date>-manager.md` before a restart.

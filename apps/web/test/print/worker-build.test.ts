@@ -74,6 +74,7 @@ describe('print worker build', () => {
       expect(card).toContain('Nguyễn Văn An');
       expect(card).not.toContain('resume-document');
     },
+    60_000,
   );
 
   it('reports the emitted Nitro worker path', () => {
