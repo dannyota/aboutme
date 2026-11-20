@@ -64,6 +64,8 @@ Open items that outlived their shipped plans. One line each, with the evidence t
 
 ## Vietnam production
 
+- `/verify` emits an API-only command (`apps/web/app/utils/verifyView.ts`), and `scripts/deployment-document-check.sh` uses the same API for legacy images. After the repository transfer, GitHub returns 404 for the v0.9.34 and v0.9.35 attestation lookups; their OCI provenance is still verifiable. Make both commands use OCI for `dannyota` without weakening signer and image checks, and address the legacy provenance link. Evidence: [repository transfer](../design/repository-transfer.md#what-the-transfer-moves).
+
 - Complete anonymous approval discovery with a throwaway environment before building: prove the remaining review cases and complete-cycle rate budget. One approval was visible anonymously on 2026-11-01. Evidence: [production pull deployment](../design/production-pull-deploy/README.md#approval-api-proof).
 
 - Raise the remaining pinned host packages once their transitions are designed: the bouncer 0.0.38 and pgBackRest 2.60.0 notes list no security fix (pgBackRest changes restore and expire defaults on page-checksum errors). CrowdSec runs 1.8.2 since v0.8.25 ([upgrade design](../design/crowdsec-1.8.2-raise.md)). Ubuntu security updates, openssh 1:9.6p1-3ubuntu13.20, and kernel 6.8.0-149 were applied on 2026-11-08 by hand; the host-local `apt-mark hold` on the openssh packages was released.

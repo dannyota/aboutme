@@ -1,17 +1,16 @@
 # Repository transfer to dntmakers
 
 Accepted 2026-11-19 (owner): the owner moves `github.com/dannyota/aboutme` to
-the organization `github.com/dntmakers/aboutme`. This design moves the release
-images, signature checks, scripts, workflows and links with it. No deploy fails,
-the running release stays verifiable, and rollback to any earlier release still
-verifies.
+the organization `github.com/dntmakers/aboutme`. New release images use the
+organization namespace. Deployed images and rollback targets keep their original
+signers and require verifiable provenance.
 
 ## What the transfer moves
 
 | Item                                        | After the transfer                                                                                                                                                          |
 | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Issues, pull requests, stars, watchers      | Move ([transfer docs][transfer])                                                                                                                                            |
-| Releases, Actions history, attestations     | Expected to move; checked after the transfer. The attestations API keys by repository ID                                                                                    |
+| Releases, Actions history, attestations     | Releases and Actions history moved. The API returned 404 for sampled pre-transfer attestations under both names and the repository ID.                                      |
 | Secrets, webhooks, deploy keys              | Stay associated ([transfer docs][transfer])                                                                                                                                 |
 | Rulesets, environments, Actions settings    | Not stated in the docs; checked after the transfer. The organization's default repository permissions apply ([transfer docs][transfer])                                     |
 | Old web, Git and API URLs                   | Redirect: the API answers 301 to `/repositories/<id>/…`, which `gh` and `git` follow and plain `curl` does not. A new repository or fork at the old name ends the redirects |
@@ -45,9 +44,8 @@ verifies.
      `dannyota` or `dntmakers`.
    - Its `SourceRepositoryOwnerIdentifier` must be that owner's account ID:
      244348267 for `dannyota`, 342323513 for `dntmakers`.
-   - The ID pin makes both owners safe to accept permanently, so rollback to any
-     earlier release keeps working. No boundary tag and no tag freeze are
-     needed.
+   - The ID pin makes both owners safe to accept permanently. No boundary tag
+     and no tag freeze are needed.
 3. **Host records check shape only, and accept both owners permanently.**
    - In `release.json`, `release.previous.json`, `maintenance.json` and stored
      operation states, server, web and caddy share one owner. The maintenance
@@ -66,10 +64,10 @@ verifies.
      certificate. It rebuilds `source_repository` and the commit, release, SBOM
      and provenance links from its build-time owner, the
      `github.repository_owner` that built it. The build refuses any other owner,
-     and the observer refuses to start without one. Every old URL redirects to
-     the current name. It fetches attestations from
+     and the observer refuses to start without one. It fetches attestations from
      `https://api.github.com/repositories/1318874703/attestations/<digest>` and
-     publishes the provenance link under its build-time owner.
+     falls back to GHCR if the API has no bundle or is rate limited. The
+     provenance link names its build-time owner.
    - From step 1, the schema and the web decoder accept both owners in
      `source_repository`, `components[].image`, `signer_workflow` and every link
      pattern. A new web can then read the previous observer's document during a
@@ -85,6 +83,13 @@ verifies.
      that file is absent. They parse its one owner line with a strict pattern
      and never source a file from an old commit. The signature check then binds
      the owner.
+   - For `dannyota` images, the deploy and operations verifier reads provenance
+     from GHCR using `gh attestation verify --bundle-from-oci`. It uses the
+     GitHub API for `dntmakers` images. Both sources require the same signature,
+     repository, owner, and image checks. OCI retrieval does not check who
+     currently holds the repository name; the repository and owner ID pins
+     enforce that identity. Verification fails if the CLI lacks the flag or the
+     legacy image lacks a verifiable bundle.
    - `release-images.yml`'s eligibility step fails when
      `github.repository_owner` differs from that owner, so a tag pushed in the
      wrong window publishes nothing.
