@@ -31,42 +31,101 @@ function sources(directory: string): string[] {
   });
 }
 
-function resolveImport(from: string, specifier: string): string | undefined {
-  if (!specifier.startsWith('.')) return undefined;
-  const base = resolve(dirname(from), specifier);
-  return [base, `${base}.ts`, `${base}.vue`, `${base}/index.ts`]
-    .find((path) => existsSync(path) && statSync(path).isFile());
+type Source = (path: string) => string | undefined;
+
+const diskSource: Source = (path) =>
+  existsSync(path) && statSync(path).isFile()
+    ? readFileSync(path, 'utf8')
+    : undefined;
+
+const ALIASES: readonly (readonly [string, string])[] = [
+  ['@@/', webRoot],
+  ['~~/', webRoot],
+  ['@/', resolve(webRoot, 'app')],
+  ['~/', resolve(webRoot, 'app')],
+];
+
+function specifierBase(from: string, specifier: string): string | undefined {
+  if (specifier.startsWith('.')) return resolve(dirname(from), specifier);
+  const alias = ALIASES.find(([prefix]) => specifier.startsWith(prefix));
+  return alias === undefined
+    ? undefined
+    : resolve(alias[1], specifier.slice(alias[0].length));
 }
 
-function reachable(): Map<string, string | undefined> {
-  const entries = ENTRY_ROOTS.flatMap((root) =>
-    sources(resolve(webRoot, root)));
-  const seen = new Map<string, string | undefined>(
+function resolveImport(
+  from: string,
+  specifier: string,
+  source: Source,
+): string | undefined {
+  const base = specifierBase(from, specifier);
+  if (base === undefined) return undefined;
+  return [base, `${base}.ts`, `${base}.vue`, `${base}/index.ts`]
+    .find((path) => source(path) !== undefined);
+}
+
+interface Graph {
+  readonly reached: Map<string, string | undefined>;
+  readonly unresolved: string[];
+}
+
+function walk(entries: string[], source: Source): Graph {
+  const reached = new Map<string, string | undefined>(
     entries.map((entry) => [entry, undefined]),
   );
+  const unresolved: string[] = [];
   const queue = [...entries];
   for (let file = queue.shift(); file !== undefined; file = queue.shift()) {
-    for (const match of readFileSync(file, 'utf8').matchAll(IMPORT)) {
-      const target = resolveImport(file, match.slice(1).find(Boolean) ?? '');
-      if (target === undefined || seen.has(target)) continue;
-      seen.set(target, file);
+    for (const match of (source(file) ?? '').matchAll(IMPORT)) {
+      const specifier = match.slice(1).find(Boolean) ?? '';
+      const target = resolveImport(file, specifier, source);
+      if (target === undefined) {
+        if (specifierBase(file, specifier) !== undefined) {
+          unresolved.push(`${relative(webRoot, file)}: ${specifier}`);
+        }
+        continue;
+      }
+      if (reached.has(target)) continue;
+      reached.set(target, file);
       queue.push(target);
     }
   }
-  return seen;
+  return { reached, unresolved };
 }
+
+const reachable = (): Graph => walk(
+  ENTRY_ROOTS.flatMap((root) => sources(resolve(webRoot, root))),
+  diskSource,
+);
 
 describe('public render worker boundary', () => {
   it('walks the public render sources and the shared renderer', () => {
-    const graph = [...reachable().keys()]
+    const graph = [...reachable().reached.keys()]
       .map((path) => relative(webRoot, path));
     expect(graph).toContain('server/workers/public-render/render.ts');
     expect(graph).toContain('app/components/public/PublicResumeApp.vue');
     expect(graph).toContain('app/components/resume/pageMetrics.ts');
   });
 
+  it('resolves every local and alias import it follows', () => {
+    expect(reachable().unresolved).toEqual([]);
+  });
+
+  it('reports a local or alias import that resolves to no file', () => {
+    const entry = resolve(webRoot, 'server/workers/public-render/a.ts');
+    const files = new Map([[entry, [
+      'import a from \'~/missing.ts\';',
+      'import b from \'../nowhere\';',
+      'import c from \'vue\';',
+    ].join('\n')]]);
+    expect(walk([entry], (path) => files.get(path)).unresolved).toEqual([
+      'server/workers/public-render/a.ts: ~/missing.ts',
+      'server/workers/public-render/a.ts: ../nowhere',
+    ]);
+  });
+
   it('never reaches the browser pagination modules', () => {
-    const graph = reachable();
+    const graph = reachable().reached;
     const reached = FORBIDDEN.flatMap((path) => {
       const absolute = resolve(webRoot, path);
       const from = graph.get(absolute);
@@ -74,5 +133,21 @@ describe('public render worker boundary', () => {
       return graph.has(absolute) ? [`${path} <- ${via}`] : [];
     });
     expect(reached).toEqual([]);
+  });
+
+  it('follows alias imports into the pagination modules', () => {
+    const files = new Map([
+      [resolve(webRoot, 'server/workers/public-render/a.ts'),
+        'import Doc from \'@/components/resume/ResumeDocument.vue\';'],
+      [resolve(webRoot, 'app/components/resume/ResumeDocument.vue'),
+        'import Paged from \'./PagedResume.vue\';'],
+      [resolve(webRoot, 'app/components/resume/PagedResume.vue'), ''],
+    ]);
+    const graph = walk(
+      [resolve(webRoot, 'server/workers/public-render/a.ts')],
+      (path) => files.get(path),
+    );
+    expect([...graph.reached.keys()].map((path) => relative(webRoot, path)))
+      .toContain('app/components/resume/PagedResume.vue');
   });
 });
