@@ -255,6 +255,7 @@ export function verifyImageCommand(target: CommandTarget | null): Command {
     [plain('  oci://ghcr.io/'), owner, plain('/aboutme-'), repository,
       plain('@sha256:'), digest, plain(' \\')],
     [plain('  --repo '), owner, plain('/aboutme \\')],
+    ...(target?.owner === 'dannyota' ? [[plain('  --bundle-from-oci \\')]] : []),
     [plain('  --signer-workflow '), owner,
       plain('/aboutme/.github/workflows/release-images.yml \\')],
     [plain('  --source-ref refs/tags/'), version, plain(' \\')],
