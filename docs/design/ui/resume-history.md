@@ -300,3 +300,7 @@ Phone, 390 px, Edit tab, then Preview tab after choosing a version:
    project link.
 5. Restore waits until every change is saved, so it never sends a revision the
    owner has not seen.
+6. On the button row below 42 rem, Back to editing and Restore keep at least 40
+   px height and let their labels wrap to a second line when the shared width is
+   too narrow, as Vietnamese is at 320 px. Labels are never truncated, and
+   nothing overflows.
