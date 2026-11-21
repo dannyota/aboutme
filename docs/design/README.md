@@ -108,6 +108,7 @@ Current behavior lives in code, deployment configuration, and
 | Other   | [UI: showcase results](ui/showcase-results.md)                         | Grid, tiles, invitation, pagination, and result states                              |
 | Other   | [UI: shell and editor](ui/shell-and-editor.md)                         | App shell, account pages, resume list, editor, and settings                         |
 | Other   | [UI: projects workspace](ui/projects.md)                               | Project list and project editor screens                                             |
+| Other   | [UI: resume history](ui/resume-history.md)                             | Editor History panel, version preview, restore and delete dialogs                   |
 | Other   | [UI: project pages](ui/project-pages.md)                               | Public project list and project page layout and copy                                |
 | Other   | [UI: responsive and accessibility](ui/responsive-and-accessibility.md) | Narrow editor layouts, motion, and accessibility                                    |
 
