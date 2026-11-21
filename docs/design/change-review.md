@@ -271,8 +271,9 @@ state, so no revocation fence is added.
 ## Data lifecycle and privacy
 
 - Export: version 3 in v0.10.0 adds checkpoints; version 4 in v0.10.1 adds
-  pending proposals. The version 2 worst case is about 12.3 MiB; adding 6 MiB of
-  checkpoints and 4 MiB of proposals stays under the 24 MiB cap.
+  pending proposals, including those hidden while the flag is off. The version 2
+  worst case is about 12.3 MiB; adding 6 MiB of checkpoints and 4 MiB of
+  proposals stays under the 24 MiB cap.
 - Checkpoints and proposals never reach a public read, cache, preview card,
   showcase, sitemap or `llms.txt`.
 - Backups hold them for the backup period after deletion, as they hold every
