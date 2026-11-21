@@ -86,8 +86,7 @@ Callers:
 All five are session routes with `sessionCookie` and `csrfToken`, tag `resumes`,
 path parameters `ResumeID` and `CheckpointID`, the read limiter on `GET` and the
 resume write limiter otherwise. They are not agent operations, and each handler
-also refuses an agent principal with the shared forbidden response; a test calls
-each with an agent principal.
+also answers `ResumeNotFound` to an agent principal; a test calls each with one.
 
 | Method and path                                         | operationId               | Headers                       | Success |
 | ------------------------------------------------------- | ------------------------- | ----------------------------- | ------- |
@@ -107,11 +106,12 @@ each with an agent principal.
 - The read returns the same item plus `lng`, `schemaVersion` and `document`
   (`personalDetails` without `photo`, `content`, `customization`), converted to
   the current schema version. The client previews it with the current photo.
-- `getResumeCheckpoint` follows `getResume` for parameters and responses.
-  `restoreResumeCheckpoint` follows `updateResumePersonalDetails`, including
-  `SchemaVersionHeader`, `400`, `401`, `403`, `405`, `412`, `428`, `409`, `422`,
-  `429`, `500` and `PublicStateBusy`. Delete and clear follow restore without
-  `If-Match`, `412` and `428`.
+- Responses. List and read: `200`, `400`, `401`, `404`, `405`, `429` and `500`,
+  with no `ETag` or `SchemaVersionHeader`, since the body is always at the
+  current version. Restore follows `updateResumePersonalDetails`:
+  `SchemaVersionHeader`, `400`, `401`, `403`, `404`, `405`, `409`, `412`, `422`,
+  `428`, `429`, `500` and `PublicStateBusy`. Delete and clear: `204`, `400`,
+  `401`, `403`, `404`, `405`, `409`, `429` and `500`.
 - Delete and clear touch no resume column, advance no revision and take no
   `If-Match`. [API](api.md) records them as exceptions to the `If-Match` rule,
   and the mutation header contract test lists them.
@@ -140,9 +140,9 @@ the public-state coordinator like every other resume write. Its operation:
 
 The daily privacy retention sweep (`privacy_retention.sql`, `Worker.Retain`)
 gains a `resume_checkpoints` category: delete checkpoints with `started_at` more
-than 29 days old, so a daily run removes each before it is 30 days old, or with
-a `schema_version` below the oldest version in
-`packages/schema/released-versions.json`; 1,000 per page and 10,000 per run,
+than 28 days old, so a daily run removes each before it is 30 days old even
+after a late or long run, or with a `schema_version` outside `acceptedVersions`
+in `packages/schema/released-versions.json`; 1,000 per page and 10,000 per run,
 with its backlog query and a database test. Reads and export filter at 30 days
 and at accepted versions, so a backlog never shows an older checkpoint.
 
