@@ -4,6 +4,35 @@ root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 host=$root/deploy/vn/scripts/deploy-host.sh
+prune_lib=$root/deploy/vn/scripts/image-prune.sh
+(
+  fixture=$work/startup
+  mkdir "$fixture"
+  sed "s|^lib=/usr/local/lib/aboutme$|lib=\"$fixture\"|" "$host" >"$fixture/deploy-host.sh"
+  cp "$root/deploy/vn/scripts/deploy-safety.sh" "$fixture/"
+  export PRUNE_ADMISSION_LOG=$fixture/calls
+  id() { printf 'id\n' >>"$PRUNE_ADMISSION_LOG"; printf '0\n'; }
+  export -f id
+  for fault in missing symlink; do
+    if [[ $fault == symlink ]]; then
+      printf '%s\n' 'printf "sourced\n" >>"$PRUNE_ADMISSION_LOG"' >"$fixture/unsafe.sh"
+      ln -s unsafe.sh "$fixture/image-prune.sh"
+    fi
+    if bash "$fixture/deploy-host.sh" >"$fixture/out" 2>&1 ||
+       ! grep -qF 'image-prune.sh' "$fixture/out" || [[ -e $PRUNE_ADMISSION_LOG ]]; then
+      printf 'deploy-host did not refuse a %s image-prune.sh before dispatch: %s\n' "$fault" "$(cat "$fixture/out")" >&2
+      exit 1
+    fi
+  done
+  rm "$fixture/image-prune.sh"
+  cp "$prune_lib" "$fixture/"
+  printf '%s\n' 'printf "sourced\n" >>"$PRUNE_ADMISSION_LOG"' >>"$fixture/image-prune.sh"
+  if bash "$fixture/deploy-host.sh" >"$fixture/out" 2>&1 ||
+     ! grep -qF 'usage: deploy-host.sh' "$fixture/out" || [[ $(cat "$PRUNE_ADMISSION_LOG") != $'sourced\nid' ]]; then
+    printf 'deploy-host did not accept the regular image-prune.sh\n' >&2
+    exit 1
+  fi
+)
 sed -n '/^step_oneshot() {/,/^}/p' "$host" >"$work/oneshot"
 sed 's|/usr/local/lib/aboutme/workload-lock.sh|workload_lock|' "$work/oneshot" >"$work/functions"
 # shellcheck disable=SC1091
@@ -389,9 +418,8 @@ for CLEANUP_ERROR in list exists reset; do
   grep -qxF 'deploy-host: cleared 0 stale healthcheck units' "$work/timers-out"
 done
 unset CLEANUP_ERROR
-sed -n '/^prune_refs() {/,/^}/p; /^step_prune_images() {/,/^}/p' "$host" >"$work/prune-functions"
-# shellcheck disable=SC1091
-source "$work/prune-functions"
+# shellcheck source=deploy/vn/scripts/image-prune.sh
+source "$prune_lib"
 p=$work/prune
 # shellcheck disable=SC2034 # read by the sourced prune functions
 state=$p/state units=$p/units data=$p/data operations_dir=$p/data/host-operations release_json=$p/state/release.json \

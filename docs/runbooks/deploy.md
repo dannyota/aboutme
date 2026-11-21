@@ -48,8 +48,8 @@ DEPLOY_HOST=<host> bash deploy/vn/scripts/deploy.sh <tag>
 ```
 
 The deployer checks tag-bound build provenance and requires the installed
-`fence.sh`, `deploy-host.sh`, and `deploy-safety.sh` to match the checkout. If
-they differ, install the reviewed host bundle before retrying.
+`fence.sh`, `deploy-host.sh`, `deploy-safety.sh`, and `image-prune.sh` to match
+the checkout. If they differ, install the reviewed host bundle before retrying.
 
 The deployer then:
 

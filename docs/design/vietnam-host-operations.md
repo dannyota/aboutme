@@ -82,7 +82,7 @@ Require clean, current reviewed `main` before opening SSH, then verify the live
 release's eligibility and exact amd64 digests. Pin the known SSH host key,
 refuse unknown/changed keys, and disable agent forwarding. Hash-check every
 installed runner, helper, unit, and template it uses, not just the deployer's
-three files. Root parses inputs again. Send target/confirmation data in a closed
+four files. Root parses inputs again. Send target/confirmation data in a closed
 JSON request on stdin to fixed `sudo .../operation-run.sh request`, never in
 sudo arguments or systemd unit names. The envelope is at most 4 KiB, with `verb`
 and the exact fields for that verb; reject extras. Unit argv contains only

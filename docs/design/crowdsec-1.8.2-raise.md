@@ -67,8 +67,8 @@ protocol.
 1. Require independent review, green exact-commit main-push CI, a patch tag and
    successful release-image publication under `instructions/releases.md:16`.
    Before host installation, take the encrypted incremental pgBackRest backup
-   through the workload lock and release annotation in
-   `deploy/vn/scripts/deploy-host.sh:235`. Require completion and healthy WAL
+   through the workload lock and release annotation in `step_backup` in
+   `deploy/vn/scripts/deploy-host.sh`. Require completion and healthy WAL
    archiving; the later deploy backup is too late. Keep keys on the host.
 2. Record the intended active edge and keep the reviewed old bundle/package
    available. Copy `deploy/vn` from clean reviewed main; run

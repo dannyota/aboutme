@@ -349,12 +349,12 @@ notice_adopt() {
   base=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
   incoming=$base/crowdsec-privacy-notice-host.sh
   if [[ -f $base/../scripts/fence.sh ]]; then base=$(cd "$base/../scripts" && pwd); fi
-  for name in fence deploy-host deploy-safety; do [[ -f $base/$name.sh && ! -L $base/$name.sh ]] || return 1; done
+  for name in fence image-prune deploy-host deploy-safety; do [[ -f $base/$name.sh && ! -L $base/$name.sh ]] || return 1; done
   state=$("$base/fence.sh" read 2>/dev/null) || return 1
   if [[ $(jq -r '.notice_authority.state // empty' <<<"$state") == initializing ]]; then
     notice_operation=$(jq -er .notice_authority.operation_id <<<"$state") || return 1
     [[ $(jq -r .operation_id <<<"$state") == "$notice_operation" && $(jq -r .operation_kind <<<"$state") == cutover ]] || return 1
-    for name in fence deploy-host deploy-safety; do
+    for name in fence image-prune deploy-host deploy-safety; do
       installed=/usr/local/lib/aboutme/$name.sh
       notice_absent "$installed" && continue
       [[ -f $installed && ! -L $installed ]] || return 1
@@ -397,11 +397,10 @@ notice_adopt() {
   if [[ $resuming == no ]]; then notice_fence mutation-start "$notice_operation" "$tag" quiesce >/dev/null 2>&1 || return 1; fi
   "$base/fence.sh" notice-authority "$notice_operation" initializing >/dev/null 2>&1 || return 1
   notice_install_canonical "$incoming" || return 1
-  for name in fence deploy-host deploy-safety; do
-    notice_recheck_mount && install -o root -g root -m 0755 "$base/$name.sh" "/usr/local/lib/aboutme/$name.sh" || return 1
-  done
-  for name in fence deploy-host deploy-safety; do
-    notice_safe_file "/usr/local/lib/aboutme/$name.sh" 755 && cmp -s "$base/$name.sh" "/usr/local/lib/aboutme/$name.sh" || return 1
+  for name in fence image-prune deploy-host deploy-safety; do
+    installed=/usr/local/lib/aboutme/$name.sh
+    notice_recheck_mount && install -o root -g root -m 0755 "$base/$name.sh" "$installed" || return 1
+    notice_safe_file "$installed" 755 && cmp -s "$base/$name.sh" "$installed" || return 1
   done
   aboutme_assert_cutover_quiescent && notice_bootstrap
 }
