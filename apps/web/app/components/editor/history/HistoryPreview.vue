@@ -56,6 +56,10 @@ const document = computed<Resume | null>(() => {
   };
 });
 
+const versionLng = computed(() => {
+  const lng = version.value?.lng;
+  return lng === null || lng === undefined || lng === '' ? 'und' : lng;
+});
 const blockedId = computed(() =>
   props.restoreBlocked ? 'history-restore-blocked' : undefined,
 );
@@ -176,7 +180,7 @@ defineExpose({ focusTitle: (): void => title.value?.focus() });
         v-else-if="document !== null && version !== null"
         :document="document"
         :label="copy.previewLabel(time)"
-        :lng="version.lng ?? record.current.metadata.lng"
+        :lng="versionLng"
         :photo-read="photoRead"
         :photo-url="photoUrl"
       />

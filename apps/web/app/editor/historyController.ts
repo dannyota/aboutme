@@ -80,10 +80,12 @@ export interface HistoryControllerDeps {
   readonly runtime: Pick<EditorRuntime, 'uuid' | 'nowEpochMs' | 'delay'>;
   readonly api?: HistoryApi;
   readonly refresh: () => Promise<unknown>;
+  restoreBlocked?: () => boolean;
 }
 
 export interface HistoryController {
   readonly list: Ref<HistoryListState>;
+  readonly loadFailed: Ref<boolean>;
   readonly selected: Ref<string>;
   readonly preview: Ref<HistoryPreviewState>;
   readonly restore: Ref<RestoreDialog | null>;
@@ -111,12 +113,14 @@ export interface HistoryController {
 }
 
 export const CURRENT_VERSION_ID = 'current';
+const UNDO_SKEW_MS = 60_000;
 
 export function createHistoryController(
   deps: HistoryControllerDeps,
 ): HistoryController {
   const api = deps.api ?? createHistoryApi();
   const list = ref<HistoryListState>({ kind: 'loading' });
+  const loadFailed = ref(false);
   const selected = ref<string>(CURRENT_VERSION_ID);
   const preview = ref<HistoryPreviewState>({ kind: 'idle' });
   const restore = ref<RestoreDialog | null>(null);
@@ -126,7 +130,7 @@ export function createHistoryController(
   const status = ref<HistoryStatus | null>(null);
   const focusRequest = ref<HistoryFocusRequest | null>(null);
 
-  let reading = false;
+  let loop: Promise<void> | null = null;
   let queued = false;
   let epoch = 0;
   let previewToken = 0;
@@ -141,6 +145,7 @@ export function createHistoryController(
     epoch += 1;
     previewToken += 1;
     list.value = { kind: 'loading' };
+    loadFailed.value = false;
     selected.value = CURRENT_VERSION_ID;
     preview.value = { kind: 'idle' };
     restore.value = null;
@@ -159,6 +164,7 @@ export function createHistoryController(
     const result = await api.list(deps.resumeId);
     if (mine !== epoch) return;
     if (result.kind === 'ok') {
+      loadFailed.value = false;
       list.value = { kind: 'ready', items: result.value };
       if (
         selected.value !== CURRENT_VERSION_ID
@@ -173,23 +179,26 @@ export function createHistoryController(
       deps.store.markSessionLost(deps.resumeId);
       return;
     }
-    list.value = { kind: 'failed' };
+    if (list.value.kind === 'ready') loadFailed.value = true;
+    else list.value = { kind: 'failed' };
   }
 
-  async function reload(): Promise<void> {
-    if (reading) {
+  function reload(): Promise<void> {
+    if (loop !== null) {
       queued = true;
-      return;
+      return loop;
     }
-    reading = true;
-    try {
-      do {
-        queued = false;
-        await readOnce();
-      } while (queued);
-    } finally {
-      reading = false;
-    }
+    loop = (async () => {
+      try {
+        do {
+          queued = false;
+          await readOnce();
+        } while (queued);
+      } finally {
+        loop = null;
+      }
+    })();
+    return loop;
   }
 
   function open(): void {
@@ -222,6 +231,7 @@ export function createHistoryController(
     }
     if (result.kind === 'not-found') {
       preview.value = { kind: 'gone' };
+      focusRequest.value = { kind: 'current' };
       await reload();
       if (token === previewToken) selected.value = CURRENT_VERSION_ID;
       return;
@@ -240,12 +250,13 @@ export function createHistoryController(
     let refreshed = false;
     for (;;) {
       const csrf = deps.auth.csrfToken.value;
-      if (
-        csrf === null
-        || deps.auth.authState.value !== 'authenticated'
-        || deps.auth.user.value?.id !== write.ownerId
-      ) {
+      const state = deps.auth.authState.value;
+      const sameOwner = deps.auth.user.value?.id === write.ownerId;
+      if (state === 'anonymous' || (state === 'authenticated' && !sameOwner)) {
         return { kind: 'session-lost' };
+      }
+      if (csrf === null || state !== 'authenticated') {
+        return { kind: 'failed' };
       }
       const result = await api.write(write, csrf);
       if (result.kind !== 'csrf-rejected') return result;
@@ -296,9 +307,12 @@ export function createHistoryController(
     ) {
       return;
     }
+    if (deps.restoreBlocked?.() === true) return;
     const record = deps.store.recordFor(deps.resumeId);
     const ownerId = owner();
     if (record === undefined || ownerId === undefined) return;
+    const startedMs = deps.runtime.nowEpochMs();
+    const priorIds = new Set(items().map((entry) => entry.id));
     if (restoreWrite === null || restoreWrite.checkpointId !== dialog.id) {
       restoreWrite = freezeHistoryWrite(
         {
@@ -331,7 +345,13 @@ export function createHistoryController(
         };
         await reload();
         if (banner.value?.id === dialog.id) {
-          banner.value = { ...banner.value, undoId: items()[0]?.id ?? null };
+          const undo = items().find(
+            (entry) =>
+              entry.cause === 'restore'
+              && !priorIds.has(entry.id)
+              && Date.parse(entry.startedAt) >= startedMs - UNDO_SKEW_MS,
+          );
+          banner.value = { ...banner.value, undoId: undo?.id ?? null };
         }
         return;
       }
@@ -499,6 +519,7 @@ export function createHistoryController(
 
   return {
     list,
+    loadFailed,
     selected,
     preview,
     restore,

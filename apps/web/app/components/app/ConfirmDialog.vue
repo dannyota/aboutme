@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
+import StatusBanner from './StatusBanner.vue';
 
 const props = withDefaults(
   defineProps<{
@@ -28,6 +29,8 @@ const props = withDefaults(
     readonly cancelLabel?: string;
     readonly destructive?: boolean;
     readonly busy?: boolean;
+    readonly busyLabel?: string;
+    readonly error?: string;
     readonly confirmText?: string;
     readonly confirmInputLabel?: string;
     readonly confirmAction?: string;
@@ -117,6 +120,12 @@ function onEscape(event: Event): void {
         <AlertDialogDescription>{{ description }}</AlertDialogDescription>
         <slot name="header-actions" />
       </AlertDialogHeader>
+      <StatusBanner
+        v-if="error !== undefined"
+        kind="error"
+      >
+        {{ error }}
+      </StatusBanner>
       <div
         v-if="confirmText !== undefined"
         class="grid gap-1.5"
@@ -148,7 +157,7 @@ function onEscape(event: Event): void {
           :variant="destructive ? 'destructive' : 'default'"
           @click="emit('confirm')"
         >
-          {{ confirmLabel }}
+          {{ busy && busyLabel !== undefined ? busyLabel : confirmLabel }}
         </Button>
       </AlertDialogFooter>
     </AlertDialogContent>

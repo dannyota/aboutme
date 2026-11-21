@@ -172,7 +172,6 @@ function writeRequest(write: HistoryWrite, csrfToken: string): Request {
   const headers: Record<string, string> = {
     'Idempotency-Key': write.idempotencyKey,
     'X-CSRF-Token': csrfToken,
-    'X-Resume-Schema-Version': String(CURRENT_VERSION),
   };
   if (write.operation === 'clear') {
     return new Request(base, {
@@ -198,6 +197,7 @@ function writeRequest(write: HistoryWrite, csrfToken: string): Request {
     headers: {
       ...headers,
       'If-Match': parentETag(write.revision as Revision),
+      'X-Resume-Schema-Version': String(CURRENT_VERSION),
     },
   });
 }
@@ -221,8 +221,6 @@ async function mapFailure(response: Response): Promise<HistoryWriteResult> {
     case 429:
     case 503:
       return { kind: 'busy', retryAfterMs: retryAfterMs(response) };
-    case 500:
-      return { kind: 'network' };
     default:
       return { kind: 'failed' };
   }

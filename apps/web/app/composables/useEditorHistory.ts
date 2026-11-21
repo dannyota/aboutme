@@ -24,6 +24,7 @@ interface Inputs<T extends Kinded> {
   readonly record: () => ResumeRecord;
   readonly sessionCheckFailing: () => boolean;
   readonly actions: ResumeEditorActions;
+  readonly controller?: HistoryController;
 }
 
 const railActions: Readonly<Record<string, string>> = {
@@ -50,13 +51,15 @@ export function useEditorHistory<T extends Kinded>(inputs: Inputs<T>) {
   const { inspector, narrowRegion } = inputs;
   const previous = ref(inspector.value) as Ref<T>;
   const preview = ref<{ focusTitle: () => void } | null>(null);
-  const history: HistoryController = createHistoryController({
-    resumeId: inputs.record().accepted.metadata.id,
-    store: useResumeStore(),
-    auth: useAuth(),
-    runtime: browserEditorRuntime,
-    refresh: () => inputs.actions.refresh(),
-  });
+  const history: HistoryController = inputs.controller
+    ?? createHistoryController({
+      resumeId: inputs.record().accepted.metadata.id,
+      store: useResumeStore(),
+      auth: useAuth(),
+      runtime: browserEditorRuntime,
+      refresh: () => inputs.actions.refresh(),
+      restoreBlocked: () => restoreBlocked.value,
+    });
 
   const restoreBlocked = computed(
     () =>
@@ -75,7 +78,12 @@ export function useEditorHistory<T extends Kinded>(inputs: Inputs<T>) {
   }
 
   async function leaveHistory(): Promise<void> {
-    const target = previous.value;
+    const record = inputs.record();
+    const key = (previous.value as { key?: unknown }).key;
+    const gone = previous.value.kind === 'section'
+      && (typeof key !== 'string'
+        || record.current.document.content[key] === undefined);
+    const target = gone ? ({ kind: 'personal' } as T) : previous.value;
     inspector.value = target;
     narrowRegion.value = 'editor';
     await nextTick();
@@ -86,8 +94,9 @@ export function useEditorHistory<T extends Kinded>(inputs: Inputs<T>) {
     const shown = history.selected.value;
     await history.select('current');
     narrowRegion.value = 'editor';
-    await nextTick();
-    focusSelector(`[data-version-id="${shown}"]`);
+    history.focusRequest.value = shown === 'current'
+      ? { kind: 'current' }
+      : { kind: 'option', id: shown };
   }
 
   watch(() => history.selected.value, async (id) => {
@@ -96,6 +105,13 @@ export function useEditorHistory<T extends Kinded>(inputs: Inputs<T>) {
     narrowRegion.value = 'preview';
     await nextTick();
     preview.value?.focusTitle();
+  });
+
+  watch(() => history.selected.value, (id, was) => {
+    if (inspector.value.kind !== 'history') return;
+    if (id === 'current' && was !== 'current' && !isWideLayout()) {
+      narrowRegion.value = 'editor';
+    }
   });
 
   watch(() => history.banner.value, (banner) => {

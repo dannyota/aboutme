@@ -40,6 +40,14 @@ const root = ref<HTMLElement | null>(null);
 let timer: ReturnType<typeof setInterval> | undefined;
 
 const ids = computed(() => ['current', ...props.items.map((item) => item.id)]);
+const optionClass
+  = 'group flex min-h-16 cursor-pointer items-start gap-2.5 rounded-[10px] '
+    + 'px-3 py-2.5 text-sm leading-normal transition-colors duration-150 '
+    + 'motion-reduce:transition-none hover:bg-accent aria-selected:bg-accent '
+    + 'outline-none focus-visible:ring-2 focus-visible:ring-ring '
+    + 'focus-visible:ring-offset-2 focus-visible:ring-offset-background';
+const line1Class
+  = 'truncate font-semibold group-aria-selected:font-bold';
 const icons = {
   edit: Pencil,
   assistant: Bot,
@@ -115,7 +123,7 @@ defineExpose({ focusOption });
   >
     <li
       :aria-selected="selected === 'current'"
-      class="history-option"
+      :class="optionClass"
       data-version-id="current"
       role="option"
       :tabindex="focusedId === 'current' ? 0 : -1"
@@ -127,7 +135,7 @@ defineExpose({ focusOption });
         class="mt-0.5 shrink-0 text-muted-foreground"
       />
       <span class="grid min-w-0">
-        <span class="history-line1 truncate">{{ copy.current }}</span>
+        <span :class="line1Class">{{ copy.current }}</span>
         <span class="truncate text-muted-foreground">
           {{ copy.currentDetail }}
         </span>
@@ -142,7 +150,7 @@ defineExpose({ focusOption });
       v-for="entry in items"
       :key="entry.id"
       :aria-selected="selected === entry.id"
-      class="history-option"
+      :class="optionClass"
       :data-version-id="entry.id"
       role="option"
       :tabindex="focusedId === entry.id ? 0 : -1"
@@ -155,7 +163,7 @@ defineExpose({ focusOption });
         class="mt-0.5 shrink-0 text-muted-foreground"
       />
       <span class="grid min-w-0">
-        <span class="history-line1 truncate">
+        <span :class="line1Class">
           <time :datetime="new Date(entry.startedAt).toISOString()">
             {{ formatAbsolute(entry.startedAt, locale, now) }}
           </time>
@@ -173,42 +181,3 @@ defineExpose({ focusOption });
     </li>
   </ul>
 </template>
-
-<style>
-.history-option {
-  display: flex;
-  min-height: 4rem;
-  cursor: pointer;
-  align-items: flex-start;
-  gap: 10px;
-  border-radius: 10px;
-  padding: 10px 12px;
-  font-size: 0.875rem;
-  line-height: 1.5;
-  transition: background-color 150ms;
-}
-
-.history-option:hover,
-.history-option[aria-selected='true'] {
-  background: var(--accent);
-}
-
-.history-option .history-line1 {
-  font-weight: 600;
-}
-
-.history-option[aria-selected='true'] .history-line1 {
-  font-weight: 700;
-}
-
-.history-option:focus-visible {
-  outline: 2px solid var(--ring);
-  outline-offset: 2px;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .history-option {
-    transition: none;
-  }
-}
-</style>

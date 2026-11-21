@@ -237,6 +237,13 @@ describe('Restore confirmation', () => {
       resume: record.accepted,
     } as never);
     const { wrapper, controller } = await mountPanel(api, record);
+    api.list.mockResolvedValue({
+      kind: 'ok',
+      value: [
+        item('r', { cause: 'restore', startedAt: new Date().toISOString() }),
+        item('a'),
+      ],
+    });
     controller.openRestore('a');
     await controller.confirmRestore();
     await flushPromises();
@@ -245,6 +252,46 @@ describe('Restore confirmation', () => {
     await banner.get('[data-action="history-undo"]').trigger('click');
     await flushPromises();
     expect(dialog()).not.toBeNull();
+  });
+});
+
+describe('Blocked restore and failed reloads', () => {
+  it('gates Undo on the same blocked state as the version bar', async () => {
+    const { wrapper, controller } = await mountPanel(
+      fakeApi([item('a')]),
+      fakeRecord(),
+      true,
+    );
+    controller.banner.value = {
+      id: 'a',
+      startedAt: item('a').startedAt,
+      undoId: 'r',
+    };
+    await flushPromises();
+    const undo = wrapper.get('[data-action="history-undo"]');
+    expect(undo.attributes('aria-disabled')).toBe('true');
+    await undo.trigger('click');
+    expect(controller.restore.value).toBeNull();
+  });
+
+  it('keeps the rows and shows the banner on a later read error', async () => {
+    const { wrapper, controller } = await mountPanel(fakeApi([item('a')]));
+    controller.loadFailed.value = true;
+    await flushPromises();
+    expect(wrapper.get('[role="alert"]').text()).toContain(
+      editorHistoryCopy.en.loadFailed,
+    );
+    expect(wrapper.find('[role="listbox"]').exists()).toBe(true);
+  });
+
+  it('reads Deleting while a delete is in flight', async () => {
+    const { controller } = await mountPanel(fakeApi([item('a')]));
+    controller.remove.value = { id: 'a', phase: 'busy' };
+    await flushPromises();
+    expect(
+      document.body.querySelector('[data-action="delete-confirm"]')!
+        .textContent,
+    ).toContain(editorHistoryCopy.en.deleting);
   });
 });
 
@@ -289,8 +336,15 @@ describe('Delete and clear confirmations', () => {
 });
 
 describe('Version bar', () => {
-  async function mountBar(restoreBlocked: boolean) {
+  async function mountBar(
+    restoreBlocked: boolean,
+    versionOver: Partial<ReturnType<typeof version>> = {},
+  ) {
     const api = fakeApi([item('a')]);
+    api.read.mockResolvedValue({
+      kind: 'ok',
+      value: version('a', versionOver),
+    });
     const record = fakeRecord();
     const { deps } = fakeDeps(api, record);
     const controller = createHistoryController(deps);
@@ -302,7 +356,11 @@ describe('Version bar', () => {
       props: { controller, record: record as never, restoreBlocked },
       global: {
         stubs: {
-          EditorPreview: { name: 'EditorPreview', template: '<div />' },
+          EditorPreview: {
+            name: 'EditorPreview',
+            props: ['lng', 'document', 'label'],
+            template: '<div />',
+          },
         },
       },
     });
@@ -338,6 +396,16 @@ describe('Version bar', () => {
     expect(wrapper.text()).not.toContain(editorHistoryCopy.en.restoreBlocked);
     await wrapper.get('[data-action="history-restore"]').trigger('click');
     expect(controller.restore.value?.phase).toBe('confirm');
+  });
+
+  it('renders the version in its own language, unset when null', async () => {
+    const own = await mountBar(false, { lng: 'vi' });
+    expect(own.wrapper.findComponent({ name: 'EditorPreview' }).props('lng'))
+      .toBe('vi');
+    const unset = await mountBar(false, { lng: null });
+    expect(
+      unset.wrapper.findComponent({ name: 'EditorPreview' }).props('lng'),
+    ).toBe('und');
   });
 
   it('shows the loading, failed and gone states', async () => {

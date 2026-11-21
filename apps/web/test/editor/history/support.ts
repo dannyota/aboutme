@@ -68,7 +68,7 @@ export function fakeDeps(api: HistoryApi, record = fakeRecord()) {
     api,
     runtime: {
       uuid: () => `key-${++n}`,
-      nowEpochMs: () => 1000,
+      nowEpochMs: () => Date.now(),
       delay: async () => {},
     },
     refresh: vi.fn(async () => {}),

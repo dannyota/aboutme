@@ -170,6 +170,9 @@ describe('history API writes', () => {
     expect(sent.headers.get('If-Match')).toBe('"r3"');
     expect(sent.headers.get('Idempotency-Key')).toBe('key-1');
     expect(sent.headers.get('X-CSRF-Token')).toBe('csrf-1');
+    expect(sent.headers.get('X-Resume-Schema-Version')).toBe(
+      String(CURRENT_VERSION),
+    );
   });
 
   it('sends no If-Match on delete and clear', async () => {
@@ -203,6 +206,7 @@ describe('history API writes', () => {
     );
     for (const sent of [first, second]) {
       expect(sent.headers.get('If-Match')).toBeNull();
+      expect(sent.headers.get('X-Resume-Schema-Version')).toBeNull();
       expect(sent.headers.get('Idempotency-Key')).toBe('key-1');
       expect(sent.headers.get('X-CSRF-Token')).toBe('csrf');
     }
@@ -231,7 +235,7 @@ describe('history API writes', () => {
     [422, 'resume_document_invalid', 'invalid'],
     [429, 'rate_limited', 'busy'],
     [503, 'public_state_busy', 'busy'],
-    [500, 'internal', 'network'],
+    [500, 'internal', 'failed'],
     [409, 'idempotency_key_reuse', 'failed'],
   ])('maps restore %i %s to %s', async (status, code, kind) => {
     const fetcher = vi.fn().mockResolvedValue(

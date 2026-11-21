@@ -679,6 +679,7 @@ function openInspector(
         v-else-if="inspector.kind === 'history'"
         :controller="history"
         :record="record"
+        :restore-blocked="restoreBlocked"
         @escape="escapeHistory"
       />
     </aside>

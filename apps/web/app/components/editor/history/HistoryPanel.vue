@@ -17,7 +17,7 @@ import { editorShellCopy } from '../../../i18n/editor-shell';
 import type { ResumeRecord } from '../../../stores/resumes';
 import StatusBanner from '../../app/StatusBanner.vue';
 import InspectorPanel from '../InspectorPanel.vue';
-import HistoryConfirmDialog from './HistoryConfirmDialog.vue';
+import ConfirmDialog from '../../app/ConfirmDialog.vue';
 import HistoryList from './HistoryList.vue';
 import HistoryRestoreDialog from './HistoryRestoreDialog.vue';
 import { formatAbsolute } from './historyFormat';
@@ -25,6 +25,7 @@ import { formatAbsolute } from './historyFormat';
 const props = defineProps<{
   readonly controller: HistoryController;
   readonly record: ResumeRecord;
+  readonly restoreBlocked?: boolean;
 }>();
 const emit = defineEmits<{ escape: [] }>();
 
@@ -76,12 +77,12 @@ const goneNotice = computed(
 const deleteError = computed(() =>
   props.controller.remove.value?.phase === 'failed'
     ? copy.value.deleteFailed
-    : null,
+    : undefined,
 );
 const clearError = computed(() =>
   props.controller.clear.value?.phase === 'failed'
     ? copy.value.clearFailed
-    : null,
+    : undefined,
 );
 const deleteTime = computed(() => {
   const id = props.controller.remove.value?.id;
@@ -94,6 +95,7 @@ function select(id: string): void {
 }
 
 function undo(): void {
+  if (props.restoreBlocked === true) return;
   const id = props.controller.banner.value?.undoId;
   if (id !== null && id !== undefined) props.controller.openRestore(id);
 }
@@ -149,6 +151,7 @@ onBeforeUnmount(() => props.controller.close());
       <Button
         class="ml-2"
         data-action="history-undo"
+        :aria-disabled="restoreBlocked ? 'true' : undefined"
         :disabled="controller.banner.value.undoId === null"
         size="sm"
         type="button"
@@ -156,6 +159,22 @@ onBeforeUnmount(() => props.controller.close());
         @click="undo"
       >
         {{ copy.undo }}
+      </Button>
+    </StatusBanner>
+    <StatusBanner
+      v-if="controller.loadFailed.value && ready"
+      kind="error"
+    >
+      {{ copy.loadFailed }}
+      <Button
+        class="ml-2"
+        data-action="history-retry"
+        size="sm"
+        type="button"
+        variant="outline"
+        @click="controller.reload()"
+      >
+        {{ shell.tryAgain }}
       </Button>
     </StatusBanner>
     <StatusBanner
@@ -244,26 +263,30 @@ onBeforeUnmount(() => props.controller.close());
       :controller="controller"
       :record="record"
     />
-    <HistoryConfirmDialog
+    <ConfirmDialog
       :busy="controller.remove.value?.phase === 'busy'"
-      :body="copy.deleteBody"
+      :busy-label="copy.deleting"
       :cancel-label="copy.cancel"
+      class="max-w-[32rem] sm:max-w-[32rem]"
       confirm-action="delete-confirm"
       :confirm-label="copy.deleteConfirm"
-      :busy-label="copy.deleting"
+      :description="copy.deleteBody"
+      destructive
       :error="deleteError"
       :open="controller.remove.value !== null"
       :title="copy.deleteTitle(deleteTime)"
       @cancel="controller.closeDelete()"
       @confirm="controller.confirmDelete()"
     />
-    <HistoryConfirmDialog
+    <ConfirmDialog
       :busy="controller.clear.value?.phase === 'busy'"
-      :body="copy.clearBody(items.length)"
+      :busy-label="copy.clearing"
       :cancel-label="copy.cancel"
+      class="max-w-[32rem] sm:max-w-[32rem]"
       confirm-action="clear-confirm"
       :confirm-label="copy.clearConfirm"
-      :busy-label="copy.clearing"
+      :description="copy.clearBody(items.length)"
+      destructive
       :error="clearError"
       :open="controller.clear.value !== null"
       :title="copy.clearTitle"
