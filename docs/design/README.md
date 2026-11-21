@@ -94,6 +94,7 @@ Current behavior lives in code, deployment configuration, and
 | Other   | [GitHub evidence](github-evidence.md)                                  | Connection, evidence session, confirmed items, outbound requests, and privacy       |
 | Other   | [GitHub evidence picker](github-evidence-picker.md)                    | Attaching evidence to a project, GitHub reads, API, storage, project page           |
 | Other   | [Change review](change-review.md)                                      | Checkpoints, restore, the review setting, and assistant proposals the owner reviews |
+| Other   | [Resume history contract](resume-history-contract.md)                  | Checkpoint storage, session rule, routes, restore, export, retention and copy       |
 | Other   | [Community showcase](showcase.md)                                      | Showcase product scope, decisions, and approvals                                    |
 | Other   | [Showcase contract](showcase-contract.md)                              | Listing fields, filters, delivery, revocation, and compatibility                    |
 | Other   | [Showcase copy](showcase-copy.md)                                      | Approved bilingual interface and legal text                                         |
@@ -107,6 +108,7 @@ Current behavior lives in code, deployment configuration, and
 | Other   | [UI: showcase results](ui/showcase-results.md)                         | Grid, tiles, invitation, pagination, and result states                              |
 | Other   | [UI: shell and editor](ui/shell-and-editor.md)                         | App shell, account pages, resume list, editor, and settings                         |
 | Other   | [UI: projects workspace](ui/projects.md)                               | Project list and project editor screens                                             |
+| Other   | [UI: resume history](ui/resume-history.md)                             | Editor History panel, version preview, restore and delete dialogs                   |
 | Other   | [UI: project pages](ui/project-pages.md)                               | Public project list and project page layout and copy                                |
 | Other   | [UI: responsive and accessibility](ui/responsive-and-accessibility.md) | Narrow editor layouts, motion, and accessibility                                    |
 
