@@ -64,7 +64,8 @@ restorable state, before the write:
 Within a session nothing is copied, so an autosave costs one extra row write
 only when it starts a session. The current state is the resume itself. A write
 that leaves restorable state unchanged, such as a publish setting or a new
-photo, neither starts a session nor adds a checkpoint.
+photo, neither starts a session nor adds a checkpoint. Creating a resume starts
+no session; its first restorable write checkpoints the created state.
 
 ### Restore and deletion
 
@@ -139,11 +140,20 @@ against the assistant's view: the stored resume with its proposal's parts
 applied where the stored value still equals `base`. The `revision` the tool
 names must equal the stored revision, or it answers `revision_conflict`. The
 call then diffs its view before and after and merges the changed parts into the
-proposal: a part already in the proposal keeps its `base` and takes the new
-`result`, a new part takes the stored value as `base`, and a part whose result
-equals its base leaves the proposal. The proposal's sequence number rises by
-one. Nothing in the `resumes` row changes, so the revision, public pages, caches
-and preview card stay as they are. The call commits with its idempotency record
+proposal:
+
+- a part already in the proposal whose stored value still equals its `base`
+  keeps that `base` and takes the new `result`;
+- a part already in the proposal whose stored value differs from its `base`
+  leaves its old change, takes the stored value as its new `base`, and starts a
+  new change, so an assistant that works from the owner's newer text proposes
+  against it;
+- a new part takes the stored value as `base`;
+- a part whose `result` equals its `base` leaves the proposal.
+
+Each change touched by the call gets a new sequence number. Nothing in the
+`resumes` row changes, so the revision, public pages, caches and preview card
+stay as they are. The call commits with its idempotency record
 ([ADR 0006](../adr/0006-transactional-idempotency.md)) and charges the same
 write limits.
 
@@ -165,9 +175,10 @@ change is:
 ### Accept and reject
 
 Accept and reject are owner-only REST writes with the signed-in session, CSRF,
-an idempotency key, and the proposal sequence number the owner saw. A different
-sequence number answers `409 proposal_changed` and the panel reloads. Accept
-also takes `If-Match`; reject changes no resume and takes none.
+an idempotency key, and the sequence number of each selected change as the owner
+saw it. A different sequence number answers `409 proposal_changed` and the panel
+reloads; changes the assistant has not touched since stay decidable. Accept also
+takes `If-Match`; reject changes no resume and takes none.
 
 Accepting one change, or all, follows the resume write lock order in
 [data](data.md), then locks the proposal row. Each selected change must be
@@ -186,7 +197,11 @@ Accepted and rejected parts leave the proposal. When none remain it is decided.
 - The owner revoking an assistant, and a second-factor change that revokes every
   grant, withdraw the grant's pending proposals in the revoke transaction. A
   client's own token revocation and the idle-client cleanup keep them for
-  review; the copied display name still names the client.
+  review.
+- Proposals and checkpoints outlive the grant they name: the reference is
+  nullable and set to null when the grant or its client is deleted, and the
+  copied display name still names the client. The owner discards such a proposal
+  with Reject all.
 - Turning review off or unpublishing leaves pending proposals for review.
 - A decided, expired or withdrawn proposal keeps only its outcome, with no part
   values, for 7 days, so the assistant can read it.
@@ -244,29 +259,31 @@ state, so no revocation fence is added.
 ## Data lifecycle and privacy
 
 - Export: version 3 in v0.10.0 adds checkpoints; version 4 in v0.10.1 adds
-  pending proposals. The worst case is about 12.3 MiB today, plus 6 MiB of
-  checkpoints and 4 MiB of proposals, under the 24 MiB cap.
+  pending proposals. The version 2 worst case is about 12.3 MiB; adding 6 MiB of
+  checkpoints and 4 MiB of proposals stays under the 24 MiB cap.
 - Checkpoints and proposals never reach a public read, cache, preview card,
   showcase, sitemap or `llms.txt`.
 - Backups hold them for the backup period after deletion, as they hold every
   table.
 - The privacy notice and the content permission in the Terms, in both languages,
-  state the 30-day history, the proposal lifetime, that deleting content also
-  deletes its history, and what an assistant can still change at once.
+  state the 30-day history, that text removed from a resume stays in its history
+  for up to 30 days unless the owner deletes the history, that deleting a resume
+  or the account deletes its history, the proposal lifetime, and what an
+  assistant can still change at once.
 
 ## Security
 
-| Attacker               | Invariant                                                                                                                                                                       |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Stolen MCP token       | Under review, no tool changes a stored value a public representation reads. No tool reads checkpoints or other grants' proposals, accepts, rejects, restores, or changes review |
-| Stolen MCP token       | It fills at most its own proposals, within the byte limits; the owner's revoke withdraws them. It cannot link a project and edit it after the owner looked                      |
-| Stolen MCP token       | Without review it can still delete an unpublished resume with its history; that power predates this design                                                                      |
-| Stolen session         | It can accept, restore and delete history, the same authority it already has over the resume                                                                                    |
-| Another signed-in user | Every proposal and checkpoint query is scoped by the owner's account; ids are random                                                                                            |
-| Hostile resume content | A proposal is validated on every tool call and again on accept, and rendered through the editor's sanitizer                                                                     |
-| Leaked backup          | It holds up to 30 days of earlier text and pending proposal text per resume                                                                                                     |
-| Container, DB, network | No new secret, route class or transport; their reach is unchanged                                                                                                               |
-| Anonymous visitor      | Nothing new is public                                                                                                                                                           |
+| Attacker               | Invariant                                                                                                                                                                                                                    |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Stolen MCP token       | Under review, no tool changes a stored value a public representation reads. No tool reads checkpoints or other grants' proposals, accepts, rejects, restores, or changes review                                              |
+| Stolen MCP token       | It fills at most its own proposals, but can use the account's shared proposal bytes and block other assistants until the owner revokes it, which withdraws them. It cannot link a project and edit it after the owner looked |
+| Stolen MCP token       | Without review it can still delete an unpublished resume with its history; that power predates this design                                                                                                                   |
+| Stolen session         | It can accept, restore and delete history, the same authority it already has over the resume                                                                                                                                 |
+| Another signed-in user | Every proposal and checkpoint query is scoped by the owner's account; ids are random                                                                                                                                         |
+| Hostile resume content | A proposal is validated on every tool call and again on accept, and rendered through the editor's sanitizer                                                                                                                  |
+| Leaked backup          | It holds up to 30 days of earlier text and pending proposal text per resume                                                                                                                                                  |
+| Container, DB, network | No new secret, route class or transport; their reach is unchanged                                                                                                                                                            |
+| Anonymous visitor      | Nothing new is public                                                                                                                                                                                                        |
 
 The release test for review: with review effective on a published resume, call
 every one of the 23 tools with valid input, then compare the revision, the
@@ -304,9 +321,12 @@ Each part is one patch release with its own migration
    changes with `list_proposals`, the refusals including library edits, the
    review screen, owner frames, and the consent, guide, notice and Terms copy.
    It holds roadmap features 2 to 5 together, because proposals without the
-   screen, the setting or the tool cannot be used. Its migration raises the
-   schema floor ([release floors](release-floors.md)), so no release without
-   review runs on its schema.
+   screen, the setting or the tool cannot be used. Its migration only adds, so
+   it raises no schema floor. It ships with a feature flag off, and assistant
+   writes save directly until the owner turns it on. After the release is
+   healthy, the owner activates it as the release floor (deploy runbook,
+   activation), then turns the flag on, so no rollback reaches a release without
+   review while review is on ([release floors](release-floors.md)).
 3. **v0.10.2, review of library project edits.** Project proposals and their
    review in the project editor.
 

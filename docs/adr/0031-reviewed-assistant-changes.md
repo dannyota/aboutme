@@ -88,7 +88,8 @@ draft copy of the whole resume out of scope.
 - The editor gains History and Proposed changes panels; the owner stream gains a
   frame for proposals.
 - The export format version rises twice and its cap grows.
-- The review release raises the schema floor, so a rollback below it is refused.
+- The review release ships behind a flag and is activated as the release floor
+  before review turns on, so a rollback below it is refused.
 
 ## History
 
