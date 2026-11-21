@@ -593,6 +593,9 @@ apps/web/e2e/chrome-details.ts
 apps/web/e2e/chrome.spec.ts
 apps/web/e2e/corpus.spec.ts
 apps/web/e2e/display-assertions.ts
+apps/web/e2e/editor-history-details.ts
+apps/web/e2e/editor-history-focus.ts
+apps/web/e2e/editor-history-proofs.ts
 apps/web/e2e/entry-points.spec.ts
 apps/web/e2e/filter-sheet-details.ts
 apps/web/e2e/fixtures/deployment/mismatch-invalid.json
