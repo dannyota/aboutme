@@ -93,7 +93,7 @@ Out of scope: collaborative editing, comments from other people, a separate draf
 
 Done when: with the setting on, a test shows no MCP tool, including delete and photo tools, can change what a public viewer sees; an owner can accept one proposed change, reject another, and see a stale proposal refused after a newer save; and an owner can restore an earlier version within the retention the design sets.
 
-Before code: the owner accepts the [change approval](../design/change-approval.md) design and [ADR 0031](../adr/0031-approved-assistant-changes.md) after an independent review; ADR 0018 and the MCP guide are amended on acceptance. Checkpoints hold no photo key, so ADR 0009 is unchanged. Release order and limits are in the design.
+Before code: the owner accepts the [change review](../design/change-review.md) design and [ADR 0031](../adr/0031-reviewed-assistant-changes.md) after an independent review; ADR 0018 and the MCP guide are amended on acceptance.
 
 ## v0.11: review with your own AI
 
