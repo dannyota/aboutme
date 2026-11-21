@@ -56,13 +56,13 @@ aboutme_edges_stable() { return 0; }
 [[ -e $work/edge-done ]] || fail 'aboutme_edge_transition did not run its command'
 [[ $(cat "$HOST_RULES_FLOCK_LOG") == "$retention_record" ]] ||
   fail "deploy-safety.sh must request the retention lock with no fence open: $(paste -sd'|' "$HOST_RULES_FLOCK_LOG")"
-for script in deploy-safety.sh deploy-host.sh; do
+for script in deploy-safety.sh deploy-host.sh image-prune.sh; do
   if grep -n 'fence\.lock' "$root/deploy/vn/scripts/$script" >&2; then fail "$script opens the fence lock itself"; fi
+  if grep -nE '(^|[;&|[:space:]])(source|\.)[[:space:]]+[^[:space:]]*crowdsec-db\.sh' \
+    "$root/deploy/vn/scripts/$script" >&2; then
+    fail "$script must run crowdsec-db.sh as a child, not source it"
+  fi
 done
-if grep -nE '(^|[;&|[:space:]])(source|\.)[[:space:]]+[^[:space:]]*crowdsec-db\.sh' \
-  "$root/deploy/vn/scripts/deploy-host.sh" >&2; then
-  fail 'deploy-host.sh must run crowdsec-db.sh as a child, not source it'
-fi
 
 mkdir -p "$work/volume-bin" "$work/dev" "$work/root"
 export HOST_RULES_WORK=$work HOST_RULES_CALLS=$work/volume-calls HOST_RULES_REAL_MKDIR

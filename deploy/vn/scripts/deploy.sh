@@ -177,7 +177,7 @@ ssh_dir=$(mktemp -d /tmp/aboutme-ssh.XXXXXX)
 ssh_opts=(-p "$SSH_PORT" -o BatchMode=yes -o ControlMaster=auto -o "ControlPath=$ssh_dir/ssh-%C" -o ControlPersist=10m
   -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
 
-for f in fence.sh deploy-host.sh deploy-safety.sh; do
+for f in fence.sh deploy-host.sh deploy-safety.sh image-prune.sh; do
   want=$(sha256sum "$here/$f" | cut -d' ' -f1)
   have=$(ssh "${ssh_opts[@]}" "$admin@$host" sha256sum "$lib/$f" | cut -d' ' -f1)
   [[ $have == "$want" ]] || {

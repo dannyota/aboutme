@@ -626,6 +626,7 @@ for name in fence deploy-host deploy-safety; do
   cp "$root/deploy/vn/tests/fixtures/legacy-notice-adoption/$name.sh.txt" "$work/legacy/$name.sh"
   cp "$root/deploy/vn/scripts/$name.sh" "$work/reviewed/$name.sh"
 done
+cp "$root/deploy/vn/scripts/image-prune.sh" "$work/reviewed/"
 cp "$root/deploy/vn/host/workload-lock.sh" "$work/reviewed/"; chmod 0755 "$work/legacy/"*.sh "$work/reviewed/"*.sh; legacy_tag=v0.7.9
 legacy_server=ghcr.io/dannyota/aboutme-server@sha256:$(printf '%064d' 1); legacy_web=ghcr.io/dannyota/aboutme-web@sha256:$(printf '%064d' 2)
 jq -n --arg server "$legacy_server" --arg web "$legacy_web" \
@@ -645,7 +646,10 @@ for command in cp install; do
 set -euo pipefail
 if [[ ${NOTICE_ADOPTION:-0} == 1 ]]; then
   case ${*: -1} in
-    /usr/local/lib/aboutme/fence.sh | /usr/local/lib/aboutme/deploy-host.sh | /usr/local/lib/aboutme/deploy-safety.sh)
+    /usr/local/lib/aboutme/fence.sh | /usr/local/lib/aboutme/deploy-host.sh | /usr/local/lib/aboutme/deploy-safety.sh | /usr/local/lib/aboutme/image-prune.sh)
+      if [[ ${*: -1} == /usr/local/lib/aboutme/deploy-host.sh ]]; then
+        cmp -s "$NOTICE_FIXTURE/reviewed/image-prune.sh" /usr/local/lib/aboutme/image-prune.sh || exit 1
+      fi
       cmp -s "$NOTICE_FIXTURE/reviewed/crowdsec-privacy-notice-host.sh" /usr/local/lib/aboutme/crowdsec-privacy-notice-host.sh || exit 1
       jq -e '.notice_authority.state=="initializing" and .operation_kind=="cutover" and .notice_authority.operation_id==.operation_id' /var/lib/aboutme/fence.json >/dev/null || exit 1
       jq -e '.mutation_kind=="quiesce" and .state=="active"' /var/lib/aboutme/cutover-mutation.json >/dev/null || exit 1
@@ -678,8 +682,9 @@ for fault in mv:/usr/local/lib/aboutme/crowdsec-privacy-notice-host.sh sync:/usr
   for name in fence deploy-host deploy-safety; do
     cmp -s "$work/legacy/$name.sh" "$work/lib/$name.sh" || fail 'guard replaced before helper persistence'
   done
+  [[ ! -e $work/lib/image-prune.sh ]] || fail 'image-prune installed before helper persistence'
   NOTICE_ADOPTION=1 quiet bash "$adopt" adopt
-  rm -rf -- "$authority"; rm -f /var/lib/aboutme/fence.json /var/lib/aboutme/cutover-mutation.json "$host"
+  rm -rf -- "$authority"; rm -f /var/lib/aboutme/fence.json /var/lib/aboutme/cutover-mutation.json "$host" "$work/lib/image-prune.sh"
   cp "$work/legacy/"*.sh "$work/lib/"; "$fence" init >"$work/out" 2>"$work/err"
 done
 touch /run/aboutme/crowdsec-retention-failed
@@ -690,11 +695,15 @@ cmp -s "$authority/epoch" "$authority/initial-epoch" || fail 'adoption anchor mi
 cmp -s "$adopt" "$host" || fail 'adoption canonical helper mismatch'
 jq -e '.notice_authority.state=="adopted" and .minimum_release==4007' /var/lib/aboutme/fence.json >/dev/null || fail 'adoption evidence or floor'
 refuse bash "$adopt" adopt
-for boundary in before:fence.sh after:fence.sh after:deploy-host.sh after:deploy-safety.sh skip:deploy-host.sh {missing,mode600,partial}:{fence,deploy-host,deploy-safety}.sh; do
+for boundary in before:fence.sh after:fence.sh after:deploy-host.sh after:deploy-safety.sh after:image-prune.sh \
+  skip:deploy-host.sh skip:image-prune.sh {missing,mode600,partial}:{fence,deploy-host,deploy-safety,image-prune}.sh; do
   rm -rf -- "$authority"; rm -f /var/lib/aboutme/fence.json /var/lib/aboutme/cutover-mutation.json
-  rm -f "$host"
+  rm -f "$host" "$work/lib/image-prune.sh"
   cp "$work/legacy/"*.sh "$work/lib/"; "$fence" init >"$work/out" 2>"$work/err"
   NOTICE_ADOPTION=1 NOTICE_ADOPT_STOP=${boundary/:/:\/usr\/local\/lib\/aboutme\/} refuse bash "$adopt" adopt
+  if [[ $boundary == *:image-prune.sh ]]; then
+    cmp -s "$work/legacy/deploy-host.sh" "$work/lib/deploy-host.sh" || fail 'deploy-host replaced before image-prune was verified'
+  fi
   adoption_owner=$(jq -er '.notice_authority.operation_id' /var/lib/aboutme/fence.json)
   jq -e --arg id "$adoption_owner" '.notice_authority.state=="initializing" and .operation_kind=="cutover" and .operation_id==$id' /var/lib/aboutme/fence.json >/dev/null || fail 'interrupted adoption lost owner'
   NOTICE_ADOPTION=1 NOTICE_APP_STATE=inspection-failure refuse bash "$adopt" adopt
@@ -702,7 +711,7 @@ for boundary in before:fence.sh after:fence.sh after:deploy-host.sh after:deploy
   NOTICE_ADOPTION=1 quiet bash "$adopt" adopt
   jq -e --arg id "$adoption_owner" '.notice_authority.state=="adopted" and .notice_authority.operation_id==$id and .minimum_release==4007 and (.operation_id // null)==null' /var/lib/aboutme/fence.json >/dev/null || fail 'resumed adoption changed owner or floor'
   [[ ! -e /var/lib/aboutme/cutover-mutation.json && -f $authority/restore-reconciliation ]] || fail 'resumed adoption did not settle denial'
-  for name in fence deploy-host deploy-safety; do cmp -s "$work/reviewed/$name.sh" "$work/lib/$name.sh" || fail 'resumed adoption retained old helper'; done
+  for name in fence deploy-host deploy-safety image-prune; do cmp -s "$work/reviewed/$name.sh" "$work/lib/$name.sh" || fail 'resumed adoption retained old helper'; done
 done
 for field in "${legacy_fields[@]}"; do export "$field=caller_override"; done
 refuse bash "$adopt" adopt

@@ -71,7 +71,7 @@ fi
 lib=/usr/local/lib/aboutme
 install -d -o root -g root -m 0755 "$lib" /run/aboutme
 for required in host/crowdsec-privacy-notice-host.sh host/workload-lock.sh \
-  scripts/fence.sh scripts/deploy-safety.sh scripts/deploy-host.sh \
+  scripts/fence.sh scripts/deploy-safety.sh scripts/image-prune.sh scripts/deploy-host.sh \
   scripts/crowdsec-privacy-notice.sh scripts/restore-drill.sh; do
   [[ -f $bundle/$required && ! -L $bundle/$required ]] || die "required notice helper is missing"
   install --compare -o root -g root -m 0755 "$bundle/$required" "$lib/${required##*/}"
@@ -472,6 +472,7 @@ copy_script() {
   fi
 }
 copy_script "$bundle/scripts/fence.sh"
+copy_script "$bundle/scripts/image-prune.sh"
 copy_script "$bundle/scripts/deploy-host.sh"
 copy_script "$bundle/scripts/deploy-safety.sh"
 copy_script "$bundle/scripts/secrets-host.sh"

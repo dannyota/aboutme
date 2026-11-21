@@ -466,7 +466,7 @@ install_drill_host() {
   say "copying the bundle and installing PostgreSQL and pgBackRest"
   rsh sudo rm -rf "$bundle"
   tar -C "$here/.." -c host edge scripts/fence.sh scripts/deploy-host.sh scripts/deploy-safety.sh \
-    scripts/crowdsec-privacy-notice.sh scripts/restore-drill.sh |
+    scripts/image-prune.sh scripts/crowdsec-privacy-notice.sh scripts/restore-drill.sh |
     rsh bash -c 'mkdir -p /tmp/aboutme-bundle && tar -C /tmp/aboutme-bundle -x'
   # shellcheck disable=SC2016 # runs on the drill host
   data_dev=$(rsh bash -c 'root=$(lsblk -no PKNAME "$(findmnt -no SOURCE /)" | head -n1)
