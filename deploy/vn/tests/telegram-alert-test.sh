@@ -223,7 +223,7 @@ private_output() {
 }
 clock='10:04 ICT · 03:04 UTC'
 msg() {
-  printf '%s <b>aboutme</b> · %s\n%s\n%s\n<i>%s · %s · <a href="https://github.com/dannyota/aboutme/blob/main/docs/runbooks/%s">runbook</a></i>' \
+  printf '%s <b>aboutme</b> · %s\n%s\n%s\n<i>%s · %s · <a href="https://github.com/dntmakers/aboutme/blob/main/docs/runbooks/%s">runbook</a></i>' \
     "$1" "$2" "$3" "$4" "$clock" "$5" "$6"
 }
 expect_text() {

@@ -137,11 +137,15 @@ JSON
   done
   sed -e 's/sha256:0/sha256:a/' -e "s|^ghcr.io/$owner/|ghcr.io/$retained_owner/|" "$WORK/digests.txt" >"$WORK/retained-digests.txt"
 }
+LEGACY_TREE=$WORK/dannyota-tree
+mkdir -p "$LEGACY_TREE/scripts/lib"
+cp "$ROOT/scripts/security-scan.sh" "$ROOT/scripts/release-eligibility.sh" "$LEGACY_TREE/scripts/"
+printf '# shellcheck shell=bash disable=SC2034\nowner=dannyota\nname=aboutme\n' >"$LEGACY_TREE/scripts/lib/repository.sh"
 run_scan() {
   : >"$CALL_LOG"
   : >"$API_LOG"
   status=0
-  bash "${SCAN_ROOT:-$ROOT}/scripts/security-scan.sh" weekly-scan "$WORK/bin/trivy" "$WORK/reports" "$@" >"$WORK/output" 2>&1 || status=$?
+  bash "${SCAN_ROOT:-$LEGACY_TREE}/scripts/security-scan.sh" weekly-scan "$WORK/bin/trivy" "$WORK/reports" "$@" >"$WORK/output" 2>&1 || status=$?
 }
 expect_status() {
   if [ "$1" = success ]; then

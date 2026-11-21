@@ -152,7 +152,7 @@ const projectsLinkClass = cn(linkClass, 'max-md:hidden');
         v-else
         :class="cn(linkClass, 'max-[72rem]:hidden')"
         data-testid="app-shell-open-source"
-        href="https://github.com/dannyota/aboutme"
+        href="https://github.com/dntmakers/aboutme"
         rel="noopener noreferrer"
       >{{ copy.openSource }}</a>
     </nav>

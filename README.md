@@ -7,7 +7,7 @@
 </picture>
 <!-- markdownlint-enable MD033 -->
 
-[![CI](https://github.com/dannyota/aboutme/actions/workflows/ci.yml/badge.svg)](https://github.com/dannyota/aboutme/actions/workflows/ci.yml)
+[![CI](https://github.com/dntmakers/aboutme/actions/workflows/ci.yml/badge.svg)](https://github.com/dntmakers/aboutme/actions/workflows/ci.yml)
 
 Build a resume, share its link, and export a PDF. aboutme is a free, open-source
 resume builder for Vietnamese and English content. Each account can hold up to
@@ -38,8 +38,8 @@ supports Vietnamese and English.
 ## Project status
 
 Production runs on one GreenNode host in Vietnam with Cloudflare DNS-only. See
-[tags](https://github.com/dannyota/aboutme/tags) for published versions,
-[Actions](https://github.com/dannyota/aboutme/actions) for build results, and
+[tags](https://github.com/dntmakers/aboutme/tags) for published versions,
+[Actions](https://github.com/dntmakers/aboutme/actions) for build results, and
 the [production runbook](docs/runbooks/production.md) for operations.
 
 The [architecture](docs/architecture.md) describes implemented behavior. The
@@ -79,8 +79,9 @@ status, logs, ports, and database rules. Run `make check` for the fast local
 gate. Independent contributors run `make ci` before a pull request. In a
 coordinated worker session, GitHub CI on `main` is the full gate.
 
-Report bugs through [GitHub issues](https://github.com/dannyota/aboutme/issues).
-Report vulnerabilities privately using the [security policy](SECURITY.md).
+Report bugs through
+[GitHub issues](https://github.com/dntmakers/aboutme/issues). Report
+vulnerabilities privately using the [security policy](SECURITY.md).
 
 ## Self-hosting
 

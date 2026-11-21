@@ -12,13 +12,13 @@ installation, migration, verification, failure recovery, and cluster restore.
 Use the current reviewed checkout's deployer. Publication and deployment share
 `scripts/release-eligibility.sh`: the tag must be strict `vMAJOR.MINOR.PATCH`,
 resolve to a commit on `main` fetched from the repository that
-`scripts/lib/repository.sh` names, and have a completed, successful latest
-matching `ci.yml` push run on `main` for that exact commit. When given an
-expected owner, the check also refuses a tag whose commit names another owner in
-`scripts/lib/repository.sh`; a commit without that file names `dannyota`
-([repository transfer](../design/repository-transfer.md)). A branch or manual
-run never counts. A newer pending, cancelled, or failed matching run blocks an
-older success. Missing evidence or a fetch/API error also blocks.
+`scripts/lib/repository.sh` names (`dntmakers/aboutme`), and have a completed,
+successful latest matching `ci.yml` push run on `main` for that exact commit.
+When given an expected owner, the check also refuses a tag whose commit names
+another owner in `scripts/lib/repository.sh`; a commit without that file names
+`dannyota` ([repository transfer](../design/repository-transfer.md)). A branch
+or manual run never counts. A newer pending, cancelled, or failed matching run
+blocks an older success. Missing evidence or a fetch/API error also blocks.
 
 The accepted
 [tooling and display changes](../design/local-tooling-simplification.md) leave

@@ -13,10 +13,10 @@ import type { Locale } from './locale';
 
 export const githubCliManualUrl
   = 'https://cli.github.com/manual/gh_attestation_verify';
-export const limitsUrl = 'https://github.com/dannyota/aboutme/blob/main/'
+export const limitsUrl = 'https://github.com/dntmakers/aboutme/blob/main/'
   + 'docs/design/deployment-transparency/README.md#what-this-proves';
-export const sourceRepositoryName = 'dannyota/aboutme';
-export const sourceRepositoryUrl = 'https://github.com/dannyota/aboutme';
+export const sourceRepositoryName = 'dntmakers/aboutme';
+export const sourceRepositoryUrl = 'https://github.com/dntmakers/aboutme';
 export const sbomPredicateFlag
   = '--predicate-type https://spdx.dev/Document/v2.3';
 

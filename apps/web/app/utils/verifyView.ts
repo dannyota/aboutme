@@ -236,7 +236,7 @@ export const readDigestsCommand = command([
 
 export function verifyImageCommand(target: CommandTarget | null): Command {
   const owner: CommandPart = target === null
-    ? plain('dannyota')
+    ? plain('dntmakers')
     : { text: target.owner, kind: 'live' };
   const repository = target === null
     ? plain('server')

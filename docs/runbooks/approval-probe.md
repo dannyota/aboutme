@@ -27,9 +27,9 @@ dispatching:
    the config; do not save or publish raw responses, profiles, or headers.
 
 ```text
-GET /repos/dannyota/aboutme
-GET /repos/dannyota/aboutme/actions/workflows/approval-probe.yml
-GET /repos/dannyota/aboutme/environments/approval-probe
+GET /repos/dntmakers/aboutme
+GET /repos/dntmakers/aboutme/actions/workflows/approval-probe.yml
+GET /repos/dntmakers/aboutme/environments/approval-probe
 GET /users/dannyota
 ```
 

@@ -138,9 +138,12 @@ Cryptographic verification uses authenticated Sigstore/TUF roots, Fulcio
 certificates, Rekor inclusion and timestamps, exact subject names/digests,
 issuer `https://token.actions.githubusercontent.com`, GitHub-hosted runners,
 source repository/SHA, and signer
-`https://github.com/dannyota/aboutme/.github/workflows/release-images.yml@refs/tags/<tag>`.
-Modern provenance identifies the selected publication run and attempt; SBOM
-certificate source identity must match.
+`https://github.com/<owner>/aboutme/.github/workflows/release-images.yml@refs/tags/<tag>`.
+Bind the owner to the source repository and image namespace, and pin the
+repository and owner IDs as in the
+[repository transfer](../repository-transfer.md). Modern provenance identifies
+the selected publication run and attempt; SBOM certificate source identity must
+match.
 
 Legacy evidence applies only to SSH targets below `F`, with `publication`
 exactly null. It waives the modern job-name/result contract, selected

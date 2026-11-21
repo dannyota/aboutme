@@ -292,7 +292,7 @@ for ((i=0; i<7; i++)); do printf -v listed '%s%saboutme-long-failed-unit-%03d.se
 units_message() {
   printf '%s <b>aboutme</b> · %s\n101 units failed: %s and 94 more.\n%s\n<i>%s · aboutme-watch · <a href="%s">runbook</a></i>' \
     "$1" "$2" "$listed" "Action: read each failed unit's journal on the host." "${3:-10:04 ICT · 03:04 UTC}" \
-    https://github.com/dannyota/aboutme/blob/main/docs/runbooks/production.md#host-watcher
+    https://github.com/dntmakers/aboutme/blob/main/docs/runbooks/production.md#host-watcher
 }
 [[ $(telegram_text "$work/telegram-message") == "$(units_message 🔴 'units failed')" ]] || {
   echo 'watcher failed-units Telegram message changed' >&2; exit 1;

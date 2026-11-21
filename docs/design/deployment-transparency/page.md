@@ -50,7 +50,7 @@ primitives. Top to bottom:
 
 | Step    | Value shown                                            | Match when                                              |
 | ------- | ------------------------------------------------------ | ------------------------------------------------------- |
-| Source  | `dannyota/aboutme`, tag, short commit, links           | The signed certificate names this repository and tag    |
+| Source  | `dntmakers/aboutme`, tag, short commit, links          | The signed certificate names the source and tag         |
 | Build   | "GitHub Actions, release-images", run link             | The signer workflow matches the expected identity       |
 | Image   | `ghcr.io/<owner>/aboutme-*`, short digest              | The signed subject equals the digest                    |
 | Running | "aboutme.vn, GreenNode HCM03", replicas, running since | The platform reports that digest; the document is fresh |

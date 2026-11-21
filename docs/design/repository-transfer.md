@@ -18,14 +18,14 @@ signers and require verifiable provenance.
 | Repository ID 1318874703                    | Unchanged: every signature carries it as `SourceRepositoryIdentifier` (OID 1.3.6.1.4.1.57264.1.15). The owner ID is 244348267 in old signatures and 342323513 in new ones   |
 | Existing signatures                         | Keep the `dannyota` signer identity and cannot be re-signed                                                                                                                 |
 | Go module `danny.vn/aboutme`                | Unaffected: no import names GitHub, and `danny.vn` serves no `go-import` metadata                                                                                           |
-| Packages created by the first new release   | Inherit the repository's visibility when `GITHUB_TOKEN` creates them ([Actions publishing][pub]); checked by the anonymous pull                                             |
+| Packages created by the first new release   | `GITHUB_TOKEN` links them to the workflow repository; initial visibility can be private ([Container registry][pub]), so deployment requires anonymous pulls                 |
 
 [transfer]:
   https://docs.github.com/en/repositories/creating-and-managing-repositories/transferring-a-repository
 [perm]:
   https://docs.github.com/en/packages/learn-github-packages/about-permissions-for-github-packages
 [pub]:
-  https://docs.github.com/en/packages/managing-github-packages-using-github-actions-workflows/publishing-and-installing-a-package-with-github-actions
+  https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry
 
 ## Decisions
 

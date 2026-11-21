@@ -583,6 +583,12 @@ describe('component rows and commands', () => {
 
   it('shows placeholders when there is no document', () => {
     const command = verifyImageCommand(null);
+    expect(command.copy).toContain('oci://ghcr.io/dntmakers/aboutme-server@');
+    expect(command.copy).toContain('  --repo dntmakers/aboutme \\');
+    expect(command.copy).toContain(
+      '  --signer-workflow dntmakers/aboutme/.github/workflows/'
+      + 'release-images.yml \\',
+    );
     expect(command.copy).toContain('aboutme-server@sha256:<digest> \\');
     expect(command.copy).toContain('refs/tags/<version> \\');
     expect(command.lines.flat().some(({ kind }) => kind === 'live'))

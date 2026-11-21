@@ -772,7 +772,7 @@ describe('AppShell', () => {
       '[data-testid="app-shell-open-source"]',
     );
     expect(openSource.attributes('href')).toBe(
-      'https://github.com/dannyota/aboutme',
+      'https://github.com/dntmakers/aboutme',
     );
     expect(openSource.attributes('rel')).toBe('noopener noreferrer');
     expect(openSource.classes()).toContain('max-[72rem]:hidden');
