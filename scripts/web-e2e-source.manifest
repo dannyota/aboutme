@@ -123,7 +123,6 @@ apps/web/app/components/editor/forms/fieldIntent.ts
 apps/web/app/components/editor/forms/projectEntryLinking.ts
 apps/web/app/components/editor/forms/projectLibrary.ts
 apps/web/app/components/editor/forms/projectLinking.ts
-apps/web/app/components/editor/history/HistoryConfirmDialog.vue
 apps/web/app/components/editor/history/HistoryList.vue
 apps/web/app/components/editor/history/HistoryPanel.vue
 apps/web/app/components/editor/history/HistoryPreview.vue
