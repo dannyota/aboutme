@@ -31,7 +31,7 @@ Compatibility = { migration_manifest:H, supported_document_versions:U[], rollbac
 Publication = { workflow_id:ID, run_id:ID, attempt:1, digests_asset_hash:H }
 Authorization = { kind:"github", workflow_id:ID, run_id:ID, attempt:1, environment_id:ID } | { kind:"ssh" }
 Request = {
-  schema:1, repository_id:ID, repository:"dannyota/aboutme", target:"production",
+  schema:1, repository_id:ID, repository:"dntmakers/aboutme", target:"production",
   epoch:UUID, generation:ID, expected_state:H, mode:"deploy"|"rollback"|"activate",
   release:Release, images:Images, observer:Observer, coordinator:Coordinator,
   compatibility:Compatibility, publication:Publication?, authorization:Authorization,
@@ -71,10 +71,13 @@ Journal = {
 }
 ```
 
-Image repositories equal `ghcr.io/dannyota/aboutme-{server,web,caddy}` for their
-respective fields. Maintenance uses the Caddy repository. Observer replacement
-uses only `ghcr.io/dannyota/aboutme-observer` and cannot be null. `keep` equals
-the installed observer, including null when absent.
+Image repositories equal `ghcr.io/<owner>/aboutme-{server,web,caddy}` for their
+respective fields, using the target release's owner under the
+[repository transfer rules](../repository-transfer.md). Maintenance takes its
+own tag's owner in `ghcr.io/<owner>/aboutme-caddy` and may retain a different
+owner on rollback. Observer replacement takes its own tag's owner in
+`ghcr.io/<owner>/aboutme-observer` and cannot be null. `keep` equals the
+installed observer, including null when absent.
 
 `tag_object` records the fetched tag ref’s object ID, whether annotated or
 lightweight. `nonce` contains 256 random bits. GitHub requests use run creation

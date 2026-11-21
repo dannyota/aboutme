@@ -285,7 +285,7 @@ describe('index.vue actions', () => {
         const maker = '[data-testid="landing-maker-actions"]';
         expect(texts(wrapper, maker)).toEqual(TABLE[locale].makerSignedOut);
         expect(hrefs(wrapper, maker)).toEqual([
-          '/register', '/danny', 'https://github.com/dannyota/aboutme',
+          '/register', '/danny', 'https://github.com/dntmakers/aboutme',
         ]);
       });
 
@@ -303,7 +303,7 @@ describe('index.vue actions', () => {
       const maker = '[data-testid="landing-maker-actions"]';
       expect(texts(wrapper, maker)).toEqual(TABLE[locale].makerSignedIn);
       expect(hrefs(wrapper, maker)).toEqual([
-        '/app/resumes', '/danny', 'https://github.com/dannyota/aboutme',
+        '/app/resumes', '/danny', 'https://github.com/dntmakers/aboutme',
       ]);
     });
   }

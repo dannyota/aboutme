@@ -86,7 +86,7 @@ export async function expectChromeNavigation(
   await expect(nav, message).toMatchAriaSnapshot('- navigation:\n'
     + visible.map((name) => `  - link "${name}"`).join('\n'));
   const links = ['/templates', '/showcase', '/guide/mcp',
-    'https://github.com/dannyota/aboutme'];
+    'https://github.com/dntmakers/aboutme'];
   for (let index = 0; index < links.length; index++) {
     await expect(nav.locator('a').nth(index), message)
       .toHaveAttribute('href', links[index]!);

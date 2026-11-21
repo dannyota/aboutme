@@ -3,7 +3,7 @@
 set +xv
 set -euo pipefail
 export LC_ALL=C
-alert_runbooks=https://github.com/dannyota/aboutme/blob/main/docs/runbooks
+alert_runbooks=https://github.com/dntmakers/aboutme/blob/main/docs/runbooks
 alert_limit=1500
 
 alert_html() {

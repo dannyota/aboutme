@@ -3,7 +3,7 @@ import { legalVi } from './legal-vi';
 import type { Locale } from './locale';
 
 export const legalContact = 'danny@aboutme.vn';
-export const repositoryUrl = 'https://github.com/dannyota/aboutme';
+export const repositoryUrl = 'https://github.com/dntmakers/aboutme';
 
 export type LegalSection = {
   readonly heading: string;

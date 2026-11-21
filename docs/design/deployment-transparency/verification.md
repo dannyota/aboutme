@@ -17,9 +17,9 @@ store, and pushed to the registry beside the image.
 
 A real statement for `aboutme-server` v0.5.21 names subject digest
 `sha256:d1c33a0a…945c`, workflow ref `refs/tags/v0.5.21`, commit `d73f4043…`,
-and run `actions/runs/36218940587/attempts/1`, and GitHub serves it without
-authentication at
-`https://api.github.com/repos/dannyota/aboutme/attestations/sha256:<hex>`.
+and run `actions/runs/36218940587/attempts/1`. The
+[recorded bundle](../../../deploy/observer/testdata/verify/api-server-v0.5.21-provenance.json)
+keeps its original `dannyota` signer.
 
 ### SBOM
 
@@ -74,10 +74,10 @@ trust root (refreshed through TUF) and requires all of:
 1. A bundle for the digest, fetched from the GitHub attestations API by
    repository ID
    (`https://api.github.com/repositories/1318874703/attestations/sha256:<hex>`)
-   and filtered by predicate type. When the API answers 403 or 429 (its
-   unauthenticated limit is 60 requests an hour per address), the observer reads
-   the same bundle from the registry, in both owners' namespaces. A namespace
-   whose token the registry refuses holds no readable bundle.
+   and filtered by predicate type. If the API returns no bundle or responds with
+   403, 404, or 429, the observer looks for the bundle in both owners' registry
+   namespaces. A namespace whose token the registry refuses holds no readable
+   bundle.
 2. A valid signature, a certificate chain to Fulcio, and a Rekor inclusion proof
    and signed timestamp inside the certificate's validity.
 3. Issuer `https://token.actions.githubusercontent.com`.

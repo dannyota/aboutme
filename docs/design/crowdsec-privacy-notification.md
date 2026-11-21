@@ -279,5 +279,5 @@ design review approved the wire and host-fence clarifications on 2026-10-19.
 First-party privacy: [English](../../apps/web/app/i18n/legal-en.ts) and
 [Vietnamese](../../apps/web/app/i18n/legal-vi.ts);
 [`job wrapper`](../../deploy/vn/host/job-run.sh),
-[mail worker/outbox/SMTP](https://github.com/dannyota/aboutme/tree/main/apps/server/internal/authmail),
-[email runbook](https://github.com/dannyota/aboutme/blob/main/docs/runbooks/email.md).
+[mail worker/outbox/SMTP](../../apps/server/internal/authmail),
+[email runbook](../runbooks/email.md).

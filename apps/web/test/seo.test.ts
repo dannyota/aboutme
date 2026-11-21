@@ -168,7 +168,7 @@ describe('site page search metadata', () => {
     });
     expect(graph[1]).toMatchObject({
       logo: 'https://aboutme.vn/apple-touch-icon-v4.png',
-      sameAs: ['https://github.com/dannyota/aboutme'],
+      sameAs: ['https://github.com/dntmakers/aboutme'],
     });
     expect(graph[2]).toMatchObject({
       offers: { '@type': 'Offer', 'price': '0', 'priceCurrency': 'VND' },

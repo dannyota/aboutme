@@ -115,7 +115,7 @@ value, a 13 px muted line, and a state chip.
 
 | Step    | Icon                    | Label VI / EN       | Value                       | Muted line                                                                              |
 | ------- | ----------------------- | ------------------- | --------------------------- | --------------------------------------------------------------------------------------- |
-| Source  | `git-commit-horizontal` | Mã nguồn / Source   | Version                     | `dannyota/aboutme` @ short commit, both links                                           |
+| Source  | `git-commit-horizontal` | Mã nguồn / Source   | Version                     | `dntmakers/aboutme` @ short commit, both links                                          |
 | Build   | `workflow`              | Bản dựng / Build    | GitHub Actions              | "release-images, lần chạy / run {id}", a link                                           |
 | Image   | `package`               | Image / Image       | `ghcr.io/<owner>/aboutme-*` | "3 image, đã được GitHub ký" / "3 images, signed by GitHub"                             |
 | Running | `server`                | Đang chạy / Running | aboutme.vn                  | "GreenNode HCM03, {n} bản sao, từ 09:41" / "GreenNode HCM03, {n} replicas, since 09:41" |

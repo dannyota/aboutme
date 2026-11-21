@@ -73,7 +73,7 @@ Action: <what Danny should do>   or   System: <what the host does next>
   events, `alert-telegram` for the delivery test, and `aboutme-host` for an
   unknown key.
 - Times are the send time in UTC+7 and UTC.
-- The runbook link is a fixed `https://github.com/dannyota/aboutme/blob/main/`
+- The runbook link is a fixed `https://github.com/dntmakers/aboutme/blob/main/`
   URL: the key's anchor in the table, else the
   [Alarms](../runbooks/production.md#alarms) section. `coraza-log-invalid` keeps
   its guidance: the third line says to read the Coraza metadata on the host, and

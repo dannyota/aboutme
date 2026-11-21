@@ -5,7 +5,7 @@
 Please **do not open a public issue** for security problems.
 
 Report privately via
-[GitHub Security Advisories](https://github.com/dannyota/aboutme/security/advisories/new).
+[GitHub Security Advisories](https://github.com/dntmakers/aboutme/security/advisories/new).
 You will get an acknowledgement within 72 hours.
 
 ## Scope notes

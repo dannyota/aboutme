@@ -25,7 +25,7 @@ var templateIDs = []string{
 	"modern-sidebar", "mono-print", "nordic-muted", "one-page-tight", "startup-bold",
 }
 
-const repositoryURL = "https://github.com/dannyota/aboutme"
+const repositoryURL = "https://github.com/dntmakers/aboutme"
 
 var crawlerHiddenPages = []string{"authorize", "forgot-password", "login", "register", "reset-password", "verify-email"}
 

@@ -29,5 +29,5 @@ Include a screenshot or error message if useful. Remove email addresses, resume
 content, tokens, and other personal data before posting.
 
 For a security vulnerability, use
-[private reporting](https://github.com/dannyota/aboutme/security/advisories/new)
+[private reporting](https://github.com/dntmakers/aboutme/security/advisories/new)
 instead of a public issue.

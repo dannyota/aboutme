@@ -412,7 +412,7 @@ describe('privacy and terms pages', () => {
     expect(en.text()).toContain('governed by the laws of Vietnam');
     expect(en.text()).toContain('continued use does not count as consent');
     expect(
-      en.get('a[href="https://github.com/dannyota/aboutme"]').text(),
+      en.get('a[href="https://github.com/dntmakers/aboutme"]').text(),
     ).toBe('Source code on GitHub');
   });
 
@@ -447,7 +447,7 @@ describe('privacy and terms pages', () => {
       expect(
         hrefs.every((href) =>
           href === 'mailto:danny@aboutme.vn'
-          || href === 'https://github.com/dannyota/aboutme'),
+          || href === 'https://github.com/dntmakers/aboutme'),
       ).toBe(true);
     }
     for (const file of [

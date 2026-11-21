@@ -30,7 +30,8 @@ match:
 
 1. **Source:** the public repository, tag, and commit.
 2. **Build:** the `release-images` workflow run that built from that commit.
-3. **Image:** the digest the build signed, in `ghcr.io/dannyota/aboutme-*`.
+3. **Image:** the digest the build signed, in `ghcr.io/<owner>/aboutme-*`. The
+   [repository transfer](../repository-transfer.md) defines the two owners.
 4. **Running:** the digest the platform reports for each serving container.
 
 Build fields come from the signed record, never from the application, the
