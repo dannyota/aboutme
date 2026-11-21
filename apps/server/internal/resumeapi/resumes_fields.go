@@ -57,18 +57,7 @@ func decodeResumeLanguage(raw json.RawMessage) (*string, error) {
 }
 
 func projectResumeLanguage(value *string) string {
-	if value == nil || *value == "" {
-		return language.Und.String()
-	}
-	tag, err := language.Parse(*value)
-	if err != nil {
-		return language.Und.String()
-	}
-	canonical := tag.String()
-	if utf8.RuneCountInString(canonical) > resume.MaxLngCharacters {
-		return language.Und.String()
-	}
-	return canonical
+	return resume.ProjectLanguage(value)
 }
 
 func documentInvalid(path, message string) *clientError {

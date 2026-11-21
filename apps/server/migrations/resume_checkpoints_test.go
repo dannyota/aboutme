@@ -77,3 +77,48 @@ func TestResumeCheckpointsMigrationUpDownUp(t *testing.T) {
 		t.Fatalf("deleted resume has %d checkpoints: %v", count, err)
 	}
 }
+
+func TestResumeCheckpointActorConstraints(t *testing.T) {
+	t.Parallel()
+	tx, ctx := newResumeSchemaTxAt(t, 22)
+	owner := createTestUser(ctx, t, tx)
+	client := insertOAuthClient(ctx, t, tx)
+	grant := insertOAuthGrant(ctx, t, tx, owner, client)
+	var resumeID uuid.UUID
+	if err := tx.QueryRow(ctx, `INSERT INTO resumes (user_id,title,schema_version,personal_details,content,customization)
+    VALUES ($1,'Fixture',1,'{}','{}','{}') RETURNING id`, owner).Scan(&resumeID); err != nil {
+		t.Fatal(err)
+	}
+	const insert = `INSERT INTO resume_checkpoints
+    (resume_id,started_at,cause,actor_grant_id,actor_name,title,schema_version,personal_details,content,customization,byte_size)
+    VALUES ($1,now(),$2,$3,$4,'Fixture',1,'{}','{}','{}',1)`
+	if _, err := tx.Exec(ctx, insert, resumeID, "assistant", grant, ""); err != nil {
+		t.Fatalf("assistant with empty copied name: %v", err)
+	}
+	for _, tc := range []struct {
+		name, constraint, query string
+		args                    []any
+	}{
+		{"assistant without copied name", "resume_checkpoints_actor_name_check", insert, []any{resumeID, "assistant", grant, nil}},
+		{"owner with a copied name", "resume_checkpoints_actor_name_check", insert, []any{resumeID, "edit", nil, "Assistant"}},
+		{"owner with a grant", "resume_checkpoints_actor_grant_check", insert, []any{resumeID, "edit", grant, nil}},
+		{"invalid session actor", "resumes_session_actor_check", `UPDATE resumes SET session_actor='grant:not-a-uuid',
+    session_started_at=now(),session_last_write_at=now() WHERE id=$1`, []any{resumeID}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sp, err := tx.Begin(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, statementErr := sp.Exec(ctx, tc.query, tc.args...)
+			if err = sp.Rollback(ctx); err != nil {
+				t.Fatal(err)
+			}
+			requireConstraintViolation(t, statementErr, tc.constraint)
+		})
+	}
+	if _, err := tx.Exec(ctx, `UPDATE resumes SET session_actor='grant:' || $2::uuid::text,
+    session_started_at=now(),session_last_write_at=now() WHERE id=$1`, resumeID, grant); err != nil {
+		t.Fatalf("valid grant session: %v", err)
+	}
+}

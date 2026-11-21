@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 	"time"
 
@@ -82,6 +83,11 @@ func TestCheckpointRoutesListRestoreAndClear(t *testing.T) {
 	if err := h.pool.QueryRow(h.ctx, `SELECT count(*) FROM resume_checkpoints WHERE resume_id = $1`, created.ID).Scan(&count); err != nil || count != 2 {
 		t.Fatalf("restore and replay stored %d checkpoints: %v", count, err)
 	}
+	var title, name string
+	if err := h.pool.QueryRow(h.ctx, `SELECT title, personal_details->>'fullName' FROM resume_checkpoints
+        WHERE resume_id=$1 AND cause='restore' AND actor_grant_id IS NULL`, created.ID).Scan(&title, &name); err != nil || title != created.Title || name != "After" {
+		t.Fatalf("restore checkpoint title=%q name=%q error=%v", title, name, err)
+	}
 	if got := checkpointWriteRequest(t, h, http.MethodDelete, item, uuid.NewString(), 0); got.status != http.StatusNoContent {
 		t.Fatalf("delete status=%d: %s", got.status, got.body)
 	}
@@ -114,7 +120,7 @@ func checkpointDeletionOperation(operation string) bool {
 	return operation == "deleteResumeCheckpoint" || operation == "clearResumeCheckpoints"
 }
 
-func checkpointWriteRequest(t *testing.T, h *resumeAPITestHarness, method, path, key string, match int64) testHTTPResponse {
+func checkpointWriteRequest(t *testing.T, h *resumeAPITestHarness, method, path, key string, match int64, versions ...string) testHTTPResponse {
 	t.Helper()
 	req, err := http.NewRequestWithContext(h.ctx, method, h.server.URL+path, nil)
 	if err != nil {
@@ -124,6 +130,9 @@ func checkpointWriteRequest(t *testing.T, h *resumeAPITestHarness, method, path,
 	req.Header.Set("Origin", resumeAPITestOrigin)
 	req.Header.Set(auth.CSRFHeaderName, h.csrfToken)
 	req.Header.Set("Idempotency-Key", key)
+	for _, version := range versions {
+		req.Header.Add(wireVersionHeader, version)
+	}
 	if match > 0 {
 		req.Header.Set("If-Match", fmt.Sprintf(`"r%d"`, match))
 	}
@@ -223,7 +232,7 @@ func TestRestoreCheckpointOlderInvalidAndBusy(t *testing.T) {
 		status  int
 		code    string
 	}{
-		{"older", docmigrate.CurrentVersion - 1, http.StatusOK, ""},
+		{"older", 1, http.StatusOK, ""},
 		{"invalid", docmigrate.CurrentVersion, http.StatusUnprocessableEntity, "document_invalid"},
 		{"busy", docmigrate.CurrentVersion, http.StatusServiceUnavailable, "public_state_busy"},
 	} {
@@ -238,7 +247,16 @@ func TestRestoreCheckpointOlderInvalidAndBusy(t *testing.T) {
 			if tc.name == "busy" {
 				h.service.idempotency = checkpointBusyRecheck{h.service.idempotency}
 			}
-			checkpoint := insertCheckpointDocumentFixture(t, h, current.ID, doc, tc.version)
+			var checkpoint uuid.UUID
+			if tc.name == "older" {
+				raw, readErr := os.ReadFile("../../../../packages/schema/fixtures/v1/minimal.json")
+				if readErr != nil {
+					t.Fatal(readErr)
+				}
+				checkpoint = insertCheckpointRawFixture(t, h, current.ID, raw, tc.version)
+			} else {
+				checkpoint = insertCheckpointDocumentFixture(t, h, current.ID, doc, tc.version)
+			}
 			path := apiResumePath + "/" + current.ID.String() + "/checkpoints/" + checkpoint.String() + "/restore"
 			response := checkpointWriteRequest(t, h, http.MethodPost, path, uuid.NewString(), 1)
 			if tc.code != "" {
@@ -254,6 +272,9 @@ func TestRestoreCheckpointOlderInvalidAndBusy(t *testing.T) {
 			if err != nil || got.Revision != want || got.StoredSchemaVersion != docmigrate.CurrentVersion {
 				t.Fatalf("revision=%d version=%d error=%v, want revision %d and current schema", got.Revision, got.StoredSchemaVersion, err, want)
 			}
+			if tc.name == "older" && got.Doc.Customization.Font.Family != "inter" {
+				t.Fatalf("stored v1 Inter family was not converted: %q", got.Doc.Customization.Font.Family)
+			}
 		})
 	}
 }
@@ -264,8 +285,13 @@ func insertCheckpointDocumentFixture(t *testing.T, h *resumeAPITestHarness, id u
 	if err != nil {
 		t.Fatal(err)
 	}
+	return insertCheckpointRawFixture(t, h, id, raw, version)
+}
+
+func insertCheckpointRawFixture(t *testing.T, h *resumeAPITestHarness, id uuid.UUID, raw []byte, version int32) uuid.UUID {
+	t.Helper()
 	var checkpoint uuid.UUID
-	if err = h.pool.QueryRow(h.ctx, `INSERT INTO resume_checkpoints
+	if err := h.pool.QueryRow(h.ctx, `INSERT INTO resume_checkpoints
   (resume_id,started_at,cause,title,lng,schema_version,personal_details,content,customization,byte_size)
   SELECT $1,$2,'edit','Historic title','vi',$3,doc->'personalDetails',doc->'content',doc->'customization',100
   FROM (SELECT $4::jsonb AS doc) AS fixture RETURNING id`, id, h.service.clock(), version, raw).Scan(&checkpoint); err != nil {
@@ -278,4 +304,68 @@ type checkpointBusyRecheck struct{ idempotencyBoundary }
 
 func (b checkpointBusyRecheck) Recheck(context.Context, uuid.UUID, string, uuid.UUID, [32]byte) (resume.RecheckResult, error) {
 	return resume.RecheckResult{}, &publicstate.DrainTimeoutError{}
+}
+
+func TestCheckpointReadProjectsStoredLanguage(t *testing.T) {
+	h := newResumeAPITestHarness(t)
+	row := h.createResume(t)
+	for _, tc := range []struct {
+		name string
+		lng  *string
+	}{{"null", nil}, {"empty", new("")}} {
+		t.Run(tc.name, func(t *testing.T) {
+			checkpoint := seedCheckpointForTest(t, h, row.ID)
+			if _, err := h.pool.Exec(h.ctx, `UPDATE resume_checkpoints SET lng=$2 WHERE id=$1`, checkpoint, tc.lng); err != nil {
+				t.Fatal(err)
+			}
+			path := apiResumePath + "/" + row.ID.String() + "/checkpoints/" + checkpoint.String()
+			result := h.request(t, http.MethodGet, path, nil, true, false)
+			var payload struct {
+				Data struct {
+					Lng string `json:"lng"`
+				} `json:"data"`
+			}
+			if err := json.Unmarshal(result.body, &payload); err != nil || result.status != http.StatusOK || payload.Data.Lng != "und" {
+				t.Fatalf("GET projected language=%q status=%d error=%v", payload.Data.Lng, result.status, err)
+			}
+		})
+	}
+}
+
+func TestCheckpointDeletesIgnoreSchemaVersionHeader(t *testing.T) {
+	h := newResumeAPITestHarness(t)
+	row := h.createResume(t)
+	collection := apiResumePath + "/" + row.ID.String() + "/checkpoints"
+	for _, operation := range []struct {
+		name string
+		one  bool
+	}{{"delete one", true}, {"clear all", false}} {
+		t.Run(operation.name, func(t *testing.T) {
+			for _, tc := range []struct {
+				name     string
+				versions []string
+			}{{"absent", nil}, {"present", []string{"2"}}, {"unsupported and repeated", []string{"future", "2"}}} {
+				t.Run(tc.name, func(t *testing.T) {
+					id := seedCheckpointForTest(t, h, row.ID)
+					path := collection
+					if operation.one {
+						path += "/" + id.String()
+					}
+					key := uuid.NewString()
+					result := checkpointWriteRequest(t, h, http.MethodDelete, path, key, 0, tc.versions...)
+					if result.status != http.StatusNoContent {
+						t.Fatalf("status=%d body=%s", result.status, result.body)
+					}
+					replay := checkpointWriteRequest(t, h, http.MethodDelete, path, key, 0, "some other value")
+					if replay.status != http.StatusNoContent {
+						t.Fatalf("replay status=%d body=%s", replay.status, replay.body)
+					}
+					var exists bool
+					if err := h.pool.QueryRow(h.ctx, `SELECT EXISTS(SELECT 1 FROM resume_checkpoints WHERE id=$1)`, id).Scan(&exists); err != nil || exists {
+						t.Fatalf("checkpoint remains: %v, %v", exists, err)
+					}
+				})
+			}
+		})
+	}
 }

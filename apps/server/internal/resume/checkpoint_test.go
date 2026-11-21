@@ -281,3 +281,66 @@ func TestCheckpointOwnerAndAssistantRace(t *testing.T) {
 		t.Fatalf("racing writes produced %d winners and %d checkpoints: %v", wins, count, err)
 	}
 }
+
+func TestCheckpointSuccessiveOwnerAndAssistantWrites(t *testing.T) {
+	t.Parallel()
+	s, q, pool, ctx := newIntegrationStore(t)
+	owner := createTestUser(t, q)
+	grant := checkpointGrant(ctx, t, q, owner, time.Now())
+	doc := validDocForTest(t)
+	doc.PersonalDetails.FullName = new("Before either write")
+	created, err := s.Create(ctx, owner, "History", doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc.PersonalDetails.FullName = new("After owner write")
+	revision, err := s.SaveDocument(ctx, owner, created.ID, doc, created.Revision)
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc.PersonalDetails.FullName = new("After assistant write")
+	err = pgx.BeginFunc(ctx, pool, func(tx pgx.Tx) error {
+		saved, saveErr := s.SaveDocumentTx(ctx, q.WithTx(tx), owner, created.ID, doc, revision, resume.CheckpointWrite{GrantID: &grant})
+		if saveErr == nil && saved.Revision != revision+1 {
+			t.Errorf("assistant revision %d, want %d", saved.Revision, revision+1)
+		}
+		return saveErr
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows, err := pool.Query(ctx, `SELECT cause, actor_grant_id, actor_name, personal_details->>'fullName'
+    FROM resume_checkpoints WHERE resume_id=$1 ORDER BY started_at,id`, created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	for _, tc := range []struct {
+		cause, name string
+		grant       *uuid.UUID
+		actor       *string
+	}{
+		{"edit", "Before either write", nil, nil},
+		{"assistant", "After owner write", &grant, new("History fixture")},
+	} {
+		var cause, name string
+		var recordedGrant *uuid.UUID
+		var recordedActor *string
+		if !rows.Next() {
+			t.Fatalf("missing %s checkpoint: %v", tc.cause, rows.Err())
+		}
+		if err = rows.Scan(&cause, &recordedGrant, &recordedActor, &name); err != nil {
+			t.Fatal(err)
+		}
+		if cause != tc.cause || name != tc.name || !equalCheckpointPointer(recordedGrant, tc.grant) || !equalCheckpointPointer(recordedActor, tc.actor) {
+			t.Fatalf("wrong checkpoint actor or data for %s: cause=%q name=%q grant=%v actor=%v", tc.cause, cause, name, recordedGrant, recordedActor)
+		}
+	}
+	if rows.Next() || rows.Err() != nil {
+		t.Fatalf("expected exactly two history rows: %v", rows.Err())
+	}
+}
+
+func equalCheckpointPointer[T comparable](a, b *T) bool {
+	return a == nil && b == nil || a != nil && b != nil && *a == *b
+}

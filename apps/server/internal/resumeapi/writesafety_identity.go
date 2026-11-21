@@ -19,6 +19,10 @@ const (
 )
 
 func parseMutationHeaders(r *http.Request, requireMatch bool, accepted []int32) (mutationHeaders, *clientError) {
+	return parseMutationHeadersWithPolicy(r, requireMatch, accepted, false)
+}
+
+func parseMutationHeadersWithPolicy(r *http.Request, requireMatch bool, accepted []int32, versionless bool) (mutationHeaders, *clientError) {
 	keyValues := r.Header.Values("Idempotency-Key")
 	if len(keyValues) == 0 {
 		return mutationHeaders{}, &clientError{Status: http.StatusBadRequest, Code: "idempotency_key_required", Message: "Idempotency-Key is required"}
@@ -48,6 +52,9 @@ func parseMutationHeaders(r *http.Request, requireMatch bool, accepted []int32) 
 		revision = &parsed
 	}
 
+	if versionless {
+		return mutationHeaders{Key: key, ExpectedRevision: revision, WireVersion: unversionedWire}, nil
+	}
 	version, versionErr := resolveWireVersion(r.Header, accepted)
 	if versionErr != nil {
 		return mutationHeaders{}, versionErr

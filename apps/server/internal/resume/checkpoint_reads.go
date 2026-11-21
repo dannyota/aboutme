@@ -28,7 +28,7 @@ type CheckpointSummary struct {
 
 type CheckpointDetail struct {
 	CheckpointSummary
-	Lng           *string            `json:"lng"`
+	Lng           string             `json:"lng"`
 	SchemaVersion int32              `json:"schemaVersion"`
 	Document      CheckpointDocument `json:"document"`
 }
@@ -70,7 +70,7 @@ func (s *Store) GetCheckpoint(ctx context.Context, arg store.GetResumeCheckpoint
 	if err != nil {
 		return CheckpointDetail{}, err
 	}
-	return CheckpointDetail{CheckpointSummary: CheckpointSummaryForRow(row), Lng: state.Lng,
+	return CheckpointDetail{CheckpointSummary: CheckpointSummaryForRow(row), Lng: ProjectLanguage(state.Lng),
 		SchemaVersion: state.SchemaVersion, Document: state.Document}, nil
 }
 

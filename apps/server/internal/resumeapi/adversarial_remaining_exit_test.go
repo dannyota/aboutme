@@ -346,6 +346,9 @@ func TestWireVersion_FailsClosed(t *testing.T) {
 		{name: "far-future", value: "2147483647"},
 	}
 	for _, mutation := range mutations {
+		if !mutation.route.AcceptsWireVersion {
+			continue
+		}
 		mutation := mutation
 		request := remainingRequestForOperation(t, mutation, fixture)
 		for _, version := range versions {
@@ -354,7 +357,7 @@ func TestWireVersion_FailsClosed(t *testing.T) {
 				before := snapshotRemainingExitState(t, h, fixture.resume.ID)
 				beforeCalls := counter.counts()
 				match := []string(nil)
-				if mutation.operationID != "createResume" && mutation.route.OperationKind != operationCheckpointDelete {
+				if mutation.operationID != "createResume" {
 					match = []string{fmt.Sprintf(`"r%d"`, fixture.resume.Revision)}
 				}
 				response := remainingPerformMutation(t, h, request, uuid.NewString(), match, version.value)
