@@ -1,6 +1,6 @@
 # Resume history panel
 
-Status: Draft for owner review (2026-11-21), for v0.10.0. The
+Status: Accepted by the owner (2026-11-21), for v0.10.0. The
 [change review design](../change-review.md#checkpoints) owns checkpoints,
 restore, deletion, retention, privacy, and owner decisions D1 and D2; the
 [history contract](../resume-history-contract.md) owns the history API. This
