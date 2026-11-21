@@ -1,6 +1,6 @@
 # Roadmap: v0.9 to v1.x
 
-Status: in progress. Accepted by the owner on 2026-11-10 and amended on 2026-11-15 with the [decisions](#owner-decisions) below. v0.8 is closed; v0.9.0 to v0.9.10 are released.
+Status: in progress. Accepted by the owner on 2026-11-10 and amended on 2026-11-15 with the [decisions](#owner-decisions) below. v0.8 and v0.9 are closed; v0.10 is next.
 
 Direction (owner, 2026-11-09): create a resume, then prove your skills, then improve your career. Each minor version below has one vision. Each patch release ships one feature (AGENTS.md "Small releases"). A feature starts only after its named design or ADR is written and accepted.
 
@@ -45,7 +45,7 @@ Vision: a project stops being three lines on a resume and becomes a page that pr
 
 Release numbers (owner, 2026-11-12): the first release in which a person can write a project and show it on a resume is v0.9.0; each later feature of this list is v0.9.1 and up. An urgent fix released before v0.9.0 stays in v0.8.x.
 
-Features 1 to 4 and 8 shipped in v0.9.0 to v0.9.9. Next come 9 and 10; features 5 to 7 follow once the owner has created the production GitHub OAuth app ([GitHub evidence](../design/github-evidence.md)). Feature numbers are stable and are not renumbered.
+All ten features have shipped. Feature numbers are stable and are not renumbered.
 
 Features:
 
@@ -93,7 +93,7 @@ Out of scope: collaborative editing, comments from other people, a separate draf
 
 Done when: with the setting on, a test shows no MCP tool, including delete and photo tools, can change what a public viewer sees; an owner can accept one proposed change, reject another, and see a stale proposal refused after a newer save; and an owner can restore an earlier version within the retention the design sets.
 
-Before code: a design and ADR for versions and proposals (storage, retention, limits, owner-only access, export, deletion and backup treatment, pending proposals after a grant is revoked, interaction with compare-and-swap revisions and realtime); an amendment to ADR 0009 if restored versions may reference replaced photos; an amendment to ADR 0018 and the MCP guide.
+Before code: the owner accepts the [change approval](../design/change-approval.md) design and [ADR 0031](../adr/0031-approved-assistant-changes.md) after an independent review; ADR 0018 and the MCP guide are amended on acceptance. Checkpoints hold no photo key, so ADR 0009 is unchanged. Release order and limits are in the design.
 
 ## v0.11: review with your own AI
 

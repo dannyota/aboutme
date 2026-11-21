@@ -93,6 +93,7 @@ Current behavior lives in code, deployment configuration, and
 | Other   | [Project entry points](project-entry-points.md)                        | Resume page title links, page bar link and their hydration to project pages   |
 | Other   | [GitHub evidence](github-evidence.md)                                  | Connection, evidence session, confirmed items, outbound requests, and privacy |
 | Other   | [GitHub evidence picker](github-evidence-picker.md)                    | Attaching evidence to a project, GitHub reads, API, storage, project page     |
+| Other   | [Change approval](change-approval.md)                                  | Checkpoints, restore, approval setting, assistant proposals and their review  |
 | Other   | [Community showcase](showcase.md)                                      | Showcase product scope, decisions, and approvals                              |
 | Other   | [Showcase contract](showcase-contract.md)                              | Listing fields, filters, delivery, revocation, and compatibility              |
 | Other   | [Showcase copy](showcase-copy.md)                                      | Approved bilingual interface and legal text                                   |
