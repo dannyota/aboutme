@@ -84,7 +84,8 @@ Callers:
 
 ## Routes
 
-All five are session routes with `sessionCookie` and `csrfToken`, tag `resumes`,
+All five are session routes (`sessionCookie`), and the three writes also need
+`csrfToken`, as `getResume` and the resume writes do. They take tag `resumes`,
 path parameters `ResumeID` and `CheckpointID`, the read limiter on `GET` and the
 resume write limiter otherwise. They are not agent operations, and each handler
 also answers `ResumeNotFound` to an agent principal; a test calls each with one.
