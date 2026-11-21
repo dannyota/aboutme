@@ -578,7 +578,7 @@ describe('EditorShell', () => {
     await design.trigger('click');
     expect(design.attributes('aria-pressed')).toBe('true');
     const tools = wrapper.findAll('[data-region="app-rail"] [aria-pressed]');
-    expect(tools).toHaveLength(5);
+    expect(tools).toHaveLength(6);
     for (const tool of tools) {
       const classes = tool.classes();
       expect(classes).toEqual(expect.arrayContaining([

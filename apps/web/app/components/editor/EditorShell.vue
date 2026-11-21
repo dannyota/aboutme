@@ -2,6 +2,7 @@
 import {
   ChevronDown,
   FileText,
+  History as HistoryIcon,
   Image,
   LayoutList,
   Palette,
@@ -9,7 +10,7 @@ import {
   Sparkles,
 } from '@lucide/vue';
 import { computed, nextTick, ref } from 'vue';
-import { Button, buttonVariants } from '@/components/ui/button';
+import { Button } from '@/components/ui/button';
 import {
   Collapsible,
   CollapsibleContent,
@@ -22,14 +23,6 @@ import {
   SheetTitle,
   SheetTrigger,
 } from '@/components/ui/sheet';
-import {
-  AlertDialog,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
 import AppLogo from '../app/AppLogo.vue';
 import AppSheetContent from '../app/AppSheetContent.vue';
 import IconButton from '../app/IconButton.vue';
@@ -37,6 +30,7 @@ import StateMark from '../app/StateMark.vue';
 import { iconFor } from '../resume/icons';
 
 import type { ResumeEditorActions } from '../../composables/useResumeEditor';
+import { useEditorHistory } from '../../composables/useEditorHistory';
 import { useStamp } from '../../composables/useStamp';
 import { linkedEntry, type EntryLocation } from '../../editor/projectLinks';
 import { canonicalPublicPath } from '../../editor/publishApi';
@@ -47,6 +41,8 @@ import AccountMenu from '../app/AccountMenu.vue';
 import CustomizationPanel from './customization/CustomizationPanel.vue';
 import PersonalDetailsPanel from './forms/PersonalDetailsPanel.vue';
 import SectionPanel from './forms/SectionPanel.vue';
+import HistoryPanel from './history/HistoryPanel.vue';
+import HistoryPreview from './history/HistoryPreview.vue';
 import PhotoPanel from './photo/PhotoPanel.vue';
 import StructurePanel from './structure/StructurePanel.vue';
 import { defaultSectionNames } from './sectionTypes';
@@ -55,6 +51,7 @@ import ConflictPanel from './ConflictPanel.vue';
 import HeldWriteAlert from './HeldWriteAlert.vue';
 import SealRing from './SealRing.vue';
 import SessionCheckBanner from './SessionCheckBanner.vue';
+import SessionLostDialog from './SessionLostDialog.vue';
 import type { SessionCheck } from '../../composables/sessionCheck';
 import LanguageTwinReview from './LanguageTwinReview.vue';
 import EditorPreview from './EditorPreview.vue';
@@ -74,7 +71,8 @@ type InspectorPanel
     | { readonly kind: 'structure' }
     | { readonly kind: 'customization' }
     | { readonly kind: 'templates' }
-    | { readonly kind: 'photo' };
+    | { readonly kind: 'photo' }
+    | { readonly kind: 'history' };
 
 const props = defineProps<{
   readonly actions: ResumeEditorActions;
@@ -98,14 +96,9 @@ const outlineOpen = ref(true);
 const publishOpen = ref(false);
 const zoom = ref<'fit' | 'full'>('fit');
 const outlineNav = ref<HTMLElement | null>(null);
-const sessionLostFirstAction = ref<{ $el?: HTMLElement } | null>(null);
 function onSheetOpenAutoFocus(event: Event): void {
   event.preventDefault();
   outlineNav.value?.querySelector<HTMLElement>('button')?.focus();
-}
-function onSessionLostOpenAutoFocus(event: Event): void {
-  event.preventDefault();
-  sessionLostFirstAction.value?.$el?.focus();
 }
 
 const document = computed(() => props.record.current.document);
@@ -162,6 +155,23 @@ const saveState = computed<SaveState>(() => {
   return waiting && props.sessionCheck?.failing.value ? 'retrying' : state;
 });
 
+const {
+  history,
+  preview: historyPreview,
+  restoreBlocked,
+  previewingVersion,
+  openHistory,
+  leaveHistory,
+  escapeHistory,
+} = useEditorHistory({
+  inspector,
+  narrowRegion,
+  saveState,
+  record: () => props.record,
+  sessionCheckFailing: () => props.sessionCheck?.failing.value === true,
+  actions: props.actions,
+});
+
 const selectedEntry = ref<string>();
 
 function selectOutline(key: string): void {
@@ -202,11 +212,6 @@ function openInspector(
     | { readonly kind: 'structure' | 'templates' | 'photo' },
 ): void {
   inspector.value = target;
-}
-
-async function discardAndSignIn(): Promise<void> {
-  props.actions.discard();
-  await navigateTo('/login');
 }
 </script>
 
@@ -324,7 +329,8 @@ async function discardAndSignIn(): Promise<void> {
 
     <aside
       class="editor-app-rail col-start-1 row-start-2 flex flex-col items-center
-        gap-2 border-r border-border bg-background p-2 max-[72rem]:col-start-2
+        gap-2 max-[22.5rem]:gap-1 border-r border-border bg-background p-2
+        max-[72rem]:col-start-2
         max-[72rem]:z-20 max-[72rem]:h-14 max-[72rem]:flex-row
         max-[72rem]:border-b max-[72rem]:border-r-0 max-[72rem]:px-3
         max-[72rem]:py-0 max-[42rem]:col-start-1
@@ -397,6 +403,18 @@ async function discardAndSignIn(): Promise<void> {
         />
       </IconButton>
       <span class="flex-1" />
+      <IconButton
+        :class="railButtonClass"
+        data-action="open-history"
+        :pressed="inspector.kind === 'history'"
+        :label="copy.history"
+        @click="openHistory"
+      >
+        <HistoryIcon
+          :size="20"
+          aria-hidden="true"
+        />
+      </IconButton>
     </aside>
 
     <aside
@@ -493,7 +511,19 @@ async function discardAndSignIn(): Promise<void> {
       data-responsive-region="preview"
       :data-narrow-active="narrowRegion === 'preview'"
     >
+      <HistoryPreview
+        v-if="previewingVersion"
+        ref="historyPreview"
+        :controller="history"
+        :photo-read="record.photoRead"
+        :photo-url="photoUrl"
+        :record="record"
+        :restore-blocked="restoreBlocked"
+        @back="leaveHistory"
+        @escape="escapeHistory"
+      />
       <EditorPreview
+        v-else
         :active="narrowRegion === 'preview'"
         :document="document"
         :lng="record.current.metadata.lng"
@@ -645,50 +675,20 @@ async function discardAndSignIn(): Promise<void> {
         :actions="actions"
         :record="record"
       />
+      <HistoryPanel
+        v-else-if="inspector.kind === 'history'"
+        :controller="history"
+        :record="record"
+        @escape="escapeHistory"
+      />
     </aside>
 
     <EditorRegionTabs v-model="narrowRegion" />
 
-    <AlertDialog :open="record.sessionLost">
-      <AlertDialogContent
-        @escape-key-down.prevent
-        @open-auto-focus="onSessionLostOpenAutoFocus"
-      >
-        <AlertDialogHeader>
-          <AlertDialogTitle>{{ copy.sessionLostTitle }}</AlertDialogTitle>
-          <AlertDialogDescription>
-            {{ copy.sessionLostDescription }}
-          </AlertDialogDescription>
-          <LocaleToggle
-            :label="copy.localeLabel"
-            @pointerdown.prevent
-          />
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <Button
-            ref="sessionLostFirstAction"
-            variant="ghost"
-            @click="discardAndSignIn"
-          >
-            {{ copy.discardAndSignIn }}
-          </Button>
-          <a
-            :class="buttonVariants({ variant: 'outline' })"
-            href="/login"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            {{ copy.openSignIn }}
-          </a>
-          <Button
-            data-action="resume-after-auth"
-            @click="actions.resumeAfterAuth()"
-          >
-            {{ copy.resumeAfterSignIn }}
-          </Button>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+    <SessionLostDialog
+      :actions="actions"
+      :open="record.sessionLost"
+    />
     <LanguageTwinReview
       :resume-id="record.accepted.metadata.id"
       :title="record.current.metadata.title"

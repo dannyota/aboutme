@@ -1,8 +1,8 @@
 import type { LegalCopy } from './legal';
 
 export const legalVi: LegalCopy = {
-  privacyUpdated: 'Cập nhật lần cuối ngày 16/11/2026',
-  termsUpdated: 'Cập nhật lần cuối ngày 11/10/2026',
+  privacyUpdated: 'Cập nhật lần cuối ngày 22/11/2026',
+  termsUpdated: 'Cập nhật lần cuối ngày 22/11/2026',
   privacyLink: 'Chính sách quyền riêng tư',
   termsLink: 'Điều khoản sử dụng',
   verifyLink: 'Kiểm chứng',
@@ -229,8 +229,14 @@ export const legalVi: LegalCopy = {
         paragraphs: [
           'Bạn có thể xuất dữ liệu tài khoản, sửa hoặc xóa CV, và xóa tài '
           + 'khoản. Chúng tôi giữ tài khoản, CV và ảnh của bạn cho đến khi '
-          + 'bạn xóa chúng hoặc xóa tài khoản. Bản xuất gồm hồ sơ, nội dung '
-          + 'CV và ảnh trong CV của bạn. Để lấy lịch sử phiên đăng nhập, '
+          + 'bạn xóa chúng hoặc xóa tài khoản. Mỗi CV còn giữ các phiên bản '
+          + 'trước của nội dung, thông tin liên hệ, bố cục, tiêu đề và ngôn '
+          + 'ngữ trong tối đa 30 ngày để bạn có thể khôi phục. Nội dung bạn '
+          + 'xóa khỏi CV vẫn nằm trong các phiên bản đó cho đến khi chúng đủ '
+          + '30 ngày hoặc bạn xóa lịch sử của CV trong trình chỉnh sửa. Xóa '
+          + 'CV hoặc tài khoản sẽ xóa lịch sử của CV. Bản xuất gồm hồ sơ, '
+          + 'các CV cùng lịch sử của chúng, và ảnh trong CV của bạn. Để lấy '
+          + 'lịch sử phiên đăng nhập, '
           + 'hãy liên hệ qua email. Bạn có thể ngắt kết nối GitHub trong Cài '
           + 'đặt và chọn giữ hay xóa các mục đã gắn. Kết nối và các mục này '
           + 'có trong bản xuất dữ liệu của bạn và bị xóa cùng tài khoản.',
@@ -320,7 +326,9 @@ export const legalVi: LegalCopy = {
           + 'lưu, kết xuất thành PDF, gửi đến các trợ lý AI bạn kết nối, '
           + 'và hiển thị nội dung đó theo cách bạn chọn, ví dụ khi bạn '
           + 'xuất bản CV. Quyền này chấm dứt khi bạn xóa nội dung, trừ các '
-          + 'bản sao lưu cho đến khi chúng hết hạn.',
+          + 'phiên bản trước trong lịch sử CV cho đến khi chúng đủ 30 ngày '
+          + 'hoặc bạn xóa lịch sử đó, và các bản sao lưu cho đến khi chúng '
+          + 'hết hạn.',
           'Nếu bạn bật Hiện trong trang Cộng đồng cho một CV, bạn cũng cho '
           + 'phép aboutme.vn hiện ảnh xem trước, mẫu, ngôn ngữ và vị trí '
           + 'bạn chọn của CV đó trên trang Cộng đồng, cho đến khi bạn tắt '

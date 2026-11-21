@@ -36,6 +36,7 @@ const props = withDefaults(defineProps<{
   readonly photoRead?: PhotoReadState;
   readonly active?: boolean;
   readonly pdfController?: PdfDownloadController;
+  readonly label?: string;
 }>(), { zoom: 'fit', active: true });
 const emit = defineEmits<{
   pages: [count: number];
@@ -254,7 +255,7 @@ onBeforeUnmount(() => {
 
 <template>
   <section
-    :aria-label="copy.previewLabel"
+    :aria-label="label ?? copy.previewLabel"
     class="relative grid h-full min-h-0 grid-rows-[minmax(0,1fr)]"
     @keydown="onPreviewKeydown"
   >

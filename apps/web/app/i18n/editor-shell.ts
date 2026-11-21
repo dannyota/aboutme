@@ -28,6 +28,7 @@ export type EditorShellCopy = {
   readonly design: string;
   readonly templates: string;
   readonly photo: string;
+  readonly history: string;
   readonly resizePanel: string;
   readonly resume: string;
   readonly toggleOutline: string;
@@ -91,6 +92,7 @@ export const editorShellCopy: WorkspaceCopy<EditorShellCopy> = {
     design: 'Thiết kế',
     templates: 'Mẫu',
     photo: 'Ảnh',
+    history: 'Lịch sử',
     resizePanel: 'Đổi độ rộng khung chỉnh sửa',
     resume: 'CV',
     toggleOutline: 'Bật tắt dàn ý CV',
@@ -184,6 +186,7 @@ export const editorShellCopy: WorkspaceCopy<EditorShellCopy> = {
     design: 'Design',
     templates: 'Templates',
     photo: 'Photo',
+    history: 'History',
     resizePanel: 'Resize editor panel',
     resume: 'Resume',
     toggleOutline: 'Toggle resume outline',
