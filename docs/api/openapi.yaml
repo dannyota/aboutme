@@ -1348,10 +1348,10 @@ paths:
         - sessionCookie: []
       description: "Downloads one complete version-3 JSON bundle of the account
         profile, up to three current-version resume documents with checkpoint
-        history from the last 30 days at accepted versions, and the private
-        project library, including hidden/private content and incomplete
-        drafts. Strings are not HTML-escaped. Each normalized photo is
-        separate standard-base64 data with its crop;
+        history from the last 30 days at accepted versions (unconvertible history
+        is skipped), and the private project library, including hidden/private
+        content and incomplete drafts. Strings are not HTML-escaped. Each
+        normalized photo is separate standard-base64 data with its crop;
         document.personalDetails.photo is removed. No backend object keys,
         provider subjects, password/session/CSRF/OAuth credentials or cleanup
         data appear. Reads account and documents in one database snapshot and
@@ -1384,7 +1384,7 @@ paths:
                 $ref: "#/components/schemas/AccountExport"
               example:
                 data:
-                  exportVersion: 2
+                  exportVersion: 3
                   exportedAt: 2026-09-06T00:00:00Z
                   account:
                     id: 018f5b6a-9a3e-7c21-8b1e-000000000001
@@ -3328,6 +3328,7 @@ paths:
       description: >-
         Deletes all checkpoints of this owned resume without changing its revision.
         There is no request body; the idempotency fingerprint uses a zero-length payload.
+        The X-Resume-Schema-Version header is ignored.
       parameters:
         - $ref: "#/components/parameters/ResumeID"
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -3397,6 +3398,7 @@ paths:
       description: >-
         Deletes the visible checkpoint without changing the resume revision. There
         is no request body; the idempotency fingerprint uses a zero-length payload.
+        The X-Resume-Schema-Version header is ignored.
       parameters:
         - $ref: "#/components/parameters/ResumeID"
         - $ref: "#/components/parameters/CheckpointID"
@@ -6542,8 +6544,7 @@ components:
     CheckpointDeleteBadRequest:
       description: >-
         `invalid_client_ip`, `request_invalid`, `idempotency_key_required`,
-        `idempotency_key_invalid`, `precondition_not_supported`, or
-        `unsupported_schema_version`.
+        `idempotency_key_invalid`, or `precondition_not_supported`.
       content:
         application/json:
           schema:
@@ -10349,8 +10350,9 @@ components:
           required: [lng, schemaVersion, document]
           properties:
             lng:
-              type: [string, "null"]
+              type: string
               maxLength: 35
+              description: Canonical BCP 47 language, or und when unset.
             schemaVersion:
               type: integer
               minimum: 1

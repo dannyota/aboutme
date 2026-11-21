@@ -269,7 +269,7 @@ const CHECKPOINT_READ_ERRORS = {
 
 const CHECKPOINT_DELETE_ERRORS = {
   ...CHECKPOINT_READ_ERRORS,
-  "400": CREATE_400,
+  "400": CREATE_400.filter((code) => code !== "unsupported_schema_version"),
   "403": ["csrf_rejected"],
   "409": ["idempotency_key_reuse"],
 };

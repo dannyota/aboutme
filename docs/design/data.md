@@ -98,11 +98,12 @@ cannot change its bytes.
 
 The database lock order is: the canonical-email advisory lock, the pending
 `password_registrations` row, the `users` row, the slug-claim advisory locks in
-sorted slug order, then the `public_state` row. Every path follows it and skips
-the locks it does not need: sign-up and verification, provider account creation,
-resume writes including publish and rename, and account deletion. The operator
-`account-delete` command runs outside the server's in-process fences, so this
-order alone keeps it from deadlocking with a concurrent publish.
+sorted slug order, the `resumes` row (`FOR NO KEY UPDATE`, taken by writes that
+record a checkpoint), then the `public_state` row. Every path follows it and
+skips the locks it does not need: sign-up and verification, provider account
+creation, resume writes including publish and rename, and account deletion. The
+operator `account-delete` command runs outside the server's in-process fences,
+so this order alone keeps it from deadlocking with a concurrent publish.
 
 Database constraints enforce global slug uniqueness and format, valid publish
 flag combinations, and the three-resume cap. Resume creation also locks the

@@ -118,11 +118,7 @@ func (b boundMutation) run(qtx *store.Queries) (resume.StoredResponse, error) {
 }
 
 func (s *Service) executeMutation(w http.ResponseWriter, r *http.Request, spec mutationSpec) {
-	accepted := s.acceptedVersions
-	if spec.Versionless {
-		accepted = []int32{}
-	}
-	headers, headerErr := parseMutationHeaders(r, spec.RequireMatch, accepted)
+	headers, headerErr := parseMutationHeadersWithPolicy(r, spec.RequireMatch, s.acceptedVersions, spec.Versionless)
 	if headerErr != nil {
 		writeResumeError(w, headerErr)
 		return

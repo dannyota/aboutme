@@ -375,18 +375,20 @@ func testMutationHeaderContract(t *testing.T, history bool) {
 		if route.Operation != "createResume" && route.OperationKind != operationCheckpointDelete {
 			validMatch = []string{`"r1"`}
 		}
-		for _, test := range []struct {
-			name    string
-			version []string
-		}{
-			{name: "unsupported version", version: []string{"999999"}},
-			{name: "duplicate version", version: []string{"2", "2"}},
-			{name: "folded version", version: []string{"2, 2"}},
-		} {
-			t.Run(route.Operation+"/"+test.name, func(t *testing.T) {
-				response := mutationHeaderRequest(t, h, route, path, validKey, validMatch, test.version)
-				assertRouteError(t, response, http.StatusBadRequest, "unsupported_schema_version")
-			})
+		if route.AcceptsWireVersion {
+			for _, test := range []struct {
+				name    string
+				version []string
+			}{
+				{name: "unsupported version", version: []string{"999999"}},
+				{name: "duplicate version", version: []string{"2", "2"}},
+				{name: "folded version", version: []string{"2, 2"}},
+			} {
+				t.Run(route.Operation+"/"+test.name, func(t *testing.T) {
+					response := mutationHeaderRequest(t, h, route, path, validKey, validMatch, test.version)
+					assertRouteError(t, response, http.StatusBadRequest, "unsupported_schema_version")
+				})
+			}
 		}
 
 		baseContentType := defaultMutationContentType(route)
