@@ -38,7 +38,7 @@ describe('privacy and terms pages', () => {
     const wrapper = await mountSuspended(PrivacyPage);
     expect(title(wrapper)).toBe('Chính sách quyền riêng tư');
     expect(wrapper.get('[data-testid="legal-updated"]').text()).toBe(
-      'Cập nhật lần cuối ngày 22/11/2026',
+      'Cập nhật lần cuối ngày 21/11/2026',
     );
     expect(wrapper.text()).toContain(
       'Kết nối GitHub (không bắt buộc): nếu bạn kết nối GitHub để xác nhận '
@@ -173,7 +173,7 @@ describe('privacy and terms pages', () => {
     const wrapper = await mountSuspended(PrivacyPage);
     expect(title(wrapper)).toBe('Privacy Policy');
     expect(wrapper.get('[data-testid="legal-updated"]').text()).toBe(
-      'Last updated November 22, 2026',
+      'Last updated November 21, 2026',
     );
     expect(wrapper.text()).toContain(
       'GitHub connection (optional): if you connect GitHub to confirm work '
@@ -371,7 +371,7 @@ describe('privacy and terms pages', () => {
     );
     expect(title(vietnamese)).toBe('Điều khoản sử dụng');
     expect(vietnamese.get('[data-testid="legal-updated"]').text()).toBe(
-      'Cập nhật lần cuối ngày 22/11/2026',
+      'Cập nhật lần cuối ngày 21/11/2026',
     );
     expect(paragraphs(vietnamese)).toContain(
       'Khi điều khoản thay đổi, chúng tôi cập nhật trang này và ngày '
@@ -394,7 +394,7 @@ describe('privacy and terms pages', () => {
     const en = await mountSuspended(TermsPage);
     expect(title(en)).toBe('Terms of Service');
     expect(en.get('[data-testid="legal-updated"]').text()).toBe(
-      'Last updated November 22, 2026',
+      'Last updated November 21, 2026',
     );
     expect(paragraphs(en)).toContain(
       'When these terms change, we update this page and its date. If '
