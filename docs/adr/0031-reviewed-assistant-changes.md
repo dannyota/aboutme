@@ -30,8 +30,9 @@ draft copy of the whole resume out of scope.
    project library or evidence. It is an ordinary owner save, and it first
    checkpoints the state it replaces.
 3. **Review setting.** Each resume has a review setting, on by default,
-   effective while the resume is published. Only the owner's signed-in session
-   changes it.
+   effective while the resume is published and the server's review flag is on.
+   Only the owner's signed-in session changes it. With the flag off, assistants
+   and the owner see the behavior and text of the release before review.
 4. **One proposal per assistant and resume.** While review is effective, each
    resume write tool adds to its grant's proposal instead of saving. The
    proposal stores fine-grained parts, each with its value before and its

@@ -100,9 +100,19 @@ served. Checkpoints hold no photo key, so they never keep a photo object alive
 
 ## Review
 
-Each resume has a review setting, on by default, effective while the resume is
-published. It belongs to the publish settings, so only the owner's signed-in
-session changes it; no MCP tool can.
+Each resume has a review setting, on by default. It belongs to the publish
+settings, so only the owner's signed-in session changes it; no MCP tool can.
+Review is effective when the server's review flag is on, the resume is
+published, and its setting is on.
+
+While the flag is off:
+
+- every tool saves directly, the registry has 22 tools, and write results carry
+  no `outcome`;
+- the editor shows neither the review setting nor the Proposed changes panel;
+- the consent screen, guide, privacy notice and Terms show their v0.10.0 text;
+- pending proposals are kept, hidden, and still expire; turning the flag on
+  shows them again, each checked for staleness as usual.
 
 ### Tools under review
 
@@ -151,9 +161,11 @@ proposal:
 - a new part takes the stored value as `base`;
 - a part whose `result` equals its `base` leaves the proposal.
 
-Each change touched by the call gets a new sequence number. Nothing in the
-`resumes` row changes, so the revision, public pages, caches and preview card
-stay as they are. The call commits with its idempotency record
+An inserted or deleted entry and its section's entry-order part always stay in
+one change, and a rebase moves them together. Each change touched by the call
+gets a new sequence number. Nothing in the `resumes` row changes, so the
+revision, public pages, caches and preview card stay as they are. The call
+commits with its idempotency record
 ([ADR 0006](../adr/0006-transactional-idempotency.md)) and charges the same
 write limits.
 
