@@ -590,8 +590,8 @@ func TestSaveDocument_MismatchCarriesWinningDoc(t *testing.T) {
 			_, err := h.st.SaveDocument(h.ctx, userID, created.ID, wsaDoc(t, "loser"), created.Revision)
 			return err
 		}},
-		{"SaveTitle", func() error {
-			_, err := h.st.SaveTitle(h.ctx, userID, created.ID, "loser-title", created.Revision)
+		{"metadata title save", func() error {
+			_, err := h.st.SaveMetadataTitleForTest(h.ctx, userID, created.ID, "loser-title", created.Revision)
 			return err
 		}},
 	}
@@ -838,9 +838,8 @@ func TestIdempotency_MutationErrorRollsBack(t *testing.T) {
 		key := wsaUUID(9102)
 		failedResp, failedReplayed, err := h.idem.ExecuteForTest(h.ctx, userID, route, key, wsaHash("body-A"),
 			func(qtx *store.Queries) (resume.StoredResponse, error) {
-				if _, casErr := qtx.UpdateResumeTitleCAS(h.ctx, store.UpdateResumeTitleCASParams{
-					ID: created.ID, UserID: userID, Revision: created.Revision, Title: "clobbered",
-				}); casErr != nil {
+				if _, casErr := h.st.SaveMetadataAndDocumentTx(h.ctx, qtx, userID, created.ID,
+					"clobbered", created.Lng, created.Doc, created.Revision, resume.CheckpointWrite{}); casErr != nil {
 					return resume.StoredResponse{}, casErr
 				}
 				row, getErr := qtx.GetResumeForUser(h.ctx, store.GetResumeForUserParams{
@@ -1106,12 +1105,12 @@ func TestNoExistenceOracle_WrongUserSameAsNotFound(t *testing.T) {
 			revision, err := h.st.SaveDocument(h.ctx, attackerID, id, wsaDoc(t, "Mallory"), victim.Revision+41)
 			return probeResult{value: revision, err: err}
 		}},
-		{"SaveTitle/correct revision", func(id uuid.UUID) probeResult {
-			revision, err := h.st.SaveTitle(h.ctx, attackerID, id, "mallory", victim.Revision)
+		{"metadata title save/correct revision", func(id uuid.UUID) probeResult {
+			revision, err := h.st.SaveMetadataTitleForTest(h.ctx, attackerID, id, "mallory", victim.Revision)
 			return probeResult{value: revision, err: err}
 		}},
-		{"SaveTitle/stale revision", func(id uuid.UUID) probeResult {
-			revision, err := h.st.SaveTitle(h.ctx, attackerID, id, "mallory", victim.Revision+41)
+		{"metadata title save/stale revision", func(id uuid.UUID) probeResult {
+			revision, err := h.st.SaveMetadataTitleForTest(h.ctx, attackerID, id, "mallory", victim.Revision+41)
 			return probeResult{value: revision, err: err}
 		}},
 		{"Delete", func(id uuid.UUID) probeResult {

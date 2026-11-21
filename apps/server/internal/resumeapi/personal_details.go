@@ -52,7 +52,7 @@ func (op personalDetailsMutation) Run(ctx context.Context, qtx *store.Queries, m
 		return mutationRunResult{}, err
 	}
 	updated, err := op.service.resumes.SaveDocumentTx(
-		ctx, qtx, mutation.UserID, input.ResumeID, doc, *mutation.ExpectedRevision,
+		ctx, qtx, mutation.UserID, input.ResumeID, doc, *mutation.ExpectedRevision, mutation.checkpointWrite(),
 	)
 	if err != nil {
 		return mutationRunResult{}, err

@@ -4,8 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
+	"golang.org/x/text/language"
 
 	schema "danny.vn/aboutme/packages/schema/gen/go"
 )
@@ -55,4 +57,19 @@ type RevisionMismatchError struct {
 
 func (e *RevisionMismatchError) Error() string {
 	return fmt.Sprintf("resume: revision mismatch: current revision is %d", e.CurrentRevision)
+}
+
+func ProjectLanguage(value *string) string {
+	if value == nil || *value == "" {
+		return language.Und.String()
+	}
+	tag, err := language.Parse(*value)
+	if err != nil {
+		return language.Und.String()
+	}
+	canonical := tag.String()
+	if utf8.RuneCountInString(canonical) > MaxLngCharacters {
+		return language.Und.String()
+	}
+	return canonical
 }

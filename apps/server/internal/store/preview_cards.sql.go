@@ -13,7 +13,7 @@ import (
 )
 
 const getLiveResumeByID = `-- name: GetLiveResumeByID :one
-SELECT id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at, public_title, favicon_emoji, sign_in_to_view, view_pass_epoch FROM resumes
+SELECT id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at, public_title, favicon_emoji, sign_in_to_view, view_pass_epoch, session_actor, session_started_at, session_last_write_at FROM resumes
 WHERE id = $1 AND live = true
 `
 
@@ -40,6 +40,9 @@ func (q *Queries) GetLiveResumeByID(ctx context.Context, id uuid.UUID) (Resume, 
 		&i.FaviconEmoji,
 		&i.SignInToView,
 		&i.ViewPassEpoch,
+		&i.SessionActor,
+		&i.SessionStartedAt,
+		&i.SessionLastWriteAt,
 	)
 	return i, err
 }
@@ -95,7 +98,7 @@ func (q *Queries) ListLiveResumePreviewCardVersions(ctx context.Context) ([]List
 }
 
 const lockResumeForPreviewCard = `-- name: LockResumeForPreviewCard :one
-SELECT id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at, public_title, favicon_emoji, sign_in_to_view, view_pass_epoch FROM resumes
+SELECT id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at, public_title, favicon_emoji, sign_in_to_view, view_pass_epoch, session_actor, session_started_at, session_last_write_at FROM resumes
 WHERE id = $1
 FOR SHARE
 `
@@ -123,6 +126,9 @@ func (q *Queries) LockResumeForPreviewCard(ctx context.Context, id uuid.UUID) (R
 		&i.FaviconEmoji,
 		&i.SignInToView,
 		&i.ViewPassEpoch,
+		&i.SessionActor,
+		&i.SessionStartedAt,
+		&i.SessionLastWriteAt,
 	)
 	return i, err
 }

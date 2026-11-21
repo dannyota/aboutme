@@ -43,7 +43,9 @@ base64 bytes and nullable crop; the document's server-owned photo reference is
 removed. A missing referenced photo fails the export before any success bytes.
 Password, session, CSRF, provider-subject, OAuth, idempotency, storage-key and
 cleanup state are excluded. Account avatar storage has no v1 portable-media
-contract and is not resolved through the resume-photo backend.
+contract and is not resolved through the resume-photo backend. Version 3 adds
+each resume's checkpoints
+([history contract](resume-history-contract.md#export)).
 
 Export and deletion are cookie-only account operations. They accept no body,
 query, resume-schema, conditional, or idempotency input. Export emits the

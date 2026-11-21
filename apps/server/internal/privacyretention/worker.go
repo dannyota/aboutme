@@ -23,6 +23,7 @@ const (
 	oauthClientIdle            = 24 * time.Hour
 	sessionRedactionLead       = 48 * time.Hour
 	sessionRetention           = 7 * 24 * time.Hour
+	checkpointSweepAge         = 28 * 24 * time.Hour
 )
 
 var (
@@ -68,6 +69,9 @@ type Result struct {
 	SlugTombstonesOldestSeconds               int64 `json:"slugTombstonesOldestSeconds"`
 	ViewCountDaysDeleted                      int64 `json:"viewCountDaysDeleted"`
 	ShareSignalDaysDeleted                    int64 `json:"shareSignalDaysDeleted"`
+	ResumeCheckpointsDeleted                  int64 `json:"resumeCheckpointsDeleted"`
+	ResumeCheckpointsBacklog                  int64 `json:"resumeCheckpointsBacklog"`
+	ResumeCheckpointsOldestSeconds            int64 `json:"resumeCheckpointsOldestSeconds"`
 
 	OAuthTransactionsDeleted       int64 `json:"oauthTransactionsDeleted"`
 	OAuthAuthorizationCodesDeleted int64 `json:"oauthAuthorizationCodesDeleted"`
@@ -131,6 +135,9 @@ func (w *Worker) logResult(ctx context.Context, command string, result Result) {
 		"authentication_security_events_backlog", result.AuthenticationSecurityEventsBacklog,
 		"authentication_security_events_oldest_seconds", result.AuthenticationSecurityEventsOldestSeconds,
 		"project_slug_holds_deleted", result.ProjectSlugHoldsDeleted,
+		"resume_checkpoints_deleted", result.ResumeCheckpointsDeleted,
+		"resume_checkpoints_backlog", result.ResumeCheckpointsBacklog,
+		"resume_checkpoints_oldest_seconds", result.ResumeCheckpointsOldestSeconds,
 		"slug_tombstones_deleted", result.SlugTombstonesDeleted,
 		"slug_tombstones_backlog", result.SlugTombstonesBacklog,
 		"slug_tombstones_oldest_seconds", result.SlugTombstonesOldestSeconds,

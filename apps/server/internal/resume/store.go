@@ -102,7 +102,7 @@ func (s *Store) Delete(ctx context.Context, userID, id uuid.UUID) error {
 
 func (s *Store) SaveDocument(ctx context.Context, userID, id uuid.UUID, doc schema.Resume, expectedRevision int64) (newRevision int64, err error) {
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
-		saved, txErr := s.SaveDocumentTx(ctx, s.q.WithTx(tx), userID, id, doc, expectedRevision)
+		saved, txErr := s.SaveDocumentTx(ctx, s.q.WithTx(tx), userID, id, doc, expectedRevision, CheckpointWrite{})
 		if txErr != nil {
 			return txErr
 		}
@@ -111,45 +111,6 @@ func (s *Store) SaveDocument(ctx context.Context, userID, id uuid.UUID, doc sche
 	})
 	if err != nil {
 		return 0, err
-	}
-	return newRevision, nil
-}
-
-func (s *Store) SaveTitle(ctx context.Context, userID, id uuid.UUID, title string, expectedRevision int64) (newRevision int64, err error) {
-	if err = validateTitle(title); err != nil {
-		return 0, err
-	}
-
-	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
-		rev, txErr := s.saveTitleTx(ctx, s.q.WithTx(tx), userID, id, title, expectedRevision)
-		if txErr != nil {
-			return txErr
-		}
-		newRevision = rev
-		return nil
-	})
-	if err != nil {
-		return 0, err
-	}
-	return newRevision, nil
-}
-
-func (s *Store) saveTitleTx(ctx context.Context, qtx *store.Queries, userID, id uuid.UUID, title string, expectedRevision int64) (int64, error) {
-	if err := validateTitle(title); err != nil {
-		return 0, err
-	}
-
-	newRevision, err := qtx.UpdateResumeTitleCAS(ctx, store.UpdateResumeTitleCASParams{
-		ID:       id,
-		UserID:   userID,
-		Revision: expectedRevision,
-		Title:    title,
-	})
-	if err != nil {
-		if !errors.Is(err, pgx.ErrNoRows) {
-			return 0, fmt.Errorf("resume: save title: %w", err)
-		}
-		return 0, s.afterCASMiss(ctx, qtx, userID, id)
 	}
 	return newRevision, nil
 }

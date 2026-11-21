@@ -547,6 +547,16 @@ func TestServer_CreateUpsertGetChainsRevisionAndClosesStaleConflict(t *testing.T
 	if upsertedOutput.Revision != "2" {
 		t.Fatalf("upsert revision = %q", upsertedOutput.Revision)
 	}
+	var checkpointGrant uuid.UUID
+	var checkpointActor, checkpointTitle string
+	if err = h.pool.QueryRow(t.Context(), `SELECT actor_grant_id, actor_name, title FROM resume_checkpoints
+        WHERE resume_id = $1 AND cause = 'assistant'`, resumeID).Scan(&checkpointGrant, &checkpointActor, &checkpointTitle); err != nil {
+		t.Fatalf("first MCP restorable write did not checkpoint: %v", err)
+	}
+	if checkpointGrant != h.grant.ID || checkpointActor != h.client.ClientName || checkpointTitle != "MCP lifecycle" {
+		t.Fatalf("MCP checkpoint has wrong actor or prior title: %s %q %q", checkpointGrant, checkpointActor, checkpointTitle)
+	}
+
 	sanitized, err := json.Marshal(upsertedOutput.State)
 	if err != nil || bytes.Contains(sanitized, []byte("alert(1)")) || !bytes.Contains(sanitized, []byte("safe")) {
 		t.Fatalf("sanitized state = %s, error = %v", sanitized, err)
@@ -624,6 +634,17 @@ func TestServer_CreateUpsertGetChainsRevisionAndClosesStaleConflict(t *testing.T
 	if updatedCustomization.Revision != "8" {
 		t.Fatalf("update customization output = %#v", updatedCustomization)
 	}
+	historyState := func() string {
+		t.Helper()
+		var state string
+		if readErr := h.pool.QueryRow(t.Context(), `SELECT jsonb_build_array(r.session_actor, r.session_started_at,
+            r.session_last_write_at, (SELECT jsonb_agg(c.id ORDER BY c.id) FROM resume_checkpoints c WHERE c.resume_id=r.id))::text
+            FROM resumes r WHERE r.id=$1`, resumeID).Scan(&state); readErr != nil {
+			t.Fatal(readErr)
+		}
+		return state
+	}
+	beforePhoto := historyState()
 	uploaded := callMutationTool(t, session, "upload_photo", map[string]any{
 		"resume_id": resumeID, "revision": "8", "data_base64": base64.StdEncoding.EncodeToString(testPhotoPNG(t)),
 	})
@@ -658,6 +679,9 @@ func TestServer_CreateUpsertGetChainsRevisionAndClosesStaleConflict(t *testing.T
 	if deletedPhoto.Revision != "11" {
 		t.Fatalf("delete photo output = %#v", deletedPhoto)
 	}
+	if got := historyState(); got != beforePhoto {
+		t.Fatalf("photo-only MCP writes changed checkpoint IDs or session columns: before=%s after=%s", beforePhoto, got)
+	}
 	listed, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: "list_resumes"})
 	if err != nil || listed.IsError {
 		t.Fatalf("list_resumes = %#v, error = %v", listed, err)
@@ -673,10 +697,29 @@ func TestServer_CreateUpsertGetChainsRevisionAndClosesStaleConflict(t *testing.T
 		t.Fatalf("marshal delete output: %v", err)
 	}
 	var deletion deleteResumeOutput
-	if err := json.Unmarshal(deleteRaw, &deletion); err != nil || !deletion.Deleted ||
+	if decodeErr := json.Unmarshal(deleteRaw, &deletion); decodeErr != nil || !deletion.Deleted ||
 		deletion.ID != resumeID || deletion.Revision != "11" {
-		t.Fatalf("delete output = %#v, error = %v", deletion, err)
+		t.Fatalf("delete output = %#v, error = %v", deletion, decodeErr)
 	}
+	metadataBase := callMutationTool(t, session, "create_resume", map[string]any{"title": "Before metadata"})
+	metadataID, ok := metadataBase.State["id"].(string)
+	if !ok || metadataID == "" {
+		t.Fatalf("missing metadata test resume ID: %#v", metadataBase)
+	}
+	metadataUpdated := callMutationTool(t, session, "update_resume_metadata", map[string]any{
+		"resume_id": metadataID, "revision": metadataBase.Revision, "title": "After metadata",
+	})
+	if metadataUpdated.Revision != "2" || metadataUpdated.State["title"] != "After metadata" {
+		t.Fatalf("first metadata write output = %#v", metadataUpdated)
+	}
+	if err = h.pool.QueryRow(t.Context(), `SELECT actor_grant_id, actor_name, title FROM resume_checkpoints
+        WHERE resume_id = $1 AND cause = 'assistant'`, metadataID).Scan(&checkpointGrant, &checkpointActor, &checkpointTitle); err != nil {
+		t.Fatalf("first MCP metadata write did not checkpoint: %v", err)
+	}
+	if checkpointGrant != h.grant.ID || checkpointActor != h.client.ClientName || checkpointTitle != "Before metadata" {
+		t.Fatalf("metadata checkpoint has wrong actor or prior title: %s %q %q", checkpointGrant, checkpointActor, checkpointTitle)
+	}
+
 }
 
 func callMutationTool(t *testing.T, session *mcp.ClientSession, name string, arguments map[string]any) mutationOutput {

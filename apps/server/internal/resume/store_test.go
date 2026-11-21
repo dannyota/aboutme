@@ -538,7 +538,7 @@ func TestStore_Integration_SaveDocument_CAS(t *testing.T) {
 	assertResumeRowEqual(t, afterInvalid, beforeInvalid)
 }
 
-func TestStore_Integration_SaveTitle_CAS(t *testing.T) {
+func TestStore_Integration_SaveMetadataTitle_CAS(t *testing.T) {
 	t.Parallel()
 	s, q, _, ctx := newIntegrationStore(t)
 	userID := createTestUser(t, q)
@@ -548,12 +548,12 @@ func TestStore_Integration_SaveTitle_CAS(t *testing.T) {
 		t.Fatalf("Create() error: %v", err)
 	}
 
-	newRev, err := s.SaveTitle(ctx, userID, created.ID, "Winning Title", created.Revision)
+	newRev, err := s.SaveMetadataTitleForTest(ctx, userID, created.ID, "Winning Title", created.Revision)
 	if err != nil {
-		t.Fatalf("SaveTitle() error: %v", err)
+		t.Fatalf("metadata title save error: %v", err)
 	}
 	if newRev != created.Revision+1 {
-		t.Errorf("SaveTitle() newRevision = %d, want %d", newRev, created.Revision+1)
+		t.Errorf("metadata title save newRevision = %d, want %d", newRev, created.Revision+1)
 	}
 
 	got, err := s.Get(ctx, userID, created.ID)
@@ -567,10 +567,10 @@ func TestStore_Integration_SaveTitle_CAS(t *testing.T) {
 		t.Errorf("Get().Revision = %d, want %d", got.Revision, newRev)
 	}
 
-	_, err = s.SaveTitle(ctx, userID, created.ID, "Loser Title", created.Revision)
+	_, err = s.SaveMetadataTitleForTest(ctx, userID, created.ID, "Loser Title", created.Revision)
 	var mismatch *resume.RevisionMismatchError
 	if !errors.As(err, &mismatch) {
-		t.Fatalf("stale SaveTitle() error = %v (%T), want *resume.RevisionMismatchError", err, err)
+		t.Fatalf("stale metadata title save error = %v (%T), want *resume.RevisionMismatchError", err, err)
 	}
 	if mismatch.CurrentRevision != newRev {
 		t.Errorf("mismatch.CurrentRevision = %d, want %d", mismatch.CurrentRevision, newRev)
@@ -579,12 +579,12 @@ func TestStore_Integration_SaveTitle_CAS(t *testing.T) {
 		t.Errorf("mismatch.Current.Title = %q, want the WINNING title %q", mismatch.Current.Title, "Winning Title")
 	}
 
-	if _, err := s.SaveTitle(ctx, userID, uuid.New(), "Doesn't matter", 1); !errors.Is(err, resume.ErrNotFound) {
-		t.Errorf("SaveTitle() unknown id error = %v, want resume.ErrNotFound", err)
+	if _, err := s.SaveMetadataTitleForTest(ctx, userID, uuid.New(), "Doesn't matter", 1); !errors.Is(err, resume.ErrNotFound) {
+		t.Errorf("metadata title save unknown id error = %v, want resume.ErrNotFound", err)
 	}
 }
 
-func TestStore_Integration_SaveTitle_TitleCharacterLimit(t *testing.T) {
+func TestStore_Integration_SaveMetadataTitle_TitleCharacterLimit(t *testing.T) {
 	t.Parallel()
 	s, q, _, ctx := newIntegrationStore(t)
 
@@ -610,34 +610,34 @@ func TestStore_Integration_SaveTitle_TitleCharacterLimit(t *testing.T) {
 
 			before, err := s.Get(ctx, userID, created.ID)
 			if err != nil {
-				t.Fatalf("Get() before SaveTitle(): %v", err)
+				t.Fatalf("Get() before metadata title save: %v", err)
 			}
 
-			newRevision, err := s.SaveTitle(ctx, userID, created.ID, tt.title, before.Revision)
+			newRevision, err := s.SaveMetadataTitleForTest(ctx, userID, created.ID, tt.title, before.Revision)
 			if tt.wantErr {
 				if !errors.Is(err, resume.ErrTitleTooLong) {
-					t.Fatalf("SaveTitle() error = %v, want resume.ErrTitleTooLong", err)
+					t.Fatalf("metadata title save error = %v, want resume.ErrTitleTooLong", err)
 				}
 				after, getErr := s.Get(ctx, userID, created.ID)
 				if getErr != nil {
-					t.Fatalf("Get() after rejected SaveTitle(): %v", getErr)
+					t.Fatalf("Get() after rejected metadata title save: %v", getErr)
 				}
 				assertResumeRowEqual(t, after, before)
 				return
 			}
 
 			if err != nil {
-				t.Fatalf("SaveTitle() error: %v", err)
+				t.Fatalf("metadata title save error: %v", err)
 			}
 			if newRevision != before.Revision+1 {
-				t.Errorf("SaveTitle() revision = %d, want %d", newRevision, before.Revision+1)
+				t.Errorf("metadata title save revision = %d, want %d", newRevision, before.Revision+1)
 			}
 			after, err := s.Get(ctx, userID, created.ID)
 			if err != nil {
-				t.Fatalf("Get() after SaveTitle(): %v", err)
+				t.Fatalf("Get() after metadata title save: %v", err)
 			}
 			if after.Title != tt.title {
-				t.Errorf("title after SaveTitle() = %q, want %q", after.Title, tt.title)
+				t.Errorf("title after metadata title save = %q, want %q", after.Title, tt.title)
 			}
 		})
 	}

@@ -55,7 +55,7 @@ func (s documentAwareOperationStore) GetTx(context.Context, *store.Queries, uuid
 }
 
 func (s documentAwareOperationStore) SaveDocumentTx(_ context.Context, _ *store.Queries, _ uuid.UUID,
-	_ uuid.UUID, doc schema.Resume, expected int64,
+	_ uuid.UUID, doc schema.Resume, expected int64, _ resume.CheckpointWrite,
 ) (resume.Resume, error) {
 	s.calls = append(s.calls, "save-document")
 	s.completeWrites++
@@ -70,15 +70,15 @@ func (s documentAwareOperationStore) SaveDocumentTx(_ context.Context, _ *store.
 type skewedSaveStore struct{ documentAwareOperationStore }
 
 func (s skewedSaveStore) SaveDocumentTx(ctx context.Context, qtx *store.Queries, userID uuid.UUID,
-	id uuid.UUID, doc schema.Resume, expected int64,
+	id uuid.UUID, doc schema.Resume, expected int64, checkpoint resume.CheckpointWrite,
 ) (resume.Resume, error) {
-	saved, err := s.documentAwareOperationStore.SaveDocumentTx(ctx, qtx, userID, id, doc, expected)
+	saved, err := s.documentAwareOperationStore.SaveDocumentTx(ctx, qtx, userID, id, doc, expected, checkpoint)
 	saved.Revision++
 	return saved, err
 }
 
 func (s documentAwareOperationStore) SaveMetadataAndDocumentTx(_ context.Context, _ *store.Queries, _ uuid.UUID,
-	_ uuid.UUID, title string, language *string, doc schema.Resume, expected int64,
+	_ uuid.UUID, title string, language *string, doc schema.Resume, expected int64, _ resume.CheckpointWrite,
 ) (int64, error) {
 	s.calls = append(s.calls, "save-metadata-document")
 	s.completeWrites++

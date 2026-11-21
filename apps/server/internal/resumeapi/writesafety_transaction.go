@@ -185,6 +185,8 @@ func mutationKeyFromContext(ctx context.Context) uuid.UUID {
 
 func resumeIDFromPrepared(prepared preparedInput) uuid.UUID {
 	switch input := prepared.Value.(type) {
+	case checkpointTarget:
+		return input.ResumeID
 	case aggregatePreparedInput:
 		return input.ResumeID
 	case resumeMetadataPrepared:

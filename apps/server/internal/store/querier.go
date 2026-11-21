@@ -41,6 +41,7 @@ type Querier interface {
 	// bounded page, oldest outcome first.
 	CleanupFinishedAuthEmailJobs(ctx context.Context, arg CleanupFinishedAuthEmailJobsParams) (int64, error)
 	ClearGitHubConnection(ctx context.Context, userID uuid.UUID) (int64, error)
+	ClearResumeCheckpoints(ctx context.Context, arg ClearResumeCheckpointsParams) error
 	CompleteClaimedMediaDeletion(ctx context.Context, arg CompleteClaimedMediaDeletionParams) (bool, error)
 	CompletePrivacyNoticeAbort(ctx context.Context, arg CompletePrivacyNoticeAbortParams) (int64, error)
 	CompletePrivacyNoticePurge(ctx context.Context, contentSha256 []byte) (int64, error)
@@ -127,6 +128,8 @@ type Querier interface {
 	DeleteProjectCAS(ctx context.Context, arg DeleteProjectCASParams) (int64, error)
 	DeleteProjectEvidence(ctx context.Context, arg DeleteProjectEvidenceParams) (int64, error)
 	DeleteRecoveredPrivacyNoticeJob(ctx context.Context, id uuid.UUID) (int64, error)
+	DeleteResumeCheckpoint(ctx context.Context, arg DeleteResumeCheckpointParams) (int64, error)
+	DeleteResumeCheckpointsPage(ctx context.Context, arg DeleteResumeCheckpointsPageParams) (int64, error)
 	DeleteResumeForUser(ctx context.Context, arg DeleteResumeForUserParams) (int64, error)
 	DeleteResumeForUserCAS(ctx context.Context, arg DeleteResumeForUserCASParams) (Resume, error)
 	DeleteResumePublicCAS(ctx context.Context, arg DeleteResumePublicCASParams) (Resume, error)
@@ -152,6 +155,7 @@ type Querier interface {
 	GetAccountExportGitHubConnection(ctx context.Context, userID uuid.UUID) (GetAccountExportGitHubConnectionRow, error)
 	GetAccountExportProfile(ctx context.Context, id uuid.UUID) (GetAccountExportProfileRow, error)
 	GetAuthenticationSecurityEventsBacklog(ctx context.Context, arg GetAuthenticationSecurityEventsBacklogParams) (GetAuthenticationSecurityEventsBacklogRow, error)
+	GetCheckpointActorName(ctx context.Context, arg GetCheckpointActorNameParams) (string, error)
 	GetCompletedMediaJobsBacklog(ctx context.Context, arg GetCompletedMediaJobsBacklogParams) (GetCompletedMediaJobsBacklogRow, error)
 	GetDCRClient(ctx context.Context, id uuid.UUID) (OAuthClient, error)
 	GetExpiredSessionsBacklog(ctx context.Context, arg GetExpiredSessionsBacklogParams) (GetExpiredSessionsBacklogRow, error)
@@ -218,6 +222,9 @@ type Querier interface {
 	GetPublicResumeProjectList(ctx context.Context, slug string) (GetPublicResumeProjectListRow, error)
 	GetPublicState(ctx context.Context) (PublicState, error)
 	GetResumeByID(ctx context.Context, id uuid.UUID) (Resume, error)
+	GetResumeCheckpoint(ctx context.Context, arg GetResumeCheckpointParams) (ResumeCheckpoint, error)
+	GetResumeCheckpointsBacklog(ctx context.Context, arg GetResumeCheckpointsBacklogParams) (GetResumeCheckpointsBacklogRow, error)
+	GetResumeForCheckpointWrite(ctx context.Context, arg GetResumeForCheckpointWriteParams) (Resume, error)
 	GetResumeForUser(ctx context.Context, arg GetResumeForUserParams) (Resume, error)
 	GetResumeForUserWithProjectLinks(ctx context.Context, arg GetResumeForUserWithProjectLinksParams) (GetResumeForUserWithProjectLinksRow, error)
 	GetResumeOwnerBySlug(ctx context.Context, slug string) (GetResumeOwnerBySlugRow, error)
@@ -252,6 +259,7 @@ type Querier interface {
 	InsertPasskeyCounterSecurityEvent(ctx context.Context, arg InsertPasskeyCounterSecurityEventParams) (AuthenticationSecurityEvent, error)
 	InsertPrivacyNoticeRecipient(ctx context.Context, arg InsertPrivacyNoticeRecipientParams) error
 	InsertProjectEvidence(ctx context.Context, arg InsertProjectEvidenceParams) (ProjectEvidence, error)
+	InsertResumeCheckpoint(ctx context.Context, arg InsertResumeCheckpointParams) (uuid.UUID, error)
 	InsertResumeShowcase(ctx context.Context, arg InsertResumeShowcaseParams) error
 	InsertRotatedOAuthToken(ctx context.Context, arg InsertRotatedOAuthTokenParams) (OAuthToken, error)
 	InsertSlugTombstone(ctx context.Context, arg InsertSlugTombstoneParams) (SlugTombstone, error)
@@ -262,6 +270,8 @@ type Querier interface {
 	ListAccountExportProjects(ctx context.Context, userID uuid.UUID) ([]Project, error)
 	ListAccountExportProviders(ctx context.Context, userID uuid.UUID) ([]string, error)
 	ListAccountExportResumes(ctx context.Context, userID uuid.UUID) ([]ListAccountExportResumesRow, error)
+	ListAccountResumeCheckpoints(ctx context.Context, arg ListAccountResumeCheckpointsParams) ([]ResumeCheckpoint, error)
+	ListCheckpointProjectIDs(ctx context.Context, arg ListCheckpointProjectIDsParams) ([]uuid.UUID, error)
 	// COALESCE gives sqlc a non-null Go string instead of a pointer (sqlc nullability inference).
 	ListEligiblePublicSlugs(ctx context.Context) ([]string, error)
 	ListEvidenceForProjects(ctx context.Context, arg ListEvidenceForProjectsParams) ([]ListEvidenceForProjectsRow, error)
@@ -306,6 +316,7 @@ type Querier interface {
 	// Callers hold LockUserForResumeWrite throughout mutations and replay storage.
 	ListProjectsForUser(ctx context.Context, userID uuid.UUID) ([]Project, error)
 	ListProjectsWithEvidence(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error)
+	ListResumeCheckpoints(ctx context.Context, arg ListResumeCheckpointsParams) ([]ListResumeCheckpointsRow, error)
 	ListResumeIDsBelowSchemaVersion(ctx context.Context, arg ListResumeIDsBelowSchemaVersionParams) ([]uuid.UUID, error)
 	ListResumeShareSignals(ctx context.Context, arg ListResumeShareSignalsParams) ([]ListResumeShareSignalsRow, error)
 	ListResumeShowcaseIDs(ctx context.Context) ([]uuid.UUID, error)
@@ -342,6 +353,7 @@ type Querier interface {
 	ProjectStoredDocumentBytes(ctx context.Context, arg ProjectStoredDocumentBytesParams) (int32, error)
 	ProjectStoredDocumentEquals(ctx context.Context, arg ProjectStoredDocumentEqualsParams) (bool, error)
 	ProposeProjectSlug(ctx context.Context, arg ProposeProjectSlugParams) (string, error)
+	PruneResumeCheckpoints(ctx context.Context, arg PruneResumeCheckpointsParams) error
 	// A single UPDATE evaluates its SET and FROM expressions against the pre-update row (PostgreSQL UPDATE).
 	PublishResumeCAS(ctx context.Context, arg PublishResumeCASParams) (Resume, error)
 	PurgeRetiredPrivacyNoticeRecipients(ctx context.Context, contentSha256 []byte) (int64, error)
@@ -366,6 +378,7 @@ type Querier interface {
 	// monotonic progress.
 	RequeueExpiredAuthEmailLeases(ctx context.Context, arg RequeueExpiredAuthEmailLeasesParams) (int64, error)
 	ResetTOTPCredentialFailureBudget(ctx context.Context, arg ResetTOTPCredentialFailureBudgetParams) (TotpCredential, error)
+	ResumeCheckpointOwnerExists(ctx context.Context, arg ResumeCheckpointOwnerExistsParams) (bool, error)
 	RetirePrivacyNoticeCampaign(ctx context.Context, arg RetirePrivacyNoticeCampaignParams) (int64, error)
 	RevokeAllSessions(ctx context.Context, arg RevokeAllSessionsParams) (int64, error)
 	RevokeOAuthGrant(ctx context.Context, arg RevokeOAuthGrantParams) (int64, error)
@@ -402,7 +415,6 @@ type Querier interface {
 	UpdateResumeMetadataAndDocumentCAS(ctx context.Context, arg UpdateResumeMetadataAndDocumentCASParams) (int64, error)
 	UpdateResumeShowcaseDerived(ctx context.Context, arg UpdateResumeShowcaseDerivedParams) error
 	UpdateResumeShowcaseRole(ctx context.Context, arg UpdateResumeShowcaseRoleParams) error
-	UpdateResumeTitleCAS(ctx context.Context, arg UpdateResumeTitleCASParams) (int64, error)
 	UpdateWebAuthnCredentialAfterAssertion(ctx context.Context, arg UpdateWebAuthnCredentialAfterAssertionParams) (WebauthnCredential, error)
 	// Consent approval: records a new grant or refreshes the live one's
 	// scopes. The conflict target names the partial unique index's predicate, so

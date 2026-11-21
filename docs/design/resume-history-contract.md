@@ -47,11 +47,12 @@ set.
 ## Session rule
 
 `resume.CheckpointTx(ctx, q, input)` runs inside the write transaction, under
-the owner row lock (`LockUserForResumeWrite`), before the resume update. `input`
-holds the resume id, the actor (the owner, or a grant id), the cause, `force`,
-the stored state before the write (`before`, as the caller holds it, converted
-to the current schema version), the state the write produces, the current
-session columns and `now`. It returns the session values to write.
+the owner row lock (`LockUserForResumeWrite`) and the resume row lock
+(`FOR NO KEY UPDATE`, in the [data](data.md) lock order), before the resume
+update. `input` holds the resume id, the actor (the owner, or a grant id), the
+cause, `force`, the stored state before the write (`before`, as the caller holds
+it, converted to the current schema version), the state the write produces, the
+current session columns and `now`. It returns the session values to write.
 
 1. Compare `before` with the result on title, `lng`, personal details without
    `photo`, content and customization, as canonical JSON. Equal and not `force`:
@@ -84,7 +85,8 @@ Callers:
 
 ## Routes
 
-All five are session routes with `sessionCookie` and `csrfToken`, tag `resumes`,
+All five are session routes (`sessionCookie`), and the three writes also need
+`csrfToken`, as `getResume` and the resume writes do. They take tag `resumes`,
 path parameters `ResumeID` and `CheckpointID`, the read limiter on `GET` and the
 resume write limiter otherwise. They are not agent operations, and each handler
 also answers `ResumeNotFound` to an agent principal; a test calls each with one.
@@ -104,9 +106,10 @@ also answers `ResumeNotFound` to an agent principal; a test calls each with one.
   with no paging: `id`, `startedAt`, `cause`, `actor` (`{kind: "owner"}` or
   `{kind: "assistant", name}`), `title` and `byteSize`. It shows only
   checkpoints from the last 30 days at an accepted schema version.
-- The read returns the same item plus `lng`, `schemaVersion` and `document`
-  (`personalDetails` without `photo`, `content`, `customization`), converted to
-  the current schema version. The client previews it with the current photo.
+- The read returns the same item plus the projected `lng`, `schemaVersion` and
+  `document` (`personalDetails` without `photo`, `content`, `customization`),
+  converted to the current schema version. The client previews it with the
+  current photo.
 - Responses. List and read: `200`, `400`, `401`, `404`, `405`, `429` and `500`,
   with no `ETag` or `SchemaVersionHeader`, since the body is always at the
   current version. Restore follows `updateResumePersonalDetails`:
@@ -152,10 +155,12 @@ and at accepted versions, so a backlog never shows an older checkpoint.
 `exportVersion` becomes 3, in Go, the OpenAPI `AccountExport` schema
 (`const: 3`), `docs/api/test/privacy.test.ts` and the Go tests. Each
 `AccountExportResume` gains `checkpoints`: the read shape above, newest first,
-read in the same snapshot, filtered as reads are. The cap becomes 25,165,824
+read in the same snapshot, filtered as reads are, with the projected `lng`. A
+checkpoint that fails to convert is skipped and logged with a fixed class and no
+content, so one bad row never blocks the export. The cap becomes 25,165,824
 bytes in `exportMaxBytes`, the OpenAPI description and [budgets](budgets.md),
-with its test at the new cap. [Operations](operations.md) and the
-[projects contract](projects-contract.md) describe the new version.
+with its test at the new cap. [Operations](operations.md) describes the new
+version.
 
 [Budgets](budgets.md) gains rows for checkpoints per resume, checkpoint age and
 the checkpoint session with the values in the [design](change-review.md#limits),

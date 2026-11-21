@@ -89,7 +89,7 @@ function assertPortableExport(value: unknown, resumeID: string): void {
     "projects",
     "resumes",
   ]);
-  expect(data.exportVersion).toBe(2);
+  expect(data.exportVersion).toBe(3);
   expect(data.projects).toEqual([]);
   expect(Number.isNaN(Date.parse(data.exportedAt as string))).toBe(false);
   const account = object(data.account);
@@ -104,6 +104,9 @@ function assertPortableExport(value: unknown, resumeID: string): void {
   expect(account.email).toBe("alice@example.invalid");
   expect(account.linkedProviders).toEqual(["google"]);
   expect(Array.isArray(data.resumes)).toBe(true);
+  for (const resume of (data.resumes as unknown[]).map(object)) {
+    expect(Array.isArray(resume.checkpoints)).toBe(true);
+  }
   const exportedResume = (data.resumes as unknown[])
     .map(object)
     .find((resume) => resume.id === resumeID);

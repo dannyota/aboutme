@@ -26,7 +26,7 @@ const (
 	exportCacheControl      = "no-store, no-transform"
 	exportAttachment        = `attachment; filename="aboutme-export.json"`
 	exportSchemaHeader      = "X-Resume-Schema-Version"
-	exportMaxBytes          = 16 * 1024 * 1024
+	exportMaxBytes          = 25_165_824
 	exportTimeout           = 20 * time.Second
 	exportPhotoTimeout      = 5 * time.Second
 	exportJPEGMaxEdge       = 2048
@@ -160,23 +160,24 @@ type exportProfile struct {
 }
 
 type exportResume struct {
-	ID              uuid.UUID       `json:"id"`
-	Title           string          `json:"title"`
-	Slug            *string         `json:"slug"`
-	Live            bool            `json:"live"`
-	DownloadEnabled bool            `json:"downloadEnabled"`
-	SEOGeoEnabled   bool            `json:"seoGeoEnabled"`
-	PublicTitle     *string         `json:"publicTitle"`
-	FaviconEmoji    *string         `json:"faviconEmoji"`
-	SignInToView    bool            `json:"signInToView"`
-	Showcase        *exportShowcase `json:"showcase"`
-	Revision        string          `json:"revision"`
-	SchemaVersion   int32           `json:"schemaVersion"`
-	Lng             string          `json:"lng"`
-	CreatedAt       time.Time       `json:"createdAt"`
-	UpdatedAt       time.Time       `json:"updatedAt"`
-	Document        json.RawMessage `json:"document"`
-	Photo           *exportPhoto    `json:"photo"`
+	ID              uuid.UUID                 `json:"id"`
+	Title           string                    `json:"title"`
+	Slug            *string                   `json:"slug"`
+	Live            bool                      `json:"live"`
+	DownloadEnabled bool                      `json:"downloadEnabled"`
+	SEOGeoEnabled   bool                      `json:"seoGeoEnabled"`
+	PublicTitle     *string                   `json:"publicTitle"`
+	FaviconEmoji    *string                   `json:"faviconEmoji"`
+	SignInToView    bool                      `json:"signInToView"`
+	Showcase        *exportShowcase           `json:"showcase"`
+	Revision        string                    `json:"revision"`
+	SchemaVersion   int32                     `json:"schemaVersion"`
+	Lng             string                    `json:"lng"`
+	CreatedAt       time.Time                 `json:"createdAt"`
+	UpdatedAt       time.Time                 `json:"updatedAt"`
+	Document        json.RawMessage           `json:"document"`
+	Photo           *exportPhoto              `json:"photo"`
+	Checkpoints     []resume.CheckpointDetail `json:"checkpoints"`
 }
 
 type exportShowcase struct {
@@ -231,10 +232,15 @@ func (s *Service) exportAttachment(ctx context.Context, userID uuid.UUID) ([]byt
 	if err != nil {
 		return nil, fmt.Errorf("read resumes: %w", err)
 	}
-	if err := validateExportResumeCount(rows); err != nil {
-		return nil, err
+	if countErr := validateExportResumeCount(rows); countErr != nil {
+		return nil, countErr
 	}
 
+	now := s.now().UTC()
+	checkpointRows, err := s.exportCheckpoints(ctx, q, userID, now)
+	if err != nil {
+		return nil, err
+	}
 	resumes := make([]exportResume, len(rows))
 	for i, row := range rows {
 		document, photoRef, err := s.exportDocument(row)
@@ -245,7 +251,12 @@ func (s *Service) exportAttachment(ctx context.Context, userID uuid.UUID) ([]byt
 		if err != nil {
 			return nil, fmt.Errorf("read resume media: %w", err)
 		}
+		checkpoints := checkpointRows[row.ID]
+		if checkpoints == nil {
+			checkpoints = []resume.CheckpointDetail{}
+		}
 		resumes[i] = exportResume{
+			Checkpoints:     checkpoints,
 			ID:              row.ID,
 			Title:           row.Title,
 			Slug:            row.Slug,
@@ -278,8 +289,8 @@ func (s *Service) exportAttachment(ctx context.Context, userID uuid.UUID) ([]byt
 	}
 
 	return marshalExportPayload(exportData{
-		ExportVersion: 2,
-		ExportedAt:    s.now().UTC(),
+		ExportVersion: 3,
+		ExportedAt:    now,
 		Account: exportProfile{
 			ID: profile.ID, Email: profile.Email, Name: profile.Name,
 			CreatedAt: profile.CreatedAt, UpdatedAt: profile.UpdatedAt,

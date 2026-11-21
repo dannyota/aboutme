@@ -265,12 +265,12 @@ func TestExportRouteFailsBeforeHeadersWhenReferencedPhotoIsMissing(t *testing.T)
 	}
 }
 
-func TestMarshalExportPayloadEnforcesTheSixteenMiBCap(t *testing.T) {
+func TestMarshalExportPayloadEnforcesTheTwentyFourMiBCap(t *testing.T) {
 	empty, err := marshalExportPayload(exportData{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	const limit = 16 * 1024 * 1024
+	const limit = 25_165_824
 	name := strings.Repeat("x", limit-len(empty))
 	payload, err := marshalExportPayload(exportData{Account: exportProfile{Name: name}})
 	if err != nil || len(payload) != limit {

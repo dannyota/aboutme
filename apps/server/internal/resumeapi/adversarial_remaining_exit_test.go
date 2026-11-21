@@ -40,6 +40,7 @@ type remainingOpenAPIMutation struct {
 type remainingFixture struct {
 	resume          resume.Resume
 	photoKey        string
+	checkpointID    uuid.UUID
 	unlinkedProject uuid.UUID
 }
 
@@ -98,10 +99,12 @@ func TestIfMatch_ExistingWritesAndCreate(t *testing.T) {
 			create = mutation
 			continue
 		}
-		existing = append(existing, mutation)
+		if mutation.route.OperationKind != operationCheckpointDelete {
+			existing = append(existing, mutation)
+		}
 	}
-	if create.operationID == "" || len(existing) != 13 {
-		t.Fatalf("OpenAPI mutation split = create %q and %d existing writes, want createResume and 13",
+	if create.operationID == "" || len(existing) != 14 {
+		t.Fatalf("OpenAPI mutation split = create %q and %d existing writes, want createResume and 14",
 			create.operationID, len(existing))
 	}
 
@@ -161,11 +164,13 @@ func TestIfMatch_ExistingWritesAndCreate(t *testing.T) {
 
 func TestIdempotency_ReplayIsByteIdentical(t *testing.T) {
 	representatives := map[operationKind]string{
-		operationCreate:         "createResume",
-		operationMetadata:       "updateResumeMetadata",
-		operationDelete:         "deleteResume",
-		operationAggregate:      "upsertResumeEntry",
-		operationPhotoCandidate: "uploadResumePhoto",
+		operationCreate:            "createResume",
+		operationMetadata:          "updateResumeMetadata",
+		operationDelete:            "deleteResume",
+		operationAggregate:         "upsertResumeEntry",
+		operationPhotoCandidate:    "uploadResumePhoto",
+		operationCheckpointRestore: "restoreResumeCheckpoint",
+		operationCheckpointDelete:  "deleteResumeCheckpoint",
 	}
 
 	for kind, operationID := range representatives {
@@ -182,11 +187,15 @@ func TestIdempotency_ReplayIsByteIdentical(t *testing.T) {
 			h.service.idempotency = counter
 			key := uuid.NewString()
 			match := []string(nil)
-			if operationID != "createResume" {
+			if operationID != "createResume" && !checkpointDeletionOperation(operationID) {
 				match = []string{fmt.Sprintf(`"r%d"`, fixture.resume.Revision)}
 			}
 
-			first := remainingPerformMutation(t, h, request, key, match, "2")
+			version := "2"
+			if checkpointDeletionOperation(operationID) {
+				version = ""
+			}
+			first := remainingPerformMutation(t, h, request, key, match, version)
 			remainingAssertSuccessStatus(t, operationID, first)
 			stateAfterFirst := snapshotRemainingExitState(t, h, fixture.resume.ID)
 			countsAfterFirst := counter.counts()
@@ -194,7 +203,7 @@ func TestIdempotency_ReplayIsByteIdentical(t *testing.T) {
 				t.Fatalf("%s first execute calls = %d, want 1", operationID, countsAfterFirst.execute)
 			}
 
-			replay := remainingPerformMutation(t, h, request, key, match, "2")
+			replay := remainingPerformMutation(t, h, request, key, match, version)
 			if replay.status != first.status || !bytes.Equal(replay.body, first.body) {
 				t.Fatalf("%s replay differs: first=%d %q replay=%d %q",
 					operationID, first.status, first.body, replay.status, replay.body)
@@ -337,6 +346,9 @@ func TestWireVersion_FailsClosed(t *testing.T) {
 		{name: "far-future", value: "2147483647"},
 	}
 	for _, mutation := range mutations {
+		if !mutation.route.AcceptsWireVersion {
+			continue
+		}
 		mutation := mutation
 		request := remainingRequestForOperation(t, mutation, fixture)
 		for _, version := range versions {
@@ -365,7 +377,7 @@ func TestStrictDecode(t *testing.T) {
 	fixture := newRemainingFixture(t, h)
 	var jsonMutations []remainingOpenAPIMutation
 	for _, mutation := range remainingOpenAPIMutations(t, fixture.resume.ID) {
-		if mutation.method != http.MethodDelete && !mutation.route.Upload {
+		if mutation.method != http.MethodDelete && !mutation.route.Upload && mutation.route.OperationKind != operationCheckpointRestore {
 			jsonMutations = append(jsonMutations, mutation)
 		}
 	}
@@ -525,7 +537,7 @@ func newRemainingFixture(t *testing.T, h *resumeAPITestHarness) remainingFixture
 	if err != nil {
 		t.Fatalf("reload adversarial resume: %v", err)
 	}
-	return remainingFixture{resume: stored, photoKey: photoKey, unlinkedProject: unlinked.ID}
+	return remainingFixture{resume: stored, photoKey: photoKey, unlinkedProject: unlinked.ID, checkpointID: seedCheckpointForTest(t, h, stored.ID)}
 }
 
 func remainingOpenAPIMutations(t *testing.T, resumeID uuid.UUID) []remainingOpenAPIMutation {
@@ -601,13 +613,14 @@ func remainingRequestForOperation(t *testing.T, mutation remainingOpenAPIMutatio
 	fixture remainingFixture,
 ) remainingMutationRequest {
 	t.Helper()
+	mutation.path = strings.ReplaceAll(mutation.path, "{checkpointId}", fixture.checkpointID.String())
 	request := remainingMutationRequest{operation: mutation}
 	switch mutation.operationID {
 	case "createResume":
 		request.body = []byte(`{"title":"Replay create","lng":"en-US"}`)
 	case "updateResumeMetadata":
 		request.body = []byte(`{"title":"Changed title"}`)
-	case "deleteResume", "deleteResumeEntry", "deleteResumePhoto":
+	case "deleteResume", "deleteResumeEntry", "deleteResumePhoto", "restoreResumeCheckpoint", "deleteResumeCheckpoint", "clearResumeCheckpoints":
 	case "upsertResumeEntry":
 		request.body = []byte(`{"entry":{"id":"` + remainingNewEntryID + `","jobTitle":"Engineer"}}`)
 	case "updateResumeSection":
@@ -745,11 +758,13 @@ func assertRemainingExitState(t *testing.T, h *resumeAPITestHarness, resumeID uu
 func remainingAssertSuccessStatus(t *testing.T, operationID string, response testHTTPResponse) {
 	t.Helper()
 	want := map[string]int{
-		"createResume":         http.StatusCreated,
-		"updateResumeMetadata": http.StatusOK,
-		"deleteResume":         http.StatusNoContent,
-		"upsertResumeEntry":    http.StatusOK,
-		"uploadResumePhoto":    http.StatusOK,
+		"createResume":            http.StatusCreated,
+		"updateResumeMetadata":    http.StatusOK,
+		"deleteResume":            http.StatusNoContent,
+		"upsertResumeEntry":       http.StatusOK,
+		"uploadResumePhoto":       http.StatusOK,
+		"restoreResumeCheckpoint": http.StatusOK,
+		"deleteResumeCheckpoint":  http.StatusNoContent,
 	}[operationID]
 	if response.status != want {
 		t.Fatalf("%s status = %d, want %d (body=%s)", operationID, response.status, want, response.body)

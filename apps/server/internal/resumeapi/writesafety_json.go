@@ -54,18 +54,22 @@ func decodeJSONBodyAs(r *http.Request, target any, shape *api.JSONShape) (bounde
 }
 
 func decodeDeleteBody(r *http.Request) (boundedInput, error) {
+	return decodeEmptyBody(r)
+}
+
+func decodeEmptyBody(r *http.Request) (boundedInput, error) {
 	if values := r.Header.Values("Content-Type"); len(values) > 0 {
 		if len(values) != 1 || !isJSONContentType(values[0]) {
-			return boundedInput{}, &clientError{Status: http.StatusBadRequest, Code: "request_invalid", Message: "DELETE Content-Type must be one application/json value"}
+			return boundedInput{}, &clientError{Status: http.StatusBadRequest, Code: "request_invalid", Message: r.Method + " Content-Type must be one application/json value"}
 		}
 	}
 	if r.ContentLength > 0 {
-		return boundedInput{}, &clientError{Status: http.StatusBadRequest, Code: "request_invalid", Message: "DELETE requests have no body"}
+		return boundedInput{}, &clientError{Status: http.StatusBadRequest, Code: "request_invalid", Message: r.Method + " requests have no body"}
 	}
 	var one [1]byte
 	n, err := r.Body.Read(one[:])
 	if n != 0 || !errors.Is(err, io.EOF) {
-		return boundedInput{}, &clientError{Status: http.StatusBadRequest, Code: "request_invalid", Message: "DELETE requests have no body"}
+		return boundedInput{}, &clientError{Status: http.StatusBadRequest, Code: "request_invalid", Message: r.Method + " requests have no body"}
 	}
 	return boundedInput{Payload: []byte{}}, nil
 }

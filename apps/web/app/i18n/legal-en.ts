@@ -1,8 +1,8 @@
 import type { LegalCopy } from './legal';
 
 export const legalEn: LegalCopy = {
-  privacyUpdated: 'Last updated November 16, 2026',
-  termsUpdated: 'Last updated October 11, 2026',
+  privacyUpdated: 'Last updated November 22, 2026',
+  termsUpdated: 'Last updated November 22, 2026',
   privacyLink: 'Privacy Policy',
   termsLink: 'Terms of Service',
   verifyLink: 'Verify',
@@ -219,8 +219,14 @@ export const legalEn: LegalCopy = {
           'You can export your account data, edit or delete your '
           + 'resumes, and delete your account. We keep your account, '
           + 'resumes, and photos until you delete them or your account. '
-          + 'The export includes your profile, resume content, and resume '
-          + 'photos. Email us for session history. You can disconnect '
+          + 'Each resume also keeps earlier versions of its text, contact '
+          + 'details, layout, title, and language for up to 30 days, so you '
+          + 'can restore them. Text you remove from a resume stays in those '
+          + 'versions until they are 30 days old or you delete the resume\'s '
+          + 'history in the editor. Deleting a resume or your account '
+          + 'deletes its history. The export includes your profile, your '
+          + 'resumes with their history, and resume photos. Email us for '
+          + 'session history. You can disconnect '
           + 'GitHub in Settings and choose to keep or remove the items you '
           + 'attached. The connection and its items are in your data export '
           + 'and are deleted with your account.',
@@ -306,8 +312,9 @@ export const legalEn: LegalCopy = {
           + 'to store, back up, render as PDF, send to AI agents you '
           + 'connect, and display your content the way you choose, for '
           + 'example by publishing a resume. This permission ends when '
-          + 'you delete the content, except for backup copies until they '
-          + 'expire.',
+          + 'you delete the content, except for earlier versions in a '
+          + 'resume\'s history until they are 30 days old or you delete that '
+          + 'history, and backup copies until they expire.',
           'If you turn on Show in the community showcase for a resume, '
           + 'you also let aboutme.vn show its preview image, template, '
           + 'language, and the role you picked on the showcase page, '

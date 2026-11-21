@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"danny.vn/aboutme/apps/server/internal/resume/docmigrate"
 	"danny.vn/aboutme/apps/server/internal/store"
 	"danny.vn/aboutme/apps/server/internal/viewcount"
 )
@@ -104,6 +105,16 @@ func (w *Worker) Retain(ctx context.Context) (result Result, returnErr error) {
 	}
 	result.ShareSignalDaysDeleted, result.Pages, err = runPages(runCtx, result.Pages, func(ctx context.Context, limit int32) (int64, error) {
 		return q.DeleteOldResumeShareSignalDaysPage(ctx, store.DeleteOldResumeShareSignalDaysPageParams{Cutoff: viewCutoff, LimitRows: limit})
+	})
+	if err != nil {
+		return w.failed(result)
+	}
+
+	checkpointVersions := docmigrate.AcceptedVersions()
+	result.ResumeCheckpointsDeleted, result.Pages, err = runPages(runCtx, result.Pages, func(ctx context.Context, limit int32) (int64, error) {
+		return q.DeleteResumeCheckpointsPage(ctx, store.DeleteResumeCheckpointsPageParams{
+			Cutoff: now.Add(-checkpointSweepAge), AcceptedVersions: checkpointVersions, LimitRows: limit,
+		})
 	})
 	if err != nil {
 		return w.failed(result)
@@ -248,6 +259,14 @@ func (w *Worker) loadRetentionBacklog(ctx context.Context, q *store.Queries, now
 	if err != nil {
 		return err
 	}
+	checkpoints, err := q.GetResumeCheckpointsBacklog(ctx, store.GetResumeCheckpointsBacklogParams{
+		Cutoff: now.Add(-checkpointSweepAge), AcceptedVersions: docmigrate.AcceptedVersions(),
+	})
+	if err != nil {
+		return err
+	}
+	result.ResumeCheckpointsBacklog = checkpoints.Backlog
+	result.ResumeCheckpointsOldestSeconds = checkpoints.OldestAgeSeconds
 	result.SessionMetadataBacklog = sessions.Backlog
 	result.SessionOldestAgeSeconds = sessions.OldestAgeSeconds
 	result.ExpiredSessionsBacklog = expired.Backlog

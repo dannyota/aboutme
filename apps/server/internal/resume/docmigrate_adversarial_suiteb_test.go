@@ -849,7 +849,7 @@ func TestSuiteB_Backfill_TitleOnlyWriteCausesRetryableLostRace(t *testing.T) {
 	}
 	titleCh := make(chan titleOutcome, 1)
 	go func() {
-		rev, err := st.SaveTitle(t.Context(), env.userID, id, "after title", before.Revision)
+		rev, err := writeFixtureTitle(t.Context(), env.pool, env.userID, id, "after title", before.Revision)
 		titleCh <- titleOutcome{revision: rev, err: err}
 	}()
 	env.suiteBWaitForBlockedBy(t, gate.pid, 1)
@@ -869,7 +869,7 @@ func TestSuiteB_Backfill_TitleOnlyWriteCausesRetryableLostRace(t *testing.T) {
 
 	title := <-titleCh
 	if title.err != nil {
-		t.Fatalf("the concurrent SaveTitle failed: %v", title.err)
+		t.Fatalf("the concurrent title-only fixture failed: %v", title.err)
 	}
 	backfill := <-backfillCh
 	if backfill.err != nil {

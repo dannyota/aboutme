@@ -38,7 +38,7 @@ describe('privacy and terms pages', () => {
     const wrapper = await mountSuspended(PrivacyPage);
     expect(title(wrapper)).toBe('Chính sách quyền riêng tư');
     expect(wrapper.get('[data-testid="legal-updated"]').text()).toBe(
-      'Cập nhật lần cuối ngày 16/11/2026',
+      'Cập nhật lần cuối ngày 22/11/2026',
     );
     expect(wrapper.text()).toContain(
       'Kết nối GitHub (không bắt buộc): nếu bạn kết nối GitHub để xác nhận '
@@ -112,7 +112,8 @@ describe('privacy and terms pages', () => {
       + 'chỉ DNS (DNS-only), không dùng proxy.',
     );
     expect(wrapper.text()).toContain(
-      'Bản xuất gồm hồ sơ, nội dung CV và ảnh trong CV của bạn. '
+      'Bản xuất gồm hồ sơ, các CV cùng lịch sử của chúng, và ảnh trong CV '
+      + 'của bạn. '
       + 'Để lấy lịch sử phiên đăng nhập, hãy liên hệ qua email.',
     );
     expect(wrapper.text()).toContain(
@@ -172,7 +173,7 @@ describe('privacy and terms pages', () => {
     const wrapper = await mountSuspended(PrivacyPage);
     expect(title(wrapper)).toBe('Privacy Policy');
     expect(wrapper.get('[data-testid="legal-updated"]').text()).toBe(
-      'Last updated November 16, 2026',
+      'Last updated November 22, 2026',
     );
     expect(wrapper.text()).toContain(
       'GitHub connection (optional): if you connect GitHub to confirm work '
@@ -256,7 +257,8 @@ describe('privacy and terms pages', () => {
       + 'with no proxying.',
     );
     expect(wrapper.text()).toContain(
-      'The export includes your profile, resume content, and resume photos. '
+      'The export includes your profile, your resumes with their history, '
+      + 'and resume photos. '
       + 'Email us for session history.',
     );
     expect(wrapper.text()).toContain(
@@ -369,7 +371,7 @@ describe('privacy and terms pages', () => {
     );
     expect(title(vietnamese)).toBe('Điều khoản sử dụng');
     expect(vietnamese.get('[data-testid="legal-updated"]').text()).toBe(
-      'Cập nhật lần cuối ngày 11/10/2026',
+      'Cập nhật lần cuối ngày 22/11/2026',
     );
     expect(paragraphs(vietnamese)).toContain(
       'Khi điều khoản thay đổi, chúng tôi cập nhật trang này và ngày '
@@ -392,7 +394,7 @@ describe('privacy and terms pages', () => {
     const en = await mountSuspended(TermsPage);
     expect(title(en)).toBe('Terms of Service');
     expect(en.get('[data-testid="legal-updated"]').text()).toBe(
-      'Last updated October 11, 2026',
+      'Last updated November 22, 2026',
     );
     expect(paragraphs(en)).toContain(
       'When these terms change, we update this page and its date. If '
@@ -408,7 +410,7 @@ describe('privacy and terms pages', () => {
     expect(en.text()).toContain(
       'If we learn an account belongs to someone under 16, we will delete it.',
     );
-    expect(en.text()).toContain('except for backup copies until they expire');
+    expect(en.text()).toContain('and backup copies until they expire');
     expect(en.text()).toContain('governed by the laws of Vietnam');
     expect(en.text()).toContain('continued use does not count as consent');
     expect(

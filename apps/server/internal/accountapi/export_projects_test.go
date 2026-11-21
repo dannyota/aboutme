@@ -49,7 +49,7 @@ func TestExport_ProjectsVersionAndCreationOrder(t *testing.T) {
 	if err := json.Unmarshal(response.Body.Bytes(), &bundle); err != nil {
 		t.Fatal(err)
 	}
-	if bundle.Data.ExportVersion != 2 || len(bundle.Data.Projects) != 2 {
+	if bundle.Data.ExportVersion != 3 || len(bundle.Data.Projects) != 2 {
 		t.Fatalf("bundle=%s", response.Body.String())
 	}
 	for i, slug := range []string{"earlier", "later"} {

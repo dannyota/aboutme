@@ -57,7 +57,7 @@ func TestDocumentWritesRunShowcaseSyncInTheSameTransaction(t *testing.T) {
 	}
 
 	err = pgx.BeginFunc(ctx, pool, func(tx pgx.Tx) error {
-		saved, saveErr := s.SaveDocumentTx(ctx, q.WithTx(tx), userID, created.ID, doc, created.Revision)
+		saved, saveErr := s.SaveDocumentTx(ctx, q.WithTx(tx), userID, created.ID, doc, created.Revision, resume.CheckpointWrite{})
 		if saveErr != nil {
 			return saveErr
 		}
@@ -79,19 +79,11 @@ func TestDocumentWritesRunShowcaseSyncInTheSameTransaction(t *testing.T) {
 		t.Fatalf("Get() error: %v", err)
 	}
 	err = pgx.BeginFunc(ctx, pool, func(tx pgx.Tx) error {
-		_, saveErr := s.SaveMetadataAndDocumentTx(ctx, q.WithTx(tx), userID, created.ID, "Renamed", nil, doc, current.Revision)
+		_, saveErr := s.SaveMetadataAndDocumentTx(ctx, q.WithTx(tx), userID, created.ID, "Renamed", nil, doc, current.Revision, resume.CheckpointWrite{})
 		return saveErr
 	})
 	if err != nil || sync.calls != 2 {
 		t.Fatalf("SaveMetadataAndDocumentTx err=%v sync calls=%d, want one more sync", err, sync.calls)
-	}
-
-	current, err = s.Get(ctx, userID, created.ID)
-	if err != nil {
-		t.Fatalf("Get() error: %v", err)
-	}
-	if _, saveErr := s.SaveTitle(ctx, userID, created.ID, "Retitled", current.Revision); saveErr != nil || sync.calls != 2 {
-		t.Fatalf("SaveTitle err=%v sync calls=%d, want no sync", saveErr, sync.calls)
 	}
 
 	if _, staleErr := s.SaveDocument(ctx, userID, created.ID, doc, created.Revision); staleErr == nil || sync.calls != 2 {

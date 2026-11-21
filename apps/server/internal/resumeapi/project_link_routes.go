@@ -129,7 +129,7 @@ func (op projectLinkOperation) Run(ctx context.Context, qtx *store.Queries, muta
 	if err = requireLinkAuthority(mutation, &current.Doc, doc); err != nil {
 		return mutationRunResult{}, err
 	}
-	updated, err := op.service.resumes.SaveDocumentTx(ctx, qtx, mutation.UserID, input.ResumeID, doc, *mutation.ExpectedRevision)
+	updated, err := op.service.resumes.SaveDocumentTx(ctx, qtx, mutation.UserID, input.ResumeID, doc, *mutation.ExpectedRevision, mutation.checkpointWrite())
 	if err != nil {
 		return mutationRunResult{}, err
 	}

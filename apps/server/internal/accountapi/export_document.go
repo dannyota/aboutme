@@ -15,10 +15,8 @@ import (
 	_ "image/png"
 	"io"
 	"sync"
-	"unicode/utf8"
 
 	"github.com/google/uuid"
-	"golang.org/x/text/language"
 
 	"danny.vn/aboutme/apps/server/internal/media"
 	"danny.vn/aboutme/apps/server/internal/resume"
@@ -170,18 +168,7 @@ func validPortablePhoto(data []byte, extension string) bool {
 }
 
 func projectExportLanguage(value *string) string {
-	if value == nil || *value == "" {
-		return language.Und.String()
-	}
-	tag, err := language.Parse(*value)
-	if err != nil {
-		return language.Und.String()
-	}
-	canonical := tag.String()
-	if utf8.RuneCountInString(canonical) > resume.MaxLngCharacters {
-		return language.Und.String()
-	}
-	return canonical
+	return resume.ProjectLanguage(value)
 }
 
 func portableProviders(providers []string) ([]string, error) {

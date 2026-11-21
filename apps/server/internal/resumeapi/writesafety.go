@@ -54,6 +54,13 @@ type mutationContext struct {
 	CurrentResume               *resume.Resume
 }
 
+func (m mutationContext) checkpointWrite() resume.CheckpointWrite {
+	if m.Agent != nil {
+		return resume.CheckpointWrite{GrantID: new(m.Agent.GrantID())}
+	}
+	return resume.CheckpointWrite{}
+}
+
 type mutationRunResult struct {
 	Response resume.StoredResponse
 }
@@ -73,6 +80,7 @@ func (f mutationOperationFunc) Run(ctx context.Context, qtx *store.Queries, muta
 type mutationSpec struct {
 	RegisteredOperation string
 	RequireMatch        bool
+	Versionless         bool
 	Decode              func(*http.Request) (boundedInput, error)
 	CanonicalTargets    func(boundedInput) ([]string, error)
 	SemanticInputs      func(boundedInput) ([]string, error)
@@ -110,7 +118,7 @@ func (b boundMutation) run(qtx *store.Queries) (resume.StoredResponse, error) {
 }
 
 func (s *Service) executeMutation(w http.ResponseWriter, r *http.Request, spec mutationSpec) {
-	headers, headerErr := parseMutationHeaders(r, spec.RequireMatch, s.acceptedVersions)
+	headers, headerErr := parseMutationHeadersWithPolicy(r, spec.RequireMatch, s.acceptedVersions, spec.Versionless)
 	if headerErr != nil {
 		writeResumeError(w, headerErr)
 		return

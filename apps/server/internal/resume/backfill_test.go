@@ -44,6 +44,13 @@ func bfSchemaVersion(ctx context.Context, t *testing.T, pool *store.Pool, id uui
 	return v
 }
 
+func writeFixtureTitle(ctx context.Context, pool *store.Pool, owner, id uuid.UUID, title string, expected int64) (int64, error) {
+	var revision int64
+	err := pool.QueryRow(ctx, `UPDATE resumes SET title = $4, revision = revision + 1, updated_at = now()
+  WHERE id = $1 AND user_id = $2 AND revision = $3 RETURNING revision`, id, owner, expected, title).Scan(&revision)
+	return revision, err
+}
+
 func TestStore_Integration_BackfillOne_OldVersionRow_Applied(t *testing.T) {
 	t.Parallel()
 	s, q, pool, ctx := pjStore(t, pjSyntheticProjector(t))
@@ -169,8 +176,8 @@ func TestStore_Integration_BackfillOne_TitleOnlyWriteInGap_LostRace(t *testing.T
 			return
 		}
 		titled = true
-		if _, saveErr := s.SaveTitle(ctx, userID, created.ID, "renamed in the gap", created.Revision); saveErr != nil {
-			t.Errorf("SaveTitle in the read/CAS gap: %v", saveErr)
+		if _, saveErr := writeFixtureTitle(ctx, pool, userID, created.ID, "renamed in the gap", created.Revision); saveErr != nil {
+			t.Errorf("title-only fixture in the read/CAS gap: %v", saveErr)
 		}
 	})
 	if err != nil {
@@ -182,7 +189,7 @@ func TestStore_Integration_BackfillOne_TitleOnlyWriteInGap_LostRace(t *testing.T
 
 	after := pjSnapshot(ctx, t, pool, created.ID)
 	if after.Revision != created.Revision+1 {
-		t.Errorf("revision = %d, want %d (only SaveTitle wrote)", after.Revision, created.Revision+1)
+		t.Errorf("revision = %d, want %d (only title-only fixture wrote)", after.Revision, created.Revision+1)
 	}
 	if after.SchemaVersion != 6 {
 		t.Errorf("schema_version = %d, want 6: a title write never migrates a document, so this lost race is a retry signal, not completion", after.SchemaVersion)

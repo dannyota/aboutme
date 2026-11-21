@@ -74,7 +74,7 @@ func (op resumeMetadataMutation) Run(ctx context.Context, qtx *store.Queries, mu
 		return mutationRunResult{}, err
 	}
 	if _, saveErr := op.service.resumes.SaveMetadataAndDocumentTx(
-		ctx, qtx, mutation.UserID, input.ResumeID, title, lng, doc, *mutation.ExpectedRevision,
+		ctx, qtx, mutation.UserID, input.ResumeID, title, lng, doc, *mutation.ExpectedRevision, mutation.checkpointWrite(),
 	); saveErr != nil {
 		return mutationRunResult{}, saveErr
 	}

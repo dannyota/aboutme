@@ -52,10 +52,10 @@ func (s *scriptedTransitionResumes) GetTx(context.Context, *store.Queries, uuid.
 	}
 	return s.second, nil
 }
-func (*scriptedTransitionResumes) SaveDocumentTx(context.Context, *store.Queries, uuid.UUID, uuid.UUID, schema.Resume, int64) (resume.Resume, error) {
+func (*scriptedTransitionResumes) SaveDocumentTx(context.Context, *store.Queries, uuid.UUID, uuid.UUID, schema.Resume, int64, resume.CheckpointWrite) (resume.Resume, error) {
 	return resume.Resume{}, errors.New("unexpected SaveDocumentTx")
 }
-func (*scriptedTransitionResumes) SaveMetadataAndDocumentTx(context.Context, *store.Queries, uuid.UUID, uuid.UUID, string, *string, schema.Resume, int64) (int64, error) {
+func (*scriptedTransitionResumes) SaveMetadataAndDocumentTx(context.Context, *store.Queries, uuid.UUID, uuid.UUID, string, *string, schema.Resume, int64, resume.CheckpointWrite) (int64, error) {
 	return 0, errors.New("unexpected SaveMetadataAndDocumentTx")
 }
 func (*scriptedTransitionResumes) DeleteTx(context.Context, *store.Queries, uuid.UUID, uuid.UUID, int64) (resume.Resume, error) {
@@ -234,9 +234,9 @@ func TestAllRevisionMutationRoutesCloseAdmission(t *testing.T) {
 	h := newResumeAPITestHarness(t)
 	fixture := newRemainingFixture(t, h)
 	mutations := remainingOpenAPIMutations(t, fixture.resume.ID)
-	exercised := make([]string, 0, 13)
+	exercised := make([]string, 0, 14)
 	for _, mutation := range mutations {
-		if mutation.operationID == "createResume" {
+		if mutation.operationID == "createResume" || mutation.route.OperationKind == operationCheckpointDelete {
 			continue
 		}
 		t.Run(mutation.operationID, func(t *testing.T) {
@@ -280,8 +280,8 @@ func TestAllRevisionMutationRoutesCloseAdmission(t *testing.T) {
 		})
 		exercised = append(exercised, mutation.operationID)
 	}
-	if len(exercised) != 13 {
-		t.Fatalf("exercised %d revision routes, want 13: %v", len(exercised), exercised)
+	if len(exercised) != 14 {
+		t.Fatalf("exercised %d revision routes, want 14: %v", len(exercised), exercised)
 	}
 }
 

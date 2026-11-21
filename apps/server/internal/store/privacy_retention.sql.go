@@ -212,6 +212,33 @@ func (q *Queries) DeleteLifecycleAuditPage(ctx context.Context, arg DeleteLifecy
 	return result.RowsAffected(), nil
 }
 
+const deleteResumeCheckpointsPage = `-- name: DeleteResumeCheckpointsPage :execrows
+WITH candidates AS MATERIALIZED (
+    SELECT id FROM resume_checkpoints
+    WHERE started_at < $1::timestamptz
+       OR NOT (schema_version = ANY($2::int[]))
+    ORDER BY started_at, id
+    LIMIT LEAST($3::int, 1000)
+    FOR UPDATE SKIP LOCKED
+)
+DELETE FROM resume_checkpoints AS checkpoint USING candidates
+WHERE checkpoint.id = candidates.id
+`
+
+type DeleteResumeCheckpointsPageParams struct {
+	Cutoff           time.Time
+	AcceptedVersions []int32
+	LimitRows        int32
+}
+
+func (q *Queries) DeleteResumeCheckpointsPage(ctx context.Context, arg DeleteResumeCheckpointsPageParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteResumeCheckpointsPage, arg.Cutoff, arg.AcceptedVersions, arg.LimitRows)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const expireIdempotencyPage = `-- name: ExpireIdempotencyPage :one
 WITH locked AS MATERIALIZED (
     SELECT record.id
@@ -428,6 +455,31 @@ type GetLifecycleAuditBacklogRow struct {
 func (q *Queries) GetLifecycleAuditBacklog(ctx context.Context, arg GetLifecycleAuditBacklogParams) (GetLifecycleAuditBacklogRow, error) {
 	row := q.db.QueryRow(ctx, getLifecycleAuditBacklog, arg.Now, arg.Cutoff)
 	var i GetLifecycleAuditBacklogRow
+	err := row.Scan(&i.Backlog, &i.OldestAgeSeconds)
+	return i, err
+}
+
+const getResumeCheckpointsBacklog = `-- name: GetResumeCheckpointsBacklog :one
+SELECT count(*)::bigint AS backlog,
+       COALESCE(floor(extract(epoch FROM greatest($1::timestamptz - min(started_at), interval '0 seconds'))), 0)::bigint AS oldest_age_seconds
+FROM resume_checkpoints
+WHERE started_at < $1::timestamptz
+   OR NOT (schema_version = ANY($2::int[]))
+`
+
+type GetResumeCheckpointsBacklogParams struct {
+	Cutoff           time.Time
+	AcceptedVersions []int32
+}
+
+type GetResumeCheckpointsBacklogRow struct {
+	Backlog          int64
+	OldestAgeSeconds int64
+}
+
+func (q *Queries) GetResumeCheckpointsBacklog(ctx context.Context, arg GetResumeCheckpointsBacklogParams) (GetResumeCheckpointsBacklogRow, error) {
+	row := q.db.QueryRow(ctx, getResumeCheckpointsBacklog, arg.Cutoff, arg.AcceptedVersions)
+	var i GetResumeCheckpointsBacklogRow
 	err := row.Scan(&i.Backlog, &i.OldestAgeSeconds)
 	return i, err
 }

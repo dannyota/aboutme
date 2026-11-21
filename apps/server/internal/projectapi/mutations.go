@@ -48,6 +48,7 @@ type deleteResult struct {
 type mutationActor struct {
 	owner     uuid.UUID
 	caller    string
+	grantID   *uuid.UUID
 	authorize func(context.Context, *store.Queries) error
 	recent    func(context.Context, *store.Queries) error
 }
@@ -116,7 +117,7 @@ func (s *Service) mutateAs(w http.ResponseWriter, r *http.Request, actorOf func(
 	case http.MethodDelete:
 		result, err = s.links.RemoveProject(r.Context(), resumeapi.ProjectRemoval{
 			UserID: actor.owner, ProjectID: id, Operation: operation, Key: headers.key, RequestHash: fingerprint,
-			Authorize: call.authorizeDelete, Remove: call.remove,
+			GrantID: actor.grantID, Authorize: call.authorizeDelete, Remove: call.remove,
 		})
 	case http.MethodPut:
 		result, err = s.links.ReplaceProject(r.Context(), resumeapi.ProjectReplacement{

@@ -242,3 +242,22 @@ WITH doomed AS (
 )
 DELETE FROM project_slug_holds AS hold
 USING doomed WHERE hold.user_id = doomed.user_id AND hold.slug = doomed.slug;
+
+-- name: DeleteResumeCheckpointsPage :execrows
+WITH candidates AS MATERIALIZED (
+    SELECT id FROM resume_checkpoints
+    WHERE started_at < sqlc.arg(cutoff)::timestamptz
+       OR NOT (schema_version = ANY(sqlc.arg(accepted_versions)::int[]))
+    ORDER BY started_at, id
+    LIMIT LEAST(sqlc.arg(limit_rows)::int, 1000)
+    FOR UPDATE SKIP LOCKED
+)
+DELETE FROM resume_checkpoints AS checkpoint USING candidates
+WHERE checkpoint.id = candidates.id;
+
+-- name: GetResumeCheckpointsBacklog :one
+SELECT count(*)::bigint AS backlog,
+       COALESCE(floor(extract(epoch FROM greatest(sqlc.arg(cutoff)::timestamptz - min(started_at), interval '0 seconds'))), 0)::bigint AS oldest_age_seconds
+FROM resume_checkpoints
+WHERE started_at < sqlc.arg(cutoff)::timestamptz
+   OR NOT (schema_version = ANY(sqlc.arg(accepted_versions)::int[]));
