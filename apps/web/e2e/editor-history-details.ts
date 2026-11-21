@@ -472,6 +472,7 @@ interface BarMeasure {
   note: string;
   buttons: { left: number; right: number; top: number; width: number;
     height: number; }[];
+  viewport: number;
   docOverflow: number;
 }
 
@@ -496,6 +497,7 @@ async function measureBar(page: Page): Promise<BarMeasure> {
       title: { top: block.top, bottom: block.bottom, right: block.right },
       note: getComputedStyle(note).display,
       buttons,
+      viewport: doc.clientWidth,
       docOverflow: doc.scrollWidth - doc.clientWidth,
     };
   });
@@ -507,8 +509,9 @@ export async function expectBarWrap(page: Page, width: number): Promise<void> {
     BarMeasure['buttons'][0], BarMeasure['buttons'][0],
     BarMeasure['buttons'][0]];
   const pad = isCompactBar(width) ? 16 : 24;
-  const sameRow = Math.abs(back.top - restore.top) <= 1
-    && Math.abs(back.top - del.top) <= 1;
+  const middle = (b: typeof del): number => b.top + b.height / 2;
+  const sameRow = Math.abs(middle(back) - middle(restore)) <= 1
+    && Math.abs(middle(back) - middle(del)) <= 1;
   const ordered = del.left < back.left && back.right <= restore.left + 1;
   const toEdge = Math.abs(m.bar.right - pad - restore.right) <= 1;
   if (isCompactBar(width)) {
@@ -538,9 +541,10 @@ export async function expectBarFit(page: Page): Promise<void> {
     bar: m.bar.scrollWidth <= m.bar.clientWidth + 1,
     buttons: m.buttons.every((button) => button.left >= m.bar.left - 1
       && button.right <= m.bar.right + 1 && button.width > 0),
+    inView: m.bar.left >= -1 && m.bar.right <= m.viewport + 1,
     page: m.docOverflow <= 0,
   }, 'History version bar overflow.').toEqual({
-    bar: true, buttons: true, page: true,
+    bar: true, buttons: true, inView: true, page: true,
   });
   const heading = page.locator('[data-history-bar] h2');
   await expect(heading, 'History version bar overflow.').toHaveCSS(

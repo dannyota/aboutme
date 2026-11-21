@@ -74,7 +74,7 @@ defineExpose({ focusTitle: (): void => title.value?.focus() });
 
 <template>
   <div
-    class="flex h-full min-h-0 flex-col"
+    class="flex h-full min-h-0 min-w-0 flex-col"
     @keydown.esc="emit('escape')"
   >
     <div
