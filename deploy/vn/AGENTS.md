@@ -10,7 +10,7 @@
 |`host/quadlet/`|Container templates and network units|
 |`host/etc/systemd/system/`|Host service and timer units, mounts, and service drop-ins|
 |`edge/`, `probe/`|Edge controls and host fact checks|
-|`scripts/deploy.sh`, `scripts/deploy-host.sh`|Laptop coordinator and host deployment operations|
+|`scripts/deploy.sh`, `scripts/deploy-host.sh`, `scripts/image-prune.sh`|Laptop coordinator, host deployment operations, and image pruning|
 |`scripts/fence.sh`, `host/workload-lock.sh`|Persistent operation fence and serialized heavy workloads|
 |`tests/`|Static deployment, lock, recovery, secret, and edge regressions|
 

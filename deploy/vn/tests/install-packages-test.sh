@@ -179,6 +179,33 @@ new_case() {
   : >"$CALLS"
 }
 
+new_case
+export FIXTURE_BUNDLE=$work/bundle
+mkdir -p "$FIXTURE_BUNDLE/host" "$FIXTURE_BUNDLE/scripts"
+for helper in host/crowdsec-privacy-notice-host.sh host/workload-lock.sh \
+  scripts/fence.sh scripts/deploy-safety.sh scripts/deploy-host.sh \
+  scripts/crowdsec-privacy-notice.sh scripts/restore-drill.sh; do
+  touch "$FIXTURE_BUNDLE/$helper"
+done
+{
+  printf '%s\n' 'set -euo pipefail' 'source "$FIXTURE_SUPPORT"' 'bundle=$FIXTURE_BUNDLE'
+  sed -n '/^for required in /,/^done$/p' "$installer"
+} >"$work/required-helpers.sh"
+for fault in missing symlink; do
+  if [[ $fault == symlink ]]; then
+    ln -s fence.sh "$FIXTURE_BUNDLE/scripts/image-prune.sh"
+  fi
+  if bash "$work/required-helpers.sh" >"$work/out" 2>"$work/err"; then
+    fail "installer accepted a $fault image-prune.sh"
+  fi
+  grep -qF 'required notice helper is missing' "$work/err" || fail 'wrong helper refusal'
+  ! grep -qF 'deploy-host.sh' "$CALLS" || fail 'installer replaced deploy-host.sh before its helper'
+done
+rm "$FIXTURE_BUNDLE/scripts/image-prune.sh"
+touch "$FIXTURE_BUNDLE/scripts/image-prune.sh"
+bash "$work/required-helpers.sh" || fail 'installer refused the complete helper set'
+grep -qF " $lib/image-prune.sh" "$CALLS" || fail 'installer did not copy image-prune.sh'
+
 for ENGINE_STATE in 'hold ok installed' 'install ok installed'; do
   export ENGINE_STATE
   for BOUNCER_STATE in 'hold ok installed' 'install ok installed'; do

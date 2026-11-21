@@ -14,12 +14,12 @@ Before replacing any installed guard during first adoption, the incoming
 reviewed helper must establish its canonical installed copy at
 `/usr/local/lib/aboutme/crowdsec-privacy-notice-host.sh`. Do this after durable
 initializing evidence under the existing bundle, cutover, and workload locks,
-and before installing `fence.sh`, `deploy-host.sh`, or `deploy-safety.sh`.
-Validate the incoming helper and destination parents, reject unsafe objects, and
-install through a same-directory temporary file, root:root 0755, file sync,
-atomic rename, and directory sync. Verify exact bytes against the reviewed
-incoming helper before replacing guards. Resume only the recorded adoption;
-partial replacement does not make a host eligible as legacy again.
+and before installing `fence.sh`, `image-prune.sh`, `deploy-host.sh`, or
+`deploy-safety.sh`. Validate the incoming helper and destination parents, reject
+unsafe objects, and install through a same-directory temporary file, root:root
+0755, file sync, atomic rename, and directory sync. Verify exact bytes against
+the reviewed incoming helper before replacing guards. Resume only the recorded
+adoption; partial replacement does not make a host eligible as legacy again.
 
 Bootstrap also creates `/var/lib/aboutme/privacy-notice/initial-epoch`, with the
 same 37 bytes as the first `epoch`: canonical lowercase UUID v4 plus LF. Its

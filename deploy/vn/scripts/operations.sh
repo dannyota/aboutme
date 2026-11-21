@@ -39,7 +39,7 @@ ssh_opts=(-p "$SSH_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes -o Forwar
 remote() { ssh "${ssh_opts[@]}" "aboutme-admin@$DEPLOY_HOST" "$@"; }
 files=(
   host/operation-run.sh host/operation-state.sh host/operation-account.sh
-  host/workload-lock.sh host/job-run.sh scripts/fence.sh scripts/deploy-safety.sh scripts/deploy-host.sh
+  host/workload-lock.sh host/job-run.sh scripts/fence.sh scripts/deploy-safety.sh scripts/deploy-host.sh scripts/image-prune.sh
   host/etc/systemd/system/aboutme-operation@.service
   host/etc/systemd/system/aboutme-operation-retention.service
   host/etc/systemd/system/aboutme-operation-retention.timer
