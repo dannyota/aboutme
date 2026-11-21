@@ -392,7 +392,7 @@ export interface paths {
         };
         /**
          * Download the caller’s portable account data
-         * @description Downloads one complete version-3 JSON bundle of the account profile, up to three current-version resume documents with checkpoint history from the last 30 days at accepted versions, and the private project library, including hidden/private content and incomplete drafts. Strings are not HTML-escaped. Each normalized photo is separate standard-base64 data with its crop; document.personalDetails.photo is removed. No backend object keys, provider subjects, password/session/CSRF/OAuth credentials or cleanup data appear. Reads account and documents in one database snapshot and buffers the complete attachment before success. A referenced photo that is missing, invalid or over 2 MiB fails the export. Complete response cap: 25,165,824 bytes. No body, query, schema, conditional or idempotency input is accepted. Separate 5/minute account-and-client-IP limit.
+         * @description Downloads one complete version-3 JSON bundle of the account profile, up to three current-version resume documents with checkpoint history from the last 30 days at accepted versions (unconvertible history is skipped), and the private project library, including hidden/private content and incomplete drafts. Strings are not HTML-escaped. Each normalized photo is separate standard-base64 data with its crop; document.personalDetails.photo is removed. No backend object keys, provider subjects, password/session/CSRF/OAuth credentials or cleanup data appear. Reads account and documents in one database snapshot and buffers the complete attachment before success. A referenced photo that is missing, invalid or over 2 MiB fails the export. Complete response cap: 25,165,824 bytes. No body, query, schema, conditional or idempotency input is accepted. Separate 5/minute account-and-client-IP limit.
          */
         get: operations["getAccountExport"];
         put?: never;
@@ -905,7 +905,7 @@ export interface paths {
         post?: never;
         /**
          * Clear resume history
-         * @description Deletes all checkpoints of this owned resume without changing its revision. There is no request body; the idempotency fingerprint uses a zero-length payload.
+         * @description Deletes all checkpoints of this owned resume without changing its revision. There is no request body; the idempotency fingerprint uses a zero-length payload. The X-Resume-Schema-Version header is ignored.
          */
         delete: operations["clearResumeCheckpoints"];
         options?: never;
@@ -929,7 +929,7 @@ export interface paths {
         post?: never;
         /**
          * Delete a resume checkpoint
-         * @description Deletes the visible checkpoint without changing the resume revision. There is no request body; the idempotency fingerprint uses a zero-length payload.
+         * @description Deletes the visible checkpoint without changing the resume revision. There is no request body; the idempotency fingerprint uses a zero-length payload. The X-Resume-Schema-Version header is ignored.
          */
         delete: operations["deleteResumeCheckpoint"];
         options?: never;
@@ -2736,7 +2736,8 @@ export interface components {
             byteSize: number;
         };
         ResumeCheckpoint: components["schemas"]["ResumeCheckpointSummary"] & {
-            lng: string | null;
+            /** @description Canonical BCP 47 language, or und when unset. */
+            lng: string;
             /** @description The current resume document schema version. */
             schemaVersion: number;
             document: components["schemas"]["ResumeCheckpointDocument"];
@@ -4138,7 +4139,7 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description `invalid_client_ip`, `request_invalid`, `idempotency_key_required`, `idempotency_key_invalid`, `precondition_not_supported`, or `unsupported_schema_version`. */
+        /** @description `invalid_client_ip`, `request_invalid`, `idempotency_key_required`, `idempotency_key_invalid`, or `precondition_not_supported`. */
         CheckpointDeleteBadRequest: {
             headers: {
                 [name: string]: unknown;
@@ -7312,7 +7313,7 @@ export interface operations {
                     /**
                      * @example {
                      *       "data": {
-                     *         "exportVersion": 2,
+                     *         "exportVersion": 3,
                      *         "exportedAt": "2026-09-06T00:00:00Z",
                      *         "account": {
                      *           "id": "018f5b6a-9a3e-7c21-8b1e-000000000001",
