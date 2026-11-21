@@ -319,7 +319,7 @@ func mutationSecurityRequest(t *testing.T, h *resumeAPITestHarness, route routeS
 		req.Header.Set("Referer", referer)
 	}
 	req.Header.Set("Idempotency-Key", uuid.NewString())
-	if route.Operation != "createResume" {
+	if route.Operation != "createResume" && !checkpointDeletionOperation(route.Operation) {
 		req.Header.Set("If-Match", `"r1"`)
 	}
 	if contentType == "" {
@@ -360,6 +360,7 @@ func crossUserRouteRequest(t *testing.T, h *resumeAPITestHarness, route routeSpe
 	path := strings.ReplaceAll(route.Pattern, "{id}", target.String())
 	path = strings.ReplaceAll(path, "{sectionKey}", "work")
 	path = strings.ReplaceAll(path, "{entryId}", "01890f47-7e8a-7b2a-8d70-9a1f2c3d4e60")
+	path = strings.ReplaceAll(path, "{checkpointId}", "01890f47-7e8a-7b2a-8d70-9a1f2c3d4e61")
 	body, contentType := crossUserRouteBody(t, route)
 	req, err := http.NewRequestWithContext(h.ctx, route.Method, h.server.URL+path, body)
 	if err != nil {
@@ -370,7 +371,9 @@ func crossUserRouteRequest(t *testing.T, h *resumeAPITestHarness, route routeSpe
 		req.Header.Set("Origin", resumeAPITestOrigin)
 		req.Header.Set(auth.CSRFHeaderName, csrfToken)
 		req.Header.Set("Idempotency-Key", uuid.NewString())
-		req.Header.Set("If-Match", `"r1"`)
+		if !checkpointDeletionOperation(route.Operation) {
+			req.Header.Set("If-Match", `"r1"`)
+		}
 		if contentType != "" {
 			req.Header.Set("Content-Type", contentType)
 		}

@@ -547,6 +547,16 @@ func TestServer_CreateUpsertGetChainsRevisionAndClosesStaleConflict(t *testing.T
 	if upsertedOutput.Revision != "2" {
 		t.Fatalf("upsert revision = %q", upsertedOutput.Revision)
 	}
+	var checkpointGrant uuid.UUID
+	var checkpointActor, checkpointTitle string
+	if err = h.pool.QueryRow(t.Context(), `SELECT actor_grant_id, actor_name, title FROM resume_checkpoints
+        WHERE resume_id = $1 AND cause = 'assistant'`, resumeID).Scan(&checkpointGrant, &checkpointActor, &checkpointTitle); err != nil {
+		t.Fatalf("first MCP restorable write did not checkpoint: %v", err)
+	}
+	if checkpointGrant != h.grant.ID || checkpointActor != h.client.ClientName || checkpointTitle != "MCP lifecycle" {
+		t.Fatalf("MCP checkpoint has wrong actor or prior title: %s %q %q", checkpointGrant, checkpointActor, checkpointTitle)
+	}
+
 	sanitized, err := json.Marshal(upsertedOutput.State)
 	if err != nil || bytes.Contains(sanitized, []byte("alert(1)")) || !bytes.Contains(sanitized, []byte("safe")) {
 		t.Fatalf("sanitized state = %s, error = %v", sanitized, err)

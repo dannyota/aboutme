@@ -107,12 +107,18 @@ func (s *Store) ListTx(ctx context.Context, qtx *store.Queries, userID uuid.UUID
 	return out, nil
 }
 
-func (s *Store) SaveDocumentTx(ctx context.Context, qtx *store.Queries, userID, id uuid.UUID, doc schema.Resume, expectedRevision int64) (Resume, error) {
+func (s *Store) SaveDocumentTx(ctx context.Context, qtx *store.Queries, userID, id uuid.UUID, doc schema.Resume,
+	expectedRevision int64, checkpoint CheckpointWrite,
+) (Resume, error) {
 	doc.SchemaVersion = int64(docmigrate.CurrentVersion)
 	if err := ValidateForStore(doc); err != nil {
 		return Resume{}, err
 	}
-	if err := checkProjectLinksTx(ctx, qtx, userID, doc); err != nil {
+	rowBefore, before, err := s.checkpointBeforeCAS(ctx, qtx, userID, id, expectedRevision)
+	if err != nil {
+		return Resume{}, err
+	}
+	if err = checkProjectLinksTx(ctx, qtx, userID, doc); err != nil {
 		return Resume{}, err
 	}
 
@@ -120,15 +126,16 @@ func (s *Store) SaveDocumentTx(ctx context.Context, qtx *store.Queries, userID, 
 	if err != nil {
 		return Resume{}, fmt.Errorf("resume: save document: encode document: %w", err)
 	}
+	session, err := s.checkpointResumeWrite(ctx, qtx, rowBefore, before, before.Title, before.Lng, doc, checkpoint)
+	if err != nil {
+		return Resume{}, err
+	}
 
 	row, err := qtx.UpdateResumeDocumentCAS(ctx, store.UpdateResumeDocumentCASParams{
-		ID:              id,
-		UserID:          userID,
-		Revision:        expectedRevision,
-		PersonalDetails: personalDetails,
-		Content:         content,
-		Customization:   customization,
-		SchemaVersion:   docmigrate.CurrentVersion,
+		ID: id, UserID: userID, Revision: expectedRevision,
+		PersonalDetails: personalDetails, Content: content, Customization: customization,
+		SchemaVersion: docmigrate.CurrentVersion, SessionActor: session.Actor,
+		SessionStartedAt: session.StartedAt, SessionLastWriteAt: session.LastWriteAt,
 	})
 	if err != nil {
 		if !errors.Is(err, pgx.ErrNoRows) {
@@ -163,7 +170,7 @@ func (s *Store) AdvanceRevisionTx(ctx context.Context, qtx *store.Queries, userI
 }
 
 func (s *Store) SaveMetadataAndDocumentTx(ctx context.Context, qtx *store.Queries, userID, id uuid.UUID,
-	title string, lng *string, doc schema.Resume, expectedRevision int64,
+	title string, lng *string, doc schema.Resume, expectedRevision int64, checkpoint CheckpointWrite,
 ) (int64, error) {
 	if err := validateTitle(title); err != nil {
 		return 0, err
@@ -175,7 +182,11 @@ func (s *Store) SaveMetadataAndDocumentTx(ctx context.Context, qtx *store.Querie
 	if err := ValidateForStore(doc); err != nil {
 		return 0, err
 	}
-	if err := checkProjectLinksTx(ctx, qtx, userID, doc); err != nil {
+	rowBefore, before, err := s.checkpointBeforeCAS(ctx, qtx, userID, id, expectedRevision)
+	if err != nil {
+		return 0, err
+	}
+	if err = checkProjectLinksTx(ctx, qtx, userID, doc); err != nil {
 		return 0, err
 	}
 
@@ -183,17 +194,16 @@ func (s *Store) SaveMetadataAndDocumentTx(ctx context.Context, qtx *store.Querie
 	if err != nil {
 		return 0, fmt.Errorf("resume: save metadata and document: encode document: %w", err)
 	}
+	session, err := s.checkpointResumeWrite(ctx, qtx, rowBefore, before, title, lng, doc, checkpoint)
+	if err != nil {
+		return 0, err
+	}
 
 	newRevision, err := qtx.UpdateResumeMetadataAndDocumentCAS(ctx, store.UpdateResumeMetadataAndDocumentCASParams{
-		ID:              id,
-		UserID:          userID,
-		Revision:        expectedRevision,
-		Title:           title,
-		Lng:             lng,
-		PersonalDetails: personalDetails,
-		Content:         content,
-		Customization:   customization,
-		SchemaVersion:   docmigrate.CurrentVersion,
+		ID: id, UserID: userID, Revision: expectedRevision, Title: title, Lng: lng,
+		PersonalDetails: personalDetails, Content: content, Customization: customization,
+		SchemaVersion: docmigrate.CurrentVersion, SessionActor: session.Actor,
+		SessionStartedAt: session.StartedAt, SessionLastWriteAt: session.LastWriteAt,
 	})
 	if err != nil {
 		if !errors.Is(err, pgx.ErrNoRows) {

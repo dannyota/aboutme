@@ -35,8 +35,16 @@ describe("account privacy contract", () => {
       "resumes",
       "projects",
     ]);
-    expect(bundle?.properties.exportVersion.const).toBe(2);
+    expect(bundle?.properties.exportVersion.const).toBe(3);
     expect(bundle?.properties.resumes.maxItems).toBe(3);
+    const exportedResume = schemas.AccountExportResume?.allOf[1];
+    expect(exportedResume.required).toContain("checkpoints");
+    expect(exportedResume.properties.checkpoints).toEqual({
+      type: "array",
+      maxItems: 50,
+      items: { $ref: "#/components/schemas/ResumeCheckpoint" },
+    });
+    expect(doc.paths["/me/export"].get.description).toContain("25,165,824 bytes");
     expect(bundle?.properties.projects.maxItems).toBe(30);
     expect(bundle?.properties.projects.items.$ref).toBe(
       "#/components/schemas/AccountExportProject",

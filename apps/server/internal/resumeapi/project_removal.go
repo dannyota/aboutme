@@ -15,6 +15,7 @@ import (
 type ProjectRemoval struct {
 	UserID      uuid.UUID
 	ProjectID   uuid.UUID
+	GrantID     *uuid.UUID
 	Operation   string
 	Key         uuid.UUID
 	RequestHash [32]byte
@@ -73,7 +74,7 @@ func (s *Service) removeProjectTx(ctx context.Context, qtx *store.Queries, liste
 		if doc, err = validateDocumentForPersistence(doc); err != nil {
 			return resume.StoredResponse{}, publicstate.CommittedState{}, err
 		}
-		saved, saveErr := s.resumes.SaveDocumentTx(ctx, qtx, removal.UserID, item.ID, doc, item.Revision)
+		saved, saveErr := s.resumes.SaveDocumentTx(ctx, qtx, removal.UserID, item.ID, doc, item.Revision, resume.CheckpointWrite{GrantID: removal.GrantID})
 		if saveErr != nil {
 			return resume.StoredResponse{}, publicstate.CommittedState{}, saveErr
 		}

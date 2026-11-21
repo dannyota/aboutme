@@ -23,8 +23,8 @@ func TestRouteInventoryIsCompleteAndImplemented(t *testing.T) {
 	t.Parallel()
 
 	routes := registeredRoutes()
-	if len(routes) != 20 {
-		t.Fatalf("registered route count = %d, want 20", len(routes))
+	if len(routes) != 25 {
+		t.Fatalf("registered route count = %d, want 25", len(routes))
 	}
 	mutations := 0
 	var got []string
@@ -34,14 +34,19 @@ func TestRouteInventoryIsCompleteAndImplemented(t *testing.T) {
 			mutations++
 		}
 	}
-	if mutations != 15 {
-		t.Fatalf("mutation route count = %d, want 15", mutations)
+	if mutations != 18 {
+		t.Fatalf("mutation route count = %d, want 18", mutations)
 	}
 	sort.Strings(got)
 	want := []string{
 		http.MethodGet + " /api/v1/resumes",
 		http.MethodPost + " /api/v1/resumes",
 		http.MethodPost + " /api/v1/resumes/{id}/publish",
+		http.MethodGet + " /api/v1/resumes/{id}/checkpoints",
+		http.MethodDelete + " /api/v1/resumes/{id}/checkpoints",
+		http.MethodGet + " /api/v1/resumes/{id}/checkpoints/{checkpointId}",
+		http.MethodDelete + " /api/v1/resumes/{id}/checkpoints/{checkpointId}",
+		http.MethodPost + " /api/v1/resumes/{id}/checkpoints/{checkpointId}/restore",
 		http.MethodDelete + " /api/v1/resumes/{id}",
 		http.MethodGet + " /api/v1/resumes/{id}",
 		http.MethodPatch + " /api/v1/resumes/{id}",
@@ -103,6 +108,9 @@ func TestEveryMutationRegistersExactlyOneConcreteOperation(t *testing.T) {
 		"uploadResumePhoto":           operationPhotoCandidate,
 		"updateResumePhotoCrop":       operationAggregate,
 		"deleteResumePhoto":           operationAggregate,
+		"restoreResumeCheckpoint":     operationCheckpointRestore,
+		"deleteResumeCheckpoint":      operationCheckpointDelete,
+		"clearResumeCheckpoints":      operationCheckpointDelete,
 	}
 	for _, route := range registeredRoutes() {
 		kind, isMutation := want[route.Operation]
@@ -135,11 +143,12 @@ func TestRouteWireVersionPolicyIsComplete(t *testing.T) {
 	t.Parallel()
 
 	for _, route := range registeredRoutes() {
-		wantAccepts := route.Mutation || route.Operation == "listResumes" || route.Operation == "getResume"
+		wantAccepts := (route.Mutation && route.OperationKind != operationCheckpointDelete) || route.Operation == "listResumes" || route.Operation == "getResume"
 		if route.AcceptsWireVersion != wantAccepts {
 			t.Errorf("%s AcceptsWireVersion = %v, want %v", route.Operation, route.AcceptsWireVersion, wantAccepts)
 		}
-		wantEmits := route.Operation != "getResumePhoto" && route.Operation != "downloadResumePDF" && route.Operation != "headResumePDF" && route.Operation != "deleteResume"
+		wantEmits := route.Operation != "getResumePhoto" && route.Operation != "downloadResumePDF" && route.Operation != "headResumePDF" && route.Operation != "deleteResume" &&
+			!strings.Contains(route.Pattern, checkpointCollectionPath) || route.Operation == "restoreResumeCheckpoint"
 		if route.EmitsWireVersion != wantEmits {
 			t.Errorf("%s EmitsWireVersion = %v, want %v", route.Operation, route.EmitsWireVersion, wantEmits)
 		}
@@ -261,7 +270,7 @@ func buildHarnessRequest(t *testing.T, h *resumeAPITestHarness, route routeSpec,
 			req.Header.Set(auth.CSRFHeaderName, h.csrfToken)
 		}
 		req.Header.Set("Idempotency-Key", uuid.NewString())
-		if route.Operation != "createResume" {
+		if route.Operation != "createResume" && route.OperationKind != operationCheckpointDelete {
 			req.Header.Set("If-Match", `"r1"`)
 		}
 		if route.Upload {
@@ -292,12 +301,18 @@ func assertRouteError(t *testing.T, response testHTTPResponse, status int, code 
 }
 
 func TestMutationHeaderContract_AllRoutes(t *testing.T) {
+	t.Run("resume", func(t *testing.T) { testMutationHeaderContract(t, false) })
+	t.Run("history", func(t *testing.T) { testMutationHeaderContract(t, true) })
+}
+
+func testMutationHeaderContract(t *testing.T, history bool) {
+	t.Helper()
 	h := newResumeAPITestHarness(t)
 	beforeResumes := h.snapshotUserTable(t, "resumes")
 	beforeIdempotency := h.snapshotUserTable(t, "idempotency_records")
 
 	for _, route := range registeredRoutes() {
-		if !route.Mutation {
+		if !route.Mutation || strings.Contains(route.Pattern, checkpointCollectionPath) != history {
 			continue
 		}
 		path := concreteRoutePath(route.Pattern)
@@ -321,7 +336,7 @@ func TestMutationHeaderContract_AllRoutes(t *testing.T) {
 		}
 
 		validKey := []string{uuid.NewString()}
-		if route.Operation == "createResume" {
+		if route.Operation == "createResume" || route.OperationKind == operationCheckpointDelete {
 			for _, test := range []struct {
 				name  string
 				match []string
@@ -357,7 +372,7 @@ func TestMutationHeaderContract_AllRoutes(t *testing.T) {
 			}
 		}
 		validMatch := []string(nil)
-		if route.Operation != "createResume" {
+		if route.Operation != "createResume" && route.OperationKind != operationCheckpointDelete {
 			validMatch = []string{`"r1"`}
 		}
 		for _, test := range []struct {

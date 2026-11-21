@@ -301,25 +301,44 @@ type PublicState struct {
 }
 
 type Resume struct {
+	ID                 uuid.UUID
+	UserID             uuid.UUID
+	Title              string
+	Slug               *string
+	Live               bool
+	DownloadEnabled    bool
+	SEOGeoEnabled      bool
+	SchemaVersion      int32
+	Revision           int64
+	Lng                *string
+	PersonalDetails    json.RawMessage
+	Content            json.RawMessage
+	Customization      json.RawMessage
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
+	PublicTitle        *string
+	FaviconEmoji       *string
+	SignInToView       bool
+	ViewPassEpoch      int32
+	SessionActor       *string
+	SessionStartedAt   *time.Time
+	SessionLastWriteAt *time.Time
+}
+
+type ResumeCheckpoint struct {
 	ID              uuid.UUID
-	UserID          uuid.UUID
+	ResumeID        uuid.UUID
+	StartedAt       time.Time
+	Cause           string
+	ActorGrantID    *uuid.UUID
+	ActorName       *string
 	Title           string
-	Slug            *string
-	Live            bool
-	DownloadEnabled bool
-	SEOGeoEnabled   bool
-	SchemaVersion   int32
-	Revision        int64
 	Lng             *string
+	SchemaVersion   int32
 	PersonalDetails json.RawMessage
 	Content         json.RawMessage
 	Customization   json.RawMessage
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
-	PublicTitle     *string
-	FaviconEmoji    *string
-	SignInToView    bool
-	ViewPassEpoch   int32
+	ByteSize        int32
 }
 
 type ResumePreviewCard struct {

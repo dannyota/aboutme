@@ -115,7 +115,7 @@ UPDATE resumes
 SET revision = revision + 1
 WHERE id = $1 AND user_id = $2
     AND revision = $3
-RETURNING id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at, public_title, favicon_emoji, sign_in_to_view, view_pass_epoch
+RETURNING id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at, public_title, favicon_emoji, sign_in_to_view, view_pass_epoch, session_actor, session_started_at, session_last_write_at
 `
 
 type AdvanceResumeRevisionCASParams struct {
@@ -147,6 +147,9 @@ func (q *Queries) AdvanceResumeRevisionCAS(ctx context.Context, arg AdvanceResum
 		&i.FaviconEmoji,
 		&i.SignInToView,
 		&i.ViewPassEpoch,
+		&i.SessionActor,
+		&i.SessionStartedAt,
+		&i.SessionLastWriteAt,
 	)
 	return i, err
 }
@@ -1269,7 +1272,7 @@ func (q *Queries) CreatePrivacyNoticeCampaign(ctx context.Context, contentSha256
 const createResume = `-- name: CreateResume :one
 INSERT INTO resumes (user_id, title, schema_version, lng,
                      personal_details, content, customization)
-VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at, public_title, favicon_emoji, sign_in_to_view, view_pass_epoch
+VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at, public_title, favicon_emoji, sign_in_to_view, view_pass_epoch, session_actor, session_started_at, session_last_write_at
 `
 
 type CreateResumeParams struct {
@@ -1313,6 +1316,9 @@ func (q *Queries) CreateResume(ctx context.Context, arg CreateResumeParams) (Res
 		&i.FaviconEmoji,
 		&i.SignInToView,
 		&i.ViewPassEpoch,
+		&i.SessionActor,
+		&i.SessionStartedAt,
+		&i.SessionLastWriteAt,
 	)
 	return i, err
 }
@@ -1895,7 +1901,7 @@ func (q *Queries) DeleteResumeForUser(ctx context.Context, arg DeleteResumeForUs
 const deleteResumeForUserCAS = `-- name: DeleteResumeForUserCAS :one
 DELETE FROM resumes
 WHERE id = $1 AND user_id = $2 AND revision = $3
-RETURNING id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at, public_title, favicon_emoji, sign_in_to_view, view_pass_epoch
+RETURNING id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at, public_title, favicon_emoji, sign_in_to_view, view_pass_epoch, session_actor, session_started_at, session_last_write_at
 `
 
 type DeleteResumeForUserCASParams struct {
@@ -1927,6 +1933,9 @@ func (q *Queries) DeleteResumeForUserCAS(ctx context.Context, arg DeleteResumeFo
 		&i.FaviconEmoji,
 		&i.SignInToView,
 		&i.ViewPassEpoch,
+		&i.SessionActor,
+		&i.SessionStartedAt,
+		&i.SessionLastWriteAt,
 	)
 	return i, err
 }
@@ -1936,7 +1945,7 @@ DELETE FROM resumes
 WHERE id = $1::uuid
   AND user_id = $2::uuid
   AND revision = $3::bigint
-RETURNING id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at, public_title, favicon_emoji, sign_in_to_view, view_pass_epoch
+RETURNING id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at, public_title, favicon_emoji, sign_in_to_view, view_pass_epoch, session_actor, session_started_at, session_last_write_at
 `
 
 type DeleteResumePublicCASParams struct {
@@ -1968,6 +1977,9 @@ func (q *Queries) DeleteResumePublicCAS(ctx context.Context, arg DeleteResumePub
 		&i.FaviconEmoji,
 		&i.SignInToView,
 		&i.ViewPassEpoch,
+		&i.SessionActor,
+		&i.SessionStartedAt,
+		&i.SessionLastWriteAt,
 	)
 	return i, err
 }
@@ -2896,7 +2908,7 @@ func (q *Queries) GetPublicRealtimeResume(ctx context.Context, slug string) (Get
 }
 
 const getPublicResumeByOwner = `-- name: GetPublicResumeByOwner :one
-SELECT id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at, public_title, favicon_emoji, sign_in_to_view, view_pass_epoch FROM resumes
+SELECT id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at, public_title, favicon_emoji, sign_in_to_view, view_pass_epoch, session_actor, session_started_at, session_last_write_at FROM resumes
 WHERE user_id = $1::uuid
   AND id = $2::uuid
 `
@@ -2929,12 +2941,15 @@ func (q *Queries) GetPublicResumeByOwner(ctx context.Context, arg GetPublicResum
 		&i.FaviconEmoji,
 		&i.SignInToView,
 		&i.ViewPassEpoch,
+		&i.SessionActor,
+		&i.SessionStartedAt,
+		&i.SessionLastWriteAt,
 	)
 	return i, err
 }
 
 const getPublicResumeBySlug = `-- name: GetPublicResumeBySlug :one
-SELECT r.id, r.user_id, r.title, r.slug, r.live, r.download_enabled, r.seo_geo_enabled, r.schema_version, r.revision, r.lng, r.personal_details, r.content, r.customization, r.created_at, r.updated_at, r.public_title, r.favicon_emoji, r.sign_in_to_view, r.view_pass_epoch, COALESCE((
+SELECT r.id, r.user_id, r.title, r.slug, r.live, r.download_enabled, r.seo_geo_enabled, r.schema_version, r.revision, r.lng, r.personal_details, r.content, r.customization, r.created_at, r.updated_at, r.public_title, r.favicon_emoji, r.sign_in_to_view, r.view_pass_epoch, r.session_actor, r.session_started_at, r.session_last_write_at, COALESCE((
     SELECT jsonb_agg(jsonb_build_object(
         'entryId', e.entry->>'id',
         'projectSlug', p.slug,
@@ -2982,13 +2997,16 @@ func (q *Queries) GetPublicResumeBySlug(ctx context.Context, slug string) (GetPu
 		&i.Resume.FaviconEmoji,
 		&i.Resume.SignInToView,
 		&i.Resume.ViewPassEpoch,
+		&i.Resume.SessionActor,
+		&i.Resume.SessionStartedAt,
+		&i.Resume.SessionLastWriteAt,
 		&i.ProjectLinks,
 	)
 	return i, err
 }
 
 const getPublicResumeProject = `-- name: GetPublicResumeProject :one
-SELECT r.id, r.user_id, r.title, r.slug, r.live, r.download_enabled, r.seo_geo_enabled, r.schema_version, r.revision, r.lng, r.personal_details, r.content, r.customization, r.created_at, r.updated_at, r.public_title, r.favicon_emoji, r.sign_in_to_view, r.view_pass_epoch, COALESCE((
+SELECT r.id, r.user_id, r.title, r.slug, r.live, r.download_enabled, r.seo_geo_enabled, r.schema_version, r.revision, r.lng, r.personal_details, r.content, r.customization, r.created_at, r.updated_at, r.public_title, r.favicon_emoji, r.sign_in_to_view, r.view_pass_epoch, r.session_actor, r.session_started_at, r.session_last_write_at, COALESCE((
     SELECT jsonb_agg(jsonb_build_object(
         'entryId', e.entry->>'id',
         'projectSlug', p.slug,
@@ -3061,6 +3079,9 @@ func (q *Queries) GetPublicResumeProject(ctx context.Context, arg GetPublicResum
 		&i.Resume.FaviconEmoji,
 		&i.Resume.SignInToView,
 		&i.Resume.ViewPassEpoch,
+		&i.Resume.SessionActor,
+		&i.Resume.SessionStartedAt,
+		&i.Resume.SessionLastWriteAt,
 		&i.ProjectLinks,
 		&i.Projects,
 	)
@@ -3068,7 +3089,7 @@ func (q *Queries) GetPublicResumeProject(ctx context.Context, arg GetPublicResum
 }
 
 const getPublicResumeProjectList = `-- name: GetPublicResumeProjectList :one
-SELECT r.id, r.user_id, r.title, r.slug, r.live, r.download_enabled, r.seo_geo_enabled, r.schema_version, r.revision, r.lng, r.personal_details, r.content, r.customization, r.created_at, r.updated_at, r.public_title, r.favicon_emoji, r.sign_in_to_view, r.view_pass_epoch, COALESCE((
+SELECT r.id, r.user_id, r.title, r.slug, r.live, r.download_enabled, r.seo_geo_enabled, r.schema_version, r.revision, r.lng, r.personal_details, r.content, r.customization, r.created_at, r.updated_at, r.public_title, r.favicon_emoji, r.sign_in_to_view, r.view_pass_epoch, r.session_actor, r.session_started_at, r.session_last_write_at, COALESCE((
     SELECT jsonb_agg(jsonb_build_object(
         'entryId', e.entry->>'id',
         'projectSlug', p.slug,
@@ -3116,6 +3137,9 @@ func (q *Queries) GetPublicResumeProjectList(ctx context.Context, slug string) (
 		&i.Resume.FaviconEmoji,
 		&i.Resume.SignInToView,
 		&i.Resume.ViewPassEpoch,
+		&i.Resume.SessionActor,
+		&i.Resume.SessionStartedAt,
+		&i.Resume.SessionLastWriteAt,
 		&i.Projects,
 	)
 	return i, err
@@ -3135,7 +3159,7 @@ func (q *Queries) GetPublicState(ctx context.Context) (PublicState, error) {
 }
 
 const getResumeByID = `-- name: GetResumeByID :one
-SELECT id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at, public_title, favicon_emoji, sign_in_to_view, view_pass_epoch FROM resumes WHERE id = $1
+SELECT id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at, public_title, favicon_emoji, sign_in_to_view, view_pass_epoch, session_actor, session_started_at, session_last_write_at FROM resumes WHERE id = $1
 `
 
 func (q *Queries) GetResumeByID(ctx context.Context, id uuid.UUID) (Resume, error) {
@@ -3161,12 +3185,15 @@ func (q *Queries) GetResumeByID(ctx context.Context, id uuid.UUID) (Resume, erro
 		&i.FaviconEmoji,
 		&i.SignInToView,
 		&i.ViewPassEpoch,
+		&i.SessionActor,
+		&i.SessionStartedAt,
+		&i.SessionLastWriteAt,
 	)
 	return i, err
 }
 
 const getResumeForUser = `-- name: GetResumeForUser :one
-SELECT id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at, public_title, favicon_emoji, sign_in_to_view, view_pass_epoch FROM resumes WHERE id = $1 AND user_id = $2
+SELECT id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at, public_title, favicon_emoji, sign_in_to_view, view_pass_epoch, session_actor, session_started_at, session_last_write_at FROM resumes WHERE id = $1 AND user_id = $2
 `
 
 type GetResumeForUserParams struct {
@@ -3197,12 +3224,15 @@ func (q *Queries) GetResumeForUser(ctx context.Context, arg GetResumeForUserPara
 		&i.FaviconEmoji,
 		&i.SignInToView,
 		&i.ViewPassEpoch,
+		&i.SessionActor,
+		&i.SessionStartedAt,
+		&i.SessionLastWriteAt,
 	)
 	return i, err
 }
 
 const getResumeForUserWithProjectLinks = `-- name: GetResumeForUserWithProjectLinks :one
-SELECT r.id, r.user_id, r.title, r.slug, r.live, r.download_enabled, r.seo_geo_enabled, r.schema_version, r.revision, r.lng, r.personal_details, r.content, r.customization, r.created_at, r.updated_at, r.public_title, r.favicon_emoji, r.sign_in_to_view, r.view_pass_epoch, COALESCE((
+SELECT r.id, r.user_id, r.title, r.slug, r.live, r.download_enabled, r.seo_geo_enabled, r.schema_version, r.revision, r.lng, r.personal_details, r.content, r.customization, r.created_at, r.updated_at, r.public_title, r.favicon_emoji, r.sign_in_to_view, r.view_pass_epoch, r.session_actor, r.session_started_at, r.session_last_write_at, COALESCE((
     SELECT jsonb_agg(jsonb_build_object(
         'entryId', e.entry->>'id',
         'projectSlug', p.slug,
@@ -3255,6 +3285,9 @@ func (q *Queries) GetResumeForUserWithProjectLinks(ctx context.Context, arg GetR
 		&i.Resume.FaviconEmoji,
 		&i.Resume.SignInToView,
 		&i.Resume.ViewPassEpoch,
+		&i.Resume.SessionActor,
+		&i.Resume.SessionStartedAt,
+		&i.Resume.SessionLastWriteAt,
 		&i.ProjectLinks,
 	)
 	return i, err
@@ -4136,7 +4169,7 @@ func (q *Queries) ListResumeIDsBelowSchemaVersion(ctx context.Context, arg ListR
 }
 
 const listResumesForUser = `-- name: ListResumesForUser :many
-SELECT id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at, public_title, favicon_emoji, sign_in_to_view, view_pass_epoch FROM resumes WHERE user_id = $1 ORDER BY created_at, id
+SELECT id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at, public_title, favicon_emoji, sign_in_to_view, view_pass_epoch, session_actor, session_started_at, session_last_write_at FROM resumes WHERE user_id = $1 ORDER BY created_at, id
 `
 
 func (q *Queries) ListResumesForUser(ctx context.Context, userID uuid.UUID) ([]Resume, error) {
@@ -4168,6 +4201,9 @@ func (q *Queries) ListResumesForUser(ctx context.Context, userID uuid.UUID) ([]R
 			&i.FaviconEmoji,
 			&i.SignInToView,
 			&i.ViewPassEpoch,
+			&i.SessionActor,
+			&i.SessionStartedAt,
+			&i.SessionLastWriteAt,
 		); err != nil {
 			return nil, err
 		}
@@ -4604,7 +4640,7 @@ FROM input
 WHERE resume.id = input.id
   AND resume.user_id = input.user_id
   AND resume.revision = input.expected_revision
-RETURNING resume.id, resume.user_id, resume.title, resume.slug, resume.live, resume.download_enabled, resume.seo_geo_enabled, resume.schema_version, resume.revision, resume.lng, resume.personal_details, resume.content, resume.customization, resume.created_at, resume.updated_at, resume.public_title, resume.favicon_emoji, resume.sign_in_to_view, resume.view_pass_epoch
+RETURNING resume.id, resume.user_id, resume.title, resume.slug, resume.live, resume.download_enabled, resume.seo_geo_enabled, resume.schema_version, resume.revision, resume.lng, resume.personal_details, resume.content, resume.customization, resume.created_at, resume.updated_at, resume.public_title, resume.favicon_emoji, resume.sign_in_to_view, resume.view_pass_epoch, resume.session_actor, resume.session_started_at, resume.session_last_write_at
 `
 
 type PublishResumeCASParams struct {
@@ -4657,6 +4693,9 @@ func (q *Queries) PublishResumeCAS(ctx context.Context, arg PublishResumeCASPara
 		&i.FaviconEmoji,
 		&i.SignInToView,
 		&i.ViewPassEpoch,
+		&i.SessionActor,
+		&i.SessionStartedAt,
+		&i.SessionLastWriteAt,
 	)
 	return i, err
 }
@@ -5295,19 +5334,25 @@ func (q *Queries) UpdateCurrentSessionProofs(ctx context.Context, arg UpdateCurr
 const updateResumeDocumentCAS = `-- name: UpdateResumeDocumentCAS :one
 UPDATE resumes
 SET personal_details = $4, content = $5, customization = $6,
-    schema_version = $7, revision = revision + 1, updated_at = now()
+    schema_version = $7, revision = revision + 1, updated_at = now(),
+    session_actor = $8,
+    session_started_at = $9,
+    session_last_write_at = $10
 WHERE id = $1 AND user_id = $2 AND revision = $3
-RETURNING id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at, public_title, favicon_emoji, sign_in_to_view, view_pass_epoch
+RETURNING id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at, public_title, favicon_emoji, sign_in_to_view, view_pass_epoch, session_actor, session_started_at, session_last_write_at
 `
 
 type UpdateResumeDocumentCASParams struct {
-	ID              uuid.UUID
-	UserID          uuid.UUID
-	Revision        int64
-	PersonalDetails json.RawMessage
-	Content         json.RawMessage
-	Customization   json.RawMessage
-	SchemaVersion   int32
+	ID                 uuid.UUID
+	UserID             uuid.UUID
+	Revision           int64
+	PersonalDetails    json.RawMessage
+	Content            json.RawMessage
+	Customization      json.RawMessage
+	SchemaVersion      int32
+	SessionActor       *string
+	SessionStartedAt   *time.Time
+	SessionLastWriteAt *time.Time
 }
 
 func (q *Queries) UpdateResumeDocumentCAS(ctx context.Context, arg UpdateResumeDocumentCASParams) (Resume, error) {
@@ -5319,6 +5364,9 @@ func (q *Queries) UpdateResumeDocumentCAS(ctx context.Context, arg UpdateResumeD
 		arg.Content,
 		arg.Customization,
 		arg.SchemaVersion,
+		arg.SessionActor,
+		arg.SessionStartedAt,
+		arg.SessionLastWriteAt,
 	)
 	var i Resume
 	err := row.Scan(
@@ -5341,6 +5389,9 @@ func (q *Queries) UpdateResumeDocumentCAS(ctx context.Context, arg UpdateResumeD
 		&i.FaviconEmoji,
 		&i.SignInToView,
 		&i.ViewPassEpoch,
+		&i.SessionActor,
+		&i.SessionStartedAt,
+		&i.SessionLastWriteAt,
 	)
 	return i, err
 }
@@ -5351,21 +5402,27 @@ SET title = $4, lng = $5,
     personal_details = $6,
     content = $7, customization = $8,
     schema_version = $9,
+    session_actor = $10,
+    session_started_at = $11,
+    session_last_write_at = $12,
     revision = revision + 1, updated_at = now()
 WHERE id = $1 AND user_id = $2 AND revision = $3
 RETURNING revision
 `
 
 type UpdateResumeMetadataAndDocumentCASParams struct {
-	ID              uuid.UUID
-	UserID          uuid.UUID
-	Revision        int64
-	Title           string
-	Lng             *string
-	PersonalDetails json.RawMessage
-	Content         json.RawMessage
-	Customization   json.RawMessage
-	SchemaVersion   int32
+	ID                 uuid.UUID
+	UserID             uuid.UUID
+	Revision           int64
+	Title              string
+	Lng                *string
+	PersonalDetails    json.RawMessage
+	Content            json.RawMessage
+	Customization      json.RawMessage
+	SchemaVersion      int32
+	SessionActor       *string
+	SessionStartedAt   *time.Time
+	SessionLastWriteAt *time.Time
 }
 
 // The full-aggregate metadata write: title, lng, and the
@@ -5385,32 +5442,9 @@ func (q *Queries) UpdateResumeMetadataAndDocumentCAS(ctx context.Context, arg Up
 		arg.Content,
 		arg.Customization,
 		arg.SchemaVersion,
-	)
-	var revision int64
-	err := row.Scan(&revision)
-	return revision, err
-}
-
-const updateResumeTitleCAS = `-- name: UpdateResumeTitleCAS :one
-UPDATE resumes
-SET title = $4, revision = revision + 1, updated_at = now()
-WHERE id = $1 AND user_id = $2 AND revision = $3
-RETURNING revision
-`
-
-type UpdateResumeTitleCASParams struct {
-	ID       uuid.UUID
-	UserID   uuid.UUID
-	Revision int64
-	Title    string
-}
-
-func (q *Queries) UpdateResumeTitleCAS(ctx context.Context, arg UpdateResumeTitleCASParams) (int64, error) {
-	row := q.db.QueryRow(ctx, updateResumeTitleCAS,
-		arg.ID,
-		arg.UserID,
-		arg.Revision,
-		arg.Title,
+		arg.SessionActor,
+		arg.SessionStartedAt,
+		arg.SessionLastWriteAt,
 	)
 	var revision int64
 	err := row.Scan(&revision)

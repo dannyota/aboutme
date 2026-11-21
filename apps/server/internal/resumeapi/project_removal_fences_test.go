@@ -72,11 +72,11 @@ type failingSaveResumes struct {
 
 var errInjectedSave = errors.New("injected save failure")
 
-func (f *failingSaveResumes) SaveDocumentTx(ctx context.Context, qtx *store.Queries, userID, id uuid.UUID, doc schema.Resume, expected int64) (resume.Resume, error) {
+func (f *failingSaveResumes) SaveDocumentTx(ctx context.Context, qtx *store.Queries, userID, id uuid.UUID, doc schema.Resume, expected int64, checkpoint resume.CheckpointWrite) (resume.Resume, error) {
 	if f.saves.Add(1) == 2 {
 		return resume.Resume{}, errInjectedSave
 	}
-	return f.Store.SaveDocumentTx(ctx, qtx, userID, id, doc, expected)
+	return f.Store.SaveDocumentTx(ctx, qtx, userID, id, doc, expected, checkpoint)
 }
 
 func TestRemoveProject_RevokesLiveLeasesKeepsDraftLeasesAndAdvancesFences(t *testing.T) {

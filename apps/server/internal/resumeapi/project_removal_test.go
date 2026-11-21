@@ -171,3 +171,32 @@ func TestRemoveProject_ThreeChangedPlansAreBusyAndChangeNothing(t *testing.T) {
 		t.Fatalf("busy removal deleted the project: %v", err)
 	}
 }
+
+func TestRemoveProjectCheckpointsTheGrantAndLinkedState(t *testing.T) {
+	h := newResumeAPITestHarness(t)
+	owned := createLinkProject(t, h, h.userID, "atlas", linkProjectDocument("Atlas"))
+	linked := seedLinkingResume(t, h, owned.ID, false)
+	now := h.service.clock()
+	client, err := h.queries.CreateOAuthClient(h.ctx, store.CreateOAuthClientParams{
+		ClientName: "Project assistant", RedirectURIs: []byte(`["https://example.test/callback"]`), CreatedAt: now,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	grant, err := h.queries.UpsertOAuthGrant(h.ctx, store.UpsertOAuthGrantParams{UserID: h.userID, ClientID: client.ID, Scopes: "projects:write", CreatedAt: now})
+	if err != nil {
+		t.Fatal(err)
+	}
+	removal := newTestRemoval(h, owned.ID, nil)
+	removal.GrantID = &grant.ID
+	result, err := h.service.RemoveProject(h.ctx, removal)
+	if err != nil || result.Outcome != resume.CommitCommitted {
+		t.Fatalf("project removal: %v, %v", result.Outcome, err)
+	}
+	var actor, projectID string
+	if err = h.pool.QueryRow(h.ctx, `SELECT actor_name, content #>> '{projects,entries,0,projectId}' FROM resume_checkpoints
+    WHERE resume_id=$1 AND actor_grant_id=$2 AND cause='assistant'`, linked.ID, grant.ID).Scan(&actor, &projectID); err != nil || actor != client.ClientName || projectID != owned.ID.String() {
+		t.Fatalf("project rewrite checkpoint has actor %q and link %q: %v", actor, projectID, err)
+	}
+	requireUnlinkedAt(t, h, linked.ID, linked.Revision+1)
+}

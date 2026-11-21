@@ -16,6 +16,17 @@ const SURFACE: Record<string, Record<string, string>> = {
     patch: "updateResumeMetadata",
     delete: "deleteResume",
   },
+  "/resumes/{id}/checkpoints": {
+    get: "listResumeCheckpoints",
+    delete: "clearResumeCheckpoints",
+  },
+  "/resumes/{id}/checkpoints/{checkpointId}": {
+    get: "getResumeCheckpoint",
+    delete: "deleteResumeCheckpoint",
+  },
+  "/resumes/{id}/checkpoints/{checkpointId}/restore": {
+    post: "restoreResumeCheckpoint",
+  },
   "/resumes/{id}/publish": { post: "publishResume" },
   "/resumes/{id}/pdf": { get: "downloadResumePDF", head: "headResumePDF" },
   "/resumes/{id}/entries/{sectionKey}": { patch: "upsertResumeEntry" },
@@ -39,6 +50,11 @@ const SURFACE: Record<string, Record<string, string>> = {
 };
 
 const MUTATIONS = new Set(["post", "patch", "delete"]);
+const CHECKPOINT_READS = new Set(["listResumeCheckpoints", "getResumeCheckpoint"]);
+const CHECKPOINT_DELETES = new Set([
+  "deleteResumeCheckpoint",
+  "clearResumeCheckpoints",
+]);
 
 interface Success {
   status: string;
@@ -92,6 +108,21 @@ const SUCCESS: Record<string, Success[]> = {
     },
   ],
   deleteResume: [{ status: "204", mediaTypes: [], headers: [] }],
+  listResumeCheckpoints: [
+    { status: "200", mediaTypes: ["application/json"], headers: [] },
+  ],
+  getResumeCheckpoint: [
+    { status: "200", mediaTypes: ["application/json"], headers: [] },
+  ],
+  restoreResumeCheckpoint: [
+    {
+      status: "200",
+      mediaTypes: ["application/json"],
+      headers: ["ETag", "X-Resume-Schema-Version"],
+    },
+  ],
+  deleteResumeCheckpoint: [{ status: "204", mediaTypes: [], headers: [] }],
+  clearResumeCheckpoints: [{ status: "204", mediaTypes: [], headers: [] }],
   publishResume: [
     {
       status: "200",
@@ -227,7 +258,32 @@ const itemDelete = (extra: Record<string, string[]> = {}) => {
   return { ...rest, ...extra };
 };
 
+const CHECKPOINT_READ_ERRORS = {
+  "400": [...COMMON_400, "request_invalid"],
+  "401": ["session_required"],
+  "404": ["resume_not_found"],
+  "405": ["method_not_allowed"],
+  "429": ["rate_limited"],
+  "500": ["internal_error"],
+};
+
+const CHECKPOINT_DELETE_ERRORS = {
+  ...CHECKPOINT_READ_ERRORS,
+  "400": CREATE_400,
+  "403": ["csrf_rejected"],
+  "409": ["idempotency_key_reuse"],
+};
+
 const ERRORS: Record<string, Record<string, string[]>> = {
+  listResumeCheckpoints: CHECKPOINT_READ_ERRORS,
+  getResumeCheckpoint: CHECKPOINT_READ_ERRORS,
+  deleteResumeCheckpoint: CHECKPOINT_DELETE_ERRORS,
+  clearResumeCheckpoints: CHECKPOINT_DELETE_ERRORS,
+  restoreResumeCheckpoint: Object.fromEntries(
+    Object.entries(itemWrite({ "503": ["public_state_busy"] })).filter(
+      ([status]) => status !== "413",
+    ),
+  ),
   downloadResumePDF: {
     "400": [...COMMON_400, "request_invalid"],
     "401": ["session_required"],
@@ -432,13 +488,13 @@ describe("resume surface", () => {
     }
   });
 
-  it("requires If-Match on every mutation except resume creation (D6)", () => {
+  it("requires If-Match only on mutations with a prior revision", () => {
     for (const [path, method, id, operation] of operations()) {
       if (!MUTATIONS.has(method)) continue;
       const refs = paramRefs(operation);
       const wanted = "#/components/parameters/IfMatch";
-      if (id === "createResume") {
-        expect(refs, "create has no prior revision").not.toContain(wanted);
+      if (id === "createResume" || CHECKPOINT_DELETES.has(id)) {
+        expect(refs, `${id} has no revision precondition`).not.toContain(wanted);
       } else {
         expect(refs, `${id} (${method} ${path})`).toContain(wanted);
       }
@@ -454,7 +510,7 @@ describe("resume surface", () => {
     }
   });
 
-  it("matches the success contract exactly, including three distinct 204s", () => {
+  it("matches the success contract exactly, including bodyless 204 responses", () => {
     for (const [path, method, id, operation] of operations()) {
       const expected = SUCCESS[id];
       const declared = Object.keys(operation.responses).filter((s) =>
@@ -540,7 +596,7 @@ describe("resume surface", () => {
 
   it("declares the resume parameters and singleton header handling", () => {
     const params = doc.components.parameters;
-    for (const name of ["ResumeID", "SectionKey", "EntryID"]) {
+    for (const name of ["ResumeID", "SectionKey", "EntryID", "CheckpointID"]) {
       expect(params[name]?.in, `${name} is a path parameter`).toBe("path");
       expect(params[name].required).toBe(true);
     }
@@ -573,13 +629,15 @@ describe("resume surface", () => {
     }
   });
 
-  it("puts the schema-version header on every JSON resume operation, never on the binary read", () => {
+  it("puts the schema-version header only on negotiated resume operations", () => {
     for (const [path, method, id, operation] of operations()) {
       const refs = paramRefs(operation);
       const wanted = "#/components/parameters/SchemaVersionHeader";
       if (id === "downloadResumePDF" || id === "headResumePDF") {
         expect(refs).not.toContain(wanted);
         expect(refs).not.toContain("#/components/parameters/IfNoneMatch");
+      } else if (CHECKPOINT_READS.has(id) || CHECKPOINT_DELETES.has(id)) {
+        expect(refs, `${id} does not negotiate a version`).not.toContain(wanted);
       } else if (id === "getResumePhoto") {
         expect(
           refs,

@@ -239,7 +239,7 @@ func TestSaveDocumentTx_MirrorsSaveDocument(t *testing.T) {
 	updated.PersonalDetails.FullName = strp("Seam Updated")
 
 	tx, qtx := beginSeamTx(ctx, t, pool)
-	saved, err := s.SaveDocumentTx(ctx, qtx, userID, created.ID, updated, created.Revision)
+	saved, err := s.SaveDocumentTx(ctx, qtx, userID, created.ID, updated, created.Revision, resume.CheckpointWrite{})
 	if err != nil {
 		t.Fatalf("SaveDocumentTx() error: %v", err)
 	}
@@ -264,7 +264,7 @@ func TestSaveDocumentTx_MirrorsSaveDocument(t *testing.T) {
 
 	tx2, qtx2 := beginSeamTx(ctx, t, pool)
 	defer rollbackSeamTx(ctx, t, tx2)
-	_, staleErr := s.SaveDocumentTx(ctx, qtx2, userID, created.ID, doc, created.Revision)
+	_, staleErr := s.SaveDocumentTx(ctx, qtx2, userID, created.ID, doc, created.Revision, resume.CheckpointWrite{})
 	var mismatch *resume.RevisionMismatchError
 	if !errors.As(staleErr, &mismatch) {
 		t.Fatalf("SaveDocumentTx(stale) error = %v, want *RevisionMismatchError", staleErr)
@@ -290,7 +290,7 @@ func TestSaveDocumentTx_ReturnsTheStoredRow(t *testing.T) {
 
 	tx, qtx := beginSeamTx(ctx, t, pool)
 	defer rollbackSeamTx(ctx, t, tx)
-	saved, err := s.SaveDocumentTx(ctx, qtx, userID, created.ID, updated, created.Revision)
+	saved, err := s.SaveDocumentTx(ctx, qtx, userID, created.ID, updated, created.Revision, resume.CheckpointWrite{})
 	if err != nil {
 		t.Fatalf("SaveDocumentTx() error: %v", err)
 	}
@@ -323,7 +323,7 @@ func TestSaveDocumentTx_RollbackLeavesZeroEffect(t *testing.T) {
 	updated.PersonalDetails.FullName = strp("Must Vanish")
 
 	tx, qtx := beginSeamTx(ctx, t, pool)
-	if _, err := s.SaveDocumentTx(ctx, qtx, userID, created.ID, updated, created.Revision); err != nil {
+	if _, err := s.SaveDocumentTx(ctx, qtx, userID, created.ID, updated, created.Revision, resume.CheckpointWrite{}); err != nil {
 		t.Fatalf("SaveDocumentTx() error: %v", err)
 	}
 	if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
@@ -350,8 +350,8 @@ func TestSaveDocumentTx_WrongOwnerVsMissing_ByteIdentical(t *testing.T) {
 
 	tx, qtx := beginSeamTx(ctx, t, pool)
 	defer rollbackSeamTx(ctx, t, tx)
-	_, wrongOwnerErr := s.SaveDocumentTx(ctx, qtx, otherID, created.ID, doc, created.Revision)
-	_, missingErr := s.SaveDocumentTx(ctx, qtx, otherID, uuid.New(), doc, created.Revision)
+	_, wrongOwnerErr := s.SaveDocumentTx(ctx, qtx, otherID, created.ID, doc, created.Revision, resume.CheckpointWrite{})
+	_, missingErr := s.SaveDocumentTx(ctx, qtx, otherID, uuid.New(), doc, created.Revision, resume.CheckpointWrite{})
 	if !errors.Is(wrongOwnerErr, resume.ErrNotFound) || !errors.Is(missingErr, resume.ErrNotFound) {
 		t.Fatalf("errors = %v / %v, want ErrNotFound for both", wrongOwnerErr, missingErr)
 	}
@@ -378,7 +378,7 @@ func TestSaveMetadataAndDocumentTx_WritesAllUnderOneCAS(t *testing.T) {
 	updated.PersonalDetails.FullName = strp("Metadata Winner")
 
 	tx, qtx := beginSeamTx(ctx, t, pool)
-	newRev, err := s.SaveMetadataAndDocumentTx(ctx, qtx, userID, created.ID, "After", strp("vi"), updated, created.Revision)
+	newRev, err := s.SaveMetadataAndDocumentTx(ctx, qtx, userID, created.ID, "After", strp("vi"), updated, created.Revision, resume.CheckpointWrite{})
 	if err != nil {
 		t.Fatalf("SaveMetadataAndDocumentTx() error: %v", err)
 	}
@@ -434,6 +434,7 @@ func TestSaveMetadataAndDocumentTx_RollbackLeavesZeroEffect(t *testing.T) {
 		strp("vi"),
 		updated,
 		created.Revision,
+		resume.CheckpointWrite{},
 	)
 	if err != nil {
 		t.Fatalf("SaveMetadataAndDocumentTx() error: %v", err)
@@ -466,7 +467,7 @@ func TestSaveMetadataAndDocumentTx_ClearsLng(t *testing.T) {
 	}
 
 	tx, qtx := beginSeamTx(ctx, t, pool)
-	if _, saveErr := s.SaveMetadataAndDocumentTx(ctx, qtx, userID, created.ID, "Has lng", nil, doc, created.Revision); saveErr != nil {
+	if _, saveErr := s.SaveMetadataAndDocumentTx(ctx, qtx, userID, created.ID, "Has lng", nil, doc, created.Revision, resume.CheckpointWrite{}); saveErr != nil {
 		t.Fatalf("SaveMetadataAndDocumentTx(nil lng) error: %v", saveErr)
 	}
 	if commitErr := tx.Commit(ctx); commitErr != nil {
@@ -499,7 +500,7 @@ func TestSaveMetadataAndDocumentTx_StaleRevisionChangesNothing(t *testing.T) {
 	before := seamRowSnapshot(ctx, t, pool, created.ID)
 
 	tx, qtx := beginSeamTx(ctx, t, pool)
-	_, staleErr := s.SaveMetadataAndDocumentTx(ctx, qtx, userID, created.ID, "Loser Title", strp("fr"), doc, created.Revision)
+	_, staleErr := s.SaveMetadataAndDocumentTx(ctx, qtx, userID, created.ID, "Loser Title", strp("fr"), doc, created.Revision, resume.CheckpointWrite{})
 	var mismatch *resume.RevisionMismatchError
 	if !errors.As(staleErr, &mismatch) {
 		t.Fatalf("SaveMetadataAndDocumentTx(stale) error = %v, want *RevisionMismatchError", staleErr)
@@ -530,17 +531,17 @@ func TestSaveMetadataAndDocumentTx_BoundsBeforeAnyStatement(t *testing.T) {
 	}
 
 	if _, err := s.SaveMetadataAndDocumentTx(ctx, closedSeamTx(ctx, t, pool), userID, created.ID,
-		strings.Repeat("x", 161), nil, doc, created.Revision); !errors.Is(err, resume.ErrTitleTooLong) {
+		strings.Repeat("x", 161), nil, doc, created.Revision, resume.CheckpointWrite{}); !errors.Is(err, resume.ErrTitleTooLong) {
 		t.Errorf("161-char title error = %v, want ErrTitleTooLong before any statement", err)
 	}
 	if _, err := s.SaveMetadataAndDocumentTx(ctx, closedSeamTx(ctx, t, pool), userID, created.ID,
-		"ok", strp(strings.Repeat("a", 36)), doc, created.Revision); !errors.Is(err, resume.ErrLngTooLong) {
+		"ok", strp(strings.Repeat("a", 36)), doc, created.Revision, resume.CheckpointWrite{}); !errors.Is(err, resume.ErrLngTooLong) {
 		t.Errorf("36-char lng error = %v, want ErrLngTooLong before any statement", err)
 	}
 
 	tx, qtx := beginSeamTx(ctx, t, pool)
 	if _, err := s.SaveMetadataAndDocumentTx(ctx, qtx, userID, created.ID,
-		strings.Repeat("x", 160), strp(strings.Repeat("a", 35)), doc, created.Revision); err != nil {
+		strings.Repeat("x", 160), strp(strings.Repeat("a", 35)), doc, created.Revision, resume.CheckpointWrite{}); err != nil {
 		t.Errorf("160-char title + 35-char lng error = %v, want nil", err)
 	}
 	rollbackSeamTx(ctx, t, tx)
@@ -560,8 +561,8 @@ func TestSaveMetadataAndDocumentTx_WrongOwnerVsMissing_ByteIdentical(t *testing.
 
 	tx, qtx := beginSeamTx(ctx, t, pool)
 	defer rollbackSeamTx(ctx, t, tx)
-	_, wrongOwnerErr := s.SaveMetadataAndDocumentTx(ctx, qtx, otherID, created.ID, "t", nil, doc, created.Revision)
-	_, missingErr := s.SaveMetadataAndDocumentTx(ctx, qtx, otherID, uuid.New(), "t", nil, doc, created.Revision)
+	_, wrongOwnerErr := s.SaveMetadataAndDocumentTx(ctx, qtx, otherID, created.ID, "t", nil, doc, created.Revision, resume.CheckpointWrite{})
+	_, missingErr := s.SaveMetadataAndDocumentTx(ctx, qtx, otherID, uuid.New(), "t", nil, doc, created.Revision, resume.CheckpointWrite{})
 	if !errors.Is(wrongOwnerErr, resume.ErrNotFound) || !errors.Is(missingErr, resume.ErrNotFound) {
 		t.Fatalf("errors = %v / %v, want ErrNotFound for both", wrongOwnerErr, missingErr)
 	}
@@ -713,7 +714,7 @@ func TestExecuteComposition_CreateAndSaveCommit_FailureLeavesNothing(t *testing.
 	updated.PersonalDetails.FullName = strp("Composed Save")
 	saveRes, err := idem.Execute(ctx, userID, "saveResume-op", uuid.New(), sha256.Sum256([]byte("save")),
 		func(qtx *store.Queries) (resume.StoredResponse, error) {
-			if _, saveErr := s.SaveDocumentTx(ctx, qtx, userID, createdID, updated, 1); saveErr != nil {
+			if _, saveErr := s.SaveDocumentTx(ctx, qtx, userID, createdID, updated, 1, resume.CheckpointWrite{}); saveErr != nil {
 				return resume.StoredResponse{}, saveErr
 			}
 			return resume.StoredResponse{Status: 200, Body: []byte(`{"rev":2}`)}, nil
@@ -738,7 +739,7 @@ func TestExecuteComposition_CreateAndSaveCommit_FailureLeavesNothing(t *testing.
 		func(qtx *store.Queries) (resume.StoredResponse, error) {
 			clobbered := validDocForTest(t)
 			clobbered.PersonalDetails.FullName = strp("Must Not Survive")
-			if _, saveErr := s.SaveDocumentTx(ctx, qtx, userID, createdID, clobbered, 2); saveErr != nil {
+			if _, saveErr := s.SaveDocumentTx(ctx, qtx, userID, createdID, clobbered, 2, resume.CheckpointWrite{}); saveErr != nil {
 				return resume.StoredResponse{}, saveErr
 			}
 			return resume.StoredResponse{}, errAfterSave
@@ -883,7 +884,7 @@ func TestEnqueueMediaDeletionTx_PhotoReferenceRemovalCommitsWithJob(t *testing.T
 	withoutPhoto := withPhoto
 	withoutPhoto.PersonalDetails.Photo = nil
 	tx, qtx := beginSeamTx(ctx, t, pool)
-	removed, err := s.SaveDocumentTx(ctx, qtx, userID, created.ID, withoutPhoto, photoRevision)
+	removed, err := s.SaveDocumentTx(ctx, qtx, userID, created.ID, withoutPhoto, photoRevision, resume.CheckpointWrite{})
 	if err != nil {
 		t.Fatalf("SaveDocumentTx(remove photo) error: %v", err)
 	}
@@ -941,7 +942,7 @@ func TestEnqueueMediaDeletionTx_MalformedAndCrossResumeChangeNothing(t *testing.
 	}
 	for _, bad := range badKeys {
 		tx, qtx := beginSeamTx(ctx, t, pool)
-		if _, err := s.SaveDocumentTx(ctx, qtx, userID, resumeA.ID, doc, resumeA.Revision); err != nil {
+		if _, err := s.SaveDocumentTx(ctx, qtx, userID, resumeA.ID, doc, resumeA.Revision, resume.CheckpointWrite{}); err != nil {
 			t.Fatalf("%s: SaveDocumentTx() error: %v", bad.name, err)
 		}
 		err := s.EnqueueMediaDeletionTx(ctx, qtx, resumeA.ID, bad.key)

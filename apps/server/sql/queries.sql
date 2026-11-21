@@ -171,7 +171,10 @@ DELETE FROM resumes WHERE id = $1 AND user_id = $2;
 -- name: UpdateResumeDocumentCAS :one
 UPDATE resumes
 SET personal_details = $4, content = $5, customization = $6,
-    schema_version = $7, revision = revision + 1, updated_at = now()
+    schema_version = $7, revision = revision + 1, updated_at = now(),
+    session_actor = sqlc.narg(session_actor),
+    session_started_at = sqlc.narg(session_started_at),
+    session_last_write_at = sqlc.narg(session_last_write_at)
 WHERE id = $1 AND user_id = $2 AND revision = $3
 RETURNING *;
 
@@ -181,12 +184,6 @@ SET revision = revision + 1
 WHERE id = sqlc.arg(id) AND user_id = sqlc.arg(user_id)
     AND revision = sqlc.arg(expected_revision)
 RETURNING *;
-
--- name: UpdateResumeTitleCAS :one
-UPDATE resumes
-SET title = $4, revision = revision + 1, updated_at = now()
-WHERE id = $1 AND user_id = $2 AND revision = $3
-RETURNING revision;
 
 -- name: BackfillResumeDocumentCAS :execrows
 -- sqlc names two positional int32 parameters SchemaVersion and SchemaVersion_2, so both are named (sqlc parameter naming).
@@ -217,6 +214,9 @@ SET title = sqlc.arg(title), lng = sqlc.narg(lng),
     personal_details = sqlc.arg(personal_details),
     content = sqlc.arg(content), customization = sqlc.arg(customization),
     schema_version = sqlc.arg(schema_version),
+    session_actor = sqlc.narg(session_actor),
+    session_started_at = sqlc.narg(session_started_at),
+    session_last_write_at = sqlc.narg(session_last_write_at),
     revision = revision + 1, updated_at = now()
 WHERE id = $1 AND user_id = $2 AND revision = $3
 RETURNING revision;

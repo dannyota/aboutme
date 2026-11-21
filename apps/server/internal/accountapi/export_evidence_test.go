@@ -43,7 +43,7 @@ func TestExport_ProjectRecordsCarryTheirEvidence(t *testing.T) {
 	if err := json.Unmarshal(response.Body.Bytes(), &bundle); err != nil {
 		t.Fatal(err)
 	}
-	if bundle.Data.ExportVersion != 2 || len(bundle.Data.Projects) != 2 {
+	if bundle.Data.ExportVersion != 3 || len(bundle.Data.Projects) != 2 {
 		t.Fatalf("export = %s", response.Body.String())
 	}
 	for _, p := range bundle.Data.Projects {

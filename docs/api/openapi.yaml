@@ -1346,8 +1346,9 @@ paths:
       summary: Download the caller’s portable account data
       security:
         - sessionCookie: []
-      description: "Downloads one complete version-2 JSON bundle of the account
-        profile, up to three current-version resume documents and the private
+      description: "Downloads one complete version-3 JSON bundle of the account
+        profile, up to three current-version resume documents with checkpoint
+        history from the last 30 days at accepted versions, and the private
         project library, including hidden/private content and incomplete
         drafts. Strings are not HTML-escaped. Each normalized photo is
         separate standard-base64 data with its crop;
@@ -1356,12 +1357,12 @@ paths:
         data appear. Reads account and documents in one database snapshot and
         buffers the complete attachment before success. A referenced photo that
         is missing, invalid or over 2 MiB fails the export. Complete response
-        cap: 16,777,216 bytes. No body, query, schema, conditional or
+        cap: 25,165,824 bytes. No body, query, schema, conditional or
         idempotency input is accepted. Separate 5/minute account-and-client-IP
         limit."
       responses:
         "200":
-          description: Complete portable JSON attachment, at most 16 MiB.
+          description: Complete portable JSON attachment, at most 25,165,824 bytes.
           headers:
             Cache-Control:
               schema:
@@ -3277,6 +3278,193 @@ paths:
           $ref: "#/components/responses/ResumeRateLimited"
         "500":
           $ref: "#/components/responses/ResumeInternalError"
+  /resumes/{id}/checkpoints:
+    get:
+      operationId: listResumeCheckpoints
+      tags: [resumes]
+      security:
+        - sessionCookie: []
+      summary: List resume checkpoints
+      description: >-
+        Lists up to 50 checkpoints of this resume, newest first, from the last
+        30 days and at an accepted document version.
+      parameters:
+        - $ref: "#/components/parameters/ResumeID"
+      responses:
+        "200":
+          description: Newest visible checkpoints, without paging.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        maxItems: 50
+                        items:
+                          $ref: "#/components/schemas/ResumeCheckpointSummary"
+                          unevaluatedProperties: false
+        "400":
+          $ref: "#/components/responses/CheckpointReadBadRequest"
+        "401":
+          $ref: "#/components/responses/ResumeUnauthorized"
+        "404":
+          $ref: "#/components/responses/ResumeNotFound"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowedCheckpoint"
+        "429":
+          $ref: "#/components/responses/ResumeRateLimited"
+        "500":
+          $ref: "#/components/responses/ResumeInternalError"
+    delete:
+      operationId: clearResumeCheckpoints
+      tags: [resumes]
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      summary: Clear resume history
+      description: >-
+        Deletes all checkpoints of this owned resume without changing its revision.
+        There is no request body; the idempotency fingerprint uses a zero-length payload.
+      parameters:
+        - $ref: "#/components/parameters/ResumeID"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "204":
+          description: Deleted. Zero bytes and no change to the resume revision.
+        "400":
+          $ref: "#/components/responses/CheckpointDeleteBadRequest"
+        "401":
+          $ref: "#/components/responses/ResumeUnauthorized"
+        "403":
+          $ref: "#/components/responses/ResumeCsrfRejected"
+        "404":
+          $ref: "#/components/responses/ResumeNotFound"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowedCheckpoint"
+        "409":
+          $ref: "#/components/responses/ResumeIdempotencyConflict"
+        "429":
+          $ref: "#/components/responses/ResumeRateLimited"
+        "500":
+          $ref: "#/components/responses/ResumeInternalError"
+  /resumes/{id}/checkpoints/{checkpointId}:
+    get:
+      operationId: getResumeCheckpoint
+      tags: [resumes]
+      security:
+        - sessionCookie: []
+      summary: Read a resume checkpoint
+      description: >-
+        Reads a checkpoint from the last 30 days at an accepted version and projects
+        it to the current version. The checkpoint never includes the photo.
+      parameters:
+        - $ref: "#/components/parameters/ResumeID"
+        - $ref: "#/components/parameters/CheckpointID"
+      responses:
+        "200":
+          description: A visible checkpoint projected to the current schema.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/ResumeCheckpoint"
+        "400":
+          $ref: "#/components/responses/CheckpointReadBadRequest"
+        "401":
+          $ref: "#/components/responses/ResumeUnauthorized"
+        "404":
+          $ref: "#/components/responses/ResumeNotFound"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowedCheckpoint"
+        "429":
+          $ref: "#/components/responses/ResumeRateLimited"
+        "500":
+          $ref: "#/components/responses/ResumeInternalError"
+    delete:
+      operationId: deleteResumeCheckpoint
+      tags: [resumes]
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      summary: Delete a resume checkpoint
+      description: >-
+        Deletes the visible checkpoint without changing the resume revision. There
+        is no request body; the idempotency fingerprint uses a zero-length payload.
+      parameters:
+        - $ref: "#/components/parameters/ResumeID"
+        - $ref: "#/components/parameters/CheckpointID"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "204":
+          description: Deleted. Zero bytes and no change to the resume revision.
+        "400":
+          $ref: "#/components/responses/CheckpointDeleteBadRequest"
+        "401":
+          $ref: "#/components/responses/ResumeUnauthorized"
+        "403":
+          $ref: "#/components/responses/ResumeCsrfRejected"
+        "404":
+          $ref: "#/components/responses/ResumeNotFound"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowedCheckpoint"
+        "409":
+          $ref: "#/components/responses/ResumeIdempotencyConflict"
+        "429":
+          $ref: "#/components/responses/ResumeRateLimited"
+        "500":
+          $ref: "#/components/responses/ResumeInternalError"
+  /resumes/{id}/checkpoints/{checkpointId}/restore:
+    post:
+      operationId: restoreResumeCheckpoint
+      tags: [resumes]
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      summary: Restore a resume checkpoint
+      description: >-
+        Restores the visible checkpoint and first checkpoints the state it replaces.
+        Keeps the current photo and publishing settings. Does not restore missing
+        library projects. There is no request body.
+      parameters:
+        - $ref: "#/components/parameters/ResumeID"
+        - $ref: "#/components/parameters/CheckpointID"
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/SchemaVersionHeader"
+      responses:
+        "200":
+          $ref: "#/components/responses/ResumeWritten"
+        "400":
+          $ref: "#/components/responses/ResumeWriteBadRequest"
+        "401":
+          $ref: "#/components/responses/ResumeUnauthorized"
+        "403":
+          $ref: "#/components/responses/ResumeCsrfRejected"
+        "404":
+          $ref: "#/components/responses/ResumeNotFound"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowedPostOnly"
+        "409":
+          $ref: "#/components/responses/ResumeIdempotencyConflict"
+        "412":
+          $ref: "#/components/responses/ResumeRevisionMismatch"
+        "422":
+          $ref: "#/components/responses/ResumeDocumentInvalid"
+        "428":
+          $ref: "#/components/responses/ResumePreconditionRequired"
+        "429":
+          $ref: "#/components/responses/ResumeRateLimited"
+        "500":
+          $ref: "#/components/responses/ResumeInternalError"
+        "503":
+          $ref: "#/components/responses/PublicStateBusy"
   /resumes/{id}/publish:
     post:
       operationId: publishResume
@@ -6344,6 +6532,38 @@ components:
               message: requested resume schema version is not accepted
               details:
                 acceptedVersions: [1, 2, 3, 4, 5, 6]
+    CheckpointReadBadRequest:
+      description: >-
+        `invalid_client_ip`, or `request_invalid` for a malformed path parameter.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    CheckpointDeleteBadRequest:
+      description: >-
+        `invalid_client_ip`, `request_invalid`, `idempotency_key_required`,
+        `idempotency_key_invalid`, `precondition_not_supported`, or
+        `unsupported_schema_version`.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    MethodNotAllowedCheckpoint:
+      description: "`method_not_allowed` on a history collection or item."
+      headers:
+        Allow:
+          description: Methods this path serves.
+          schema:
+            type: string
+          example: DELETE, GET
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: method_not_allowed
+              message: method not allowed
     ResumeReadBadRequest:
       description: >-
         `invalid_client_ip`, `request_invalid` for a malformed path
@@ -10085,6 +10305,75 @@ components:
                   $ref: "#/components/schemas/Revision"
                 project:
                   $ref: "#/components/schemas/Project"
+    ResumeCheckpointActor:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [kind]
+          properties:
+            kind:
+              const: owner
+        - type: object
+          additionalProperties: false
+          required: [kind, name]
+          properties:
+            kind:
+              const: assistant
+            name:
+              type: string
+    ResumeCheckpointSummary:
+      type: object
+      required: [id, startedAt, cause, actor, title, byteSize]
+      properties:
+        id:
+          type: string
+          format: uuid
+        startedAt:
+          type: string
+          format: date-time
+        cause:
+          type: string
+          enum: [edit, assistant, restore, accept]
+        actor:
+          $ref: "#/components/schemas/ResumeCheckpointActor"
+        title:
+          type: string
+          maxLength: 160
+        byteSize:
+          type: integer
+          minimum: 1
+    ResumeCheckpoint:
+      allOf:
+        - $ref: "#/components/schemas/ResumeCheckpointSummary"
+        - type: object
+          required: [lng, schemaVersion, document]
+          properties:
+            lng:
+              type: [string, "null"]
+              maxLength: 35
+            schemaVersion:
+              type: integer
+              minimum: 1
+              description: The current resume document schema version.
+            document:
+              $ref: "#/components/schemas/ResumeCheckpointDocument"
+      unevaluatedProperties: false
+    ResumeCheckpointDocument:
+      type: object
+      additionalProperties: false
+      required: [personalDetails, content, customization]
+      description: The current resume document fields from packages/schema/resume.schema.json, without a photo.
+      properties:
+        personalDetails:
+          type: object
+          properties:
+            photo: false
+        content:
+          type: object
+          additionalProperties: true
+        customization:
+          type: object
+          additionalProperties: true
     AccountExport:
       type: object
       additionalProperties: false
@@ -10103,7 +10392,7 @@ components:
           properties:
             exportVersion:
               type: integer
-              const: 2
+              const: 3
             exportedAt:
               type: string
               format: date-time
@@ -10181,6 +10470,7 @@ components:
           required:
             - document
             - photo
+            - checkpoints
           properties:
             showcase:
               anyOf:
@@ -10190,6 +10480,11 @@ components:
               $ref: "#/components/schemas/AccountExportDocument"
             photo:
               $ref: "#/components/schemas/AccountExportPhoto"
+            checkpoints:
+              type: array
+              maxItems: 50
+              items:
+                $ref: "#/components/schemas/ResumeCheckpoint"
       unevaluatedProperties: false
     AccountExportDocument:
       description:
@@ -11739,6 +12034,15 @@ components:
       schema:
         type: string
         format: uuid
+    CheckpointID:
+      name: checkpointId
+      in: path
+      required: true
+      description: The checkpoint id. Missing, expired, unsupported and foreign checkpoints all answer 404.
+      schema:
+        type: string
+        format: uuid
+      example: 018f5b6a-9a3e-7c21-8b1e-000000000011
     ResumeID:
       name: id
       in: path

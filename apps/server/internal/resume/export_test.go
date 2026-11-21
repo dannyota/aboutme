@@ -43,8 +43,23 @@ func (s *Store) CreateTxForTest(ctx context.Context, qtx *store.Queries, userID 
 }
 
 func (s *Store) SaveDocumentTxForTest(ctx context.Context, qtx *store.Queries, userID, id uuid.UUID, doc schema.Resume, expectedRevision int64) (int64, error) {
-	saved, err := s.SaveDocumentTx(ctx, qtx, userID, id, doc, expectedRevision)
+	saved, err := s.SaveDocumentTx(ctx, qtx, userID, id, doc, expectedRevision, CheckpointWrite{})
 	return saved.Revision, err
+}
+
+func (s *Store) SaveMetadataTitleForTest(ctx context.Context, userID, id uuid.UUID, title string, expected int64) (int64, error) {
+	var revision int64
+	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		q := s.q.WithTx(tx)
+		current, getErr := s.GetTx(ctx, q, userID, id)
+		if getErr != nil {
+			return getErr
+		}
+		var saveErr error
+		revision, saveErr = s.SaveMetadataAndDocumentTx(ctx, q, userID, id, title, current.Lng, current.Doc, expected, CheckpointWrite{})
+		return saveErr
+	})
+	return revision, err
 }
 
 func NewIdempotencyStoreForTest(pool *store.Pool, now func() time.Time) *IdempotencyStore {

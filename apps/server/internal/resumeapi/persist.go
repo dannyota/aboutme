@@ -54,6 +54,8 @@ const (
 	operationAggregate
 	operationPhotoCandidate
 	operationPublish
+	operationCheckpointRestore
+	operationCheckpointDelete
 )
 
 func (kind operationKind) build(service *Service) mutationOperation {
@@ -70,6 +72,10 @@ func (kind operationKind) build(service *Service) mutationOperation {
 		return photoCandidateOperation{aggregateOperation{service: service}}
 	case operationPublish:
 		return publishOperation{service: service}
+	case operationCheckpointRestore:
+		return checkpointRestoreMutation{service: service}
+	case operationCheckpointDelete:
+		return checkpointDeleteMutation{service: service}
 	case operationNone:
 		return nil
 	default:
@@ -152,7 +158,7 @@ func (op aggregateOperation) Run(ctx context.Context, qtx *store.Queries, mutati
 	if err = requireLinkAuthority(mutation, &current.Doc, doc); err != nil {
 		return mutationRunResult{}, err
 	}
-	updated, err := op.service.resumes.SaveDocumentTx(ctx, qtx, mutation.UserID, input.ResumeID, doc, *mutation.ExpectedRevision)
+	updated, err := op.service.resumes.SaveDocumentTx(ctx, qtx, mutation.UserID, input.ResumeID, doc, *mutation.ExpectedRevision, mutation.checkpointWrite())
 	if err != nil {
 		return mutationRunResult{}, err
 	}

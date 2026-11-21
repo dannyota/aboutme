@@ -360,6 +360,10 @@ func TestDeleteAccountCommitsThreeResumePrivacyLifecycle(t *testing.T) {
 	assertRowsAbsent(ctx, t, pool, "auth_email_jobs", deletedEmailJobs)
 	assertRowsPresent(ctx, t, pool, "auth_email_jobs", foreignEmailJobs)
 	for _, item := range fixtures {
+		var checkpoints int
+		if countErr := pool.QueryRow(ctx, "SELECT count(*) FROM resume_checkpoints WHERE resume_id = $1", item.id).Scan(&checkpoints); countErr != nil || checkpoints != 0 {
+			t.Errorf("deleted resume retains %d checkpoints: %v", checkpoints, countErr)
+		}
 		if _, err := q.GetSlugTombstoneForUpdate(ctx, item.slug); err != nil {
 			t.Errorf("tombstone %q retained: %v", item.slug, err)
 		}
@@ -488,6 +492,12 @@ func seedAccountCascadeRows(
 	if _, err := pool.Exec(ctx, `INSERT INTO idempotency_usage (user_id, retained_records, stored_bytes) VALUES ($1, 1, 13)`, user.ID); err != nil {
 		t.Fatalf("seed idempotency usage: %v", err)
 	}
+	if _, err := pool.Exec(ctx, `INSERT INTO resume_checkpoints
+        (resume_id, started_at, cause, title, lng, schema_version, personal_details, content, customization, byte_size)
+        SELECT id, $2, 'edit', title, lng, schema_version, personal_details - 'photo', content, customization, 100
+        FROM resumes WHERE user_id = $1`, user.ID, now); err != nil {
+		t.Fatalf("seed resume checkpoints: %v", err)
+	}
 	return emailJobIDs
 }
 
@@ -521,6 +531,12 @@ func assertAccountCascadeCounts(ctx context.Context, t *testing.T, pool *store.P
 			t.Errorf("%s rows for user = %d, error=%v, want %d", item.table, count, err, want)
 		}
 	}
+	var checkpoints int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM resume_checkpoints c JOIN resumes r ON r.id = c.resume_id
+        WHERE r.user_id = $1`, userID).Scan(&checkpoints); err != nil || checkpoints != want {
+		t.Errorf("resume checkpoints for user = %d, error=%v, want %d", checkpoints, err, want)
+	}
+
 }
 
 func assertRowsAbsent(ctx context.Context, t *testing.T, pool *store.Pool, table string, ids []uuid.UUID) {

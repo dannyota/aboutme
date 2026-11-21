@@ -248,6 +248,7 @@ func concreteRoutePath(pattern string) string {
 		"{id}", "01890f47-7e8a-7b2a-8d70-9a1f2c3d4e5f",
 		"{sectionKey}", "work",
 		"{entryId}", "01890f47-7e8a-7b2a-8d70-9a1f2c3d4e60",
+		"{checkpointId}", "01890f47-7e8a-7b2a-8d70-9a1f2c3d4e61",
 	)
 	return replacer.Replace(pattern)
 }

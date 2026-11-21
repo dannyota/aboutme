@@ -35,7 +35,7 @@ func parseMutationHeaders(r *http.Request, requireMatch bool, accepted []int32) 
 	var revision *int64
 	if !requireMatch {
 		if len(matchValues) != 0 {
-			return mutationHeaders{}, &clientError{Status: http.StatusBadRequest, Code: "precondition_not_supported", Message: "If-Match is not supported when creating a resume"}
+			return mutationHeaders{}, &clientError{Status: http.StatusBadRequest, Code: "precondition_not_supported", Message: "If-Match is not supported for this operation"}
 		}
 	} else {
 		if len(matchValues) == 0 {

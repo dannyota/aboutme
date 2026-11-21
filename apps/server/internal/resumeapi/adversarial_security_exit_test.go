@@ -346,6 +346,7 @@ func TestSessionRevokedBetweenRequests(t *testing.T) {
 func TestGetSafeMethodsBypassCSRFButNotAuth(t *testing.T) {
 	h := newResumeAPITestHarness(t)
 	created := h.createResume(t)
+	checkpoint := seedCheckpointForTest(t, h, created.ID)
 	operations := securityExitOpenAPIResumeOperations(t)
 	before := snapshotSecurityExitState(t, h)
 	getPaths := make(map[string]struct{})
@@ -354,7 +355,7 @@ func TestGetSafeMethodsBypassCSRFButNotAuth(t *testing.T) {
 		if operation.Method != http.MethodGet {
 			continue
 		}
-		path := strings.ReplaceAll(operation.Path, "{id}", created.ID.String())
+		path := strings.NewReplacer("{id}", created.ID.String(), "{checkpointId}", checkpoint.String()).Replace(operation.Path)
 		getPaths[path] = struct{}{}
 		t.Run(operation.OperationID, func(t *testing.T) {
 			withoutAuth := securityExitRequest(t, h, http.MethodGet, path, nil, "", nil, false)
@@ -395,7 +396,7 @@ func TestGetSafeMethodsBypassCSRFButNotAuth(t *testing.T) {
 
 	seenPaths := make(map[string]struct{})
 	for _, operation := range operations {
-		path := strings.ReplaceAll(operation.Path, "{id}", created.ID.String())
+		path := strings.NewReplacer("{id}", created.ID.String(), "{checkpointId}", checkpoint.String()).Replace(operation.Path)
 		if _, seen := seenPaths[path]; seen {
 			continue
 		}
@@ -840,7 +841,7 @@ func securityExitMutationRequest(t *testing.T, h *resumeAPITestHarness,
 		request.Header.Set(auth.CSRFHeaderName, h.csrfToken)
 	}
 	request.Header.Set("Idempotency-Key", uuid.NewString())
-	if operation.Method != http.MethodPost || operation.Path != apiResumePath {
+	if (operation.Method != http.MethodPost || operation.Path != apiResumePath) && !checkpointDeletionOperation(operation.OperationID) {
 		request.Header.Set("If-Match", fmt.Sprintf(`"r%d"`, revision))
 	}
 	if contentType != "" {
