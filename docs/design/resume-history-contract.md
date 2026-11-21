@@ -1,6 +1,7 @@
 # Resume history contract
 
-Status: Proposed (2026-11-21). The contract for release v0.10.0 of the
+Status: Accepted (2026-11-21) after an independent review; the owner approved
+its legal copy. The contract for release v0.10.0 of the
 [change review](change-review.md) design, sections "Checkpoints" and "Release
 order" item 1. Product rules stay in that design and the
 [History panel spec](ui/resume-history.md); this page fixes storage, write-path
