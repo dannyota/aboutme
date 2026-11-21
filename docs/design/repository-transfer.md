@@ -98,8 +98,11 @@ signers and require verifiable provenance.
      from both sources. OCI retrieval does not check who currently holds the
      repository name; the scripts' repository and owner ID pins enforce that
      identity. The page's command binds the repository by name only, as it does
-     for `dntmakers` images. Verification fails if the CLI lacks the flag or the
-     legacy image lacks a verifiable bundle.
+     for `dntmakers` images. After a rollback to a pre-transfer release, that
+     release's own web serves the page with its API-only command, which returns
+     404; that is accepted on the same grounds as the provenance links.
+     Verification fails if the CLI lacks the flag or the legacy image lacks a
+     verifiable bundle.
    - `release-images.yml`'s eligibility step fails when
      `github.repository_owner` differs from that owner, so a tag pushed in the
      wrong window publishes nothing.
