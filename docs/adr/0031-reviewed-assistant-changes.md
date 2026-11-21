@@ -1,8 +1,8 @@
 # 0031: Reviewed assistant changes and resume history
 
 Status: Accepted (2026-11-21) by the owner after an independent review. The
-[change review](../design/change-review.md) design applies it. Nothing is
-implemented yet.
+[change review](../design/change-review.md) design applies it. Decisions 1 and 2
+shipped in v0.10.0; the rest are not implemented yet.
 
 ## Context
 
