@@ -2,8 +2,9 @@
 
 Status: Proposed (2026-11-21). The contract for release v0.10.0 of the
 [change review](change-review.md) design, sections "Checkpoints" and "Release
-order" item 1. Product rules stay in that design; this page fixes storage,
-write-path hooks, routes, export, retention, limits and copy.
+order" item 1. Product rules stay in that design and the
+[History panel spec](ui/resume-history.md); this page fixes storage, write-path
+hooks, routes, export, retention and copy.
 
 ## Storage
 
@@ -16,64 +17,77 @@ in Up and Down, explicit grants to `aboutme_app`
 
 | Column             | Type          | Rule                                                                      |
 | ------------------ | ------------- | ------------------------------------------------------------------------- |
-| `id`               | `uuid`        | Primary key, random                                                       |
+| `id`               | `uuid`        | Primary key, `DEFAULT uuidv7()`                                           |
 | `resume_id`        | `uuid`        | `REFERENCES resumes (id) ON DELETE CASCADE`                               |
-| `started_at`       | `timestamptz` | Session start; the order key                                              |
-| `cause`            | `text`        | `edit`, `assistant` or `restore`; v0.10.1 adds `accept`                   |
-| `actor_grant_id`   | `uuid` null   | `REFERENCES oauth_grants (id) ON DELETE SET NULL`; null for the owner     |
-| `actor_name`       | `text` null   | The client's display name copied at insert; null for the owner            |
-| `title`, `lng`     | `text`        | As on `resumes`                                                           |
+| `started_at`       | `timestamptz` | Session start; the order and retention key                                |
+| `cause`            | `text`        | `CHECK` in `edit`, `assistant`, `restore`, `accept`; v0.10.0 writes three |
+| `actor_grant_id`   | `uuid` null   | `REFERENCES oauth_grants (id) ON DELETE SET NULL`                         |
+| `actor_name`       | `text` null   | Client display name copied at insert; may be empty                        |
+| `title`, `lng`     | `text`        | The same `CHECK` limits as `resumes`                                      |
 | `schema_version`   | `integer`     | Version of the stored document                                            |
 | `personal_details` | `jsonb`       | Without `photo`                                                           |
 | `content`          | `jsonb`       |                                                                           |
 | `customization`    | `jsonb`       |                                                                           |
-| `byte_size`        | `integer`     | UTF-8 bytes of the checkpoint's export JSON, computed in Go before insert |
+| `byte_size`        | `integer`     | `CHECK (byte_size > 0)`; see below                                        |
 
-Index `(resume_id, started_at DESC)`, and an index leading with `actor_grant_id`
-for the foreign key (`foreign_key_indexes_test.go`).
+- `CHECK ((cause = 'assistant') = (actor_name IS NOT NULL))`: an assistant row
+  keeps its name after its grant is deleted; owner rows hold neither.
+- Indexes: `(resume_id, started_at DESC)` for reads and pruning, `(started_at)`
+  for the sweep, and one leading with `actor_grant_id` for the foreign key
+  (`foreign_key_indexes_test.go`).
+- `byte_size` is the UTF-8 length of the JSON of `title`, `lng`, `schemaVersion`
+  and `document` as stored, encoded by `encoding/json` with
+  `SetEscapeHTML(false)`. It excludes ids, times, actor fields and itself.
 
-`resumes` gains three nullable columns: `session_actor` (`owner` or
-`grant:<uuid>`, checked by pattern), `session_started_at` and
-`session_last_write_at`. They change only in writes that already update the row,
-so they add no notification.
+`resumes` gains `session_actor` (`owner` or `grant:<uuid>`, checked by pattern),
+`session_started_at` and `session_last_write_at`, all three null or all three
+set.
 
 ## Session rule
 
-`resume.CheckpointTx(ctx, q, resumeID, actor, before, now)` runs inside the
-write transaction, after the resume row is locked and before its update. `actor`
-is the owner, or a grant with its id and client name. `before` is the stored
-state as the caller already holds it, converted to the current schema version.
+`resume.CheckpointTx(ctx, q, input)` runs inside the write transaction, under
+the owner row lock (`LockUserForResumeWrite`), before the resume update. `input`
+holds the resume id, the actor (the owner, or a grant id), the cause, `force`,
+the stored state before the write (`before`, as the caller holds it, converted
+to the current schema version), the state the write produces, the current
+session columns and `now`. It returns the session values to write.
 
-1. Compare `before` with the state the write produces on title, `lng`, personal
-   details without `photo`, content and customization, as canonical JSON. Equal:
-   do nothing, and leave the session columns unchanged.
-2. Start a new session when `session_actor` is null or differs from `actor`,
-   `session_last_write_at` is more than 10 minutes before `now`, or
-   `session_started_at` is more than an hour before `now`. On a new session,
-   insert a checkpoint of `before` and set `session_started_at`.
-3. Set `session_actor` and `session_last_write_at`.
+1. Compare `before` with the result on title, `lng`, personal details without
+   `photo`, content and customization, as canonical JSON. Equal and not `force`:
+   return the session columns unchanged and insert nothing.
+2. Start a new session when `force` is set, `session_actor` is null or differs
+   from the actor, `session_last_write_at` is more than 10 minutes before `now`,
+   or `session_started_at` is more than an hour before `now`. On a new session,
+   insert a checkpoint of `before` and set `session_started_at`. For a grant,
+   look up the client's display name through the grant at insert.
+3. Return `session_actor` and `session_last_write_at = now`.
 4. After an insert, delete the resume's oldest checkpoints while there are more
    than 50 or their `byte_size` sum passes 2 MiB.
 
+`UpdateResumeDocumentCAS` and `UpdateResumeMetadataAndDocumentCAS` set the three
+session columns from the returned values, so the rule adds no `UPDATE` and no
+notification of its own.
+
 Callers:
 
-- `SaveDocumentTx` and `SaveMetadataAndDocumentTx` take the actor and `before`,
-  and call the rule. That covers every REST and MCP resume write, photo writes
-  included (step 1 ignores a photo-only change), and `removeProjectTx`.
-- `ProjectRemoval` carries the acting owner or grant, so a library delete's
+- `SaveDocumentTx` and `SaveMetadataAndDocumentTx` take a checkpoint argument
+  (actor, cause, `force`) and call the rule once. That covers every REST and MCP
+  resume write, photo writes included (step 1 skips a photo-only change), and
+  `removeProjectTx`.
+- `ProjectRemoval` carries the acting owner or grant id, so a library delete's
   rewrite counts as that actor.
 - `CreateTx` starts no session. `BackfillOne` converts schema versions without a
   restorable change and does not call the rule.
-- Restore calls the rule with a forced new session and cause `restore`.
-
-The agent authority query (`GetOAuthTokenAuthorityByDigest`) also returns
-`oauth_clients.client_name`, so the actor's name is known in the transaction.
+- `Store.SaveTitle`, `saveTitleTx` and `UpdateResumeTitleCAS`, used only by
+  tests, are deleted.
 
 ## Routes
 
-Owner session only: `sessionCookie` and `csrfToken`, tag `resumes`, the resume
-write limiter, and no MCP tool. An agent principal reaching these handlers is
-refused like any other session-only route.
+All five are session routes with `sessionCookie` and `csrfToken`, tag `resumes`,
+path parameters `ResumeID` and `CheckpointID`, the read limiter on `GET` and the
+resume write limiter otherwise. They are not agent operations, and each handler
+also refuses an agent principal with the shared forbidden response; a test calls
+each with an agent principal.
 
 | Method and path                                         | operationId               | Headers                       | Success |
 | ------------------------------------------------------- | ------------------------- | ----------------------------- | ------- |
@@ -83,100 +97,116 @@ refused like any other session-only route.
 | `DELETE /resumes/{id}/checkpoints/{checkpointId}`       | `deleteResumeCheckpoint`  | `Idempotency-Key`             | 204     |
 | `DELETE /resumes/{id}/checkpoints`                      | `clearResumeCheckpoints`  | `Idempotency-Key`             | 204     |
 
+- Every checkpoint query joins `resumes` on both `id` and `user_id`. A
+  checkpoint of another resume or account, an expired one, or one at a schema
+  version the release does not accept answers `ResumeNotFound`.
 - The list is an `Envelope` whose `data` holds up to 50 items, newest first,
   with no paging: `id`, `startedAt`, `cause`, `actor` (`{kind: "owner"}` or
-  `{kind: "assistant", name}`), `title` and `byteSize`.
+  `{kind: "assistant", name}`), `title` and `byteSize`. It shows only
+  checkpoints from the last 30 days at an accepted schema version.
 - The read returns the same item plus `lng`, `schemaVersion` and `document`
   (`personalDetails` without `photo`, `content`, `customization`), converted to
-  the current schema version. The client previews it with the resume's current
-  photo, which a restore keeps.
-- Restore answers like the other resume mutations, with the saved resume and its
-  new revision. Errors use the shared responses: `ResumeNotFound` (also for an
-  unknown or foreign checkpoint), `ResumeRevisionMismatch`,
-  `ResumePreconditionRequired`, `ResumeIdempotencyConflict`,
-  `ResumeDocumentInvalid` and `ResumeRateLimited`.
-- Delete and clear touch no resume column and advance no revision.
-- `TestRouteInventoryEqualsOpenAPI` and the mutation header contract test cover
-  the five routes, and `apps/web/app/api/generated/` is regenerated.
+  the current schema version. The client previews it with the current photo.
+- `getResumeCheckpoint` follows `getResume` for parameters and responses.
+  `restoreResumeCheckpoint` follows `updateResumePersonalDetails`, including
+  `SchemaVersionHeader`, `400`, `401`, `403`, `405`, `412`, `428`, `409`, `422`,
+  `429`, `500` and `PublicStateBusy`. Delete and clear follow restore without
+  `If-Match`, `412` and `428`.
+- Delete and clear touch no resume column, advance no revision and take no
+  `If-Match`. [API](api.md) records them as exceptions to the `If-Match` rule,
+  and the mutation header contract test lists them.
+- `TestRouteInventoryEqualsOpenAPI` covers the five routes, and
+  `apps/web/app/api/generated/` is regenerated.
 
-### Restore transaction
+### Restore
 
-It follows the [data](data.md) lock order, then:
+Restore is a resumeapi `mutationSpec` with `nonDrainingTransition`, so it takes
+the public-state coordinator like every other resume write. Its operation:
 
-1. reads the checkpoint scoped to the resume and the owner's account;
-2. converts it to the current schema version and validates it;
+1. reads the checkpoint through the scoped query above;
+2. converts it to the current schema version;
 3. keeps the current photo, slug, publish, download, search, sign in to view and
    showcase settings, public title and favicon emoji;
 4. drops `projectId` from project entries whose library project is missing, as
    `removeProjectTx` does;
-5. checkpoints the current state (forced session, cause `restore`) and saves
-   through `SaveMetadataAndDocumentTx` with the `If-Match` revision, so the
-   revision advances and the usual notification fires;
-6. commits with the idempotency record.
+5. passes the document through `prepareDocumentForPersistence`, which sanitizes
+   and validates it;
+6. saves through `SaveMetadataAndDocumentTx` with cause `restore` and `force`,
+   at the `If-Match` revision, so the state before is checkpointed once, the
+   revision advances, and the usual notification fires;
+7. commits with the idempotency record.
 
 ## Retention
 
 The daily privacy retention sweep (`privacy_retention.sql`, `Worker.Retain`)
 gains a `resume_checkpoints` category: delete checkpoints with `started_at` more
-than 30 days old, or with a `schema_version` below the oldest accepted version
-in `packages/schema/released-versions.json`, 1,000 per page and 10,000 per run,
-with its backlog query and a database test.
+than 29 days old, so a daily run removes each before it is 30 days old, or with
+a `schema_version` below the oldest version in
+`packages/schema/released-versions.json`; 1,000 per page and 10,000 per run,
+with its backlog query and a database test. Reads and export filter at 30 days
+and at accepted versions, so a backlog never shows an older checkpoint.
 
 ## Export
 
 `exportVersion` becomes 3, in Go, the OpenAPI `AccountExport` schema
 (`const: 3`), `docs/api/test/privacy.test.ts` and the Go tests. Each
 `AccountExportResume` gains `checkpoints`: the read shape above, newest first,
-read in the same snapshot. The cap becomes 25,165,824 bytes (24 MiB) in
-`exportMaxBytes`, the OpenAPI description and [budgets](budgets.md), with its
-test at the new cap. [Operations](operations.md) and the
+read in the same snapshot, filtered as reads are. The cap becomes 25,165,824
+bytes in `exportMaxBytes`, the OpenAPI description and [budgets](budgets.md),
+with its test at the new cap. [Operations](operations.md) and the
 [projects contract](projects-contract.md) describe the new version.
 
-## Limits
-
-[Budgets](budgets.md) gains these rows, enforced by the session rule and the
-sweep:
-
-| Budget                 | Limit                                |
-| ---------------------- | ------------------------------------ |
-| Checkpoints per resume | 50, and 2 MiB of `byte_size`         |
-| Checkpoint age         | 30 days; daily sweep, 1,000/page     |
-| Checkpoint session     | Ends after 10 minutes idle or 1 hour |
-| Account JSON export    | ≤ 25,165,824 bytes                   |
+[Budgets](budgets.md) gains rows for checkpoints per resume, checkpoint age and
+the checkpoint session with the values in the [design](change-review.md#limits),
+and its account export row becomes "≤ 25,165,824 bytes; 5/min per account and
+IP".
 
 ## Copy
 
 `apps/web/app/i18n/legal-en.ts` and `legal-vi.ts`, with `privacyUpdated` and
-`termsUpdated` set to the release date. In "Your controls", after the sentence
-about keeping resumes until deletion:
+`termsUpdated` set to the release date. In "Your controls", these sentences
+replace "We keep your account, resumes, and photos until you delete them or your
+account. The export includes your profile, resume content, and resume photos."
+and their Vietnamese counterparts:
 
-- EN: "Each resume also keeps a history of its earlier text, layout and title
-  for up to 30 days, so you can restore them. Text you remove from a resume
-  stays in that history until the copy is 30 days old or you delete the history
-  in the editor. Deleting a resume deletes its history."
-- VI: "Mỗi CV cũng giữ lịch sử nội dung, bố cục và tiêu đề trước đó trong tối đa
-  30 ngày để bạn có thể khôi phục. Nội dung bạn xóa khỏi CV vẫn nằm trong lịch
-  sử đó cho đến khi bản sao đủ 30 ngày hoặc bạn xóa lịch sử trong trình chỉnh
-  sửa. Xóa CV sẽ xóa lịch sử của CV đó."
+- EN: "We keep your account, resumes, and photos until you delete them or your
+  account. Each resume also keeps earlier versions of its text, contact details,
+  layout, title, and language for up to 30 days, so you can restore them. Text
+  you remove from a resume stays in those versions until they are 30 days old or
+  you delete the resume's history in the editor. Deleting a resume or your
+  account deletes its history. The export includes your profile, your resumes
+  with their history, and resume photos."
+- VI: "Chúng tôi giữ tài khoản, CV và ảnh của bạn cho đến khi bạn xóa chúng hoặc
+  xóa tài khoản. Mỗi CV còn giữ các phiên bản trước của nội dung, thông tin liên
+  hệ, bố cục, tiêu đề và ngôn ngữ trong tối đa 30 ngày để bạn có thể khôi phục.
+  Nội dung bạn xóa khỏi CV vẫn nằm trong các phiên bản đó cho đến khi chúng đủ
+  30 ngày hoặc bạn xóa lịch sử của CV trong trình chỉnh sửa. Xóa CV hoặc tài
+  khoản sẽ xóa lịch sử của CV. Bản xuất gồm hồ sơ, các CV cùng lịch sử của
+  chúng, và ảnh trong CV của bạn."
 
-The export sentence names "resume content and history" (VI: "nội dung và lịch sử
-CV"). In "Your content", the permission ends:
+In "Your content", the sentence beginning "This permission ends" becomes:
 
-- EN: "except for resume history copies until they are 30 days old or you delete
-  the history, and backup copies until they expire."
-- VI: "trừ các bản trong lịch sử CV cho đến khi chúng đủ 30 ngày hoặc bạn xóa
-  lịch sử, và các bản sao lưu cho đến khi chúng hết hạn."
-
-The History panel's layout and copy come from its UI spec.
+- EN: "This permission ends when you delete the content, except for earlier
+  versions in a resume's history until they are 30 days old or you delete that
+  history, and backup copies until they expire."
+- VI: "Quyền này chấm dứt khi bạn xóa nội dung, trừ các phiên bản trước trong
+  lịch sử CV cho đến khi chúng đủ 30 ngày hoặc bạn xóa lịch sử đó, và các bản
+  sao lưu cho đến khi chúng hết hạn."
 
 ## Tests
 
-- Store: the session rule for each boundary (no session, actor change, 10
-  minutes idle, one hour), a photo-only write, pruning by count and by bytes,
-  and a checkpoint for every caller above, MCP included.
+- Session rule: each boundary (no session, actor change, 10 minutes idle, one
+  hour, `force`), a photo-only write, pruning by count and by bytes, a
+  checkpoint for every caller above with MCP included, an owner and an assistant
+  racing on one resume, and no extra notification.
 - Restore: kept fields, a dropped missing project link, an older schema version,
-  a stale `If-Match`, an idempotent replay, an invalid result, and a foreign or
-  unknown checkpoint answering 404.
-- Delete and clear, the retention category, export version 3 and its cap,
-  migration Up-Down-Up, grants and foreign-key index tests, OpenAPI parity, and
-  that no MCP tool reaches a checkpoint route.
+  markup the sanitizer strips, a stale `If-Match`, an idempotent replay, an
+  invalid result, and `PublicStateBusy`.
+- Scope: every route with another resume's and another account's checkpoint id
+  answers 404; every route refuses an agent principal.
+- Lifecycle: delete and clear; resume and account deletion cascades
+  (`assertAccountCascadeCounts`); a deleted grant leaving `actor_name`; the
+  retention category; a checkpoint at an unaccepted version skipped by list,
+  read and export.
+- Export version 3 and its cap; migration Up-Down-Up; grants and foreign-key
+  index tests; OpenAPI parity and the header contract.

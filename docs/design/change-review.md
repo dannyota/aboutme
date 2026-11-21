@@ -93,10 +93,11 @@ never list, read, restore or delete checkpoints.
 Checkpoints live in their own table keyed by resume, so taking one notifies
 nobody. Each row stores, at insert, the UTF-8 byte length of its JSON as
 exported. The insert deletes the oldest checkpoints beyond 50 or beyond 2 MiB
-for that resume, and the daily privacy retention sweep deletes checkpoints older
-than 30 days. A checkpoint at a schema version the release does not accept is
-deleted and never served. Checkpoints hold no photo key, so they never keep a
-photo object alive ([ADR 0009](../adr/0009-private-media-delivery.md)).
+for that resume, and the daily privacy retention sweep deletes each checkpoint
+before it is 30 days old; reads never show an older one. A checkpoint at a
+schema version the release does not accept is deleted and never served.
+Checkpoints hold no photo key, so they never keep a photo object alive
+([ADR 0009](../adr/0009-private-media-delivery.md)).
 
 ## Review
 

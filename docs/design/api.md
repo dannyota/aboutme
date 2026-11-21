@@ -239,7 +239,9 @@ and writes nothing. The record and mutation commit in one transaction.
 Every mutation of an existing resume also requires `If-Match`. Missing is `428`,
 malformed is `400`, and stale is `412` with the current revision and document in
 `error.details`. `POST /resumes` is the only resume mutation with no prior
-revision: it rejects `If-Match` and relies on its idempotency key.
+revision: it rejects `If-Match` and relies on its idempotency key. Deleting one
+or all of a resume's checkpoints changes no resume column, so those two routes
+take no `If-Match` ([history contract](resume-history-contract.md#routes)).
 
 Granular endpoints read the complete aggregate, apply the change, sanitize rich
 text, validate the current document, and persist the complete aggregate with
