@@ -392,7 +392,7 @@ export interface paths {
         };
         /**
          * Download the caller’s portable account data
-         * @description Downloads one complete version-2 JSON bundle of the account profile, up to three current-version resume documents and the private project library, including hidden/private content and incomplete drafts. Strings are not HTML-escaped. Each normalized photo is separate standard-base64 data with its crop; document.personalDetails.photo is removed. No backend object keys, provider subjects, password/session/CSRF/OAuth credentials or cleanup data appear. Reads account and documents in one database snapshot and buffers the complete attachment before success. A referenced photo that is missing, invalid or over 2 MiB fails the export. Complete response cap: 16,777,216 bytes. No body, query, schema, conditional or idempotency input is accepted. Separate 5/minute account-and-client-IP limit.
+         * @description Downloads one complete version-3 JSON bundle of the account profile, up to three current-version resume documents with checkpoint history from the last 30 days at accepted versions, and the private project library, including hidden/private content and incomplete drafts. Strings are not HTML-escaped. Each normalized photo is separate standard-base64 data with its crop; document.personalDetails.photo is removed. No backend object keys, provider subjects, password/session/CSRF/OAuth credentials or cleanup data appear. Reads account and documents in one database snapshot and buffers the complete attachment before success. A referenced photo that is missing, invalid or over 2 MiB fails the export. Complete response cap: 25,165,824 bytes. No body, query, schema, conditional or idempotency input is accepted. Separate 5/minute account-and-client-IP limit.
          */
         get: operations["getAccountExport"];
         put?: never;
@@ -887,6 +887,74 @@ export interface paths {
          *     Like every mutation of an existing resume this requires `If-Match` and `Idempotency-Key`.
          */
         patch: operations["updateResumeMetadata"];
+        trace?: never;
+    };
+    "/resumes/{id}/checkpoints": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List resume checkpoints
+         * @description Lists up to 50 checkpoints of this resume, newest first, from the last 30 days and at an accepted document version.
+         */
+        get: operations["listResumeCheckpoints"];
+        put?: never;
+        post?: never;
+        /**
+         * Clear resume history
+         * @description Deletes all checkpoints of this owned resume without changing its revision. There is no request body; the idempotency fingerprint uses a zero-length payload.
+         */
+        delete: operations["clearResumeCheckpoints"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/resumes/{id}/checkpoints/{checkpointId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read a resume checkpoint
+         * @description Reads a checkpoint from the last 30 days at an accepted version and projects it to the current version. The checkpoint never includes the photo.
+         */
+        get: operations["getResumeCheckpoint"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a resume checkpoint
+         * @description Deletes the visible checkpoint without changing the resume revision. There is no request body; the idempotency fingerprint uses a zero-length payload.
+         */
+        delete: operations["deleteResumeCheckpoint"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/resumes/{id}/checkpoints/{checkpointId}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore a resume checkpoint
+         * @description Restores the visible checkpoint and first checkpoints the state it replaces. Keeps the current photo and publishing settings. Does not restore missing library projects. There is no request body.
+         */
+        post: operations["restoreResumeCheckpoint"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/resumes/{id}/publish": {
@@ -2648,10 +2716,47 @@ export interface components {
                 };
             };
         };
+        ResumeCheckpointActor: {
+            /** @constant */
+            kind: "owner";
+        } | {
+            /** @constant */
+            kind: "assistant";
+            name: string;
+        };
+        ResumeCheckpointSummary: {
+            /** Format: uuid */
+            id: string;
+            /** Format: date-time */
+            startedAt: string;
+            /** @enum {string} */
+            cause: "edit" | "assistant" | "restore" | "accept";
+            actor: components["schemas"]["ResumeCheckpointActor"];
+            title: string;
+            byteSize: number;
+        };
+        ResumeCheckpoint: components["schemas"]["ResumeCheckpointSummary"] & {
+            lng: string | null;
+            /** @description The current resume document schema version. */
+            schemaVersion: number;
+            document: components["schemas"]["ResumeCheckpointDocument"];
+        };
+        /** @description The current resume document fields from packages/schema/resume.schema.json, without a photo. */
+        ResumeCheckpointDocument: {
+            personalDetails: {
+                photo?: never;
+            };
+            content: {
+                [key: string]: unknown;
+            };
+            customization: {
+                [key: string]: unknown;
+            };
+        };
         AccountExport: {
             data: {
                 /** @constant */
-                exportVersion: 2;
+                exportVersion: 3;
                 /** Format: date-time */
                 exportedAt: string;
                 account: components["schemas"]["AccountExportProfile"];
@@ -2681,6 +2786,7 @@ export interface components {
             showcase?: null | components["schemas"]["AccountExportShowcase"];
             document: components["schemas"]["AccountExportDocument"];
             photo: components["schemas"]["AccountExportPhoto"];
+            checkpoints: components["schemas"]["ResumeCheckpoint"][];
         };
         /** @description Full current-version owner document with personalDetails.photo removed; the portable photo is beside the document. All other fields, including hidden/private content, remain. */
         AccountExportDocument: components["schemas"]["ResumeDocument"] & {
@@ -4017,6 +4123,46 @@ export interface components {
                  *             6
                  *           ]
                  *         }
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `invalid_client_ip`, or `request_invalid` for a malformed path parameter. */
+        CheckpointReadBadRequest: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `invalid_client_ip`, `request_invalid`, `idempotency_key_required`, `idempotency_key_invalid`, `precondition_not_supported`, or `unsupported_schema_version`. */
+        CheckpointDeleteBadRequest: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `method_not_allowed` on a history collection or item. */
+        MethodNotAllowedCheckpoint: {
+            headers: {
+                /**
+                 * @description Methods this path serves.
+                 * @example DELETE, GET
+                 */
+                Allow?: string;
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "method_not_allowed",
+                 *         "message": "method not allowed"
                  *       }
                  *     }
                  */
@@ -5884,6 +6030,11 @@ export interface components {
         /** @description An evidence item's UUID. An unknown id, or one that belongs to another project or account, is `404 evidence_not_found`. */
         EvidenceID: string;
         /**
+         * @description The checkpoint id. Missing, expired, unsupported and foreign checkpoints all answer 404.
+         * @example 018f5b6a-9a3e-7c21-8b1e-000000000011
+         */
+        CheckpointID: string;
+        /**
          * @description A resume's id (`resumes.id`, `uuidv7`). A resume owned by another account answers exactly like a missing one.
          * @example 018f5b6a-9a3e-7c21-8b1e-000000000010
          */
@@ -7145,7 +7296,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Complete portable JSON attachment, at most 16 MiB. */
+            /** @description Complete portable JSON attachment, at most 25,165,824 bytes. */
             200: {
                 headers: {
                     "Cache-Control"?: "no-store, no-transform";
@@ -8919,6 +9070,223 @@ export interface operations {
             428: components["responses"]["ResumePreconditionRequired"];
             429: components["responses"]["ResumeRateLimited"];
             500: components["responses"]["ResumeInternalError"];
+        };
+    };
+    listResumeCheckpoints: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description A resume's id (`resumes.id`, `uuidv7`). A resume owned by another account answers exactly like a missing one.
+                 * @example 018f5b6a-9a3e-7c21-8b1e-000000000010
+                 */
+                id: components["parameters"]["ResumeID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Newest visible checkpoints, without paging. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope"] & {
+                        data?: components["schemas"]["ResumeCheckpointSummary"][];
+                    };
+                };
+            };
+            400: components["responses"]["CheckpointReadBadRequest"];
+            401: components["responses"]["ResumeUnauthorized"];
+            404: components["responses"]["ResumeNotFound"];
+            405: components["responses"]["MethodNotAllowedCheckpoint"];
+            429: components["responses"]["ResumeRateLimited"];
+            500: components["responses"]["ResumeInternalError"];
+        };
+    };
+    clearResumeCheckpoints: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description Client-generated UUID scoping this mutation to `(user, canonical operation identity, key)`. The operation identity contains the method, registered operation, and canonical concrete target values. Replaying the same scoped key with a matching semantic request fingerprint returns the original stored response; a different fingerprint is rejected as a domain conflict.
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 idempotency_key_invalid`, never silently first-wins.
+                 * @example 018f0f3e-9e3a-7000-8000-000000000001
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                /**
+                 * @description A resume's id (`resumes.id`, `uuidv7`). A resume owned by another account answers exactly like a missing one.
+                 * @example 018f5b6a-9a3e-7c21-8b1e-000000000010
+                 */
+                id: components["parameters"]["ResumeID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted. Zero bytes and no change to the resume revision. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["CheckpointDeleteBadRequest"];
+            401: components["responses"]["ResumeUnauthorized"];
+            403: components["responses"]["ResumeCsrfRejected"];
+            404: components["responses"]["ResumeNotFound"];
+            405: components["responses"]["MethodNotAllowedCheckpoint"];
+            409: components["responses"]["ResumeIdempotencyConflict"];
+            429: components["responses"]["ResumeRateLimited"];
+            500: components["responses"]["ResumeInternalError"];
+        };
+    };
+    getResumeCheckpoint: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description A resume's id (`resumes.id`, `uuidv7`). A resume owned by another account answers exactly like a missing one.
+                 * @example 018f5b6a-9a3e-7c21-8b1e-000000000010
+                 */
+                id: components["parameters"]["ResumeID"];
+                /**
+                 * @description The checkpoint id. Missing, expired, unsupported and foreign checkpoints all answer 404.
+                 * @example 018f5b6a-9a3e-7c21-8b1e-000000000011
+                 */
+                checkpointId: components["parameters"]["CheckpointID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A visible checkpoint projected to the current schema. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope"] & {
+                        data?: components["schemas"]["ResumeCheckpoint"];
+                    };
+                };
+            };
+            400: components["responses"]["CheckpointReadBadRequest"];
+            401: components["responses"]["ResumeUnauthorized"];
+            404: components["responses"]["ResumeNotFound"];
+            405: components["responses"]["MethodNotAllowedCheckpoint"];
+            429: components["responses"]["ResumeRateLimited"];
+            500: components["responses"]["ResumeInternalError"];
+        };
+    };
+    deleteResumeCheckpoint: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description Client-generated UUID scoping this mutation to `(user, canonical operation identity, key)`. The operation identity contains the method, registered operation, and canonical concrete target values. Replaying the same scoped key with a matching semantic request fingerprint returns the original stored response; a different fingerprint is rejected as a domain conflict.
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 idempotency_key_invalid`, never silently first-wins.
+                 * @example 018f0f3e-9e3a-7000-8000-000000000001
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                /**
+                 * @description A resume's id (`resumes.id`, `uuidv7`). A resume owned by another account answers exactly like a missing one.
+                 * @example 018f5b6a-9a3e-7c21-8b1e-000000000010
+                 */
+                id: components["parameters"]["ResumeID"];
+                /**
+                 * @description The checkpoint id. Missing, expired, unsupported and foreign checkpoints all answer 404.
+                 * @example 018f5b6a-9a3e-7c21-8b1e-000000000011
+                 */
+                checkpointId: components["parameters"]["CheckpointID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted. Zero bytes and no change to the resume revision. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["CheckpointDeleteBadRequest"];
+            401: components["responses"]["ResumeUnauthorized"];
+            403: components["responses"]["ResumeCsrfRejected"];
+            404: components["responses"]["ResumeNotFound"];
+            405: components["responses"]["MethodNotAllowedCheckpoint"];
+            409: components["responses"]["ResumeIdempotencyConflict"];
+            429: components["responses"]["ResumeRateLimited"];
+            500: components["responses"]["ResumeInternalError"];
+        };
+    };
+    restoreResumeCheckpoint: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description Optimistic-concurrency precondition, ETag form: `"r<revision>"` (quotes included, per RFC 9110). Required on every mutation of an existing resume or library project. Resume and project creation have no prior revision and reject an `If-Match` header. A mismatch returns `412 Precondition Failed` with the current revision/document — never `409` (see the write-safety section above).
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 precondition_malformed`, never silently first-wins.
+                 * @example "r42"
+                 */
+                "If-Match": components["parameters"]["IfMatch"];
+                /**
+                 * @description Client-generated UUID scoping this mutation to `(user, canonical operation identity, key)`. The operation identity contains the method, registered operation, and canonical concrete target values. Replaying the same scoped key with a matching semantic request fingerprint returns the original stored response; a different fingerprint is rejected as a domain conflict.
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 idempotency_key_invalid`, never silently first-wins.
+                 * @example 018f0f3e-9e3a-7000-8000-000000000001
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description The resume document version this request speaks. Absent means the server's current version. It appears on every JSON resume read and every mutation, including bodyless deletes, because a mutation resolves it into its idempotency fingerprint. The binary photo and PDF reads are outside this contract.
+                 *
+                 *     A value outside the accepted set is `400 unsupported_schema_version` with `details.acceptedVersions`.
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 unsupported_schema_version`, never silently first-wins.
+                 * @example 2
+                 */
+                "X-Resume-Schema-Version"?: components["parameters"]["SchemaVersionHeader"];
+            };
+            path: {
+                /**
+                 * @description A resume's id (`resumes.id`, `uuidv7`). A resume owned by another account answers exactly like a missing one.
+                 * @example 018f5b6a-9a3e-7c21-8b1e-000000000010
+                 */
+                id: components["parameters"]["ResumeID"];
+                /**
+                 * @description The checkpoint id. Missing, expired, unsupported and foreign checkpoints all answer 404.
+                 * @example 018f5b6a-9a3e-7c21-8b1e-000000000011
+                 */
+                checkpointId: components["parameters"]["CheckpointID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["ResumeWritten"];
+            400: components["responses"]["ResumeWriteBadRequest"];
+            401: components["responses"]["ResumeUnauthorized"];
+            403: components["responses"]["ResumeCsrfRejected"];
+            404: components["responses"]["ResumeNotFound"];
+            405: components["responses"]["MethodNotAllowedPostOnly"];
+            409: components["responses"]["ResumeIdempotencyConflict"];
+            412: components["responses"]["ResumeRevisionMismatch"];
+            422: components["responses"]["ResumeDocumentInvalid"];
+            428: components["responses"]["ResumePreconditionRequired"];
+            429: components["responses"]["ResumeRateLimited"];
+            500: components["responses"]["ResumeInternalError"];
+            503: components["responses"]["PublicStateBusy"];
         };
     };
     publishResume: {
