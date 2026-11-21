@@ -68,10 +68,12 @@ signers and require verifiable provenance.
      `https://api.github.com/repositories/1318874703/attestations/<digest>` and
      falls back to GHCR if the API has no bundle or is rate limited. The
      provenance link names its build-time owner.
-   - A `dannyota` observer's provenance links point at the GitHub API, which
-     returns 404 for pre-transfer attestations. That observer runs only after a
-     rollback to a pre-transfer release, and later code cannot change the links
-     it writes. That is accepted: `--bundle-from-oci` still verifies those
+   - A provenance link for a pre-transfer digest returns 404 whichever owner the
+     observer that wrote it has, because the GitHub API returns 404 for
+     pre-transfer attestations. A pre-transfer digest runs only after a rollback
+     to a pre-transfer release, whose own web then serves `/verify`, or briefly
+     during a deploy from one. A later web therefore shows these links
+     unchanged. That is accepted: `--bundle-from-oci` still verifies those
      images.
    - From step 1, the schema and the web decoder accept both owners in
      `source_repository`, `components[].image`, `signer_workflow` and every link
@@ -88,14 +90,16 @@ signers and require verifiable provenance.
      that file is absent. They parse its one owner line with a strict pattern
      and never source a file from an old commit. The signature check then binds
      the owner.
-   - For `dannyota` images, the deploy and operations verifier,
-     `deployment-document-check.sh` and the verify page's copy-paste command
-     read provenance from GHCR using `gh attestation verify --bundle-from-oci`.
-     They use the GitHub API for `dntmakers` images. Both sources require the
-     same signature, repository, owner, and image checks. OCI retrieval does not
-     check who currently holds the repository name; the repository and owner ID
-     pins enforce that identity. Verification fails if the CLI lacks the flag or
-     the legacy image lacks a verifiable bundle.
+   - For `dannyota` images, the deploy and operations verifier and
+     `deployment-document-check.sh` read provenance from GHCR using
+     `gh attestation verify --bundle-from-oci`, and the verify page's copy-paste
+     command adds the same flag. They use the GitHub API for `dntmakers` images.
+     The scripts require the same signature, repository, owner, and image checks
+     from both sources. OCI retrieval does not check who currently holds the
+     repository name; the scripts' repository and owner ID pins enforce that
+     identity. The page's command binds the repository by name only, as it does
+     for `dntmakers` images. Verification fails if the CLI lacks the flag or the
+     legacy image lacks a verifiable bundle.
    - `release-images.yml`'s eligibility step fails when
      `github.repository_owner` differs from that owner, so a tag pushed in the
      wrong window publishes nothing.

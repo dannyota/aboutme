@@ -131,8 +131,8 @@ GitHub and Sigstore.
 2. Verify one digest's provenance with the GitHub CLI (signed in, since `gh`
    needs a token). `<owner>` is the owner in that component's `image` in the
    document, `dannyota` or `dntmakers`. For a `dannyota` image, add
-   `--bundle-from-oci` after `--repo`: GitHub's API no longer returns
-   attestations built before the
+   `--bundle-from-oci` after `--repo`: GitHub's API returns 404 for attestations
+   built before the
    [repository transfer](../repository-transfer.md#what-the-transfer-moves), and
    the bundle stored beside the image in GHCR carries the same signature.
 
