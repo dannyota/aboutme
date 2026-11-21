@@ -83,7 +83,7 @@ Vision: with approval on, nothing an assistant writes reaches a live resume unti
 
 Features, in shipping order:
 
-1. Version history: saves keep restorable versions for a bounded time; the owner can view and restore one. The design decides what a restore includes (text, photo, evidence, publish settings).
+1. Version history: saves keep restorable versions for a bounded time; the owner can view and restore one. Shipped in v0.10.0.
 2. Proposed changes: a write from MCP to a published resume becomes a proposal, not a save. Unpublished resumes keep direct writes.
 3. Review screen: the owner sees each proposed change against the current text and accepts or rejects it, one by one or all.
 4. Owner setting: per resume, "assistant edits need my approval", on by default for published resumes.

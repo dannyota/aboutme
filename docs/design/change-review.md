@@ -1,7 +1,8 @@
 # Changes you review
 
 Status: Accepted by the owner (2026-11-21) after an independent review, with the
-decisions below. Nothing is implemented yet. It designs roadmap version
+decisions below. History (release 1) shipped in v0.10.0; review of assistant
+writes is next. It designs roadmap version
 [v0.10](../plans/roadmap.md#v010-changes-you-approve) and is recorded in
 [ADR 0031](../adr/0031-reviewed-assistant-changes.md).
 
