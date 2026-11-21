@@ -560,6 +560,7 @@ describe('component rows and commands', () => {
       'gh attestation verify \\',
       `  oci://ghcr.io/dannyota/aboutme-server@${server.image.digest} \\`,
       '  --repo dannyota/aboutme \\',
+      '  --bundle-from-oci \\',
       '  --signer-workflow '
       + 'dannyota/aboutme/.github/workflows/release-images.yml \\',
       '  --source-ref refs/tags/v0.6.0 \\',
@@ -583,14 +584,15 @@ describe('component rows and commands', () => {
 
   it('shows placeholders when there is no document', () => {
     const command = verifyImageCommand(null);
-    expect(command.copy).toContain('oci://ghcr.io/dntmakers/aboutme-server@');
-    expect(command.copy).toContain('  --repo dntmakers/aboutme \\');
-    expect(command.copy).toContain(
+    expect(command.copy).toBe([
+      'gh attestation verify \\',
+      '  oci://ghcr.io/dntmakers/aboutme-server@sha256:<digest> \\',
+      '  --repo dntmakers/aboutme \\',
       '  --signer-workflow dntmakers/aboutme/.github/workflows/'
       + 'release-images.yml \\',
-    );
-    expect(command.copy).toContain('aboutme-server@sha256:<digest> \\');
-    expect(command.copy).toContain('refs/tags/<version> \\');
+      '  --source-ref refs/tags/<version> \\',
+      '  --deny-self-hosted-runners',
+    ].join('\n'));
     expect(command.lines.flat().some(({ kind }) => kind === 'live'))
       .toBe(false);
     expect(readDigestsCommand.copy).toBe(

@@ -169,13 +169,18 @@ app_owners_agree() {
 
 verify() {
   local out=$1 image=$2 digest=$3 version=$4 owner id
+  local -a repo_args
   shift 4
   if ! owner=$(image_owner "$image") || ! id=$(owner_id "$owner"); then
     printf 'not an aboutme release image: %s\n' "$image" >"$out.err"
     return 1
   fi
+  repo_args=(--repo "$owner/aboutme")
+  if [ "$owner" = dannyota ]; then
+    repo_args+=(--bundle-from-oci)
+  fi
   env -u GH_DEBUG bash "$REPO/scripts/run-owned.sh" --timeout 120 -- gh attestation verify "oci://$image@$digest" \
-    --repo "$owner/aboutme" --signer-workflow "$owner/aboutme/.github/workflows/release-images.yml" \
+    "${repo_args[@]}" --signer-workflow "$owner/aboutme/.github/workflows/release-images.yml" \
     --source-ref "refs/tags/$version" --deny-self-hosted-runners "$@" --format json \
     >"$out.json" 2>"$out.err" || return 1
   jq -e --arg repository "$REPOSITORY_ID" --arg owner "$owner" --arg id "$id" '

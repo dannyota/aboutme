@@ -177,8 +177,11 @@ grep -Fxq -- '-now 2026-10-02T03:21:05Z' "$STUB/dc.log" ||
 [ "$(grep -c . "$STUB/gh.log")" -eq 4 ] || fail 'gh ran the wrong number of times'
 [ "$(grep -c -- "--predicate-type https://spdx.dev/Document/v2.3" "$STUB/gh.log")" -eq 2 ] ||
   fail 'the SBOM verification did not run once per digest'
-grep -Fxq -- "attestation verify oci://$IMAGE@$D1 --repo dannyota/aboutme --signer-workflow dannyota/aboutme/.github/workflows/release-images.yml --source-ref refs/tags/v0.6.5 --deny-self-hosted-runners --format json" "$STUB/gh.log" ||
-  fail 'the provenance command line is wrong'
+legacy_argv="attestation verify oci://$IMAGE@$D1 --repo dannyota/aboutme --bundle-from-oci --signer-workflow dannyota/aboutme/.github/workflows/release-images.yml --source-ref refs/tags/v0.6.5 --deny-self-hosted-runners"
+grep -Fxq -- "$legacy_argv --format json" "$STUB/gh.log" ||
+  fail 'the dannyota provenance command line is wrong'
+grep -Fxq -- "$legacy_argv --predicate-type https://spdx.dev/Document/v2.3 --format json" "$STUB/gh.log" ||
+  fail 'the dannyota SBOM command line is wrong'
 summary | grep -q '^PASS app images share one owner$' || fail 'the app owner check did not run'
 
 NEW=ghcr.io/dntmakers/aboutme
@@ -203,8 +206,11 @@ document dntmakers dntmakers dntmakers
 run_check
 [ "$RC" -eq 0 ] || fail "dntmakers images exited $RC: $(summary)"
 for pair in "server $D1" "web $D2" "caddy $D3"; do
-  grep -Fxq -- "attestation verify oci://$NEW-${pair% *}@${pair#* } --repo dntmakers/aboutme --signer-workflow dntmakers/aboutme/.github/workflows/release-images.yml --source-ref refs/tags/v0.6.5 --deny-self-hosted-runners --format json" "$STUB/gh.log" ||
-    fail "the dntmakers ${pair% *} command line is wrong"
+  modern_argv="attestation verify oci://$NEW-${pair% *}@${pair#* } --repo dntmakers/aboutme --signer-workflow dntmakers/aboutme/.github/workflows/release-images.yml --source-ref refs/tags/v0.6.5 --deny-self-hosted-runners"
+  grep -Fxq -- "$modern_argv --format json" "$STUB/gh.log" ||
+    fail "the dntmakers ${pair% *} provenance command line is wrong"
+  grep -Fxq -- "$modern_argv --predicate-type https://spdx.dev/Document/v2.3 --format json" "$STUB/gh.log" ||
+    fail "the dntmakers ${pair% *} SBOM command line is wrong"
 done
 ! grep -q 'dannyota' "$STUB/gh.log" || fail 'a dntmakers image was verified under dannyota'
 

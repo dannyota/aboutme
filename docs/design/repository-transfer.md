@@ -68,6 +68,13 @@ signers and require verifiable provenance.
      `https://api.github.com/repositories/1318874703/attestations/<digest>` and
      falls back to GHCR if the API has no bundle or is rate limited. The
      provenance link names its build-time owner.
+   - A provenance link for a pre-transfer digest returns 404 whichever owner the
+     observer that wrote it has, because the GitHub API returns 404 for
+     pre-transfer attestations. A pre-transfer digest runs only after a rollback
+     to a pre-transfer release, whose own web then serves `/verify`, or briefly
+     during a deploy from one. A later web therefore shows these links
+     unchanged. That is accepted: `--bundle-from-oci` still verifies those
+     images.
    - From step 1, the schema and the web decoder accept both owners in
      `source_repository`, `components[].image`, `signer_workflow` and every link
      pattern. A new web can then read the previous observer's document during a
@@ -83,13 +90,19 @@ signers and require verifiable provenance.
      that file is absent. They parse its one owner line with a strict pattern
      and never source a file from an old commit. The signature check then binds
      the owner.
-   - For `dannyota` images, the deploy and operations verifier reads provenance
-     from GHCR using `gh attestation verify --bundle-from-oci`. It uses the
-     GitHub API for `dntmakers` images. Both sources require the same signature,
-     repository, owner, and image checks. OCI retrieval does not check who
-     currently holds the repository name; the repository and owner ID pins
-     enforce that identity. Verification fails if the CLI lacks the flag or the
-     legacy image lacks a verifiable bundle.
+   - For `dannyota` images, the deploy and operations verifier and
+     `deployment-document-check.sh` read provenance from GHCR using
+     `gh attestation verify --bundle-from-oci`, and the verify page's copy-paste
+     command adds the same flag. They use the GitHub API for `dntmakers` images.
+     The scripts require the same signature, repository, owner, and image checks
+     from both sources. OCI retrieval does not check who currently holds the
+     repository name; the scripts' repository and owner ID pins enforce that
+     identity. The page's command binds the repository by name only, as it does
+     for `dntmakers` images. After a rollback to a pre-transfer release, that
+     release's own web serves the page with its API-only command, which returns
+     404; that is accepted on the same grounds as the provenance links.
+     Verification fails if the CLI lacks the flag or the legacy image lacks a
+     verifiable bundle.
    - `release-images.yml`'s eligibility step fails when
      `github.repository_owner` differs from that owner, so a tag pushed in the
      wrong window publishes nothing.
@@ -123,9 +136,9 @@ signers and require verifiable provenance.
 | `deploy.sh`, `operations.sh`, `provenance.sh`                                                    | Owner from the tagged commit; `provenance.sh` adds the repository ID and owner-consistency checks to `gh attestation verify`'s JSON                                                                                         |
 | `deploy-host.sh`, `operation-state.sh`, `operation-run.sh`, `crowdsec-privacy-notice*.sh`        | Decision 3, with a test of a rollback record: `dannyota` app images and a `dntmakers` maintenance image                                                                                                                     |
 | `deployment-document.sh`, observer `verify`, `document`, `platform`, `leakscan`, `fetch`, schema | Decision 4; the leak scan allows both owners' prefixes; the registry fallback reads both namespaces                                                                                                                         |
-| Web `deploymentDocument.ts`, `verifyView.ts`, `VerifyChain.vue`                                  | Decode decision 4; the copy-paste verify command takes each image's owner for `oci://`, `--repo` and `--signer-workflow`                                                                                                    |
+| Web `deploymentDocument.ts`, `verifyView.ts`, `VerifyChain.vue`                                  | Decode decision 4; the copy-paste verify command takes each image's owner for `oci://`, `--repo` and `--signer-workflow`, and adds `--bundle-from-oci` for `dannyota`                                                       |
 | `release-eligibility.sh`, `security-scan.sh`, `mcp-owner-workflow.sh`                            | Repository from `scripts/lib/repository.sh`, or as decision 5 says                                                                                                                                                          |
-| `deployment-document-check.sh`                                                                   | Each image's owner for `oci://`, `--repo` and `--signer-workflow`, and the repository ID from `gh`'s JSON                                                                                                                   |
+| `deployment-document-check.sh`                                                                   | Each image's owner for `oci://`, `--repo` and `--signer-workflow`, `--bundle-from-oci` for `dannyota`, and the repository ID from `gh`'s JSON                                                                               |
 | `approval-probe.sh`                                                                              | Requests `https://api.github.com/repositories/1318874703/actions/runs/<id>` and drops the `full_name` pin; the repository ID is already pinned                                                                              |
 | Tests                                                                                            | Every verifier accepts both owners under the repository ID, and rejects another ID and a signer owner that differs from the namespace. Host records reject mixed app owners; the observer reports them with `release: null` |
 

@@ -13,6 +13,7 @@ import {
   recomputeSummary,
 } from '../../app/utils/deploymentDocument';
 import {
+  type Command,
   commandTargets,
   imageNamespaces,
   verifyImageCommand,
@@ -50,10 +51,10 @@ function stateOf(value: Loose): PageState {
 function commandFor(
   document: DeploymentDocument,
   component: ComponentName,
-): string {
+): Command {
   const targets = commandTargets(document)
     .filter((target) => target.component === component);
-  return verifyImageCommand(targets[targets.length - 1]!).copy;
+  return verifyImageCommand(targets[targets.length - 1]!);
 }
 
 function expectedCommand(
@@ -61,11 +62,13 @@ function expectedCommand(
   repository: string,
   digest: string,
   version: string,
+  ...bundleLines: string[]
 ): string {
   return [
     'gh attestation verify \\',
     `  oci://ghcr.io/${owner}/aboutme-${repository}@${digest} \\`,
     `  --repo ${owner}/aboutme \\`,
+    ...bundleLines,
     `  --signer-workflow ${owner}/aboutme/.github/workflows/`
     + 'release-images.yml \\',
     `  --source-ref refs/tags/${version} \\`,
@@ -118,11 +121,16 @@ describe('dannyota documents', () => {
     },
   );
 
-  it('renders dannyota commands and namespace as before', () => {
+  it('uses the registry bundle for a dannyota command', () => {
     const value = raw('verified');
     const document = decoded(value);
-    expect(commandFor(document, 'server')).toBe(expectedCommand(
-      'dannyota', 'server', image(value, 0).digest, 'v0.6.0'));
+    const command = commandFor(document, 'server');
+    expect(command.lines[3]).toEqual([
+      { text: '  --bundle-from-oci \\', kind: 'plain' },
+    ]);
+    expect(command.copy).toBe(expectedCommand(
+      'dannyota', 'server', image(value, 0).digest, 'v0.6.0',
+      '  --bundle-from-oci \\'));
     expect(imageNamespaces(document)).toEqual(['ghcr.io/dannyota/']);
   });
 });
@@ -137,7 +145,7 @@ describe('dntmakers documents', () => {
     });
     for (const [index, name] of (['server', 'web', 'caddy'] as const)
       .entries()) {
-      expect(commandFor(document, name)).toBe(expectedCommand(
+      expect(commandFor(document, name).copy).toBe(expectedCommand(
         'dntmakers', name, image(value, index).digest, 'v0.6.0'));
     }
     expect(imageNamespaces(document)).toEqual(['ghcr.io/dntmakers/']);
@@ -160,9 +168,10 @@ describe('a rollback keeping a newer dntmakers maintenance image', () => {
     expect(stateOf(value)).toMatchObject({
       kind: 'verified', release: { version: 'v0.6.0' },
     });
-    expect(commandFor(document, 'server')).toBe(expectedCommand(
-      'dannyota', 'server', image(value, 0).digest, 'v0.6.0'));
-    expect(commandFor(document, 'maintenance')).toBe(expectedCommand(
+    expect(commandFor(document, 'server').copy).toBe(expectedCommand(
+      'dannyota', 'server', image(value, 0).digest, 'v0.6.0',
+      '  --bundle-from-oci \\'));
+    expect(commandFor(document, 'maintenance').copy).toBe(expectedCommand(
       'dntmakers', 'caddy', image(value, 3).digest, 'v0.9.40'));
     expect(document.components[3]!.runningImages[0]!.links).toMatchObject({
       commit: image(value, 3).links.commit,
