@@ -1,8 +1,8 @@
 import type { LegalCopy } from './legal';
 
 export const legalVi: LegalCopy = {
-  privacyUpdated: 'Cập nhật lần cuối ngày 22/11/2026',
-  termsUpdated: 'Cập nhật lần cuối ngày 22/11/2026',
+  privacyUpdated: 'Cập nhật lần cuối ngày 21/11/2026',
+  termsUpdated: 'Cập nhật lần cuối ngày 21/11/2026',
   privacyLink: 'Chính sách quyền riêng tư',
   termsLink: 'Điều khoản sử dụng',
   verifyLink: 'Kiểm chứng',
