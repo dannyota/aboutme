@@ -470,8 +470,9 @@ interface BarMeasure {
     scrollWidth: number; clientWidth: number; };
   title: { top: number; bottom: number; right: number };
   note: string;
+  row: { left: number; right: number };
   buttons: { left: number; right: number; top: number; width: number;
-    height: number; }[];
+    height: number; scrollWidth: number; clientWidth: number; }[];
   viewport: number;
   docOverflow: number;
 }
@@ -486,11 +487,15 @@ async function measureBar(page: Page): Promise<BarMeasure> {
       '[data-action="history-restore"]',
     ].map((selector) => {
       const b = bar.querySelector(selector)!.getBoundingClientRect();
+      const node = bar.querySelector(selector)!;
       return { left: b.left, right: b.right, top: b.top, width: b.width,
-        height: b.height };
+        height: b.height, scrollWidth: node.scrollWidth,
+        clientWidth: node.clientWidth };
     });
+    const rowBox = bar.children[1]!.getBoundingClientRect();
     const doc = document.documentElement;
     return {
+      row: { left: rowBox.left, right: rowBox.right },
       bar: { left: box.left, right: box.right, top: box.top,
         bottom: box.bottom, scrollWidth: bar.scrollWidth,
         clientWidth: bar.clientWidth },
@@ -541,10 +546,14 @@ export async function expectBarFit(page: Page): Promise<void> {
     bar: m.bar.scrollWidth <= m.bar.clientWidth + 1,
     buttons: m.buttons.every((button) => button.left >= m.bar.left - 1
       && button.right <= m.bar.right + 1 && button.width > 0),
+    row: m.row.left >= m.bar.left - 1 && m.row.right <= m.bar.right + 1,
+    labels: m.buttons.every((button) =>
+      button.scrollWidth <= button.clientWidth + 1),
     inView: m.bar.left >= -1 && m.bar.right <= m.viewport + 1,
     page: m.docOverflow <= 0,
   }, 'History version bar overflow.').toEqual({
-    bar: true, buttons: true, inView: true, page: true,
+    bar: true, buttons: true, row: true, labels: true, inView: true,
+    page: true,
   });
   const heading = page.locator('[data-history-bar] h2');
   await expect(heading, 'History version bar overflow.').toHaveCSS(
@@ -566,10 +575,12 @@ export async function expectBarButtons(
     BarMeasure['buttons'][0]];
   expect({
     delete: [Math.round(del.width), Math.round(del.height)],
-    heights: [Math.round(back.height), Math.round(restore.height)],
+    tall: isCompactBar(width)
+      ? back.height >= 39.5 && restore.height >= 39.5
+      : Math.round(back.height) === 40 && Math.round(restore.height) === 40,
   }, 'History version bar buttons.').toEqual({
     delete: isCompactBar(width) ? [40, 40] : [36, 36],
-    heights: [40, 40],
+    tall: true,
   });
 }
 

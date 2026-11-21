@@ -114,7 +114,9 @@ defineExpose({ focusTitle: (): void => title.value?.focus() });
           />
         </IconButton>
         <Button
-          class="max-[42rem]:h-10 max-[42rem]:flex-1"
+          class="max-[42rem]:h-auto max-[42rem]:min-h-10 max-[42rem]:min-w-0
+            max-[42rem]:flex-1 max-[42rem]:whitespace-normal
+            max-[42rem]:py-2 max-[42rem]:leading-tight"
           data-action="history-back"
           :disabled="loading"
           type="button"
@@ -126,7 +128,9 @@ defineExpose({ focusTitle: (): void => title.value?.focus() });
         <Button
           :aria-describedby="blockedId"
           :aria-disabled="restoreBlocked ? 'true' : undefined"
-          class="max-[42rem]:h-10 max-[42rem]:flex-1"
+          class="max-[42rem]:h-auto max-[42rem]:min-h-10 max-[42rem]:min-w-0
+            max-[42rem]:flex-1 max-[42rem]:whitespace-normal
+            max-[42rem]:py-2 max-[42rem]:leading-tight"
           data-action="history-restore"
           :disabled="loading || !ready"
           type="button"

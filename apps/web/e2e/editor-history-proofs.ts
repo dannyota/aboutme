@@ -217,6 +217,18 @@ test.describe('editor History panel mutations', () => {
           { 'min-width': '600px' }), 'History version bar overflow.');
     });
 
+  mutationTest('the History version bar rejects unwrappable labels at 320px',
+    async ({ page }) => {
+      test.setTimeout(60_000);
+      await openPanel(page, 320, 'vi');
+      await chooseVersion(page, 'vi');
+      await proveMutation(() => expectBarFit(page),
+        () => applyStyleMutation(
+          page.locator('[data-action="history-back"], '
+            + '[data-action="history-restore"]'),
+          { 'white-space': 'nowrap' }), 'History version bar overflow.');
+    });
+
   mutationTest('the History version bar rejects a 36px Delete at 390px',
     async ({ page }) => {
       test.setTimeout(60_000);
