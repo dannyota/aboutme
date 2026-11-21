@@ -377,7 +377,7 @@ specified in [project entry points](project-entry-points.md).
 
 - The account export moves to `exportVersion` 2 and gains `projects`, ordered by
   creation time, each with its fields, text and revision. Resume documents in
-  the export keep `projectId`. The byte cap is unchanged.
+  the export keep `projectId`.
 - Account deletion removes the library by cascade and the slug holds explicitly.
   The privacy sweep deletes expired slug holds.
 
