@@ -12,6 +12,7 @@ import { TEMPLATES } from '@aboutme/schema/templates';
 import { readFileSync } from 'node:fs';
 import { resolve as resolvePath } from 'node:path';
 
+import './editor-history-proofs';
 import { captureReviewImage } from './review-images';
 import {
   expectScreen,
