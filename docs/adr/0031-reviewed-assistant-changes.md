@@ -1,8 +1,8 @@
 # 0031: Reviewed assistant changes and resume history
 
-Status: Proposed (2026-11-21). The [change review](../design/change-review.md)
-design applies it. The owner decided its product choices on 2026-11-21;
-acceptance waits for the independent review.
+Status: Accepted (2026-11-21) by the owner after an independent review. The
+[change review](../design/change-review.md) design applies it. Nothing is
+implemented yet.
 
 ## Context
 
@@ -81,8 +81,8 @@ draft copy of the whole resume out of scope.
 ## Consequences
 
 - MCP results, `list_resumes`, `get_resume`, the closed error vocabulary and the
-  tool registry change; ADR 0018 and the MCP guide are amended when this is
-  accepted.
+  tool registry change; ADR 0018 records it, and the MCP guide changes when
+  review ships.
 - Two tables grow per resume within fixed limits, and backups hold up to 30 days
   of earlier text per resume. The privacy notice and the Terms change in both
   languages.
@@ -94,4 +94,5 @@ draft copy of the whole resume out of scope.
 
 ## History
 
-- 2026-11-21: proposed as a new record for roadmap v0.10.
+- 2026-11-21: proposed as a new record for roadmap v0.10, and accepted by the
+  owner after an independent review.

@@ -48,7 +48,7 @@ record may change until accepted.
 | [0028](0028-community-showcase.md)                       | Accepted | Opt-in, uncached, never-indexed showcase of published resumes                              |
 | [0029](0029-account-project-library.md)                  | Accepted | Private account project library, selection in the resume, pages under the resume           |
 | [0030](0030-github-evidence.md)                          | Accepted | GitHub connection for project evidence: no scope, no stored token, checked snapshots       |
-| [0031](0031-reviewed-assistant-changes.md)               | Proposed | Resume checkpoints and restore; assistant proposals the owner reviews on published resumes |
+| [0031](0031-reviewed-assistant-changes.md)               | Accepted | Resume checkpoints and restore; assistant proposals the owner reviews on published resumes |
 
 The [historical AWS production decision](history/aws-production.md) is an
 unnumbered appendix.

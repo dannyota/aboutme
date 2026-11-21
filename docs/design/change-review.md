@@ -1,7 +1,7 @@
 # Changes you review
 
-Status: Proposed (2026-11-21). The owner decided D1 to D6 below on 2026-11-21;
-acceptance waits for the independent review. It designs roadmap version
+Status: Accepted by the owner (2026-11-21) after an independent review, with the
+decisions below. Nothing is implemented yet. It designs roadmap version
 [v0.10](../plans/roadmap.md#v010-changes-you-approve) and is recorded in
 [ADR 0031](../adr/0031-reviewed-assistant-changes.md).
 
@@ -221,8 +221,8 @@ Accepted and rejected parts leave the proposal. When none remain it is decided.
 
 ### What the assistant sees
 
-[ADR 0018](../adr/0018-mcp-agent-access.md) and the [MCP guide](mcp-guide.md)
-change when this design is accepted:
+[ADR 0018](../adr/0018-mcp-agent-access.md) records these changes, and the
+[MCP guide](mcp-guide.md) changes when they ship:
 
 - A write result gains `outcome`, `saved` or `proposed`. A proposed result
   carries the stored resume and the assistant's view.

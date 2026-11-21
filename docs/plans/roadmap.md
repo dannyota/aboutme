@@ -93,7 +93,7 @@ Out of scope: collaborative editing, comments from other people, a separate draf
 
 Done when: with the setting on, a test shows no MCP tool, including delete and photo tools, can change what a public viewer sees; an owner can accept one proposed change, reject another, and see a stale proposal refused after a newer save; and an owner can restore an earlier version within the retention the design sets.
 
-Before code: the owner accepts the [change review](../design/change-review.md) design and [ADR 0031](../adr/0031-reviewed-assistant-changes.md) after an independent review; ADR 0018 and the MCP guide are amended on acceptance.
+Design: the [change review](../design/change-review.md) design and [ADR 0031](../adr/0031-reviewed-assistant-changes.md), accepted on 2026-11-21. Before code for each release: its contract changes, and a UI design before frontend work.
 
 ## v0.11: review with your own AI
 

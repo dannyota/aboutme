@@ -120,3 +120,8 @@ Former ADR 0026, unchanged in substance.
   silently reach the project library.
 - 2026-11-19: Recorded the capability rule after the SDK's default tool-list
   capability let listen requests fill every request slot in production.
+- 2026-11-21: [ADR 0031](0031-reviewed-assistant-changes.md) makes assistant
+  writes to a published resume under review into proposals the owner accepts,
+  refuses `upload_photo` and `delete_resume` there, and adds `list_proposals`,
+  the `outcome` result field and two closed errors. The tool surface here
+  changes when that ships.
